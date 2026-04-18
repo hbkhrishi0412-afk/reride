@@ -15,6 +15,7 @@ import androidx.core.splashscreen.SplashScreen;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
+import java.lang.reflect.Method;
 
 public class MainActivity extends BridgeActivity {
 
@@ -25,6 +26,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ensureFirebaseInitialized();
         registerPlugin(OAuthExternalBrowserPlugin.class);
         SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
@@ -33,10 +35,102 @@ public class MainActivity extends BridgeActivity {
         scheduleRenderProcessGoneRecovery();
     }
 
+    /**
+     * Defensive Firebase bootstrap done via reflection so that this Activity does NOT
+     * need a compile-time dependency on {@code com.google.firebase:firebase-common}
+     * (which is only on the runtime classpath, pulled in transitively by
+     * {@code @capacitor/push-notifications} as {@code implementation}, and therefore
+     * not visible to the {@code :app} module at compile time).
+     * <p>
+     * Without this, the Capacitor PushNotifications plugin's {@code register()} call
+     * goes straight to {@code FirebaseMessaging.getInstance()}, which throws
+     * {@code IllegalStateException: Default FirebaseApp is not initialized} on the
+     * Capacitor plugins handler thread (a JS try/catch cannot rescue it) when there is
+     * no {@code google-services.json} in {@code android/app/}.
+     * <p>
+     * Order of preference at runtime:
+     * <ol>
+     *   <li>If {@code FirebaseApp} class is missing entirely (push-notifications plugin
+     *       removed) — we silently no-op.</li>
+     *   <li>If {@code google-services.json} is present, the default app is already
+     *       initialized via a ContentProvider before {@code onCreate} runs and we just
+     *       confirm.</li>
+     *   <li>Otherwise we install a stub {@code FirebaseOptions} so {@code getInstance()}
+     *       returns a valid (but non-functional) app. {@code register()} then fails via
+     *       the JS {@code registrationError} listener instead of killing the process.</li>
+     * </ol>
+     * Drop a real {@code android/app/google-services.json} to enable actual FCM push.
+     */
+    private void ensureFirebaseInitialized() {
+        final Class<?> firebaseAppClass;
+        final Class<?> firebaseOptionsClass;
+        final Class<?> firebaseOptionsBuilderClass;
+        try {
+            firebaseAppClass = Class.forName("com.google.firebase.FirebaseApp");
+            firebaseOptionsClass = Class.forName("com.google.firebase.FirebaseOptions");
+            firebaseOptionsBuilderClass = Class.forName("com.google.firebase.FirebaseOptions$Builder");
+        } catch (ClassNotFoundException ignored) {
+            return;
+        }
+
+        try {
+            Method getInstance = firebaseAppClass.getMethod("getInstance");
+            getInstance.invoke(null);
+            return;
+        } catch (Exception ignored) {
+            // Either not initialized yet, or some other reflection issue. Try manual init.
+        }
+
+        try {
+            Method initializeFromContext = firebaseAppClass.getMethod("initializeApp", android.content.Context.class);
+            Object app = initializeFromContext.invoke(null, getApplicationContext());
+            if (app != null) {
+                return;
+            }
+        } catch (Exception err) {
+            Log.w(TAG, "Firebase auto-init failed; will install stub options", err);
+        }
+
+        try {
+            Object builder = firebaseOptionsBuilderClass.getConstructor().newInstance();
+            firebaseOptionsBuilderClass
+                .getMethod("setApplicationId", String.class)
+                .invoke(builder, "1:000000000000:android:0000000000000000");
+            firebaseOptionsBuilderClass
+                .getMethod("setApiKey", String.class)
+                .invoke(builder, "AIzaSyDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUM");
+            firebaseOptionsBuilderClass
+                .getMethod("setProjectId", String.class)
+                .invoke(builder, "reride-stub");
+            Object stubOptions = firebaseOptionsBuilderClass.getMethod("build").invoke(builder);
+
+            Method initializeWithOptions = firebaseAppClass.getMethod(
+                "initializeApp",
+                android.content.Context.class,
+                firebaseOptionsClass
+            );
+            initializeWithOptions.invoke(null, getApplicationContext(), stubOptions);
+            Log.w(
+                TAG,
+                "Firebase initialized with stub options because google-services.json is absent. " +
+                "Real push notifications are disabled; PushNotifications.register() will fail safely."
+            );
+        } catch (Exception err) {
+            Log.e(TAG, "Failed to install stub FirebaseApp; push registration may crash the app", err);
+        }
+    }
+
     private void scheduleRenderProcessGoneRecovery() {
+        // Capacitor Bridge / WebView is created across multiple frames after
+        // BridgeActivity.onCreate(). Try at several offsets so we win even on
+        // slow / cold starts, but cap the latest retry well after first paint
+        // because a renderer death right after the post-login HOME render is
+        // the worst time for the recovery hook to still be missing.
         mainHandler.post(this::installRenderProcessGoneRecoveryOnce);
-        mainHandler.postDelayed(this::installRenderProcessGoneRecoveryOnce, 300);
-        mainHandler.postDelayed(this::installRenderProcessGoneRecoveryOnce, 1200);
+        mainHandler.postDelayed(this::installRenderProcessGoneRecoveryOnce, 200);
+        mainHandler.postDelayed(this::installRenderProcessGoneRecoveryOnce, 600);
+        mainHandler.postDelayed(this::installRenderProcessGoneRecoveryOnce, 1500);
+        mainHandler.postDelayed(this::installRenderProcessGoneRecoveryOnce, 3500);
     }
 
     /**

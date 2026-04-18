@@ -21,6 +21,13 @@ interface MobileLayoutProps {
   inboxCount?: number;
   /** Unread in-app notifications (Activity); drives header bell dot. */
   unreadNotificationCount?: number;
+  /**
+   * Logged-in service provider (separate identity from `currentUser`). Passed
+   * through to `MobileHeader` so the slide-out menu reflects auth state for
+   * service providers (avoids "Guest / Not logged in" while a provider is
+   * actively signed in).
+   */
+  serviceProvider?: { name?: string; email?: string } | null;
 }
 
 /**
@@ -43,7 +50,8 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   onLogout,
   wishlistCount = 0,
   inboxCount = 0,
-  unreadNotificationCount = 0
+  unreadNotificationCount = 0,
+  serviceProvider = null
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const shouldRenderHeader = showHeader || showMenu;
@@ -106,6 +114,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
           showMenu={showMenu}
           onToggleMenu={() => setShowMenu(!showMenu)}
           unreadNotificationCount={unreadNotificationCount}
+          serviceProvider={serviceProvider}
         />
       )}
       

@@ -716,82 +716,135 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
 
   // Show conversation list
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      <div className="px-4 pt-4 pb-2 bg-gray-50">
-        <h1 className="text-xl font-bold text-gray-900">{t('mobileInbox.title')}</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          {conversations.length > 0 ? (
-            <>
-              {inboxRole === 'seller'
-                ? t('mobileInbox.sellerThreadSummary', { count: conversations.length })
-                : t('mobileInbox.buyerThreadSummary', { count: conversations.length })}
-              {unreadCount > 0
-                ? ` · ${t('mobileInbox.unreadLine', { count: unreadCount })}`
-                : ''}
-            </>
-          ) : (
-            t('mobileInbox.emptySubtitle')
+    <div className="min-h-screen pb-24" style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%)' }}>
+      {/* Premium obsidian header */}
+      <div
+        className="px-5 sticky top-0 z-30 relative overflow-hidden"
+        style={{
+          paddingTop: 'max(1.1rem, env(safe-area-inset-top, 0px))',
+          paddingBottom: '1.25rem',
+          background: 'linear-gradient(180deg, #0B0B0F 0%, #16161D 70%, #1C1C24 100%)',
+          boxShadow: '0 10px 30px -12px rgba(0,0,0,0.55)',
+        }}
+      >
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div className="absolute -top-20 -left-16 w-64 h-64 rounded-full" style={{ background: 'radial-gradient(closest-side, rgba(255,107,53,0.18), transparent 70%)' }} />
+          <div className="absolute -bottom-24 -right-16 w-72 h-72 rounded-full" style={{ background: 'radial-gradient(closest-side, rgba(168,135,255,0.10), transparent 70%)' }} />
+          <div className="absolute inset-x-0 bottom-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent)' }} />
+        </div>
+
+        <div className="relative z-10 flex items-center gap-2 mb-3">
+          <span className="text-[10.5px] uppercase tracking-[0.22em] text-white/45 font-semibold">
+            {inboxRole === 'seller' ? 'Seller inbox' : 'Inbox'}
+          </span>
+        </div>
+
+        <div className="relative z-10 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-white font-semibold tracking-tight" style={{ fontSize: 24, lineHeight: 1.1, letterSpacing: '-0.03em' }}>
+              {t('mobileInbox.title')}
+              <span className="text-white/40 font-light">.</span>
+            </h1>
+            <p className="mt-1.5 text-[12px] text-white/55 font-medium truncate max-w-[80vw]">
+              {conversations.length > 0 ? (
+                <>
+                  {inboxRole === 'seller'
+                    ? t('mobileInbox.sellerThreadSummary', { count: conversations.length })
+                    : t('mobileInbox.buyerThreadSummary', { count: conversations.length })}
+                  {unreadCount > 0
+                    ? ` · ${t('mobileInbox.unreadLine', { count: unreadCount })}`
+                    : ''}
+                </>
+              ) : (
+                t('mobileInbox.emptySubtitle')
+              )}
+            </p>
+            {openThreadInFloatingChat && inboxRole === 'seller' && conversations.length > 0 && (
+              <p className="text-[10.5px] text-white/40 mt-1 font-medium">{t('mobileInbox.sellerTapForFloatingChat')}</p>
+            )}
+          </div>
+          {unreadCount > 0 && (
+            <span
+              className="shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold text-white"
+              style={{ background: 'linear-gradient(135deg, #FF8456, #FF6B35)', boxShadow: '0 8px 18px -8px rgba(255,107,53,0.55)' }}
+            >
+              {unreadCount > 99 ? '99+' : unreadCount} new
+            </span>
           )}
-        </p>
-        {openThreadInFloatingChat && inboxRole === 'seller' && conversations.length > 0 && (
-          <p className="text-xs text-gray-500 mt-1.5">{t('mobileInbox.sellerTapForFloatingChat')}</p>
-        )}
+        </div>
       </div>
-      {/* Search Bar */}
-      <div className="bg-white border-b border-gray-200 p-4 sticky top-0 z-10">
-        <div className="relative">
+
+      {/* Search + filter bar */}
+      <div
+        className="px-4 py-3 sticky z-20"
+        style={{
+          top: 'calc(env(safe-area-inset-top, 0px) + 96px)',
+          background: 'rgba(255,255,255,0.85)',
+          backdropFilter: 'saturate(180%) blur(14px)',
+          WebkitBackdropFilter: 'saturate(180%) blur(14px)',
+          borderBottom: '1px solid rgba(15, 23, 42, 0.06)'
+        }}
+      >
+        <div className="relative mb-2.5">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search conversations..."
-            className="w-full px-4 py-3 pl-10 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-orange-500"
+            placeholder="Search conversations…"
+            className="w-full pl-10 pr-3 py-2.5 rounded-full text-[13px] font-medium text-slate-900 outline-none"
+            style={{ background: 'rgba(15,23,42,0.05)', border: '1px solid rgba(15,23,42,0.06)' }}
           />
           <svg
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
-        <div className="flex gap-2 mt-3 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setFilterMode('all')}
-            className={`px-4 py-2 rounded-full text-sm font-semibold ${
-              filterMode === 'all' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
-            }`}
-            aria-label="Show all conversations"
-          >
-            All
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterMode('unread')}
-            className={`px-4 py-2 rounded-full text-sm font-semibold ${
-              filterMode === 'unread' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
-            }`}
-            aria-label="Show unread conversations"
-          >
-            Unread ({unreadCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterMode('read')}
-            className={`px-4 py-2 rounded-full text-sm font-semibold ${
-              filterMode === 'read' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
-            }`}
-            aria-label="Show read conversations"
-          >
-            Read
-          </button>
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide -mx-1 px-1">
+          {(([
+            { key: 'all', label: 'All', count: conversations.length },
+            { key: 'unread', label: 'Unread', count: unreadCount },
+            { key: 'read', label: 'Read', count: undefined }
+          ]) as { key: 'all' | 'unread' | 'read'; label: string; count?: number }[]).map((f) => {
+            const active = filterMode === f.key;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilterMode(f.key)}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all active:scale-95"
+                style={{
+                  background: active ? '#0B0B0F' : 'rgba(15,23,42,0.04)',
+                  color: active ? '#FFFFFF' : '#475569',
+                  border: active ? '1px solid #0B0B0F' : '1px solid rgba(15,23,42,0.06)'
+                }}
+                aria-label={`Show ${f.label.toLowerCase()} conversations`}
+              >
+                {f.label}
+                {typeof f.count === 'number' && f.count > 0 && (
+                  <span
+                    className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[10px] font-bold"
+                    style={{ background: active ? 'rgba(255,255,255,0.18)' : '#FF6B35', color: '#FFFFFF' }}
+                  >
+                    {f.count > 99 ? '99+' : f.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
           {onMarkAllAsRead && unreadCount > 0 && (
             <button
               type="button"
               onClick={() => void onMarkAllAsRead(inboxRole)}
-              className="px-4 py-2 rounded-full text-sm font-semibold bg-blue-50 text-blue-700"
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-semibold active:scale-95 transition-transform"
+              style={{ background: 'rgba(37,99,235,0.10)', color: '#1D4ED8' }}
               aria-label="Mark all conversations as read"
             >
               Mark all read
@@ -801,18 +854,28 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
       </div>
 
       {/* Conversation List */}
-      <div className="divide-y divide-gray-200">
+      <div>
         {filteredConversations.length === 0 ? (
-          <div className="text-center py-12">
-            <svg
-              className="w-16 h-16 text-gray-300 mx-auto mb-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          <div className="px-4 pt-6">
+            <div
+              className="rounded-3xl px-6 py-12 text-center"
+              style={{ background: 'linear-gradient(180deg, #FFFFFF, #FAFAFC)', border: '1px solid rgba(15,23,42,0.06)', boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)' }}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            <p className="text-gray-500">No conversations found</p>
+              <div
+                className="w-14 h-14 mx-auto mb-3 rounded-2xl grid place-items-center"
+                style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.10), rgba(5,150,105,0.18))', color: '#047857' }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </div>
+              <h4 className="text-[16px] font-semibold text-slate-900 mb-1 tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+                No conversations
+              </h4>
+              <p className="text-[12.5px] text-slate-500 leading-relaxed max-w-sm mx-auto font-medium">
+                {searchQuery ? 'Try a different search.' : 'New chats will appear here.'}
+              </p>
+            </div>
           </div>
         ) : (
           filteredConversations.map((conv) => {
@@ -825,59 +888,95 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
             const isUnread =
               inboxRole === 'customer' ? !conv.isReadByCustomer : !conv.isReadBySeller;
             const isSwiped = swipedId === conv.id;
+            const initials = (counterpart || 'C').split(' ').map(s => s.charAt(0)).slice(0, 2).join('').toUpperCase();
+            const peerOnline = chatPeerOnlineByConversationId?.[conv.id];
 
             return (
               <div
                 key={conv.id}
-                className="relative bg-white overflow-hidden"
+                className="relative overflow-hidden"
+                style={{ background: '#FFFFFF', borderBottom: '1px solid rgba(15,23,42,0.05)' }}
                 onTouchStart={(e) => handleSwipeStart(e, conv.id)}
                 onTouchMove={handleSwipeMove}
                 onTouchEnd={() => handleSwipeEnd(conv.id)}
                 onClick={() => !isSwiped && handleSelectConversation(conv)}
               >
+                {isUnread && (
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-3.5 bottom-3.5 w-[3px] rounded-r-full"
+                    style={{ background: 'linear-gradient(180deg, #FF8456, #FF6B35)' }}
+                  />
+                )}
                 <div
-                  className={`flex items-center gap-4 p-4 transition-transform ${
+                  className={`flex items-start gap-3 px-4 py-3.5 transition-transform ${
                     isSwiped ? '-translate-x-24' : 'translate-x-0'
                   }`}
                 >
-                  <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
-                    {counterpart.charAt(0).toUpperCase()}
+                  <div className="relative shrink-0">
+                    <div
+                      className="w-11 h-11 rounded-xl grid place-items-center text-white font-bold text-[13px] tracking-tight"
+                      style={{
+                        background: 'linear-gradient(160deg, #1F1F28 0%, #0E0E13 100%)',
+                        border: '1px solid rgba(255,255,255,0.06)'
+                      }}
+                    >
+                      {initials}
+                    </div>
+                    {peerOnline && (
+                      <span
+                        aria-hidden
+                        className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full"
+                        style={{ background: '#10B981', boxShadow: '0 0 0 2px #FFFFFF' }}
+                      />
+                    )}
+                    {!peerOnline && isUnread && (
+                      <span
+                        aria-hidden
+                        className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
+                        style={{ background: '#FF6B35', boxShadow: '0 0 0 2px #FFFFFF' }}
+                      />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="font-semibold text-gray-900 truncate">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <h3 className={`truncate text-[14px] tracking-tight ${isUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-800'}`} style={{ letterSpacing: '-0.01em' }}>
                         {counterpart}
                       </h3>
-                      <div className="flex flex-col items-end flex-shrink-0 ml-2">
-                        <span className="text-xs text-gray-500">
-                          {formatRelativeTime(conv.lastMessageAt)}
-                        </span>
-                        {inboxRole === 'seller' && onSetConversationReadState && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSetConversationReadState(conv.id, isUnread);
-                            }}
-                            className="text-[11px] text-gray-500 hover:text-orange-500 mt-0.5"
-                            aria-label={isUnread ? 'Mark conversation as read' : 'Mark conversation as unread'}
-                          >
-                            {isUnread ? 'Mark read' : 'Mark unread'}
-                          </button>
-                        )}
-                      </div>
+                      <span className="text-[10.5px] text-slate-400 font-medium whitespace-nowrap shrink-0">
+                        {formatRelativeTime(conv.lastMessageAt)}
+                      </span>
                     </div>
-                    <p className="text-sm text-gray-600 truncate mb-1">
-                      {conv.vehicleName}
-                    </p>
-                    <p className={`text-sm truncate ${isUnread ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
-                      {preview.prefix && <span className="text-gray-400 font-normal">{preview.prefix}</span>}
+                    <p className="text-[11px] text-slate-500 truncate mt-0.5 font-medium">{conv.vehicleName}</p>
+                    <p className={`text-[12.5px] truncate mt-1 ${isUnread ? 'text-slate-700 font-semibold' : 'text-slate-500'}`}>
+                      {preview.prefix && <span className="text-slate-400 font-normal">{preview.prefix}</span>}
                       {preview.text}
                     </p>
+                    {inboxRole === 'seller' && onSetConversationReadState && (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSetConversationReadState(conv.id, isUnread);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10.5px] font-semibold active:scale-95 transition-transform"
+                          style={{
+                            background: isUnread ? 'rgba(37,99,235,0.08)' : 'rgba(71,85,105,0.06)',
+                            color: isUnread ? '#1D4ED8' : '#475569'
+                          }}
+                          aria-label={isUnread ? 'Mark conversation as read' : 'Mark conversation as unread'}
+                        >
+                          {isUnread ? 'Mark read' : 'Mark unread'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {isUnread && (
-                    <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0"></div>
-                  )}
+                  <span className="text-slate-300 mt-1 shrink-0">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
+                  </span>
                 </div>
 
                 {/* Swipe Actions */}
@@ -892,11 +991,14 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                       onFlagContent('conversation', conv.id, 'User reported');
                       setSwipedId(null);
                     }}
-                    className="h-full px-6 bg-red-500 text-white flex items-center"
+                    className="h-full px-5 text-white flex items-center gap-1.5 text-[12px] font-semibold"
+                    style={{ background: 'linear-gradient(135deg, #F43F5E 0%, #DC2626 100%)' }}
+                    aria-label="Report conversation"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M4 21V4M4 14h12l-2-3 2-3H4" />
                     </svg>
+                    Report
                   </button>
                 </div>
               </div>

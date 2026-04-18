@@ -218,6 +218,7 @@ const CarServices = React.lazy(() => import('./components/CarServices'));
 const ServiceDetail = React.lazy(() => import('./components/ServiceDetail'));
 const CarServiceLogin = React.lazy(() => import('./components/CarServiceLogin'));
 const CarServiceDashboard = React.lazy(() => import('./components/CarServiceDashboard'));
+const MobileCarServiceDashboard = React.lazy(() => import('./components/MobileCarServiceDashboard'));
 const PricingPage = React.lazy(() => import('./components/PricingPage'));
 const SupportPage = React.lazy(() => import('./components/SupportPage'));
 const AboutUsPage = React.lazy(() => import('./components/AboutUsPage'));
@@ -494,7 +495,48 @@ const AppContent: React.FC = () => {
     resetViewportZoom();
   }, []);
   
-  const [serviceProvider, setServiceProvider] = React.useState<ServiceProvider | null>(null);
+  const SERVICE_PROVIDER_STORAGE_KEY = 'reRideServiceProvider';
+  const [serviceProvider, setServiceProviderRaw] = React.useState<ServiceProvider | null>(() => {
+    try {
+      const raw = localStorage.getItem(SERVICE_PROVIDER_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
+        return parsed as ServiceProvider;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+  const setServiceProvider = React.useCallback(
+    (next: ServiceProvider | null | ((prev: ServiceProvider | null) => ServiceProvider | null)) => {
+      setServiceProviderRaw((prev) => {
+        const value = typeof next === 'function' ? next(prev) : next;
+        try {
+          if (value) {
+            localStorage.setItem(SERVICE_PROVIDER_STORAGE_KEY, JSON.stringify(value));
+          } else {
+            localStorage.removeItem(SERVICE_PROVIDER_STORAGE_KEY);
+          }
+        } catch {
+          // ignore storage errors
+        }
+        return value;
+      });
+    },
+    []
+  );
+  // Unified logout that also clears any persisted service-provider session.
+  // The shared `handleLogout` only knows about the regular customer/seller
+  // user, so a provider-only session would leave `serviceProvider` (and its
+  // localStorage entry) intact and the mobile menu would still appear logged
+  // in. Using this wrapper from layout/header logout actions keeps both
+  // identities in sync.
+  const handleLogoutAll = React.useCallback(() => {
+    setServiceProvider(null);
+    handleLogout();
+  }, [handleLogout, setServiceProvider]);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -514,7 +556,139 @@ const AppContent: React.FC = () => {
     window.addEventListener('reride:service-provider-oauth', onServiceProviderGoogleOAuth as EventListener);
     return () =>
       window.removeEventListener('reride:service-provider-oauth', onServiceProviderGoogleOAuth as EventListener);
-  }, [navigate, addToast]);
+  }, [navigate, addToast, setServiceProvider]);
+
+  // If we have an active Supabase session AND the last-known role is
+  // `service_provider`, try to restore the provider profile from the API
+  // (e.g. after a hard refresh on mobile). This avoids the "No provider data.
+  // Please log in again." dead-end after the user comes back to the app.
+  //
+  // CRITICAL on Android (Capacitor WebView):
+  //   - Do NOT run this for customers/sellers/guests. Calling /api/service-providers
+  //     immediately after a customer login adds another network round-trip + JSON
+  //     parse + state update to the same frame as the heavy post-login HOME paint,
+  //     which on low-RAM Android emulators / devices is enough to OOM-kill the
+  //     WebView renderer and force-close the activity.
+  //   - Only set state when the response is a *valid* provider object (has an
+  //     `email` string). A 200-with-array or stub response would otherwise
+  //     spread an array into the object, corrupting the menu / provider UI.
+  //   - Defer the work off the post-login frame using requestIdleCallback so it
+  //     never competes with the first paint of HOME.
+  React.useEffect(() => {
+    if (serviceProvider) return;
+    if (typeof window === 'undefined') return;
+
+    // Cheap pre-check: only attempt if there is any signal this user is a
+    // service provider (current React user state, last-known session role,
+    // or persisted provider record). For customers/sellers/guests we skip
+    // entirely — they will never have a /api/service-providers profile and
+    // the call only burns boot/login budget.
+    let lastRole: string | null = null;
+    try {
+      lastRole =
+        sessionStorage.getItem('reride_last_role') ||
+        localStorage.getItem('reride_last_role') ||
+        null;
+    } catch {
+      lastRole = null;
+    }
+    const userLooksLikeProvider =
+      currentUser?.role === 'service_provider' || lastRole === 'service_provider';
+    if (!userLooksLikeProvider) return;
+
+    let cancelled = false;
+    let idleHandle: number | null = null;
+    let timeoutHandle: number | null = null;
+
+    const run = async () => {
+      try {
+        const { getSession } = await import('./services/supabase-auth-service');
+        const sessionResult = await getSession();
+        if (cancelled) return;
+        const token = sessionResult?.success ? sessionResult.session?.access_token : null;
+        if (!token) return;
+        const resp = await fetch('/api/service-providers?scope=mine', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        // 404 = customer/seller account hitting the provider endpoint; ignore.
+        if (!resp.ok) return;
+        const provider = await resp.json().catch(() => null);
+        if (
+          cancelled ||
+          !provider ||
+          typeof provider !== 'object' ||
+          Array.isArray(provider) ||
+          typeof (provider as { email?: unknown }).email !== 'string'
+        ) {
+          return;
+        }
+        const p = provider as Partial<ServiceProvider> & Record<string, unknown>;
+        setServiceProvider({
+          ...(p as ServiceProvider),
+          name: typeof p.name === 'string' && p.name.trim() ? p.name : 'Provider',
+          city: typeof p.city === 'string' ? p.city : '',
+        });
+      } catch {
+        // ignore - leave dashboard empty so login screen will be shown
+      }
+    };
+
+    const ric = (window as unknown as {
+      requestIdleCallback?: (fn: () => void, opts?: { timeout?: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    }).requestIdleCallback;
+    if (typeof ric === 'function') {
+      idleHandle = ric(() => {
+        void run();
+      }, { timeout: 2000 });
+    } else {
+      timeoutHandle = window.setTimeout(() => {
+        void run();
+      }, 250);
+    }
+
+    return () => {
+      cancelled = true;
+      try {
+        const cic = (window as unknown as {
+          cancelIdleCallback?: (id: number) => void;
+        }).cancelIdleCallback;
+        if (idleHandle != null && typeof cic === 'function') cic(idleHandle);
+      } catch {
+        /* ignore */
+      }
+      if (timeoutHandle != null) window.clearTimeout(timeoutHandle);
+    };
+  }, [serviceProvider, setServiceProvider, currentUser?.role]);
+
+  // If we land on (or get logged out from) the service-provider dashboard
+  // without a `serviceProvider` in state, redirect straight to the provider
+  // login screen instead of showing an intermediate "sign-in required" card.
+  // We give the session-restore effect above a brief window to repopulate the
+  // provider after a hard refresh; if it's still missing after that, we send
+  // the user to the login page.
+  React.useEffect(() => {
+    if (currentView !== ViewEnum.CAR_SERVICE_DASHBOARD) return;
+    if (serviceProvider) return;
+
+    let lastRole: string | null = null;
+    try {
+      lastRole =
+        sessionStorage.getItem('reride_last_role') ||
+        localStorage.getItem('reride_last_role') ||
+        null;
+    } catch {
+      lastRole = null;
+    }
+    const userLooksLikeProvider =
+      currentUser?.role === 'service_provider' || lastRole === 'service_provider';
+
+    const delayMs = userLooksLikeProvider ? 2500 : 0;
+    const timer = window.setTimeout(() => {
+      navigate(ViewEnum.CAR_SERVICE_LOGIN);
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [currentView, serviceProvider, currentUser?.role, navigate]);
 
   // Helper function to properly close chat and clear localStorage
   const handleCloseChat = React.useCallback(() => {
@@ -690,11 +864,33 @@ const AppContent: React.FC = () => {
       query?: string;
     }) => {
       const params = new URLSearchParams();
-      if (opts.filters) {
-        Object.entries(opts.filters).forEach(([k, v]) => {
-          if (v === undefined || v === null || v === '') return;
-          params.set(k, String(v));
-        });
+      const callerFilters = opts.filters || {};
+      // When a chip / deep link is followed from the Home hero, the in-app
+      // `navigate(USED_CARS)` path that normally resets the category to
+      // 'ALL' (AppProvider.tsx) is *not* hit — we go straight through
+      // `routerNavigate`. That left `selectedCategory` stuck on
+      // FOUR_WHEELER (its Home default), and `VehicleList` then ANDs the
+      // brand chip with `categoryFilter = 'FOUR_WHEELER'`, which silently
+      // drops every listing whose `vehicle.category` isn't the exact
+      // string "four-wheeler" (older rows store "Sedan" / "SUV" / etc.).
+      //
+      // Result: clicking a brand pill like "Hyundai" navigated to
+      // `/used-cars?make=Hyundai` with `Make = Hyundai` selected in the
+      // sidebar but produced 0 results.
+      //
+      // Fix: when the caller didn't explicitly pin a category, clear it
+      // here too — both in URL (so refresh/share is faithful) and in app
+      // state (so the existing `setCategoryFilter(initialCategory)` sync
+      // in VehicleList lands on 'ALL' instead of the leftover Home value).
+      const explicitCategory =
+        callerFilters.category != null && String(callerFilters.category).trim() !== '';
+      Object.entries(callerFilters).forEach(([k, v]) => {
+        if (v === undefined || v === null || v === '') return;
+        params.set(k, String(v));
+      });
+      if (!explicitCategory) {
+        params.set('category', 'ALL');
+        setSelectedCategory('ALL');
       }
       if (opts.query && opts.query.trim()) {
         params.set('q', opts.query.trim());
@@ -707,7 +903,7 @@ const AppContent: React.FC = () => {
         state: { view: ViewEnum.USED_CARS, timestamp: Date.now() },
       });
     },
-    [routerNavigate, setInitialSearchQuery]
+    [routerNavigate, setInitialSearchQuery, setSelectedCategory]
   );
 
   // If the URL has `?q=...` on mount / refresh, seed `initialSearchQuery`
@@ -3085,6 +3281,30 @@ const AppContent: React.FC = () => {
         );
 
       case ViewEnum.CAR_SERVICE_DASHBOARD:
+        if (isMobileApp) {
+          return (
+            <MobileCarServiceDashboard
+              provider={serviceProvider as {
+                name: string;
+                email: string;
+                phone: string;
+                city: string;
+                state?: string;
+                district?: string;
+                workshops?: string[];
+                skills?: string[];
+                availability?: string;
+                serviceCategories?: import('./constants/serviceProviderCatalog').ServiceCategory[];
+              } | null}
+              onNavigate={navigate}
+              onLogout={() => {
+                setServiceProvider(null);
+                handleLogout();
+                navigate(ViewEnum.HOME);
+              }}
+            />
+          );
+        }
         return (
           <CarServiceDashboard
             provider={serviceProvider as { name: string; email: string; phone: string; city: string } | null}
@@ -3773,12 +3993,13 @@ const AppContent: React.FC = () => {
             showBottomNav={true}
             headerTitle={getPageTitle()}
             currentUser={currentUser}
-            onLogout={handleLogout}
+            onLogout={handleLogoutAll}
             onNavigate={navigate}
             currentView={currentView}
             wishlistCount={wishlist.length}
             inboxCount={unreadMessagesCount}
             unreadNotificationCount={unreadNotificationsCount}
+            serviceProvider={serviceProvider}
           >
             <MobileDashboard
               currentUser={currentUser}
@@ -3990,12 +4211,13 @@ const AppContent: React.FC = () => {
             showBottomNav={true}
             headerTitle={getPageTitle()}
             currentUser={currentUser}
-            onLogout={handleLogout}
+            onLogout={handleLogoutAll}
             onNavigate={navigate}
             currentView={currentView}
             wishlistCount={wishlist.length}
             inboxCount={unreadMessagesCount}
             unreadNotificationCount={unreadNotificationsCount}
+            serviceProvider={serviceProvider}
           >
             <MobileBuyerDashboard
               currentUser={currentUser}
@@ -4141,10 +4363,11 @@ const AppContent: React.FC = () => {
           currentView={currentView}
           onNavigate={navigate}
           currentUser={currentUser}
-          onLogout={handleLogout}
+          onLogout={handleLogoutAll}
           wishlistCount={wishlist.length}
           inboxCount={unreadMessagesCount}
           unreadNotificationCount={unreadNotificationsCount}
+          serviceProvider={serviceProvider}
         >
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>

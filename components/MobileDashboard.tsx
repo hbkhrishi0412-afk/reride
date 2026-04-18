@@ -15,6 +15,50 @@ import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../util
 import { formatRelativeTime } from '../utils/date';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
 
+// ---------- Premium inline SVG icon set (kept local to avoid new deps) ----------
+type IconProps = { className?: string; size?: number; stroke?: number };
+const Icon = ({
+  size = 20,
+  stroke = 1.75,
+  className,
+  children,
+}: IconProps & { children: React.ReactNode }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    width={size}
+    height={size}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={stroke}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    {children}
+  </svg>
+);
+const IconBell = (p: IconProps) => (<Icon {...p}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></Icon>);
+const IconSettings = (p: IconProps) => (<Icon {...p}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></Icon>);
+const IconPlus = (p: IconProps) => (<Icon {...p}><path d="M12 5v14M5 12h14" /></Icon>);
+const IconChevronRight = (p: IconProps) => (<Icon {...p}><path d="M9 18l6-6-6-6" /></Icon>);
+const IconArrowUpRight = (p: IconProps) => (<Icon {...p}><path d="M7 17L17 7M9 7h8v8" /></Icon>);
+const IconCar = (p: IconProps) => (<Icon {...p}><path d="M5 17h14M6 17v2a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-2M15 17v2a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-2" /><path d="M3 13l2-5a2 2 0 0 1 1.85-1.25h10.3A2 2 0 0 1 19 8l2 5v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3z" /><circle cx="7.5" cy="14.5" r=".75" fill="currentColor" /><circle cx="16.5" cy="14.5" r=".75" fill="currentColor" /></Icon>);
+const IconEye = (p: IconProps) => (<Icon {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></Icon>);
+const IconChat = (p: IconProps) => (<Icon {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></Icon>);
+const IconCheck = (p: IconProps) => (<Icon {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" /></Icon>);
+const IconSparkle = (p: IconProps) => (<Icon {...p}><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" /></Icon>);
+const IconCrown = (p: IconProps) => (<Icon {...p}><path d="M3 18h18M3 7l4 4 5-7 5 7 4-4-2 11H5z" /></Icon>);
+const IconUpload = (p: IconProps) => (<Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></Icon>);
+const IconList = (p: IconProps) => (<Icon {...p}><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></Icon>);
+const IconRocket = (p: IconProps) => (<Icon {...p}><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09zM12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" /><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" /></Icon>);
+const IconStar = (p: IconProps) => (<Icon {...p}><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.27 5.82 22 7 14.14l-5-4.87 6.91-1.01z" /></Icon>);
+const IconEdit = (p: IconProps) => (<Icon {...p}><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4z" /></Icon>);
+const IconTrash = (p: IconProps) => (<Icon {...p}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></Icon>);
+const IconShield = (p: IconProps) => (<Icon {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></Icon>);
+const IconChart = (p: IconProps) => (<Icon {...p}><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></Icon>);
+
 interface MobileDashboardProps {
   currentUser: User;
   userVehicles: Vehicle[];
@@ -305,617 +349,965 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     return row;
   }, [t, totalListings, soldListings, reportedCount, isSeller, unreadSellerThreads]);
 
-  const renderOverview = () => (
-    <div className="space-y-5 pb-4">
-      {/* Premium Welcome Card */}
-      <div 
-        className="rounded-2xl p-5 text-white"
-        style={{
-          background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 50%, #FF9F6B 100%)',
-          boxShadow: '0 8px 24px rgba(255, 107, 53, 0.3), 0 4px 8px rgba(255, 107, 53, 0.2)',
-          border: '0.5px solid rgba(255, 255, 255, 0.2)'
-        }}
-      >
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <h2 className="text-xl font-bold mb-1 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+  const renderOverview = () => {
+    const conversionRate = totalListings > 0 ? Math.round((soldListings / totalListings) * 100) : 0;
+    const planUsedPct = plan && plan.listingLimit !== 'unlimited'
+      ? Math.min((activeListings / plan.listingLimit) * 100, 100)
+      : 0;
+    const featuredRemaining = plan ? Math.max((plan.featuredCredits || 0) - featuredListingsCount, 0) : 0;
+    const certsRemaining = plan ? Math.max((plan.freeCertifications || 0) - (currentUser.usedCertifications || 0), 0) : 0;
+    const expiringSoon = currentUser.planExpiryDate
+      ? (new Date(currentUser.planExpiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24) < 14
+      : false;
+
+    return (
+      <div className="space-y-4 pb-4">
+        {/* ── Premium Welcome Hero ── */}
+        <div
+          className="relative overflow-hidden rounded-3xl text-white"
+          style={{
+            background:
+              'radial-gradient(120% 120% at 0% 0%, #1F1F2A 0%, #0E0E14 55%, #0A0A10 100%)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            boxShadow: '0 20px 50px -22px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05)'
+          }}
+        >
+          {/* Accent stripe */}
+          <div
+            aria-hidden
+            className="absolute left-0 top-0 h-full w-[3px]"
+            style={{ background: 'linear-gradient(180deg, #FF8456, #FF6B35 60%, transparent)' }}
+          />
+          {/* Subtle dot grid */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-[0.07]"
+            style={{
+              backgroundImage:
+                'radial-gradient(rgba(255,255,255,0.6) 1px, transparent 1px)',
+              backgroundSize: '14px 14px'
+            }}
+          />
+          {/* Glow */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-20 -top-16 w-72 h-72 rounded-full"
+            style={{ background: 'radial-gradient(closest-side, rgba(255,107,53,0.20), transparent 70%)' }}
+          />
+
+          <div className="relative p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/80"
+                style={{
+                  background: 'rgba(255,107,53,0.12)',
+                  border: '1px solid rgba(255,107,53,0.30)'
+                }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#FF8456] shadow-[0_0_10px_rgba(255,132,86,0.8)]" />
+                {isSeller ? 'Seller hub' : isAdmin ? 'Admin' : 'Buyer hub'}
+              </span>
+            </div>
+            <h2
+              className="font-semibold mb-1.5 text-white"
+              style={{ fontSize: '22px', lineHeight: 1.15, letterSpacing: '-0.025em' }}
+            >
               {t('sellerDashboard.mobile.welcome', { name: currentUser.name?.split(' ')[0] || '' })}
             </h2>
-            <p className="text-white/90 text-sm leading-relaxed font-medium">
+            <p className="text-[13.5px] text-white/60 leading-relaxed font-medium max-w-sm">
               {isSeller
                 ? t('sellerDashboard.mobile.manageListings')
                 : isAdmin
                   ? t('sellerDashboard.mobile.monitorPlatform')
                   : t('sellerDashboard.mobile.trackBuyerJourney')}
             </p>
-          </div>
-          <div 
-            className="w-12 h-12 rounded-full flex items-center justify-center"
-            style={{
-              background: 'rgba(255, 255, 255, 0.25)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              border: '1.5px solid rgba(255, 255, 255, 0.3)',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
-            }}
-          >
-            <span className="text-2xl">👋</span>
-          </div>
-        </div>
-      </div>
 
-      {/* Stats Grid - Native Style (2x2 balanced layout) */}
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          type="button"
-          onClick={() => setActiveTab('listings')}
-          aria-label={`${t('sellerDashboard.mobile.tab.listings')}: ${totalListings}`}
-          className="native-card p-4 text-left cursor-pointer active:opacity-80 native-transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center" aria-hidden="true">
-              <span className="text-xl">🚗</span>
-            </div>
-            {totalListings > 0 && (
-              <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
-                {totalListings}
-              </span>
+            {/* Hero metrics rail */}
+            {isSeller && (
+              <div className="mt-5 grid grid-cols-3 gap-3">
+                {[
+                  { label: 'Active', value: activeListings },
+                  { label: 'Views', value: totalViews.toLocaleString('en-IN') },
+                  { label: 'Inquiries', value: totalInquiries }
+                ].map((m) => (
+                  <div
+                    key={m.label}
+                    className="rounded-2xl px-3 py-2.5"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.06)'
+                    }}
+                  >
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-white/45 font-semibold">{m.label}</p>
+                    <p className="mt-1 text-[18px] font-bold text-white tracking-tight">{m.value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {isSeller && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingVehicle(null);
+                  setActiveTab('addVehicle');
+                }}
+                className="mt-5 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-[13px] font-semibold text-white active:scale-[0.97] transition-transform"
+                style={{
+                  background: 'linear-gradient(135deg, #FF8456 0%, #FF6B35 100%)',
+                  boxShadow: '0 10px 24px -10px rgba(255,107,53,0.6), inset 0 1px 0 rgba(255,255,255,0.25)'
+                }}
+              >
+                <IconPlus size={16} stroke={2.4} />
+                List a vehicle
+                <IconArrowUpRight size={14} stroke={2.2} className="opacity-90" />
+              </button>
             )}
           </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
-            {t('sellerDashboard.mobile.tab.listings')}
-          </p>
-          <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{totalListings}</p>
-          {activeListings > 0 && (
-            <p className="text-xs text-gray-500 mt-1">{t('sellerDashboard.mobile.nActive', { count: activeListings })}</p>
-          )}
-        </button>
-
-        <div className="native-card p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center" aria-hidden="true">
-              <span className="text-xl">👁️</span>
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
-            {t('sellerDashboard.mobile.totalViews')}
-          </p>
-          <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{totalViews}</p>
-          {totalViews > 0 && (
-            <p className="text-xs text-gray-500 mt-1">{t('sellerDashboard.mobile.viewsHint')}</p>
-          )}
         </div>
 
-        {isSeller && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('messages')}
-            aria-label={`${t('sellerDashboard.mobile.tab.messages')}: ${totalInquiries}${unreadSellerThreads > 0 ? `, ${unreadSellerThreads} unread` : ''}`}
-            className="native-card p-4 text-left cursor-pointer active:opacity-80 native-transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500"
+        {/* ── Premium Stats Grid (2×2) ── */}
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            {
+              key: 'listings',
+              label: t('sellerDashboard.mobile.tab.listings'),
+              value: totalListings,
+              hint: activeListings > 0 ? t('sellerDashboard.mobile.nActive', { count: activeListings }) : 'Start your first',
+              icon: <IconCar size={16} stroke={1.9} />,
+              accent: '#2563EB',
+              accentSoft: 'rgba(37,99,235,0.10)',
+              progress: totalListings > 0 ? Math.min((activeListings / Math.max(totalListings, 1)) * 100, 100) : 0,
+              onClick: () => setActiveTab('listings')
+            },
+            {
+              key: 'views',
+              label: t('sellerDashboard.mobile.totalViews'),
+              value: totalViews.toLocaleString('en-IN'),
+              hint: totalViews > 0 ? t('sellerDashboard.mobile.viewsHint') : 'Awaiting views',
+              icon: <IconEye size={16} stroke={1.9} />,
+              accent: '#8B5CF6',
+              accentSoft: 'rgba(139,92,246,0.10)',
+              progress: Math.min(totalViews / 5, 100),
+              onClick: undefined as undefined | (() => void)
+            },
+            ...(isSeller ? [{
+              key: 'messages',
+              label: t('sellerDashboard.mobile.tab.messages'),
+              value: totalInquiries,
+              hint: unreadSellerThreads > 0 ? `${unreadSellerThreads} unread` : 'All caught up',
+              icon: <IconChat size={16} stroke={1.9} />,
+              accent: '#10B981',
+              accentSoft: 'rgba(16,185,129,0.10)',
+              progress: totalInquiries > 0 ? Math.min((unreadSellerThreads / Math.max(totalInquiries, 1)) * 100, 100) : 0,
+              onClick: () => setActiveTab('messages')
+            }] : []),
+            {
+              key: 'sold',
+              label: t('sellerDashboard.mobile.soldStat'),
+              value: soldListings,
+              hint:
+                soldListings > 0 && totalListings > 0
+                  ? t('sellerDashboard.mobile.soldSuccess', { percent: conversionRate })
+                  : 'No sales yet',
+              icon: <IconCheck size={16} stroke={1.9} />,
+              accent: '#FF6B35',
+              accentSoft: 'rgba(255,107,53,0.10)',
+              progress: conversionRate,
+              onClick: () => setActiveTab('salesHistory')
+            }
+          ].map((s) => {
+            const isInteractive = !!s.onClick;
+            const Comp: any = isInteractive ? 'button' : 'div';
+            return (
+              <Comp
+                key={s.key}
+                {...(isInteractive ? { type: 'button', onClick: s.onClick } : {})}
+                className="relative text-left rounded-2xl p-4 active:scale-[0.98] transition-all"
+                style={{
+                  background: '#FFFFFF',
+                  border: '1px solid rgba(15,23,42,0.06)',
+                  boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+                }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div
+                    className="w-9 h-9 rounded-xl grid place-items-center"
+                    style={{ background: s.accentSoft, color: s.accent }}
+                  >
+                    {s.icon}
+                  </div>
+                  {isInteractive && (
+                    <span className="text-slate-300">
+                      <IconChevronRight size={16} stroke={2} />
+                    </span>
+                  )}
+                </div>
+                <p
+                  className="text-[10.5px] uppercase font-semibold text-slate-500 mb-1"
+                  style={{ letterSpacing: '0.14em' }}
+                >
+                  {s.label}
+                </p>
+                <p
+                  className="text-[26px] font-bold text-slate-900 tracking-tight leading-none"
+                  style={{ letterSpacing: '-0.03em' }}
+                >
+                  {s.value}
+                </p>
+                <div className="mt-3 h-1 rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${Math.max(s.progress, 4)}%`, background: s.accent }}
+                  />
+                </div>
+                <p className="mt-2 text-[11px] text-slate-500 font-medium truncate">{s.hint}</p>
+              </Comp>
+            );
+          })}
+        </div>
+
+        {/* ── Plan card skeleton ── */}
+        {isSeller && planLoading && (
+          <div
+            aria-hidden
+            className="rounded-3xl p-5 animate-pulse"
+            style={{
+              background: 'linear-gradient(135deg, #16161D, #0E0E14)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              minHeight: 200
+            }}
           >
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center" aria-hidden="true">
-                <span className="text-xl">💬</span>
-              </div>
-              {unreadSellerThreads > 0 && (
-                <span className="text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full">
-                  {unreadSellerThreads} new
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
-              {t('sellerDashboard.mobile.tab.messages')}
-            </p>
-            <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{totalInquiries}</p>
-          </button>
+            <div className="h-4 w-32 bg-white/10 rounded mb-3" />
+            <div className="h-7 w-44 bg-white/10 rounded mb-5" />
+            <div className="h-2 w-full bg-white/10 rounded mb-2" />
+            <div className="h-3 w-2/3 bg-white/10 rounded mb-2" />
+            <div className="h-3 w-1/2 bg-white/10 rounded" />
+          </div>
         )}
 
-        <div className="native-card p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center" aria-hidden="true">
-              <span className="text-xl">✅</span>
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
-            {t('sellerDashboard.mobile.soldStat')}
-          </p>
-          <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{soldListings}</p>
-          {soldListings > 0 && totalListings > 0 && (
-            <p className="text-xs text-gray-500 mt-1">
-              {t('sellerDashboard.mobile.soldSuccess', {
-                percent: Math.round((soldListings / totalListings) * 100),
-              })}
-            </p>
-          )}
-        </div>
-      </div>
+        {/* ── Premium Plan Card (obsidian + amber accents) ── */}
+        {isSeller && plan && !planLoading && (
+          <div
+            className="relative overflow-hidden rounded-3xl text-white"
+            style={{
+              background:
+                'linear-gradient(135deg, #14141C 0%, #0B0B11 60%, #08080C 100%)',
+              border: '1px solid rgba(255, 184, 102, 0.18)',
+              boxShadow: '0 20px 50px -22px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)'
+            }}
+          >
+            {/* Amber edge */}
+            <div
+              aria-hidden
+              className="absolute inset-x-0 top-0 h-px"
+              style={{ background: 'linear-gradient(90deg, transparent, rgba(255,184,102,0.55), transparent)' }}
+            />
+            <div
+              aria-hidden
+              className="absolute -right-16 -top-16 w-56 h-56 rounded-full"
+              style={{ background: 'radial-gradient(closest-side, rgba(255,184,102,0.18), transparent 70%)' }}
+            />
 
-      {/* Plan card skeleton while loading — prevents layout jump */}
-      {isSeller && planLoading && (
-        <div
-          aria-hidden="true"
-          className="rounded-2xl p-5 bg-gradient-to-br from-orange-200 to-orange-300 relative overflow-hidden animate-pulse"
-          style={{ minHeight: 180 }}
-        >
-          <div className="h-5 w-40 bg-white/40 rounded mb-4" />
-          <div className="h-3 w-full bg-white/30 rounded mb-2" />
-          <div className="h-2 w-full bg-white/20 rounded mb-4" />
-          <div className="h-3 w-2/3 bg-white/30 rounded mb-2" />
-          <div className="h-3 w-1/2 bg-white/30 rounded" />
-        </div>
-      )}
-
-      {/* Plan Management Card - Premium Design */}
-      {isSeller && plan && !planLoading && (
-        <div 
-          className="rounded-2xl p-5 text-white relative overflow-hidden"
-          style={{
-            background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 50%, #FF9F6B 100%)',
-            boxShadow: '0 8px 24px rgba(255, 107, 53, 0.3), 0 4px 8px rgba(255, 107, 53, 0.2)',
-            border: '0.5px solid rgba(255, 255, 255, 0.2)'
-          }}
-        >
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">
-                {t('sellerDashboard.yourPlanLabel')} {plan.name}
-              </h3>
-              {(plan.id !== 'premium' || (currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date())) && (
-                <button
-                  onClick={() => onNavigate(ViewEnum.PRICING)}
-                  className="px-4 py-2 bg-white/20 backdrop-blur-sm text-white font-semibold rounded-lg text-sm active:scale-95 transition-transform"
-                >
-                  {currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date()
-                    ? t('sellerDashboard.renewPlan')
-                    : t('sellerDashboard.upgradePlan')}
-                </button>
-              )}
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between items-center">
-                <span className="opacity-90">
-                  {t('vehicle.detail.activeListings')}:
-                </span>
-                <span className="font-bold">{activeListings} / {plan.listingLimit === 'unlimited' ? '∞' : plan.listingLimit}</span>
+            <div className="relative p-5">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span
+                      className="w-7 h-7 grid place-items-center rounded-lg"
+                      style={{
+                        background: 'linear-gradient(135deg, #FFD08A, #E59F4B)',
+                        color: '#1B120A',
+                        boxShadow: '0 6px 14px -6px rgba(229,159,75,0.55)'
+                      }}
+                    >
+                      <IconCrown size={15} stroke={2} />
+                    </span>
+                    <span className="text-[10.5px] uppercase tracking-[0.20em] text-amber-200/80 font-semibold">
+                      {t('sellerDashboard.yourPlanLabel')}
+                    </span>
+                  </div>
+                  <h3
+                    className="text-white font-semibold tracking-tight"
+                    style={{ fontSize: '20px', letterSpacing: '-0.02em' }}
+                  >
+                    {plan.name}
+                  </h3>
+                </div>
+                {(plan.id !== 'premium' || (currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date())) && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(ViewEnum.PRICING)}
+                    className="shrink-0 rounded-full px-4 py-2 text-[12.5px] font-semibold text-slate-900 active:scale-95 transition-transform"
+                    style={{
+                      background: 'linear-gradient(180deg, #FFFFFF, #F2F2F2)',
+                      boxShadow: '0 8px 18px -8px rgba(255,255,255,0.35)'
+                    }}
+                  >
+                    {currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date()
+                      ? t('sellerDashboard.renewPlan')
+                      : t('sellerDashboard.upgradePlan')}
+                  </button>
+                )}
               </div>
-              <div className="w-full rounded-full h-2 bg-white/20">
+
+              {/* Listings usage */}
+              <div className="mb-4">
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className="text-[12px] text-white/55 font-medium">{t('vehicle.detail.activeListings')}</span>
+                  <span className="text-[13px] text-white font-semibold">
+                    {activeListings}
+                    <span className="text-white/40"> / {plan.listingLimit === 'unlimited' ? '∞' : plan.listingLimit}</span>
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${plan.listingLimit === 'unlimited' ? 100 : planUsedPct}%`,
+                      background: 'linear-gradient(90deg, #FFD08A, #FF8456)'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Two-up: credits + certifications */}
+              <div className="grid grid-cols-2 gap-2.5 mb-3">
                 <div
-                  className="bg-white h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${plan.listingLimit === 'unlimited' ? 0 : Math.min((activeListings / plan.listingLimit) * 100, 100)}%` }}
-                ></div>
+                  className="rounded-2xl px-3 py-2.5"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/45 font-semibold">Featured</p>
+                  <p className="mt-1 text-[16px] font-bold text-white tracking-tight">
+                    {featuredRemaining}<span className="text-white/40 text-[12px] font-medium ml-1">left</span>
+                  </p>
+                </div>
+                <div
+                  className="rounded-2xl px-3 py-2.5"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/45 font-semibold">Certifications</p>
+                  <p className="mt-1 text-[16px] font-bold text-white tracking-tight">
+                    {certsRemaining}<span className="text-white/40 text-[12px] font-medium ml-1">free</span>
+                  </p>
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="opacity-90">Featured Credits:</span>
-                <span className="font-bold">{Math.max((plan.featuredCredits || 0) - featuredListingsCount, 0)} remaining</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="opacity-90">Free Certifications:</span>
-                <span className="font-bold">{Math.max((plan.freeCertifications || 0) - (currentUser.usedCertifications || 0), 0)} remaining</span>
-              </div>
+
               {currentUser.planExpiryDate && (
-                <div className="pt-3 border-t border-white/20 flex justify-between items-center text-xs">
-                  <span className="opacity-90">Expiry:</span>
-                  <span className="font-semibold">
+                <div
+                  className="flex items-center justify-between rounded-xl px-3 py-2"
+                  style={{
+                    background: expiringSoon ? 'rgba(255,107,53,0.08)' : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${expiringSoon ? 'rgba(255,107,53,0.25)' : 'rgba(255,255,255,0.06)'}`
+                  }}
+                >
+                  <span className="text-[11.5px] text-white/60 font-medium">
+                    {expiringSoon ? 'Renews soon' : 'Renews on'}
+                  </span>
+                  <span className="text-[12px] font-semibold text-white">
                     {new Date(currentUser.planExpiryDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
                 </div>
               )}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* AI Sales Assistant */}
-      {isSeller && (
-        <div className="native-card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
-              <span className="text-xl">✨</span>
-              AI Sales Assistant
-            </h3>
-          </div>
-          <AiAssistant
-            vehicles={safeUserVehicles}
-            conversations={safeConversations}
-            onNavigateToVehicle={(vehicleId) => {
-              const vehicle = safeUserVehicles.find(v => v.id === vehicleId);
-              if (vehicle && onViewVehicle) onViewVehicle(vehicle);
+        {/* ── AI Sales Assistant ── */}
+        {isSeller && (
+          <div
+            className="relative overflow-hidden rounded-3xl p-5"
+            style={{
+              background: '#FFFFFF',
+              border: '1px solid rgba(15,23,42,0.06)',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
             }}
-            onNavigateToInquiry={(conversationId) => {
-              const conv = safeConversations.find((c) => c && c.id === conversationId);
-              if (conv && onSellerOpenChat) onSellerOpenChat(conv);
-            }}
-          />
-        </div>
-      )}
-
-      {/* Premium Quick Actions */}
-      <div className="native-card p-5">
-        <h3 className="font-bold text-gray-900 mb-4 text-base tracking-tight" style={{ letterSpacing: '-0.01em' }}>Quick Actions</h3>
-        <div className="grid grid-cols-2 gap-3">
-          {isSeller && (
-            <>
-              <button 
-                onClick={() => {
-                  setEditingVehicle(null);
-                  setActiveTab('addVehicle');
-                }}
-                className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl font-bold native-button min-h-[80px]"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(255, 107, 53, 0.1) 0%, rgba(255, 132, 86, 0.15) 100%)',
-                  border: '0.5px solid rgba(255, 107, 53, 0.2)',
-                  color: '#FF6B35',
-                  boxShadow: '0 2px 8px rgba(255, 107, 53, 0.15)',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)'
-                }}
-                onMouseDown={(e) => {
-                  e.currentTarget.style.transform = 'scale(0.96)';
-                }}
-                onMouseUp={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-              >
-                <span className="text-2xl">➕</span>
-                <span className="text-sm">Add Vehicle</span>
-              </button>
-              <button 
-                onClick={() => setActiveTab('listings')}
-                className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl font-bold native-button min-h-[80px]"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(59, 130, 246, 0.15) 100%)',
-                  border: '0.5px solid rgba(37, 99, 235, 0.2)',
-                  color: '#2563EB',
-                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.15)',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)'
-                }}
-                onMouseDown={(e) => {
-                  e.currentTarget.style.transform = 'scale(0.96)';
-                }}
-                onMouseUp={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-              >
-                <span className="text-2xl">📝</span>
-                <span className="text-sm">Manage Listings</span>
-              </button>
-              {onAddMultipleVehicles && (
-                <button 
-                  onClick={() => setShowBulkUpload(true)}
-                  className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl font-bold native-button min-h-[80px]"
+          >
+            <div
+              aria-hidden
+              className="absolute -right-10 -top-10 w-40 h-40 rounded-full opacity-60"
+              style={{ background: 'radial-gradient(closest-side, rgba(139,92,246,0.10), transparent 70%)' }}
+            />
+            <div className="relative flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className="w-9 h-9 rounded-xl grid place-items-center text-white"
                   style={{
-                    background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(167, 139, 250, 0.15) 100%)',
-                    border: '0.5px solid rgba(139, 92, 246, 0.2)',
-                    color: '#8B5CF6',
-                    boxShadow: '0 2px 8px rgba(139, 92, 246, 0.15)',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)'
+                    background: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+                    boxShadow: '0 8px 20px -10px rgba(139,92,246,0.55)'
                   }}
                 >
-                  <span className="text-2xl">📤</span>
-                  <span className="text-sm">Bulk Upload</span>
+                  <IconSparkle size={16} stroke={2} />
+                </span>
+                <div className="leading-tight">
+                  <h3 className="font-semibold text-slate-900 text-[15px] tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+                    AI Sales Assistant
+                  </h3>
+                  <p className="text-[11.5px] text-slate-500 font-medium">Smart suggestions based on your listings</p>
+                </div>
+              </div>
+              <span
+                className="text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-1 rounded-full"
+                style={{ background: 'rgba(139,92,246,0.10)', color: '#7C3AED' }}
+              >
+                Beta
+              </span>
+            </div>
+            <AiAssistant
+              vehicles={safeUserVehicles}
+              conversations={safeConversations}
+              onNavigateToVehicle={(vehicleId) => {
+                const vehicle = safeUserVehicles.find(v => v.id === vehicleId);
+                if (vehicle && onViewVehicle) onViewVehicle(vehicle);
+              }}
+              onNavigateToInquiry={(conversationId) => {
+                const conv = safeConversations.find((c) => c && c.id === conversationId);
+                if (conv && onSellerOpenChat) onSellerOpenChat(conv);
+              }}
+            />
+          </div>
+        )}
+
+        {/* ── Premium Quick Actions ── */}
+        <div
+          className="rounded-3xl p-5"
+          style={{
+            background: '#FFFFFF',
+            border: '1px solid rgba(15,23,42,0.06)',
+            boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+          }}
+        >
+          <div className="flex items-baseline justify-between mb-4">
+            <h3 className="font-semibold text-slate-900 text-[15px] tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+              Quick actions
+            </h3>
+            <span className="text-[11px] uppercase tracking-[0.16em] text-slate-400 font-semibold">Shortcuts</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            {(() => {
+              const actions: { key: string; label: string; sub: string; onClick: () => void; icon: React.ReactNode; accent: string; tint: string }[] = [];
+              if (isSeller) {
+                actions.push({
+                  key: 'add',
+                  label: 'Add vehicle',
+                  sub: 'List in minutes',
+                  onClick: () => { setEditingVehicle(null); setActiveTab('addVehicle'); },
+                  icon: <IconPlus size={16} stroke={2.2} />,
+                  accent: '#FF6B35',
+                  tint: 'rgba(255,107,53,0.10)'
+                });
+                actions.push({
+                  key: 'manage',
+                  label: 'Manage',
+                  sub: 'Edit listings',
+                  onClick: () => setActiveTab('listings'),
+                  icon: <IconList size={16} stroke={2} />,
+                  accent: '#2563EB',
+                  tint: 'rgba(37,99,235,0.10)'
+                });
+                if (onAddMultipleVehicles) {
+                  actions.push({
+                    key: 'bulk',
+                    label: 'Bulk upload',
+                    sub: 'CSV import',
+                    onClick: () => setShowBulkUpload(true),
+                    icon: <IconUpload size={16} stroke={2} />,
+                    accent: '#8B5CF6',
+                    tint: 'rgba(139,92,246,0.10)'
+                  });
+                }
+                actions.push({
+                  key: 'analytics',
+                  label: 'Analytics',
+                  sub: 'Performance',
+                  onClick: () => setActiveTab('analytics'),
+                  icon: <IconChart size={16} stroke={2} />,
+                  accent: '#0EA5E9',
+                  tint: 'rgba(14,165,233,0.10)'
+                });
+              }
+              actions.push({
+                key: 'inbox',
+                label: 'Messages',
+                sub: 'Open inbox',
+                onClick: () => onNavigate(ViewEnum.INBOX),
+                icon: <IconChat size={16} stroke={2} />,
+                accent: '#10B981',
+                tint: 'rgba(16,185,129,0.10)'
+              });
+              actions.push({
+                key: 'settings',
+                label: 'Settings',
+                sub: 'Preferences',
+                onClick: () => setActiveTab('settings'),
+                icon: <IconShield size={16} stroke={2} />,
+                accent: '#475569',
+                tint: 'rgba(71,85,105,0.10)'
+              });
+              return actions.map((a) => (
+                <button
+                  key={a.key}
+                  type="button"
+                  onClick={a.onClick}
+                  className="group relative flex items-start gap-3 rounded-2xl p-3.5 text-left active:scale-[0.97] transition-transform"
+                  style={{
+                    background: 'rgba(15,23,42,0.025)',
+                    border: '1px solid rgba(15,23,42,0.06)'
+                  }}
+                >
+                  <span
+                    className="w-9 h-9 rounded-xl grid place-items-center shrink-0"
+                    style={{ background: a.tint, color: a.accent }}
+                  >
+                    {a.icon}
+                  </span>
+                  <span className="flex-1 min-w-0 leading-tight pt-0.5">
+                    <span className="block text-[13px] font-semibold text-slate-900 truncate" style={{ letterSpacing: '-0.01em' }}>
+                      {a.label}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-slate-500 font-medium truncate">{a.sub}</span>
+                  </span>
+                  <span className="text-slate-300 mt-1.5">
+                    <IconChevronRight size={14} stroke={2} />
+                  </span>
                 </button>
-              )}
-            </>
-          )}
-          <button 
-            type="button"
-            onClick={() => onNavigate(ViewEnum.INBOX)}
-            className="flex flex-col items-center justify-center gap-2 p-4 bg-green-50 rounded-xl text-green-700 font-semibold native-button active:opacity-70 min-h-[80px]"
-          >
-            <span className="text-2xl">💬</span>
-            <span className="text-sm">Messages</span>
-          </button>
-          <button 
-            onClick={() => setActiveTab('settings')}
-            className="flex flex-col items-center justify-center gap-2 p-4 bg-gray-50 rounded-xl text-gray-700 font-semibold native-button active:opacity-70 min-h-[80px]"
-          >
-            <span className="text-2xl">⚙️</span>
-            <span className="text-sm">Settings</span>
-          </button>
+              ));
+            })()}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderListings = () => (
-    <div className="space-y-5 pb-4">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-lg font-bold text-gray-900">{t('sellerListing.yourListings')}</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
+    <div className="space-y-4 pb-4">
+      {/* Section header */}
+      <div className="flex items-center justify-between">
+        <div className="min-w-0">
+          <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Inventory</p>
+          <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+            {t('sellerListing.yourListings')}
+          </h3>
+          <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">
             {t('sellerListing.listingsSummary', { total: totalListings, active: activeListings })}
           </p>
         </div>
         {isSeller && (
-          <button 
-            onClick={() => {
-              setEditingVehicle(null);
-              setActiveTab('addVehicle');
+          <button
+            type="button"
+            onClick={() => { setEditingVehicle(null); setActiveTab('addVehicle'); }}
+            className="inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[12.5px] font-semibold text-white active:scale-95 transition-transform shrink-0"
+            style={{
+              background: 'linear-gradient(135deg, #FF8456 0%, #FF6B35 100%)',
+              boxShadow: '0 8px 18px -8px rgba(255,107,53,0.55)',
+              letterSpacing: '-0.01em'
             }}
-            className="native-button native-button-primary px-5 py-2.5 text-sm font-bold flex items-center gap-2"
-            style={{ letterSpacing: '-0.01em' }}
           >
-            <span className="text-base">➕</span>
-            <span>{t('sellerListing.addVehicle')}</span>
+            <IconPlus size={14} stroke={2.4} />
+            {t('sellerListing.addVehicle')}
           </button>
         )}
       </div>
 
       {safeUserVehicles.length === 0 ? (
-        <div className="text-center py-12 px-4">
-          <div className="w-20 h-20 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-4xl">🚗</span>
+        <div
+          className="relative overflow-hidden rounded-3xl px-6 py-12 text-center"
+          style={{
+            background: 'linear-gradient(180deg, #FFFFFF, #FAFAFC)',
+            border: '1px solid rgba(15,23,42,0.06)'
+          }}
+        >
+          <div
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-px"
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(255,107,53,0.4), transparent)' }}
+          />
+          <div
+            className="w-16 h-16 mx-auto mb-4 rounded-2xl grid place-items-center"
+            style={{
+              background: 'linear-gradient(135deg, rgba(255,107,53,0.10), rgba(255,132,86,0.18))',
+              color: '#FF6B35'
+            }}
+          >
+            <IconCar size={28} stroke={1.7} />
           </div>
-          <h4 className="text-xl font-bold text-gray-900 mb-2">{t('sellerListing.noListingsTitle')}</h4>
-          <p className="text-gray-600 text-sm mb-6 leading-relaxed max-w-sm mx-auto">
+          <h4 className="text-[18px] font-semibold text-slate-900 mb-1.5 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+            {t('sellerListing.noListingsTitle')}
+          </h4>
+          <p className="text-[13px] text-slate-500 mb-6 leading-relaxed max-w-sm mx-auto font-medium">
             {isSeller ? t('sellerListing.noListingsSeller') : t('sellerListing.noListingsBuyer')}
           </p>
           {isSeller && (
-            <button 
-              onClick={() => {
-                setEditingVehicle(null);
-                setActiveTab('addVehicle');
+            <button
+              type="button"
+              onClick={() => { setEditingVehicle(null); setActiveTab('addVehicle'); }}
+              className="inline-flex items-center gap-2 rounded-full px-6 py-3 font-semibold text-white text-[13.5px] active:scale-95 transition-transform"
+              style={{
+                background: 'linear-gradient(135deg, #FF8456 0%, #FF6B35 100%)',
+                boxShadow: '0 12px 24px -10px rgba(255,107,53,0.55)'
               }}
-              className="native-button native-button-primary px-8 py-3 font-semibold"
             >
+              <IconPlus size={16} stroke={2.4} />
               {t('sellerListing.addFirstVehicle')}
             </button>
           )}
         </div>
       ) : (
         <div className="space-y-3">
-          {safeUserVehicles.map((vehicle) => (
-            <div 
-              key={vehicle.id} 
-              className="native-card p-4 cursor-pointer active:opacity-80 native-transition"
-              onClick={() => {
-                if (onViewVehicle) {
-                  onViewVehicle(vehicle);
-                }
-              }}
-            >
-              <div className="flex items-start gap-4">
-                <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <span className="text-3xl">🚗</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-bold text-gray-900 truncate text-base mb-1">
-                    {vehicle.year} {vehicle.make} {vehicle.model}
-                  </h4>
-                  {vehicle.variant && (
-                    <p className="text-xs text-gray-500 mb-2">{vehicle.variant}</p>
-                  )}
-                  <p className="text-lg font-bold text-orange-600 mb-2">₹{vehicle.price.toLocaleString('en-IN')}</p>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                      vehicle.status === 'published' ? 'bg-green-100 text-green-800' :
-                      vehicle.status === 'sold' ? 'bg-gray-100 text-gray-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {vehicle.status === 'published'
-                        ? t('sellerListing.badgeActive')
-                        : vehicle.status === 'sold'
-                          ? t('sellerListing.badgeSold')
-                          : t('sellerListing.badgePending')}
-                    </span>
-                    {vehicle.mileage && (
-                      <span className="text-xs text-gray-500">📏 {vehicle.mileage.toLocaleString('en-IN')} km</span>
+          {safeUserVehicles.map((vehicle) => {
+            const heroImage = (vehicle.images && vehicle.images[0]) || '';
+            const statusMeta =
+              vehicle.status === 'published'
+                ? { bg: 'rgba(16,185,129,0.10)', color: '#047857', label: t('sellerListing.badgeActive') }
+                : vehicle.status === 'sold'
+                  ? { bg: 'rgba(71,85,105,0.10)', color: '#334155', label: t('sellerListing.badgeSold') }
+                  : { bg: 'rgba(245,158,11,0.12)', color: '#B45309', label: t('sellerListing.badgePending') };
+            return (
+              <div
+                key={vehicle.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => onViewVehicle?.(vehicle)}
+                onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && onViewVehicle) { e.preventDefault(); onViewVehicle(vehicle); } }}
+                className="relative rounded-2xl p-3.5 active:scale-[0.99] transition-all cursor-pointer"
+                style={{
+                  background: '#FFFFFF',
+                  border: '1px solid rgba(15,23,42,0.06)',
+                  boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+                }}
+              >
+                <div className="flex items-start gap-3.5">
+                  {/* Cover */}
+                  <div
+                    className="relative w-[88px] h-[88px] rounded-xl overflow-hidden shrink-0 grid place-items-center"
+                    style={{
+                      background: 'linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%)',
+                      border: '1px solid rgba(15,23,42,0.05)'
+                    }}
+                  >
+                    {heroImage ? (
+                      <img src={heroImage} alt="" loading="lazy" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-slate-400"><IconCar size={32} stroke={1.6} /></span>
                     )}
-                    {vehicle.views && (
-                      <span className="text-xs text-gray-500">👁️ {t('sellerListing.views', { count: vehicle.views })}</span>
+                    {vehicle.isFeatured && (
+                      <span
+                        className="absolute top-1.5 left-1.5 inline-flex items-center gap-0.5 rounded-full px-1.5 py-[3px] text-[9px] font-bold text-white"
+                        style={{ background: 'linear-gradient(135deg, #FFD08A, #E59F4B)', color: '#1B120A' }}
+                      >
+                        <IconStar size={9} stroke={2.4} /> Featured
+                      </span>
                     )}
                   </div>
+
+                  {/* Body */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="font-semibold text-slate-900 text-[14.5px] truncate tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+                        {vehicle.year} {vehicle.make} {vehicle.model}
+                      </h4>
+                      <span
+                        className="shrink-0 px-2 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-wider"
+                        style={{ background: statusMeta.bg, color: statusMeta.color }}
+                      >
+                        {statusMeta.label}
+                      </span>
+                    </div>
+                    {vehicle.variant && (
+                      <p className="text-[11.5px] text-slate-500 truncate mt-0.5 font-medium">{vehicle.variant}</p>
+                    )}
+                    <p className="text-[17px] font-bold text-slate-900 mt-1.5 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+                      ₹{vehicle.price.toLocaleString('en-IN')}
+                    </p>
+                    <div className="mt-1.5 flex items-center gap-3 text-[11px] text-slate-500 font-medium">
+                      {vehicle.mileage ? <span>{vehicle.mileage.toLocaleString('en-IN')} km</span> : null}
+                      {vehicle.views ? (
+                        <span className="inline-flex items-center gap-1">
+                          <IconEye size={11} stroke={2} />
+                          {t('sellerListing.views', { count: vehicle.views })}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
+
+                {/* Action rail */}
                 {isSeller && (
-                  <div 
-                    className="flex flex-col gap-2"
+                  <div
                     onClick={(e) => e.stopPropagation()}
+                    className="mt-3 pt-3 flex items-center gap-1.5 overflow-x-auto scrollbar-hide"
+                    style={{ borderTop: '1px dashed rgba(15,23,42,0.08)' }}
                   >
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingVehicle(vehicle);
-                        setActiveTab('editVehicle');
-                      }}
-                      className="p-2.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
-                      aria-label="Edit vehicle"
-                      title="Edit vehicle"
-                    >
-                      <span className="text-lg">✏️</span>
-                    </button>
-                    {vehicle.status === 'published' && (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          _onMarkAsSold(vehicle.id);
-                        }}
-                        className="p-2.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
-                        aria-label="Mark as sold"
-                        title="Mark as sold"
-                      >
-                        <span className="text-lg">✅</span>
-                      </button>
-                    )}
-                    {!vehicle.isFeatured && vehicle.status === 'published' && (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          _onFeatureListing(vehicle.id);
-                        }}
-                        className="p-2.5 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
-                        aria-label="Feature listing"
-                        title="Feature listing"
-                      >
-                        <span className="text-lg">⭐</span>
-                      </button>
-                    )}
-                    {vehicle.status === 'published' && onBoostListing && (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setBoostVehicle(vehicle);
-                        }}
-                        className="p-2.5 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
-                        aria-label="Boost listing"
-                        title="Boost listing"
-                      >
-                        <span className="text-lg">🚀</span>
-                      </button>
-                    )}
-                    {vehicle.status === 'published' && onRequestCertification && (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRequestCertification(vehicle.id);
-                        }}
-                        className="p-2.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
-                        aria-label="Request certification"
-                        title="Request certification"
-                      >
-                        <span className="text-lg">🏆</span>
-                      </button>
-                    )}
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteVehicle(vehicle.id);
-                      }}
-                      className="p-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
-                      aria-label="Delete vehicle"
-                      title="Delete vehicle"
-                    >
-                      <span className="text-lg">🗑️</span>
-                    </button>
+                    {[
+                      {
+                        key: 'edit',
+                        label: 'Edit',
+                        icon: <IconEdit size={14} stroke={2} />,
+                        color: '#2563EB',
+                        tint: 'rgba(37,99,235,0.08)',
+                        show: true,
+                        onClick: () => { setEditingVehicle(vehicle); setActiveTab('editVehicle'); }
+                      },
+                      {
+                        key: 'sold',
+                        label: 'Mark sold',
+                        icon: <IconCheck size={14} stroke={2} />,
+                        color: '#047857',
+                        tint: 'rgba(16,185,129,0.08)',
+                        show: vehicle.status === 'published',
+                        onClick: () => _onMarkAsSold(vehicle.id)
+                      },
+                      {
+                        key: 'feature',
+                        label: 'Feature',
+                        icon: <IconStar size={14} stroke={2} />,
+                        color: '#B45309',
+                        tint: 'rgba(245,158,11,0.10)',
+                        show: !vehicle.isFeatured && vehicle.status === 'published',
+                        onClick: () => _onFeatureListing(vehicle.id)
+                      },
+                      {
+                        key: 'boost',
+                        label: 'Boost',
+                        icon: <IconRocket size={14} stroke={2} />,
+                        color: '#7C3AED',
+                        tint: 'rgba(139,92,246,0.10)',
+                        show: vehicle.status === 'published' && !!onBoostListing,
+                        onClick: () => setBoostVehicle(vehicle)
+                      },
+                      {
+                        key: 'cert',
+                        label: 'Certify',
+                        icon: <IconShield size={14} stroke={2} />,
+                        color: '#0EA5E9',
+                        tint: 'rgba(14,165,233,0.10)',
+                        show: vehicle.status === 'published' && !!onRequestCertification,
+                        onClick: () => onRequestCertification?.(vehicle.id)
+                      },
+                      {
+                        key: 'delete',
+                        label: 'Delete',
+                        icon: <IconTrash size={14} stroke={2} />,
+                        color: '#DC2626',
+                        tint: 'rgba(220,38,38,0.08)',
+                        show: true,
+                        onClick: () => onDeleteVehicle(vehicle.id)
+                      }
+                    ]
+                      .filter((a) => a.show)
+                      .map((a) => (
+                        <button
+                          key={a.key}
+                          type="button"
+                          onClick={a.onClick}
+                          aria-label={a.label}
+                          title={a.label}
+                          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap active:scale-95 transition-transform"
+                          style={{ background: a.tint, color: a.color }}
+                        >
+                          {a.icon}
+                          {a.label}
+                        </button>
+                      ))}
                   </div>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 
-  const renderMessagesHub = () => (
-    <div className="space-y-5 pb-4">
-      <div className="native-card p-5">
-        <h3 className="text-lg font-bold text-gray-900 mb-2">{t('sellerDashboard.mobile.tab.messages')}</h3>
-        <p className="text-sm text-gray-600 leading-relaxed mb-4">{t('sellerDashboard.mobile.messagesHubBody')}</p>
-
-        <div className="flex flex-wrap gap-2 mb-4">
-          <button
-            type="button"
-            onClick={() => setMessagesHubFilter('all')}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold ${
-              messagesHubFilter === 'all' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
-            }`}
-            aria-label="Show all conversations"
-          >
-            All
-          </button>
-          <button
-            type="button"
-            onClick={() => setMessagesHubFilter('unread')}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold ${
-              messagesHubFilter === 'unread' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
-            }`}
-            aria-label="Show unread conversations"
-          >
-            Unread ({unreadSellerThreads})
-          </button>
-          <button
-            type="button"
-            onClick={() => setMessagesHubFilter('read')}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold ${
-              messagesHubFilter === 'read' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
-            }`}
-            aria-label="Show read conversations"
-          >
-            Read
-          </button>
+  const renderMessagesHub = () => {
+    const filters: { key: 'all' | 'unread' | 'read'; label: string; count?: number }[] = [
+      { key: 'all', label: 'All', count: safeConversations.length },
+      { key: 'unread', label: 'Unread', count: unreadSellerThreads },
+      { key: 'read', label: 'Read' }
+    ];
+    return (
+      <div className="space-y-4 pb-4">
+        {/* Section header */}
+        <div className="flex items-end justify-between">
+          <div className="min-w-0">
+            <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Inbox</p>
+            <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+              {t('sellerDashboard.mobile.tab.messages')}
+            </h3>
+            <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium leading-snug max-w-[260px]">
+              {t('sellerDashboard.mobile.messagesHubBody')}
+            </p>
+          </div>
           {onMarkAllAsReadBySeller && unreadSellerThreads > 0 && (
             <button
               type="button"
               onClick={onMarkAllAsReadBySeller}
-              className="px-3 py-1.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700"
-              aria-label="Mark all conversations as read"
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-semibold active:scale-95 transition-transform"
+              style={{ background: 'rgba(37,99,235,0.10)', color: '#1D4ED8' }}
             >
+              <IconCheck size={13} stroke={2.2} />
               Mark all read
             </button>
           )}
         </div>
 
-        {hubConversationList.length === 0 ? (
-          <p className="text-sm text-gray-500 mb-4">{t('sellerDashboard.messages.emptyTitle')}</p>
-        ) : (
-          <div className="space-y-2 mb-5 max-h-[min(50vh,420px)] overflow-y-auto">
-            {hubConversationList.map((conv) => {
-              if (!conv) return null;
-              const last = getLastVisibleMessageForViewer(conv, 'seller');
-              const preview = getThreadLastMessagePreview(last, {
-                otherLabel: conv.customerName || '',
-                viewer: 'seller',
-              });
-              const line = `${preview.prefix}${preview.text}`;
-              const isUnread = !conv.isReadBySeller;
-              return (
-                <div
-                  key={conv.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onSellerOpenChat?.(conv)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onSellerOpenChat?.(conv);
-                    }
-                  }}
-                  className={`w-full text-left p-3 rounded-xl border ${
-                    isUnread ? 'border-orange-200 bg-orange-50/40' : 'border-gray-100 bg-white'
-                  } active:opacity-90`}
-                >
-                  <div className="flex justify-between gap-2 items-start">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-gray-900 truncate">
-                        {conv.customerName || 'Customer'}
-                      </p>
-                      <p className="text-xs text-gray-500 truncate">{conv.vehicleName}</p>
-                      <p className="text-sm text-gray-600 truncate mt-1">{line}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className="text-[11px] text-gray-400 whitespace-nowrap">
-                        {formatRelativeTime(conv.lastMessageAt)}
-                      </span>
-                      {onSetConversationReadState && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSetConversationReadState(conv.id, isUnread);
+        {/* Filters */}
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide -mx-1 px-1">
+          {filters.map((f) => {
+            const active = messagesHubFilter === f.key;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setMessagesHubFilter(f.key)}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all active:scale-95"
+                style={{
+                  background: active ? '#0B0B0F' : 'rgba(15,23,42,0.04)',
+                  color: active ? '#FFFFFF' : '#475569',
+                  border: active ? '1px solid #0B0B0F' : '1px solid rgba(15,23,42,0.06)'
+                }}
+              >
+                {f.label}
+                {typeof f.count === 'number' && f.count > 0 && (
+                  <span
+                    className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[10px] font-bold"
+                    style={{
+                      background: active ? 'rgba(255,255,255,0.18)' : '#FF6B35',
+                      color: '#FFFFFF'
+                    }}
+                  >
+                    {f.count > 99 ? '99+' : f.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Conversation list */}
+        <div
+          className="rounded-3xl overflow-hidden"
+          style={{
+            background: '#FFFFFF',
+            border: '1px solid rgba(15,23,42,0.06)',
+            boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+          }}
+        >
+          {hubConversationList.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <div
+                className="w-14 h-14 mx-auto mb-3 rounded-2xl grid place-items-center"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(16,185,129,0.10), rgba(5,150,105,0.18))',
+                  color: '#047857'
+                }}
+              >
+                <IconChat size={24} stroke={1.7} />
+              </div>
+              <h4 className="text-[15px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+                {t('sellerDashboard.messages.emptyTitle')}
+              </h4>
+              <p className="mt-1 text-[12px] text-slate-500 font-medium">No conversations match this filter.</p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100 max-h-[min(58vh,520px)] overflow-y-auto">
+              {hubConversationList.map((conv) => {
+                if (!conv) return null;
+                const last = getLastVisibleMessageForViewer(conv, 'seller');
+                const preview = getThreadLastMessagePreview(last, { otherLabel: conv.customerName || '', viewer: 'seller' });
+                const line = `${preview.prefix}${preview.text}`;
+                const isUnread = !conv.isReadBySeller;
+                const initials = (conv.customerName || 'C').split(' ').map(s => s.charAt(0)).slice(0, 2).join('').toUpperCase();
+                return (
+                  <li
+                    key={conv.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onSellerOpenChat?.(conv)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSellerOpenChat?.(conv); } }}
+                    className="relative px-4 py-3.5 active:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    {isUnread && (
+                      <span
+                        aria-hidden
+                        className="absolute left-0 top-3.5 bottom-3.5 w-[3px] rounded-r-full"
+                        style={{ background: 'linear-gradient(180deg, #FF8456, #FF6B35)' }}
+                      />
+                    )}
+                    <div className="flex items-start gap-3">
+                      <div className="relative shrink-0">
+                        <div
+                          className="w-10 h-10 rounded-xl grid place-items-center text-[13px] font-bold tracking-tight"
+                          style={{
+                            background: 'linear-gradient(160deg, #1F1F28 0%, #0E0E13 100%)',
+                            color: '#FFFFFF',
+                            border: '1px solid rgba(255,255,255,0.06)'
                           }}
-                          className="text-[11px] text-blue-600 font-semibold"
-                          aria-label={isUnread ? 'Mark conversation as read' : 'Mark conversation as unread'}
                         >
-                          {isUnread ? 'Mark read' : 'Mark unread'}
-                        </button>
-                      )}
+                          {initials}
+                        </div>
+                        {isUnread && (
+                          <span
+                            aria-hidden
+                            className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
+                            style={{ background: '#FF6B35', boxShadow: '0 0 0 2px #FFFFFF' }}
+                          />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <p className={`truncate text-[13.5px] tracking-tight ${isUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-800'}`} style={{ letterSpacing: '-0.01em' }}>
+                            {conv.customerName || 'Customer'}
+                          </p>
+                          <span className="text-[10.5px] text-slate-400 font-medium whitespace-nowrap shrink-0">
+                            {formatRelativeTime(conv.lastMessageAt)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5 font-medium">{conv.vehicleName}</p>
+                        <p className={`text-[12.5px] truncate mt-1 ${isUnread ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>{line}</p>
+                        {onSetConversationReadState && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onSetConversationReadState(conv.id, isUnread); }}
+                              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10.5px] font-semibold active:scale-95 transition-transform"
+                              style={{
+                                background: isUnread ? 'rgba(37,99,235,0.08)' : 'rgba(71,85,105,0.06)',
+                                color: isUnread ? '#1D4ED8' : '#475569'
+                              }}
+                            >
+                              {isUnread ? 'Mark read' : 'Mark unread'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-slate-300 mt-1 shrink-0">
+                        <IconChevronRight size={16} stroke={2} />
+                      </span>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
 
         <button
           type="button"
           onClick={() => onNavigate(ViewEnum.INBOX)}
-          className="w-full native-button native-button-primary py-3.5 font-bold"
+          className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 text-[13.5px] font-semibold text-white active:scale-[0.98] transition-transform"
+          style={{
+            background: 'linear-gradient(135deg, #14141C 0%, #0B0B11 100%)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            boxShadow: '0 14px 30px -14px rgba(11,11,15,0.55)'
+          }}
         >
           {t('sellerDashboard.mobile.messagesHubOpenInbox')}
+          <IconArrowUpRight size={16} stroke={2.2} />
         </button>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderAnalytics = () => {
     // Calculate additional metrics
@@ -938,203 +1330,272 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       .sort((a, b) => (b?.views || 0) - (a?.views || 0))
       .slice(0, 5);
 
+    const formatPrice = (n: number) => (n >= 10000000
+      ? `${(n / 10000000).toFixed(1)}Cr`
+      : n >= 100000
+        ? `${(n / 100000).toFixed(1)}L`
+        : n.toLocaleString('en-IN'));
+    const successRate = totalListings > 0 ? Math.round((soldListings / totalListings) * 100) : 0;
+
+    const metrics = [
+      {
+        key: 'views',
+        label: 'Total views',
+        value: totalViews.toLocaleString('en-IN'),
+        hint: averageViewsPerListing > 0 ? `${averageViewsPerListing} avg / listing` : 'Awaiting traffic',
+        icon: <IconEye size={16} stroke={1.9} />,
+        accent: '#2563EB',
+        tint: 'rgba(37,99,235,0.10)'
+      },
+      {
+        key: 'inquiries',
+        label: t('sellerDashboard.mobile.analyticsMessageThreads'),
+        value: totalInquiries,
+        hint: totalViews > 0 ? `${conversionRate}% conversion` : 'No views yet',
+        icon: <IconChat size={16} stroke={1.9} />,
+        accent: '#10B981',
+        tint: 'rgba(16,185,129,0.10)'
+      },
+      {
+        key: 'response',
+        label: 'Response rate',
+        value: `${responseRate}%`,
+        hint: 'Messages replied',
+        icon: <IconChart size={16} stroke={1.9} />,
+        accent: '#8B5CF6',
+        tint: 'rgba(139,92,246,0.10)'
+      },
+      {
+        key: 'price',
+        label: 'Avg. price',
+        value: `₹${formatPrice(avgPrice)}`,
+        hint: 'Across listings',
+        icon: <IconCar size={16} stroke={1.9} />,
+        accent: '#FF6B35',
+        tint: 'rgba(255,107,53,0.10)'
+      }
+    ];
+
+    const trends: { key: string; label: string; value: number; max: number; color: string }[] = [
+      { key: 'views', label: 'Views', value: totalViews, max: Math.max(totalViews, 1000), color: '#2563EB' },
+      { key: 'inq', label: t('sellerDashboard.mobile.analyticsMessageThreads'), value: totalInquiries, max: Math.max(totalInquiries, 100), color: '#10B981' },
+      { key: 'active', label: t('vehicle.detail.activeListings'), value: activeListings, max: Math.max(activeListings, 20), color: '#FF6B35' }
+    ];
+
     return (
-      <div className="space-y-5 pb-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-900">Analytics</h3>
-          <div className="flex gap-2">
-            <button className="text-xs bg-orange-100 text-orange-600 px-3 py-1 rounded-full font-semibold">
-              30 Days
-            </button>
+      <div className="space-y-4 pb-4">
+        {/* Section header */}
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Insights</p>
+            <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Analytics</h3>
+            <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">Performance across your inventory</p>
           </div>
-        </div>
-
-        {/* Key Metrics Grid */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="native-card p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Total Views</p>
-            <p className="text-2xl font-bold text-gray-900">{totalViews.toLocaleString()}</p>
-            {averageViewsPerListing > 0 && (
-              <p className="text-xs text-gray-500 mt-1">{averageViewsPerListing} avg/listing</p>
-            )}
-          </div>
-
-          <div className="native-card p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">
-              {t('sellerDashboard.mobile.analyticsMessageThreads')}
-            </p>
-            <p className="text-2xl font-bold text-gray-900">{totalInquiries}</p>
-            {totalViews > 0 && (
-              <p className="text-xs text-gray-500 mt-1">{conversionRate}% conversion</p>
-            )}
-          </div>
-
-          <div className="native-card p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Response Rate</p>
-            <p className="text-2xl font-bold text-gray-900">{responseRate}%</p>
-            <p className="text-xs text-gray-500 mt-1">Messages replied</p>
-          </div>
-
-          <div className="native-card p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
-                <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Avg. Price</p>
-            <p className="text-lg font-bold text-gray-900">
-              ₹{avgPrice >= 100000 ? `${(avgPrice / 100000).toFixed(1)}L` : avgPrice.toLocaleString()}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">Per listing</p>
-          </div>
-        </div>
-
-        {/* Performance Trends */}
-        <div className="native-card p-4">
-          <h4 className="font-bold text-gray-900 mb-4">Performance Trends</h4>
-          
-          {/* Simple bar chart representation */}
-          <div className="space-y-3">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Views</span>
-                <span className="text-xs text-gray-500">{totalViews}</span>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-2">
-                <div 
-                  className="bg-blue-500 h-2 rounded-full"
-                  style={{ width: `${Math.min((totalViews / 1000) * 100, 100)}%` }}
-                ></div>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">
-                  {t('sellerDashboard.mobile.analyticsMessageThreads')}
-                </span>
-                <span className="text-xs text-gray-500">{totalInquiries}</span>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-2">
-                <div 
-                  className="bg-green-500 h-2 rounded-full"
-                  style={{ width: `${Math.min((totalInquiries / 100) * 100, 100)}%` }}
-                ></div>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">
-                  {t('vehicle.detail.activeListings')}
-                </span>
-                <span className="text-xs text-gray-500">{activeListings}</span>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-2">
-                <div 
-                  className="bg-orange-500 h-2 rounded-full"
-                  style={{ width: `${Math.min((activeListings / 20) * 100, 100)}%` }}
-                ></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Top Performing Listings */}
-        {topVehicles.length > 0 && (
-          <div className="native-card p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="font-bold text-gray-900">Top Performers</h4>
-              <button 
-                onClick={() => setActiveTab('listings')}
-                className="text-xs text-orange-500 font-semibold"
+          <div
+            className="inline-flex items-center gap-1 rounded-full p-1"
+            style={{ background: 'rgba(15,23,42,0.05)', border: '1px solid rgba(15,23,42,0.06)' }}
+          >
+            {['7D', '30D', '90D'].map((p, i) => (
+              <button
+                key={p}
+                type="button"
+                className="px-2.5 py-1 rounded-full text-[10.5px] font-semibold transition-colors"
+                style={{
+                  background: i === 1 ? '#0B0B0F' : 'transparent',
+                  color: i === 1 ? '#FFFFFF' : '#475569'
+                }}
               >
-                View All
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Metric grid */}
+        <div className="grid grid-cols-2 gap-3">
+          {metrics.map((m) => (
+            <div
+              key={m.key}
+              className="rounded-2xl p-4"
+              style={{
+                background: '#FFFFFF',
+                border: '1px solid rgba(15,23,42,0.06)',
+                boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+              }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: m.tint, color: m.accent }}>
+                  {m.icon}
+                </div>
+              </div>
+              <p className="text-[10.5px] uppercase font-semibold text-slate-500 mb-1" style={{ letterSpacing: '0.14em' }}>
+                {m.label}
+              </p>
+              <p className="text-[24px] font-bold text-slate-900 tracking-tight leading-none" style={{ letterSpacing: '-0.03em' }}>
+                {m.value}
+              </p>
+              <p className="mt-2 text-[11px] text-slate-500 font-medium truncate">{m.hint}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Performance trends */}
+        <div
+          className="rounded-3xl p-5"
+          style={{
+            background: '#FFFFFF',
+            border: '1px solid rgba(15,23,42,0.06)',
+            boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+          }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="font-semibold text-slate-900 text-[15px] tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+              Performance trends
+            </h4>
+            <span className="text-[10.5px] uppercase tracking-[0.16em] text-slate-400 font-semibold">Live</span>
+          </div>
+          <div className="space-y-3.5">
+            {trends.map((t1) => {
+              const pct = Math.min((t1.value / Math.max(t1.max, 1)) * 100, 100);
+              return (
+                <div key={t1.key}>
+                  <div className="flex items-baseline justify-between mb-1.5">
+                    <span className="text-[12.5px] font-semibold text-slate-700">{t1.label}</span>
+                    <span className="text-[12.5px] font-bold text-slate-900 tracking-tight">{t1.value.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(15,23,42,0.05)' }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{
+                        width: `${Math.max(pct, 4)}%`,
+                        background: `linear-gradient(90deg, ${t1.color}AA, ${t1.color})`
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Top performers */}
+        {topVehicles.length > 0 && (
+          <div
+            className="rounded-3xl p-5"
+            style={{
+              background: '#FFFFFF',
+              border: '1px solid rgba(15,23,42,0.06)',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-semibold text-slate-900 text-[15px] tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+                Top performers
+              </h4>
+              <button
+                type="button"
+                onClick={() => setActiveTab('listings')}
+                className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-slate-700 active:scale-95 transition-transform"
+              >
+                View all
+                <IconChevronRight size={13} stroke={2.4} />
               </button>
             </div>
-            <div className="space-y-3">
+            <ul className="space-y-2">
               {topVehicles.map((vehicle, idx) => (
-                <div
+                <li
                   key={vehicle.id}
-                  onClick={() => onViewVehicle && onViewVehicle(vehicle)}
-                  className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl active:scale-[0.98] transition-transform cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onViewVehicle?.(vehicle)}
+                  onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && onViewVehicle) { e.preventDefault(); onViewVehicle(vehicle); } }}
+                  className="flex items-center gap-3 rounded-2xl p-3 cursor-pointer active:scale-[0.99] transition-transform"
+                  style={{ background: 'rgba(15,23,42,0.025)', border: '1px solid rgba(15,23,42,0.04)' }}
                 >
-                  <div className="flex items-center justify-center w-8 h-8 bg-orange-100 rounded-lg flex-shrink-0">
-                    <span className="text-orange-600 font-bold text-sm">#{idx + 1}</span>
-                  </div>
+                  <span
+                    className="w-8 h-8 rounded-lg grid place-items-center text-[12px] font-bold tracking-tight shrink-0"
+                    style={{
+                      background: idx === 0
+                        ? 'linear-gradient(135deg, #FFD08A, #E59F4B)'
+                        : 'linear-gradient(160deg, #1F1F28 0%, #0E0E13 100%)',
+                      color: idx === 0 ? '#1B120A' : '#FFFFFF'
+                    }}
+                  >
+                    {idx + 1}
+                  </span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 text-sm truncate">
+                    <p className="font-semibold text-slate-900 text-[13.5px] truncate tracking-tight" style={{ letterSpacing: '-0.01em' }}>
                       {vehicle.year} {vehicle.make} {vehicle.model}
                     </p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-gray-500 flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        {vehicle.views || 0} views
+                    <div className="mt-0.5 flex items-center gap-3 text-[11px] text-slate-500 font-medium">
+                      <span className="inline-flex items-center gap-1">
+                        <IconEye size={11} stroke={2} /> {vehicle.views || 0}
                       </span>
                       {(vehicle.inquiriesCount ?? 0) > 0 && (
-                        <span className="text-xs text-gray-500 flex items-center gap-1">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                          </svg>
-                          {t('sellerDashboard.mobile.listingMessageCount', {
-                            count: vehicle.inquiriesCount ?? 0,
-                          })}
+                        <span className="inline-flex items-center gap-1">
+                          <IconChat size={11} stroke={2} /> {vehicle.inquiriesCount}
                         </span>
                       )}
                     </div>
                   </div>
-                  <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
+                  <span className="text-slate-300 shrink-0"><IconChevronRight size={16} stroke={2} /></span>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         )}
 
-        {/* Quick Stats Summary */}
-        <div className="native-card p-4 bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-orange-700 font-semibold uppercase tracking-wide mb-1">Success Rate</p>
-              <p className="text-2xl font-bold text-orange-900">
-                {totalListings > 0 ? Math.round((soldListings / totalListings) * 100) : 0}%
+        {/* Success card (premium dark) */}
+        <div
+          className="relative overflow-hidden rounded-3xl text-white p-5"
+          style={{
+            background: 'linear-gradient(135deg, #14141C 0%, #0B0B11 100%)',
+            border: '1px solid rgba(255,107,53,0.20)',
+            boxShadow: '0 20px 50px -22px rgba(0,0,0,0.55)'
+          }}
+        >
+          <div
+            aria-hidden
+            className="absolute -right-20 -top-16 w-72 h-72 rounded-full"
+            style={{ background: 'radial-gradient(closest-side, rgba(255,107,53,0.20), transparent 70%)' }}
+          />
+          <div className="relative flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[10.5px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1.5">Success rate</p>
+              <p className="text-[34px] font-bold text-white tracking-tight leading-none" style={{ letterSpacing: '-0.03em' }}>
+                {successRate}<span className="text-white/40 text-[22px] font-semibold ml-1">%</span>
               </p>
-              <p className="text-xs text-orange-600 mt-1">{soldListings} sold out of {totalListings} listings</p>
+              <p className="mt-2 text-[12px] text-white/55 font-medium">{soldListings} sold of {totalListings} listings</p>
             </div>
-            <div className="w-16 h-16 bg-orange-200 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
+            {/* Gauge ring */}
+            {(() => {
+              const r = 28; const c = 2 * Math.PI * r; const off = c * (1 - successRate / 100);
+              return (
+                <div className="shrink-0 relative w-[78px] h-[78px] grid place-items-center">
+                  <svg width={78} height={78} viewBox="0 0 78 78" className="-rotate-90">
+                    <circle cx={39} cy={39} r={r} stroke="rgba(255,255,255,0.10)" strokeWidth={6} fill="none" />
+                    <circle
+                      cx={39}
+                      cy={39}
+                      r={r}
+                      stroke="url(#sgrad)"
+                      strokeWidth={6}
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeDasharray={c}
+                      strokeDashoffset={off}
+                    />
+                    <defs>
+                      <linearGradient id="sgrad" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#FFD08A" />
+                        <stop offset="100%" stopColor="#FF6B35" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  <span className="absolute text-white text-[12px] font-bold">{successRate}%</span>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -1225,192 +1686,158 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const unreadNotifications = userNotifications.filter(n => !n.isRead);
 
   const renderProfile = () => {
+    const cardStyle: React.CSSProperties = {
+      background: '#FFFFFF',
+      border: '1px solid rgba(15,23,42,0.06)',
+      boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+    };
+    const initials = (currentUser.name || 'U').split(' ').map(s => s.charAt(0)).slice(0, 2).join('').toUpperCase();
+
     if (isEditingProfile) {
+      const resetForm = () => {
+        setIsEditingProfile(false);
+        setProfileErrors({});
+        setProfileFormData({
+          name: currentUser.name,
+          email: currentUser.email,
+          mobile: currentUser.mobile || '',
+          dealershipName: currentUser?.dealershipName || '',
+          bio: currentUser?.bio || '',
+          location: currentUser?.location || '',
+          address: currentUser?.address || '',
+          pincode: currentUser?.pincode || '',
+        });
+      };
+      const Field = ({ label, name, type = 'text', placeholder, required = false, multiline = false, rows = 3, maxLength, inputMode, hint }: {
+        label: string;
+        name: keyof typeof profileFormData;
+        type?: string;
+        placeholder?: string;
+        required?: boolean;
+        multiline?: boolean;
+        rows?: number;
+        maxLength?: number;
+        inputMode?: 'text' | 'numeric' | 'tel' | 'email';
+        hint?: string;
+      }) => {
+        const err = profileErrors[name as string];
+        const value = profileFormData[name] as string;
+        const baseInput: React.CSSProperties = {
+          width: '100%',
+          padding: '12px 14px',
+          background: '#FFFFFF',
+          border: `1px solid ${err ? 'rgba(220,38,38,0.45)' : 'rgba(15,23,42,0.10)'}`,
+          borderRadius: 12,
+          fontSize: 14,
+          color: '#0F172A',
+          fontWeight: 500,
+          outline: 'none',
+          transition: 'all 0.18s ease'
+        };
+        return (
+          <label className="block">
+            <span className="block text-[11.5px] font-semibold text-slate-700 mb-1.5 tracking-tight">
+              {label} {required && <span className="text-rose-500">*</span>}
+            </span>
+            {multiline ? (
+              <textarea
+                name={name as string}
+                value={value}
+                onChange={handleProfileChange}
+                rows={rows}
+                placeholder={placeholder}
+                maxLength={maxLength}
+                style={{ ...baseInput, resize: 'none' }}
+              />
+            ) : (
+              <input
+                type={type}
+                name={name as string}
+                value={value}
+                onChange={handleProfileChange}
+                placeholder={placeholder}
+                inputMode={inputMode}
+                maxLength={maxLength}
+                style={baseInput}
+                required={required}
+              />
+            )}
+            {hint && !err && <p className="text-[10.5px] text-slate-400 mt-1 font-medium">{hint}</p>}
+            {err && <p className="text-[11px] text-rose-600 mt-1 font-semibold">{err}</p>}
+          </label>
+        );
+      };
+
       return (
-        <div className="space-y-5 pb-4">
-          <div className="flex items-center justify-between mb-4">
+        <div className="space-y-4 pb-4">
+          {/* Section header */}
+          <div className="flex items-start justify-between">
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Edit Profile</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Update your account information</p>
+              <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Profile</p>
+              <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Edit profile</h3>
+              <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">Update your account & dealership info</p>
             </div>
-            <button 
-              onClick={() => {
-                setIsEditingProfile(false);
-                setProfileErrors({});
-                // Reset form data
-                setProfileFormData({
-                  name: currentUser.name,
-                  email: currentUser.email,
-                  mobile: currentUser.mobile || '',
-                  dealershipName: currentUser?.dealershipName || '',
-                  bio: currentUser?.bio || '',
-                  location: currentUser?.location || '',
-                  address: currentUser?.address || '',
-                  pincode: currentUser?.pincode || '',
-                });
-              }}
-              className="p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            <button
+              type="button"
+              onClick={resetForm}
+              aria-label="Cancel edit"
+              className="w-9 h-9 rounded-full grid place-items-center text-slate-500 active:scale-95 transition-transform"
+              style={{ background: 'rgba(15,23,42,0.05)', border: '1px solid rgba(15,23,42,0.06)' }}
             >
               ✕
             </button>
           </div>
 
-          <form onSubmit={handleProfileSave} className="native-card p-5 space-y-5">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="name"
-                value={profileFormData.name}
-                onChange={handleProfileChange}
-                className={`native-input ${profileErrors.name ? 'bg-red-50' : ''}`}
-                required
-              />
-              {profileErrors.name && <p className="text-red-600 text-xs mt-1.5 font-medium">{profileErrors.name}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Email <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                name="email"
-                value={profileFormData.email}
-                onChange={handleProfileChange}
-                className={`native-input ${profileErrors.email ? 'bg-red-50' : ''}`}
-                required
-              />
-              {profileErrors.email && <p className="text-red-600 text-xs mt-1.5 font-medium">{profileErrors.email}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Mobile Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="tel"
-                name="mobile"
-                value={profileFormData.mobile}
-                onChange={handleProfileChange}
-                placeholder="+91 98765 43210"
-                className={`native-input ${profileErrors.mobile ? 'bg-red-50' : ''}`}
-                required
-              />
-              {profileErrors.mobile && <p className="text-red-600 text-xs mt-1.5 font-medium">{profileErrors.mobile}</p>}
-            </div>
-
+          <form onSubmit={handleProfileSave} className="rounded-3xl p-5 space-y-4" style={cardStyle}>
+            <Field label="Name" name="name" required />
+            <Field label="Email" name="email" type="email" required />
+            <Field label="Mobile number" name="mobile" type="tel" inputMode="tel" placeholder="+91 98765 43210" required />
             {isSeller && (
               <>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Dealership Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="dealershipName"
-                    value={profileFormData.dealershipName}
-                    onChange={handleProfileChange}
-                    className={`native-input ${profileErrors.dealershipName ? 'bg-red-50' : ''}`}
-                    required
-                  />
-                  {profileErrors.dealershipName && <p className="text-red-600 text-xs mt-1.5 font-medium">{profileErrors.dealershipName}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Bio
-                  </label>
-                  <textarea
-                    name="bio"
-                    value={profileFormData.bio}
-                    onChange={handleProfileChange}
-                    rows={4}
-                    placeholder="Tell us about your dealership..."
-                    className="native-input resize-none"
-                    maxLength={500}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">{profileFormData.bio.length}/500</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">City or region</label>
-                  <input
-                    type="text"
-                    name="location"
-                    value={profileFormData.location}
-                    onChange={handleProfileChange}
-                    placeholder="e.g. Bengaluru, Karnataka"
-                    className={`native-input ${profileErrors.location ? 'bg-red-50' : ''}`}
-                  />
-                  {profileErrors.location && <p className="text-red-600 text-xs mt-1.5 font-medium">{profileErrors.location}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Street address</label>
-                  <textarea
-                    name="address"
-                    value={profileFormData.address}
-                    onChange={handleProfileChange}
-                    rows={2}
-                    placeholder="Building, street, locality"
-                    className={`native-input resize-none ${profileErrors.address ? 'bg-red-50' : ''}`}
-                  />
-                  {profileErrors.address && <p className="text-red-600 text-xs mt-1.5 font-medium">{profileErrors.address}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">PIN code</label>
-                  <input
-                    type="text"
-                    name="pincode"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={profileFormData.pincode}
-                    onChange={handleProfileChange}
-                    placeholder="6-digit PIN"
-                    className={`native-input ${profileErrors.pincode ? 'bg-red-50' : ''}`}
-                  />
-                  {profileErrors.pincode && <p className="text-red-600 text-xs mt-1.5 font-medium">{profileErrors.pincode}</p>}
-                </div>
+                <Field label="Dealership name" name="dealershipName" required />
+                <Field
+                  label="Bio"
+                  name="bio"
+                  multiline
+                  rows={4}
+                  placeholder="Tell buyers about your dealership..."
+                  maxLength={500}
+                  hint={`${profileFormData.bio.length}/500`}
+                />
+                <Field label="City or region" name="location" placeholder="e.g. Bengaluru, Karnataka" />
+                <Field label="Street address" name="address" multiline rows={2} placeholder="Building, street, locality" />
+                <Field label="PIN code" name="pincode" inputMode="numeric" maxLength={6} placeholder="6-digit PIN" />
               </>
             )}
 
             {profileErrors.general && (
-              <div className="p-3 bg-red-50 rounded-xl">
-                <p className="text-red-600 text-sm">{profileErrors.general}</p>
+              <div
+                className="rounded-xl px-3 py-2.5"
+                style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.20)' }}
+              >
+                <p className="text-[12.5px] text-rose-700 font-semibold">{profileErrors.general}</p>
               </div>
             )}
 
-            <div className="flex gap-3 pt-4 border-t border-gray-200">
+            <div className="flex gap-2.5 pt-4" style={{ borderTop: '1px solid rgba(15,23,42,0.06)' }}>
               <button
                 type="button"
-                onClick={() => {
-                  setIsEditingProfile(false);
-                  setProfileErrors({});
-                  setProfileFormData({
-                    name: currentUser.name,
-                    email: currentUser.email,
-                    mobile: currentUser.mobile || '',
-                    dealershipName: currentUser?.dealershipName || '',
-                    bio: currentUser?.bio || '',
-                    location: currentUser?.location || '',
-                    address: currentUser?.address || '',
-                    pincode: currentUser?.pincode || '',
-                  });
-                }}
-                className="flex-1 native-button native-button-secondary"
+                onClick={resetForm}
+                className="flex-1 inline-flex items-center justify-center rounded-2xl py-3 text-[13px] font-semibold text-slate-700 active:scale-[0.98] transition-transform"
+                style={{ background: 'rgba(15,23,42,0.04)', border: '1px solid rgba(15,23,42,0.06)' }}
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSavingProfile}
-                className="flex-1 native-button native-button-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 inline-flex items-center justify-center rounded-2xl py-3 text-[13px] font-semibold text-white active:scale-[0.98] transition-transform disabled:opacity-70"
+                style={{
+                  background: 'linear-gradient(135deg, #14141C 0%, #0B0B11 100%)',
+                  boxShadow: '0 14px 30px -14px rgba(11,11,15,0.55)'
+                }}
               >
-                {isSavingProfile ? 'Saving...' : 'Save Changes'}
+                {isSavingProfile ? 'Saving…' : 'Save changes'}
               </button>
             </div>
           </form>
@@ -1419,168 +1846,206 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     }
 
     return (
-      <div className="space-y-5 pb-4">
-        <div className="native-card p-4">
-        <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center flex-shrink-0">
-            <span className="text-orange-600 font-bold text-xl">
-                {currentUser.name?.charAt(0).toUpperCase() || 'U'}
-            </span>
+      <div className="space-y-4 pb-4">
+        {/* Premium identity card (obsidian) */}
+        <div
+          className="relative overflow-hidden rounded-3xl p-5 text-white"
+          style={{
+            background: 'radial-gradient(120% 120% at 0% 0%, #1F1F2A 0%, #0E0E14 55%, #0A0A10 100%)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            boxShadow: '0 20px 50px -22px rgba(0,0,0,0.55)'
+          }}
+        >
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-20 -top-16 w-72 h-72 rounded-full"
+            style={{ background: 'radial-gradient(closest-side, rgba(255,107,53,0.20), transparent 70%)' }}
+          />
+          <div className="relative flex items-center gap-4">
+            <div className="relative">
+              <span
+                className="absolute -inset-[3px] rounded-2xl"
+                style={{ background: 'conic-gradient(from 140deg, #FF8456, #FF6B35, #C7411F, #FF8456)' }}
+              />
+              <span
+                className="relative w-16 h-16 rounded-2xl grid place-items-center text-white font-bold text-[20px] tracking-tight"
+                style={{
+                  background: 'linear-gradient(160deg, #1F1F28 0%, #0E0E13 100%)',
+                  border: '1px solid rgba(255,255,255,0.08)'
+                }}
+              >
+                {initials}
+              </span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-white font-semibold text-[18px] truncate tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+                {currentUser.name}
+              </h3>
+              <p className="text-[12.5px] text-white/55 truncate font-medium">{currentUser.email}</p>
+              <span
+                className="inline-flex items-center gap-1.5 mt-2 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em]"
+                style={{ background: 'rgba(255,107,53,0.14)', color: '#FFB18A', border: '1px solid rgba(255,107,53,0.30)' }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#FF8456]" />
+                {currentUser.role}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsEditingProfile(true)}
+              aria-label="Edit profile"
+              className="w-9 h-9 rounded-full grid place-items-center text-white/85 active:scale-95 transition-transform shrink-0"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}
+            >
+              <IconEdit size={15} stroke={2} />
+            </button>
           </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-bold text-gray-900 truncate">{currentUser.name}</h3>
-              <p className="text-sm text-gray-500 truncate">{currentUser.email}</p>
-              <p className="text-xs text-orange-600 font-semibold uppercase mt-1">{currentUser.role}</p>
-              {isSeller && currentUser?.dealershipName && (
-                <p className="text-sm text-gray-700 font-medium mt-1">{currentUser?.dealershipName}</p>
+
+          {isSeller && (currentUser?.dealershipName || currentUser?.location || currentUser?.address || currentUser?.pincode) && (
+            <div
+              className="relative mt-4 rounded-2xl p-3"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
+            >
+              {currentUser?.dealershipName && (
+                <p className="text-[13px] text-white font-semibold tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+                  {currentUser.dealershipName}
+                </p>
               )}
-              {isSeller && (currentUser?.location || currentUser?.address || currentUser?.pincode) && (
-                <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+              {(currentUser?.location || currentUser?.address || currentUser?.pincode) && (
+                <p className="text-[11.5px] text-white/55 mt-1 leading-relaxed font-medium">
                   {[currentUser?.location, currentUser?.address].filter(Boolean).join(' · ')}
                   {currentUser?.pincode ? ` · PIN ${String(currentUser.pincode).replace(/\D/g, '').slice(0, 6)}` : ''}
                 </p>
               )}
-          </div>
+            </div>
+          )}
         </div>
-      </div>
 
-        {/* Seller QR Code Section - Only show for sellers when not editing */}
-        {isSeller && !isEditingProfile && (() => {
+        {/* Seller QR card */}
+        {isSeller && (() => {
           const origin = getPublicWebOriginForShareLinks();
           const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(shareUrl)}`;
-          
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(shareUrl)}&bgcolor=ffffff&color=0B0B0F&margin=8`;
+          const onCopy = async () => {
+            try {
+              await navigator.clipboard.writeText(shareUrl);
+              addToast?.('Link copied to clipboard!', 'success');
+            } catch {
+              const textArea = document.createElement('textarea');
+              textArea.value = shareUrl;
+              textArea.style.position = 'fixed';
+              textArea.style.left = '-999999px';
+              document.body.appendChild(textArea);
+              textArea.select();
+              try { document.execCommand('copy'); addToast?.('Link copied to clipboard!', 'success'); }
+              catch { addToast?.('Failed to copy link. Please copy manually.', 'error'); }
+              document.body.removeChild(textArea);
+            }
+          };
           return (
-            <div className="native-card p-4 mb-4">
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Seller Share Link & QR Code</h3>
-                
-                {/* Share URL */}
-                <div className="mb-4">
-                  <label className="block text-xs text-gray-600 mb-2">Public seller URL</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={shareUrl}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(shareUrl);
-                          addToast?.('Link copied to clipboard!', 'success');
-                        } catch (err) {
-                          // Fallback for browsers that don't support clipboard API
-                          const textArea = document.createElement('textarea');
-                          textArea.value = shareUrl;
-                          textArea.style.position = 'fixed';
-                          textArea.style.left = '-999999px';
-                          document.body.appendChild(textArea);
-                          textArea.select();
-                          try {
-                            document.execCommand('copy');
-                            addToast?.('Link copied to clipboard!', 'success');
-                          } catch (e) {
-                            addToast?.('Failed to copy link. Please copy manually.', 'error');
-                          }
-                          document.body.removeChild(textArea);
-                        }
-                      }}
-                      className="px-4 py-2 text-xs font-semibold bg-blue-600 text-white rounded-lg active:scale-95 transition-transform"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">Share this link or QR code to showcase your seller profile and listings.</p>
+            <div className="rounded-3xl p-5" style={cardStyle}>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h4 className="font-semibold text-slate-900 text-[15px] tracking-tight" style={{ letterSpacing: '-0.01em' }}>Share storefront</h4>
+                  <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">Public link & QR for buyers</p>
                 </div>
+                <span
+                  className="text-[10px] font-bold uppercase tracking-[0.16em] px-2 py-1 rounded-full"
+                  style={{ background: 'rgba(37,99,235,0.10)', color: '#1D4ED8' }}
+                >
+                  Public
+                </span>
+              </div>
 
-                {/* QR Code */}
-                <div className="flex flex-col items-center">
-                  <img 
-                    src={qrUrl} 
-                    alt="Seller QR code" 
-                    className="w-40 h-40 border-2 border-white rounded-xl bg-white shadow-sm"
-                  />
-                  <button
-                    onClick={handleDownloadQRCode}
-                    className="mt-3 px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold active:scale-95 transition-transform flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Download QR Code
-                  </button>
+              <div className="flex flex-col items-center mb-4">
+                <div
+                  className="rounded-2xl p-3"
+                  style={{
+                    background: 'linear-gradient(180deg, #FFFFFF, #F8FAFC)',
+                    border: '1px solid rgba(15,23,42,0.06)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6), 0 6px 18px -10px rgba(15,23,42,0.20)'
+                  }}
+                >
+                  <img src={qrUrl} alt="Seller QR code" className="w-40 h-40 rounded-xl" />
                 </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadQRCode}
+                  className="mt-3 inline-flex items-center gap-2 rounded-full px-4 py-2 text-[12.5px] font-semibold text-white active:scale-95 transition-transform"
+                  style={{
+                    background: 'linear-gradient(135deg, #14141C 0%, #0B0B11 100%)',
+                    boxShadow: '0 10px 22px -10px rgba(11,11,15,0.50)'
+                  }}
+                >
+                  <IconUpload size={13} stroke={2.2} className="rotate-180" />
+                  Download QR
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-2xl p-2 pl-3" style={{ background: 'rgba(15,23,42,0.04)', border: '1px solid rgba(15,23,42,0.06)' }}>
+                <input
+                  readOnly
+                  value={shareUrl}
+                  className="flex-1 bg-transparent text-[11.5px] text-slate-700 font-medium truncate outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={onCopy}
+                  className="shrink-0 rounded-xl px-3 py-1.5 text-[11.5px] font-semibold text-white active:scale-95 transition-transform"
+                  style={{ background: 'linear-gradient(135deg, #FF8456 0%, #FF6B35 100%)' }}
+                >
+                  Copy
+                </button>
               </div>
             </div>
           );
         })()}
 
-        <div className="native-card p-4">
-          <h4 className="font-bold text-gray-900 mb-4 text-base">Account Settings</h4>
-          <div className="space-y-2">
-            <button 
-              onClick={() => setIsEditingProfile(true)}
-              className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">✏️</span>
-                <span className="text-gray-900 font-medium">Edit Profile</span>
-            </div>
-              <span className="text-gray-400">›</span>
-          </button>
-            <button 
-              onClick={() => setActiveTab('notifications')}
-              className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">🔔</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-900 font-medium">Notifications</span>
-                  {unreadNotifications.length > 0 && (
-                    <span className="bg-orange-500 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center">
-                      {unreadNotifications.length}
+        {/* Account rows */}
+        <div className="rounded-3xl p-2.5" style={cardStyle}>
+          <div className="px-2.5 pt-2 pb-1">
+            <p className="text-[10.5px] uppercase tracking-[0.16em] text-slate-400 font-semibold">Account</p>
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {[
+              { key: 'edit', label: 'Edit profile', sub: 'Personal & dealership info', icon: <IconEdit size={16} stroke={2} />, tint: 'rgba(37,99,235,0.10)', color: '#2563EB', onClick: () => setIsEditingProfile(true), badge: undefined as undefined | number },
+              { key: 'notifs', label: 'Notifications', sub: 'Activity & alerts', icon: <IconBell size={16} stroke={2} />, tint: 'rgba(255,107,53,0.10)', color: '#EA580C', onClick: () => setActiveTab('notifications'), badge: unreadNotifications.length },
+              { key: 'privacy', label: 'Privacy', sub: 'Account safety', icon: <IconShield size={16} stroke={2} />, tint: 'rgba(71,85,105,0.10)', color: '#475569', onClick: () => onNavigate(ViewEnum.SUPPORT) },
+              { key: 'help', label: 'Help & support', sub: 'FAQ, contact us', icon: <IconChat size={16} stroke={2} />, tint: 'rgba(16,185,129,0.10)', color: '#047857', onClick: () => onNavigate(ViewEnum.SUPPORT) },
+              ...(onLogout ? [{ key: 'logout', label: 'Log out', sub: 'End this session', icon: <IconArrowUpRight size={16} stroke={2} />, tint: 'rgba(220,38,38,0.10)', color: '#DC2626', onClick: () => onLogout() }] : [])
+            ].map((row) => (
+              <li key={row.key}>
+                <button
+                  type="button"
+                  onClick={row.onClick}
+                  className="w-full flex items-center gap-3 px-2.5 py-3.5 rounded-xl active:bg-slate-50 transition-colors"
+                >
+                  <span className="w-9 h-9 rounded-xl grid place-items-center shrink-0" style={{ background: row.tint, color: row.color }}>
+                    {row.icon}
+                  </span>
+                  <span className="flex-1 min-w-0 text-left">
+                    <span className="flex items-center gap-2">
+                      <span className={`text-[13.5px] font-semibold truncate tracking-tight ${row.key === 'logout' ? 'text-rose-600' : 'text-slate-900'}`} style={{ letterSpacing: '-0.01em' }}>
+                        {row.label}
+                      </span>
+                      {typeof row.badge === 'number' && row.badge > 0 && (
+                        <span
+                          className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[10px] font-bold text-white"
+                          style={{ background: '#FF6B35' }}
+                        >
+                          {row.badge > 9 ? '9+' : row.badge}
+                        </span>
+                      )}
                     </span>
-                  )}
-            </div>
-              </div>
-              <span className="text-gray-400">›</span>
-          </button>
-            <button 
-              onClick={() => onNavigate(ViewEnum.SUPPORT)}
-              className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">🛡️</span>
-                <span className="text-gray-900 font-medium">Privacy</span>
-              </div>
-              <span className="text-gray-400">›</span>
-            </button>
-            <button 
-              onClick={() => onNavigate(ViewEnum.SUPPORT)}
-              className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">💬</span>
-                <span className="text-gray-900 font-medium">Help & Support</span>
-            </div>
-              <span className="text-gray-400">›</span>
-          </button>
-          {onLogout && (
-            <button 
-              onClick={onLogout}
-                className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-red-50 flex items-center justify-between mt-2"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">🚪</span>
-                  <span className="text-red-600 font-medium">Log Out</span>
-                </div>
-                <span className="text-red-400">›</span>
-              </button>
-            )}
-              </div>
+                    <span className="block text-[11.5px] text-slate-500 truncate font-medium mt-0.5">{row.sub}</span>
+                  </span>
+                  <span className="text-slate-300 shrink-0">
+                    <IconChevronRight size={16} stroke={2} />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     );
@@ -1588,30 +2053,49 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   const renderNotifications = () => {
     const filteredNotifications = userNotifications.length > 0 ? userNotifications : notifications;
-    
+    const cardStyle: React.CSSProperties = {
+      background: '#FFFFFF',
+      border: '1px solid rgba(15,23,42,0.06)',
+      boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+    };
+    const meta = (n: Notification) => {
+      if (n.targetType === 'conversation') {
+        return { title: 'New message', icon: <IconChat size={15} stroke={2} />, tint: 'rgba(16,185,129,0.10)', color: '#047857' };
+      }
+      if (n.targetType === 'vehicle') {
+        return { title: 'Vehicle update', icon: <IconCar size={15} stroke={2} />, tint: 'rgba(37,99,235,0.10)', color: '#1D4ED8' };
+      }
+      return { title: 'Notification', icon: <IconBell size={15} stroke={2} />, tint: 'rgba(255,107,53,0.10)', color: '#EA580C' };
+    };
+
     return (
-      <div className="space-y-5 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">Notifications</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Activity (not Messages) · {filteredNotifications.length} total · {unreadNotifications.length} unread
+      <div className="space-y-4 pb-4">
+        {/* Section header */}
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Inbox</p>
+            <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Notifications</h3>
+            <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">
+              {filteredNotifications.length} total · {unreadNotifications.length} unread
             </p>
           </div>
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
             <button
               type="button"
               onClick={() => onNavigate(ViewEnum.NOTIFICATIONS_CENTER)}
-              className="text-xs font-semibold text-blue-600 active:opacity-70"
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 active:scale-95 transition-transform"
             >
               Grouped view
+              <IconArrowUpRight size={11} stroke={2.4} />
             </button>
             {unreadNotifications.length > 0 && onMarkNotificationsAsRead && (
               <button
                 type="button"
                 onClick={() => onMarkNotificationsAsRead(unreadNotifications.map(n => n.id))}
-                className="text-sm font-semibold text-orange-600 active:opacity-70 native-transition"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold active:scale-95 transition-transform"
+                style={{ background: 'rgba(255,107,53,0.10)', color: '#EA580C' }}
               >
+                <IconCheck size={12} stroke={2.4} />
                 Mark all read
               </button>
             )}
@@ -1619,69 +2103,87 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         </div>
 
         {filteredNotifications.length === 0 ? (
-          <div className="text-center py-12 px-4">
-            <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-4xl">🔔</span>
-      </div>
-            <h4 className="text-xl font-bold text-gray-900 mb-2">No notifications</h4>
-            <p className="text-gray-600 text-sm leading-relaxed max-w-sm mx-auto">
-              You're all caught up! New notifications will appear here
+          <div
+            className="relative overflow-hidden rounded-3xl px-6 py-12 text-center"
+            style={{ background: 'linear-gradient(180deg, #FFFFFF, #FAFAFC)', border: '1px solid rgba(15,23,42,0.06)' }}
+          >
+            <div
+              className="w-14 h-14 mx-auto mb-3 rounded-2xl grid place-items-center"
+              style={{ background: 'linear-gradient(135deg, rgba(255,107,53,0.10), rgba(255,132,86,0.18))', color: '#EA580C' }}
+            >
+              <IconBell size={24} stroke={1.7} />
+            </div>
+            <h4 className="text-[16px] font-semibold text-slate-900 mb-1 tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+              All caught up
+            </h4>
+            <p className="text-[12.5px] text-slate-500 leading-relaxed max-w-sm mx-auto font-medium">
+              New notifications will appear here.
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {filteredNotifications.map((notification) => (
-              <div
-                key={notification.id}
-                onClick={() => {
-                  if (onNotificationClick) {
-                    onNotificationClick(notification);
-                  }
-                  if (!notification.isRead && onMarkNotificationsAsRead) {
-                    onMarkNotificationsAsRead([notification.id]);
-                  }
-                }}
-                className={`native-card p-4 cursor-pointer active:opacity-80 native-transition ${
-                  !notification.isRead ? 'border-l-4 border-l-orange-500' : ''
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                    <span className="text-orange-600 text-lg">
-                      {notification.targetType === 'conversation' ? '💬' :
-                       notification.targetType === 'vehicle' ? '🚗' : '🔔'}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h4 className={`font-semibold text-sm ${!notification.isRead ? 'text-gray-900' : 'text-gray-600'}`}>
-                        {notification.targetType === 'conversation' ? 'New Message' :
-                         notification.targetType === 'vehicle' ? 'Vehicle Update' : 'Notification'}
-                      </h4>
-                      {!notification.isRead && (
-                        <span className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0"></span>
-                      )}
+          <div className="rounded-3xl overflow-hidden" style={cardStyle}>
+            <ul className="divide-y divide-slate-100">
+              {filteredNotifications.map((notification) => {
+                const m = meta(notification);
+                const isUnread = !notification.isRead;
+                return (
+                  <li
+                    key={notification.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      if (onNotificationClick) onNotificationClick(notification);
+                      if (isUnread && onMarkNotificationsAsRead) onMarkNotificationsAsRead([notification.id]);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (onNotificationClick) onNotificationClick(notification);
+                        if (isUnread && onMarkNotificationsAsRead) onMarkNotificationsAsRead([notification.id]);
+                      }
+                    }}
+                    className="relative px-4 py-3.5 active:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    {isUnread && (
+                      <span
+                        aria-hidden
+                        className="absolute left-0 top-3.5 bottom-3.5 w-[3px] rounded-r-full"
+                        style={{ background: 'linear-gradient(180deg, #FF8456, #FF6B35)' }}
+                      />
+                    )}
+                    <div className="flex items-start gap-3">
+                      <span className="w-9 h-9 rounded-xl grid place-items-center shrink-0 mt-0.5" style={{ background: m.tint, color: m.color }}>
+                        {m.icon}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className={`text-[13px] truncate tracking-tight ${isUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-700'}`} style={{ letterSpacing: '-0.01em' }}>
+                            {m.title}
+                          </h4>
+                          {isUnread && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#FF6B35' }} />}
+                        </div>
+                        <p className={`text-[12.5px] mt-0.5 leading-snug ${isUnread ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>
+                          {notification.message}
+                        </p>
+                        <p className="text-[10.5px] text-slate-400 mt-1 font-medium">
+                          {new Date(notification.timestamp).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            ...(new Date(notification.timestamp).getFullYear() !== new Date().getFullYear() && { year: 'numeric' })
+                          })}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-sm text-gray-700 mb-1">{notification.message}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(notification.timestamp).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        ...(new Date(notification.timestamp).getFullYear() !== new Date().getFullYear() && {
-                          year: 'numeric'
-                        })
-                      })}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         )}
-    </div>
-  );
+      </div>
+    );
   };
 
   const handleAddFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -1749,22 +2251,46 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const renderAddVehicle = () => {
 
     return (
-      <div className="space-y-5 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">{t('sellerListing.addTitle')}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{t('sellerListing.addSubtitle')}</p>
+      <div className="space-y-4 pb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setActiveTab('listings')}
+              aria-label="Back to listings"
+              className="w-9 h-9 rounded-full grid place-items-center text-slate-700 active:scale-95 transition-transform shrink-0"
+              style={{ background: 'rgba(15,23,42,0.05)', border: '1px solid rgba(15,23,42,0.06)' }}
+            >
+              <IconChevronRight size={16} stroke={2.2} className="rotate-180" />
+            </button>
+            <div className="min-w-0">
+              <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">New listing</p>
+              <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight truncate" style={{ letterSpacing: '-0.02em' }}>
+                {t('sellerListing.addTitle')}
+              </h3>
+              <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">{t('sellerListing.addSubtitle')}</p>
+            </div>
           </div>
-          <button 
+          <button
+            type="button"
             onClick={() => setActiveTab('listings')}
-            className="p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            className="w-9 h-9 rounded-full grid place-items-center text-slate-500 active:scale-95 transition-transform shrink-0"
+            style={{ background: 'rgba(15,23,42,0.05)', border: '1px solid rgba(15,23,42,0.06)' }}
             aria-label={t('common.close')}
           >
             ✕
           </button>
         </div>
-        
-        <form onSubmit={handleAddSubmit} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 space-y-6">
+
+        <form
+          onSubmit={handleAddSubmit}
+          className="rounded-3xl p-5 space-y-6"
+          style={{
+            background: '#FFFFFF',
+            border: '1px solid rgba(15,23,42,0.06)',
+            boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+          }}
+        >
           {/* Basic Information */}
           <div className="space-y-4">
             <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.basic')}</h4>
@@ -2024,22 +2550,66 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   };
 
   const renderEditVehicle = () => {
-    if (!editingVehicle) {
-      return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">{t('sellerListing.editTitle')}</h3>
-        <button 
-              onClick={() => setActiveTab('listings')}
-          className="p-2 text-gray-400 hover:text-gray-600"
+    const editHeader = (
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={() => setActiveTab('listings')}
+            aria-label="Back to listings"
+            className="w-9 h-9 rounded-full grid place-items-center text-slate-700 active:scale-95 transition-transform shrink-0"
+            style={{ background: 'rgba(15,23,42,0.05)', border: '1px solid rgba(15,23,42,0.06)' }}
+          >
+            <IconChevronRight size={16} stroke={2.2} className="rotate-180" />
+          </button>
+          <div className="min-w-0">
+            <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Listing</p>
+            <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight truncate" style={{ letterSpacing: '-0.02em' }}>
+              {t('sellerListing.editTitle')}
+            </h3>
+            {editingVehicle && (
+              <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium truncate">
+                {editingVehicle.year} {editingVehicle.make} {editingVehicle.model}
+              </p>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab('listings')}
+          className="w-9 h-9 rounded-full grid place-items-center text-slate-500 active:scale-95 transition-transform shrink-0"
+          style={{ background: 'rgba(15,23,42,0.05)', border: '1px solid rgba(15,23,42,0.06)' }}
           aria-label={t('common.close')}
         >
           ✕
         </button>
       </div>
-          <div className="bg-white rounded-lg p-4 shadow-sm text-center py-8">
-            <p className="text-gray-500">{t('sellerListing.editNoSelection')}</p>
-          </div>
+    );
+
+    const emptyState = (
+      <div
+        className="rounded-3xl px-6 py-10 text-center"
+        style={{
+          background: 'linear-gradient(180deg, #FFFFFF, #FAFAFC)',
+          border: '1px solid rgba(15,23,42,0.06)',
+          boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+        }}
+      >
+        <div
+          className="w-14 h-14 mx-auto mb-3 rounded-2xl grid place-items-center"
+          style={{ background: 'linear-gradient(135deg, rgba(15,23,42,0.05), rgba(15,23,42,0.10))', color: '#475569' }}
+        >
+          <IconCar size={24} stroke={1.7} />
+        </div>
+        <p className="text-[13px] text-slate-600 font-medium">{t('sellerListing.editNoSelection')}</p>
+      </div>
+    );
+
+    if (!editingVehicle) {
+      return (
+        <div className="space-y-4 pb-4">
+          {editHeader}
+          {emptyState}
         </div>
       );
     }
@@ -2047,22 +2617,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     const formData = editFormData || editingVehicle;
     if (!formData) {
       return (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">{t('sellerListing.editTitle')}</h3>
-          <button 
-              onClick={() => setActiveTab('listings')}
-              className="p-2 text-gray-400 hover:text-gray-600"
-              aria-label={t('common.close')}
-          >
-              ✕
-          </button>
+        <div className="space-y-4 pb-4">
+          {editHeader}
+          {emptyState}
         </div>
-          <div className="bg-white rounded-lg p-4 shadow-sm text-center py-8">
-            <p className="text-gray-500">{t('sellerListing.editNoSelection')}</p>
-      </div>
-    </div>
-  );
+      );
     }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -2131,19 +2690,18 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     };
 
     return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">{t('sellerListing.editTitle')}</h3>
-        <button 
-          onClick={() => setActiveTab('listings')}
-          className="p-2 text-gray-400 hover:text-gray-600"
-          aria-label={t('common.close')}
+    <div className="space-y-4 pb-4">
+      {editHeader}
+
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-3xl p-5 space-y-6"
+          style={{
+            background: '#FFFFFF',
+            border: '1px solid rgba(15,23,42,0.06)',
+            boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+          }}
         >
-          ✕
-        </button>
-      </div>
-      
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg p-4 shadow-sm space-y-4">
           {/* Basic Information */}
           <div className="space-y-4">
             <h4 className="font-semibold text-gray-900 border-b pb-2">{t('sellerListing.section.basic')}</h4>
@@ -2505,78 +3063,142 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const renderSalesHistory = () => {
     const soldVehicles = safeUserVehicles.filter(v => v && v.status === 'sold');
     const totalSalesValue = soldVehicles.reduce((sum, v) => sum + (v?.price || 0), 0);
+    const formatPriceInr = (n: number) => (n >= 10000000
+      ? `${(n / 10000000).toFixed(2)} Cr`
+      : n >= 100000 ? `${(n / 100000).toFixed(2)} L` : n.toLocaleString('en-IN'));
+    const avgSale = soldVehicles.length > 0 ? totalSalesValue / soldVehicles.length : 0;
 
     return (
-      <div className="space-y-5 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">Sales History</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{soldVehicles.length} sold vehicles</p>
-          </div>
+      <div className="space-y-4 pb-4">
+        {/* Section header */}
+        <div>
+          <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Revenue</p>
+          <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Sales history</h3>
+          <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">{soldVehicles.length} vehicles sold to date</p>
         </div>
 
-        {/* Sales Summary Card */}
-        <div 
-          className="rounded-2xl p-5 text-white"
+        {/* Premium revenue card (obsidian + emerald accent) */}
+        <div
+          className="relative overflow-hidden rounded-3xl text-white p-5"
           style={{
-            background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
-            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.3)'
+            background: 'linear-gradient(135deg, #14141C 0%, #0B0B11 100%)',
+            border: '1px solid rgba(16,185,129,0.22)',
+            boxShadow: '0 20px 50px -22px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)'
           }}
         >
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-lg font-bold">Total Sales</h4>
-            <span className="text-3xl">💰</span>
+          <div
+            aria-hidden
+            className="absolute -right-20 -top-20 w-72 h-72 rounded-full"
+            style={{ background: 'radial-gradient(closest-side, rgba(16,185,129,0.25), transparent 70%)' }}
+          />
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-3">
+              <span
+                className="w-7 h-7 grid place-items-center rounded-lg"
+                style={{ background: 'linear-gradient(135deg, #6EE7B7, #10B981)', color: '#053B27', boxShadow: '0 6px 14px -6px rgba(16,185,129,0.55)' }}
+              >
+                <IconCheck size={15} stroke={2.2} />
+              </span>
+              <span className="text-[10.5px] uppercase tracking-[0.20em] text-emerald-200/85 font-semibold">Total revenue</span>
+            </div>
+            <p className="text-[34px] font-bold tracking-tight leading-none text-white" style={{ letterSpacing: '-0.03em' }}>
+              ₹{formatPriceInr(totalSalesValue)}
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2.5">
+              <div className="rounded-2xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-white/45 font-semibold">Vehicles</p>
+                <p className="mt-1 text-[16px] font-bold text-white tracking-tight">{soldVehicles.length}</p>
+              </div>
+              <div className="rounded-2xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-white/45 font-semibold">Avg. price</p>
+                <p className="mt-1 text-[16px] font-bold text-white tracking-tight">₹{formatPriceInr(avgSale)}</p>
+              </div>
+            </div>
           </div>
-          <p className="text-3xl font-bold mb-2">₹{totalSalesValue.toLocaleString('en-IN')}</p>
-          <p className="text-sm opacity-90">{soldVehicles.length} vehicles sold</p>
         </div>
 
         {soldVehicles.length === 0 ? (
-          <div className="text-center py-12 px-4">
-            <div className="w-20 h-20 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-4xl">✅</span>
+          <div
+            className="relative overflow-hidden rounded-3xl px-6 py-12 text-center"
+            style={{ background: 'linear-gradient(180deg, #FFFFFF, #FAFAFC)', border: '1px solid rgba(15,23,42,0.06)' }}
+          >
+            <div
+              className="w-14 h-14 mx-auto mb-3 rounded-2xl grid place-items-center"
+              style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.10), rgba(5,150,105,0.18))', color: '#047857' }}
+            >
+              <IconCheck size={24} stroke={1.7} />
             </div>
-            <h4 className="text-xl font-bold text-gray-900 mb-2">No sales yet</h4>
-            <p className="text-gray-600 text-sm leading-relaxed max-w-sm mx-auto">
-              Vehicles marked as sold will appear here
+            <h4 className="text-[16px] font-semibold text-slate-900 mb-1 tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+              No sales yet
+            </h4>
+            <p className="text-[12.5px] text-slate-500 leading-relaxed max-w-sm mx-auto font-medium">
+              Vehicles marked as sold will appear here.
             </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {soldVehicles.map((vehicle) => (
-              <div key={vehicle.id} className="native-card p-4">
-                <div className="flex items-start gap-4">
-                  <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <span className="text-3xl">🚗</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-gray-900 truncate text-base mb-1">
-                      {vehicle.year} {vehicle.make} {vehicle.model}
-                    </h4>
-                    <p className="text-lg font-bold text-green-600 mb-2">₹{vehicle.price.toLocaleString('en-IN')}</p>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {vehicle.mileage && (
-                        <span className="text-xs text-gray-500">📏 {vehicle.mileage.toLocaleString('en-IN')} km</span>
-                      )}
-                      {vehicle.soldAt && (
-                        <span className="text-xs text-gray-500">
-                          Sold on {new Date(vehicle.soldAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {onMarkAsUnsold && (
-                    <button
-                      onClick={() => onMarkAsUnsold(vehicle.id)}
-                      className="p-2.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 active:scale-95 transition-transform"
-                      title="Mark as unsold"
+            {soldVehicles.map((vehicle) => {
+              const heroImage = (vehicle.images && vehicle.images[0]) || '';
+              return (
+                <div
+                  key={vehicle.id}
+                  className="relative rounded-2xl p-3.5"
+                  style={{
+                    background: '#FFFFFF',
+                    border: '1px solid rgba(15,23,42,0.06)',
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+                  }}
+                >
+                  <div className="flex items-start gap-3.5">
+                    <div
+                      className="relative w-[80px] h-[80px] rounded-xl overflow-hidden shrink-0 grid place-items-center"
+                      style={{ background: 'linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%)', border: '1px solid rgba(15,23,42,0.05)' }}
                     >
-                      <span className="text-lg">↩️</span>
-                    </button>
-                  )}
+                      {heroImage ? (
+                        <img src={heroImage} alt="" loading="lazy" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-slate-400"><IconCar size={28} stroke={1.6} /></span>
+                      )}
+                      <span
+                        className="absolute top-1.5 left-1.5 inline-flex items-center gap-0.5 rounded-full px-1.5 py-[3px] text-[9px] font-bold uppercase tracking-wider"
+                        style={{ background: 'rgba(16,185,129,0.92)', color: '#FFFFFF' }}
+                      >
+                        Sold
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold text-slate-900 text-[14.5px] truncate tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+                        {vehicle.year} {vehicle.make} {vehicle.model}
+                      </h4>
+                      <p className="text-[17px] font-bold text-emerald-600 mt-1.5 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+                        ₹{vehicle.price.toLocaleString('en-IN')}
+                      </p>
+                      <div className="mt-1.5 flex items-center gap-3 text-[11px] text-slate-500 font-medium flex-wrap">
+                        {vehicle.mileage ? <span>{vehicle.mileage.toLocaleString('en-IN')} km</span> : null}
+                        {vehicle.soldAt && (
+                          <span>
+                            Sold {new Date(vehicle.soldAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {onMarkAsUnsold && (
+                      <button
+                        type="button"
+                        onClick={() => onMarkAsUnsold(vehicle.id)}
+                        title="Mark as unsold"
+                        aria-label="Mark as unsold"
+                        className="shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-semibold active:scale-95 transition-transform"
+                        style={{ background: 'rgba(37,99,235,0.08)', color: '#1D4ED8' }}
+                      >
+                        <IconArrowUpRight size={13} stroke={2.2} className="rotate-180" />
+                        Unsold
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -2585,42 +3207,83 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   // Render Reports View
   const renderReports = () => (
-    <div className="space-y-5 pb-4">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-lg font-bold text-gray-900">Reported Vehicles</h3>
-          <p className="text-xs text-gray-500 mt-0.5">{safeReportedVehicles.length} flagged listings</p>
-        </div>
+    <div className="space-y-4 pb-4">
+      {/* Section header */}
+      <div>
+        <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Compliance</p>
+        <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Reported listings</h3>
+        <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">
+          {safeReportedVehicles.length === 0 ? 'All clear' : `${safeReportedVehicles.length} flagged listings need review`}
+        </p>
       </div>
 
       {safeReportedVehicles.length === 0 ? (
-        <div className="text-center py-12 px-4">
-          <div className="w-20 h-20 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-4xl">✅</span>
+        <div
+          className="relative overflow-hidden rounded-3xl px-6 py-12 text-center"
+          style={{ background: 'linear-gradient(180deg, #FFFFFF, #FAFAFC)', border: '1px solid rgba(15,23,42,0.06)' }}
+        >
+          <div
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-px"
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(16,185,129,0.45), transparent)' }}
+          />
+          <div
+            className="w-14 h-14 mx-auto mb-3 rounded-2xl grid place-items-center"
+            style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.10), rgba(5,150,105,0.18))', color: '#047857' }}
+          >
+            <IconShield size={24} stroke={1.8} />
           </div>
-          <h4 className="text-xl font-bold text-gray-900 mb-2">No reports</h4>
-          <p className="text-gray-600 text-sm leading-relaxed max-w-sm mx-auto">
-            All your listings are in good standing
+          <h4 className="text-[16px] font-semibold text-slate-900 mb-1 tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+            No reports
+          </h4>
+          <p className="text-[12.5px] text-slate-500 leading-relaxed max-w-sm mx-auto font-medium">
+            All your listings are in good standing.
           </p>
         </div>
       ) : (
         <div className="space-y-3">
           {safeReportedVehicles.map((vehicle) => (
-            <div key={vehicle.id} className="native-card p-4 border-l-4 border-red-500">
-              <div className="flex items-start gap-4">
-                <div className="w-20 h-20 bg-gradient-to-br from-red-100 to-red-200 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <span className="text-3xl">🚩</span>
+            <div
+              key={vehicle.id}
+              className="relative rounded-2xl p-3.5 overflow-hidden"
+              style={{
+                background: '#FFFFFF',
+                border: '1px solid rgba(220,38,38,0.18)',
+                boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+              }}
+            >
+              <div
+                aria-hidden
+                className="absolute left-0 top-0 h-full w-[3px]"
+                style={{ background: 'linear-gradient(180deg, #FCA5A5, #DC2626)' }}
+              />
+              <div className="flex items-start gap-3.5">
+                <div
+                  className="w-[72px] h-[72px] rounded-xl grid place-items-center shrink-0"
+                  style={{ background: 'linear-gradient(135deg, rgba(220,38,38,0.08), rgba(220,38,38,0.18))', color: '#DC2626' }}
+                >
+                  <IconCar size={26} stroke={1.7} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-bold text-gray-900 truncate text-base mb-1">
-                    {vehicle.year} {vehicle.make} {vehicle.model}
-                  </h4>
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="font-semibold text-slate-900 text-[14.5px] truncate tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+                      {vehicle.year} {vehicle.make} {vehicle.model}
+                    </h4>
+                    <span
+                      className="shrink-0 px-2 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-wider"
+                      style={{ background: 'rgba(220,38,38,0.10)', color: '#B91C1C' }}
+                    >
+                      Flagged
+                    </span>
+                  </div>
                   {vehicle.flagReason && (
-                    <p className="text-sm text-red-600 mb-2 font-medium">Reason: {vehicle.flagReason}</p>
+                    <p className="text-[12.5px] text-rose-700 mt-1.5 font-medium">
+                      <span className="text-rose-500/80">Reason: </span>{vehicle.flagReason}
+                    </p>
                   )}
                   {vehicle.flaggedAt && (
-                    <p className="text-xs text-gray-500">
-                      Flagged on {new Date(vehicle.flaggedAt).toLocaleDateString('en-IN')}
+                    <p className="text-[11px] text-slate-500 mt-1.5 font-medium">
+                      Flagged on {new Date(vehicle.flaggedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </p>
                   )}
                 </div>
@@ -2668,131 +3331,202 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       }
     };
 
+    const cardStyle: React.CSSProperties = {
+      background: '#FFFFFF',
+      border: '1px solid rgba(15,23,42,0.06)',
+      boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
+    };
+
+    const settingRows: { key: string; label: string; sub: string; icon: React.ReactNode; tint: string; color: string; onClick: () => void }[] = [
+      {
+        key: 'profile',
+        label: 'Edit profile',
+        sub: 'Personal & dealership details',
+        icon: <IconEdit size={16} stroke={2} />,
+        tint: 'rgba(37,99,235,0.10)',
+        color: '#2563EB',
+        onClick: () => setActiveTab('profile')
+      },
+      {
+        key: 'privacy',
+        label: 'Privacy & security',
+        sub: 'Manage account safety',
+        icon: <IconShield size={16} stroke={2} />,
+        tint: 'rgba(71,85,105,0.10)',
+        color: '#475569',
+        onClick: () => onNavigate(ViewEnum.SUPPORT)
+      },
+      {
+        key: 'help',
+        label: 'Help & support',
+        sub: 'FAQ, contact us',
+        icon: <IconChat size={16} stroke={2} />,
+        tint: 'rgba(16,185,129,0.10)',
+        color: '#047857',
+        onClick: () => onNavigate(ViewEnum.SUPPORT)
+      },
+      ...(onLogout ? [{
+        key: 'logout',
+        label: 'Sign out',
+        sub: 'End this session',
+        icon: <IconArrowUpRight size={16} stroke={2} />,
+        tint: 'rgba(220,38,38,0.10)',
+        color: '#DC2626',
+        onClick: () => onLogout()
+      }] : [])
+    ];
+
     return (
-      <div className="space-y-5 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">Settings</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Manage your account settings</p>
-          </div>
+      <div className="space-y-4 pb-4">
+        {/* Section header */}
+        <div>
+          <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Account</p>
+          <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Settings</h3>
+          <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">Manage your preferences and finance partners</p>
         </div>
 
-        {/* Bank Partners Section */}
-        <div className="native-card p-5">
-          <h4 className="font-bold text-gray-900 mb-3 text-base">{t('vehicle.detail.financePartners.title')}</h4>
-          <p className="text-sm text-gray-600 mb-4">
-            Select banks you partner with for vehicle financing. This information will be displayed on your listings.
-          </p>
-          
-          <div className="grid grid-cols-2 gap-3 mb-4 max-h-[400px] overflow-y-auto">
-            {availableBanks.map((bank) => {
-              const isSelected = selectedBanks.includes(bank);
-              return (
-                <label
-                  key={bank}
-                  className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                    isSelected
-                      ? 'border-purple-600 bg-purple-50'
-                      : 'border-gray-200 bg-white'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => handleBankToggle(bank)}
-                    className="sr-only"
-                  />
-                  <div className={`flex-shrink-0 w-5 h-5 rounded border-2 mr-3 flex items-center justify-center ${
-                    isSelected ? 'border-purple-600 bg-purple-600' : 'border-gray-300'
-                  }`}>
-                    {isSelected && (
-                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    )}
-                  </div>
-                  <span className={`text-sm font-medium ${isSelected ? 'text-purple-900' : 'text-gray-700'}`}>
-                    {bank}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
+        {/* Bank Partners */}
+        {isSeller && (
+          <div className="rounded-3xl p-5" style={cardStyle}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h4 className="font-semibold text-slate-900 text-[15px] tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+                  {t('vehicle.detail.financePartners.title')}
+                </h4>
+                <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium leading-snug max-w-xs">
+                  Banks you partner with for financing. Shown on your listings.
+                </p>
+              </div>
+              <span
+                className="text-[10px] font-bold uppercase tracking-[0.16em] px-2 py-1 rounded-full"
+                style={{ background: 'rgba(139,92,246,0.10)', color: '#7C3AED' }}
+              >
+                {selectedBanks.length} active
+              </span>
+            </div>
 
-          {selectedBanks.length > 0 && (
-            <div className="mb-4 p-3 bg-purple-50 rounded-lg">
-              <p className="text-sm font-medium text-purple-900 mb-2">Selected Partners ({selectedBanks.length}):</p>
-              <div className="flex flex-wrap gap-2">
+            {selectedBanks.length > 0 && (
+              <div className="mb-4 flex flex-wrap gap-1.5">
                 {selectedBanks.map((bank) => (
                   <span
                     key={bank}
-                    className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200"
+                    className="inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1 text-[11.5px] font-semibold"
+                    style={{ background: 'rgba(139,92,246,0.08)', color: '#5B21B6', border: '1px solid rgba(139,92,246,0.18)' }}
                   >
                     {bank}
                     <button
+                      type="button"
                       onClick={() => handleBankToggle(bank)}
-                      className="ml-2 text-purple-600 hover:text-purple-800"
                       aria-label={`Remove ${bank}`}
+                      className="w-4 h-4 rounded-full grid place-items-center text-[12px] leading-none"
+                      style={{ background: 'rgba(139,92,246,0.18)', color: '#5B21B6' }}
                     >
                       ×
                     </button>
                   </span>
                 ))}
               </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2 mb-4 max-h-[360px] overflow-y-auto pr-1">
+              {availableBanks.map((bank) => {
+                const isSelected = selectedBanks.includes(bank);
+                return (
+                  <label
+                    key={bank}
+                    className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer transition-colors active:scale-[0.99]"
+                    style={{
+                      background: isSelected ? 'rgba(139,92,246,0.08)' : 'rgba(15,23,42,0.025)',
+                      border: `1px solid ${isSelected ? 'rgba(139,92,246,0.30)' : 'rgba(15,23,42,0.06)'}`
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleBankToggle(bank)}
+                      className="sr-only"
+                    />
+                    <span
+                      className="shrink-0 w-4.5 h-4.5 rounded-md grid place-items-center"
+                      style={{
+                        width: 18, height: 18,
+                        background: isSelected ? '#7C3AED' : '#FFFFFF',
+                        border: `1.5px solid ${isSelected ? '#7C3AED' : 'rgba(15,23,42,0.20)'}`
+                      }}
+                    >
+                      {isSelected && (
+                        <svg width="10" height="10" viewBox="0 0 20 20" fill="white">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </span>
+                    <span
+                      className="text-[12px] font-semibold truncate"
+                      style={{ color: isSelected ? '#5B21B6' : '#334155' }}
+                    >
+                      {bank}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
-          )}
 
-          <button
-            onClick={handleSaveBanks}
-            disabled={isSavingBanks}
-            className={`w-full py-3 rounded-lg font-semibold transition-all ${
-              isSavingBanks
-                ? 'bg-gray-400 text-white cursor-not-allowed'
-                : saveSuccess
-                ? 'bg-green-600 text-white'
-                : 'bg-purple-600 text-white hover:bg-purple-700'
-            }`}
-          >
-            {isSavingBanks ? 'Saving...' : saveSuccess ? '✓ Saved' : 'Save Changes'}
-          </button>
-        </div>
-
-        {/* Other Settings */}
-        <div className="native-card p-5">
-          <h4 className="font-bold text-gray-900 mb-4 text-base">Account Settings</h4>
-          <div className="space-y-2">
-            <button 
-              onClick={() => setActiveTab('profile')}
-              className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
+            <button
+              type="button"
+              onClick={handleSaveBanks}
+              disabled={isSavingBanks}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl py-3 text-[13.5px] font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-70"
+              style={{
+                background: saveSuccess
+                  ? 'linear-gradient(135deg, #34D399, #10B981)'
+                  : 'linear-gradient(135deg, #14141C 0%, #0B0B11 100%)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                boxShadow: '0 14px 30px -14px rgba(11,11,15,0.55)'
+              }}
             >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">👤</span>
-                <span className="text-gray-900 font-medium">Edit Profile</span>
-              </div>
-              <span className="text-gray-400">›</span>
-            </button>
-            <button 
-              onClick={() => onNavigate(ViewEnum.SUPPORT)}
-              className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">🛡️</span>
-                <span className="text-gray-900 font-medium">Privacy & Security</span>
-              </div>
-              <span className="text-gray-400">›</span>
-            </button>
-            <button 
-              onClick={() => onNavigate(ViewEnum.SUPPORT)}
-              className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">💬</span>
-                <span className="text-gray-900 font-medium">Help & Support</span>
-              </div>
-              <span className="text-gray-400">›</span>
+              {isSavingBanks ? 'Saving…' : saveSuccess ? (<><IconCheck size={15} stroke={2.4} /> Saved</>) : 'Save changes'}
             </button>
           </div>
+        )}
+
+        {/* Account rows */}
+        <div className="rounded-3xl p-2.5" style={cardStyle}>
+          <div className="px-2.5 pt-2 pb-1">
+            <p className="text-[10.5px] uppercase tracking-[0.16em] text-slate-400 font-semibold">Account</p>
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {settingRows.map((row) => (
+              <li key={row.key}>
+                <button
+                  type="button"
+                  onClick={row.onClick}
+                  className="w-full flex items-center gap-3 px-2.5 py-3.5 rounded-xl active:bg-slate-50 transition-colors"
+                >
+                  <span
+                    className="w-9 h-9 rounded-xl grid place-items-center shrink-0"
+                    style={{ background: row.tint, color: row.color }}
+                  >
+                    {row.icon}
+                  </span>
+                  <span className="flex-1 min-w-0 text-left">
+                    <span className="block text-[13.5px] font-semibold text-slate-900 truncate tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+                      {row.label}
+                    </span>
+                    <span className="block text-[11.5px] text-slate-500 truncate font-medium mt-0.5">{row.sub}</span>
+                  </span>
+                  <span className="text-slate-300 shrink-0">
+                    <IconChevronRight size={16} stroke={2} />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
+
+        {/* App version footer */}
+        <p className="text-center text-[10.5px] text-slate-400 font-medium tracking-wide pt-2">
+          Reride · Premium Seller Hub
+        </p>
       </div>
     );
   };
@@ -2816,105 +3550,180 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   return (
     <div className="w-full bg-gradient-to-b from-gray-50 to-white min-h-screen">
-      {/* Premium Dashboard Header - Ultra Modern Design */}
-      <div 
-        className="px-5 py-5 sticky top-0 z-20 safe-top relative overflow-hidden" 
-        style={{ 
-          top: '0px', 
-          paddingTop: 'max(1.25rem, env(safe-area-inset-top, 0px))',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
-          boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)'
-        }}
-      >
-        {/* Animated background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full blur-3xl"></div>
-          <div className="absolute bottom-0 right-0 w-64 h-64 bg-white rounded-full blur-3xl"></div>
-        </div>
-        
-        <div className="relative z-10 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-black text-white mb-1 tracking-tight" style={{ 
-              letterSpacing: '-0.03em',
-              textShadow: '0 2px 10px rgba(0, 0, 0, 0.2)'
-            }}>
-              Dashboard
-            </h1>
-            <p className="text-sm text-white/90 font-medium">
-              {isSeller ? '✨ Manage your listings' : 
-               isAdmin ? '🔧 Platform overview' : 
-               '🚗 Your car journey'}
-            </p>
-          </div>
-          <div 
-            className="w-14 h-14 rounded-2xl flex items-center justify-center relative"
+      {/* Premium Dashboard Header — Obsidian luxe */}
+      {(() => {
+        const headerUnread = notifications.filter(n => n && n.recipientEmail === currentUser.email && !n.isRead).length;
+        const todayLabel = new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'short', day: 'numeric' });
+        const hr = new Date().getHours();
+        const greeting = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+        const firstName = currentUser.name?.split(' ')[0] || 'there';
+        const initials = (currentUser.name || 'U').split(' ').map(s => s.charAt(0)).slice(0, 2).join('').toUpperCase();
+        return (
+          <div
+            className="px-5 sticky top-0 z-30 safe-top relative overflow-hidden"
             style={{
-              background: 'rgba(255, 255, 255, 0.25)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              border: '2px solid rgba(255, 255, 255, 0.3)',
-              boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
+              top: '0px',
+              paddingTop: 'max(1.1rem, env(safe-area-inset-top, 0px))',
+              paddingBottom: '1.25rem',
+              background: 'linear-gradient(180deg, #0B0B0F 0%, #16161D 70%, #1C1C24 100%)',
+              boxShadow: '0 10px 30px -12px rgba(0,0,0,0.55)'
             }}
           >
-            <span className="text-white font-black text-xl">
-              {currentUser.name?.charAt(0).toUpperCase() || 'U'}
-            </span>
-          </div>
-        </div>
-      </div>
+            {/* Subtle radial glow accents */}
+            <div aria-hidden className="pointer-events-none absolute inset-0">
+              <div className="absolute -top-24 -left-20 w-72 h-72 rounded-full" style={{ background: 'radial-gradient(closest-side, rgba(255,107,53,0.18), transparent 70%)' }} />
+              <div className="absolute -bottom-24 -right-16 w-72 h-72 rounded-full" style={{ background: 'radial-gradient(closest-side, rgba(168,135,255,0.10), transparent 70%)' }} />
+              <div className="absolute inset-x-0 bottom-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent)' }} />
+            </div>
 
-      {/* Premium Tab Navigation - Ultra Modern Design */}
-      <div 
-        className="px-4 py-4 sticky z-20 bg-white" 
-        style={{ 
-          top: '88px',
-          borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)'
+            {/* Top utility row */}
+            <div className="relative z-10 flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="w-8 h-8 rounded-lg grid place-items-center"
+                  style={{
+                    background: 'linear-gradient(135deg, #FF8456 0%, #FF6B35 100%)',
+                    boxShadow: '0 6px 14px rgba(255,107,53,0.35), inset 0 1px 0 rgba(255,255,255,0.25)'
+                  }}
+                >
+                  <span className="text-white font-black text-[11px] tracking-[0.18em]">RR</span>
+                </div>
+                <div className="flex flex-col leading-none">
+                  <span className="text-[10px] uppercase tracking-[0.22em] text-white/45 font-semibold">Reride</span>
+                  <span className="text-[11px] text-white/70 font-medium mt-0.5">{todayLabel}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('notifications')}
+                  aria-label={`Notifications${headerUnread ? `, ${headerUnread} unread` : ''}`}
+                  className="relative w-10 h-10 rounded-full grid place-items-center text-white/85 active:scale-95 transition-transform"
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)'
+                  }}
+                >
+                  <IconBell size={18} stroke={1.6} />
+                  {headerUnread > 0 && (
+                    <span
+                      className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white grid place-items-center"
+                      style={{
+                        background: 'linear-gradient(135deg, #FF6B35, #E5482C)',
+                        boxShadow: '0 0 0 2px #0B0B0F'
+                      }}
+                    >
+                      {headerUnread > 9 ? '9+' : headerUnread}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('settings')}
+                  aria-label="Settings"
+                  className="w-10 h-10 rounded-full grid place-items-center text-white/85 active:scale-95 transition-transform"
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)'
+                  }}
+                >
+                  <IconSettings size={18} stroke={1.6} />
+                </button>
+              </div>
+            </div>
+
+            {/* Greeting block */}
+            <div className="relative z-10 flex items-end justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-white/45 font-semibold mb-1.5">{greeting}</p>
+                <h1
+                  className="text-white font-semibold truncate"
+                  style={{ fontSize: '26px', lineHeight: 1.1, letterSpacing: '-0.03em' }}
+                >
+                  {firstName}
+                  <span className="text-white/40 font-light">.</span>
+                </h1>
+                <p className="mt-2 text-[12.5px] text-white/55 font-medium">
+                  {isSeller
+                    ? `${activeListings} active · ${totalViews.toLocaleString('en-IN')} views today`
+                    : isAdmin ? 'Platform overview' : 'Your car journey'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('profile')}
+                aria-label="Open profile"
+                className="relative shrink-0"
+              >
+                <span
+                  className="absolute -inset-[3px] rounded-2xl"
+                  style={{ background: 'conic-gradient(from 140deg, #FF8456, #FF6B35, #C7411F, #FF8456)' }}
+                />
+                <span
+                  className="relative w-12 h-12 rounded-2xl grid place-items-center font-bold text-white text-[15px] tracking-tight"
+                  style={{
+                    background: 'linear-gradient(160deg, #1F1F28 0%, #0E0E13 100%)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)'
+                  }}
+                >
+                  {initials}
+                </span>
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Premium Tab Navigation — Refined pills */}
+      <div
+        className="px-4 sticky z-20"
+        style={{
+          top: 'calc(env(safe-area-inset-top, 0px) + 132px)',
+          background: 'rgba(255,255,255,0.85)',
+          backdropFilter: 'saturate(180%) blur(14px)',
+          WebkitBackdropFilter: 'saturate(180%) blur(14px)',
+          borderBottom: '1px solid rgba(15, 23, 42, 0.06)'
         }}
       >
-        <div className="flex space-x-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as DashboardTab)}
-              className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-bold whitespace-nowrap transition-all duration-300 min-h-[48px] relative ${
-                activeTab === tab.id
-                  ? 'text-white'
-                  : 'text-gray-700'
-              }`}
-              style={{
-                background: activeTab === tab.id 
-                  ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                  : 'linear-gradient(180deg, #F9FAFB 0%, #F3F4F6 100%)',
-                boxShadow: activeTab === tab.id 
-                  ? '0 8px 20px rgba(102, 126, 234, 0.4), 0 4px 8px rgba(118, 75, 162, 0.3)'
-                  : '0 2px 4px rgba(0, 0, 0, 0.05)',
-                border: activeTab === tab.id ? 'none' : '1px solid rgba(0, 0, 0, 0.08)',
-                transform: activeTab === tab.id ? 'scale(1.05) translateY(-2px)' : 'scale(1)',
-                letterSpacing: '-0.01em'
-              }}
-              onMouseDown={(e) => {
-                if (activeTab !== tab.id) {
-                  e.currentTarget.style.transform = 'scale(0.95)';
-                }
-              }}
-              onMouseUp={(e) => {
-                e.currentTarget.style.transform = activeTab === tab.id ? 'scale(1.05) translateY(-2px)' : 'scale(1)';
-              }}
-            >
-              <span className="text-lg">{tab.icon}</span>
-              <span className="hidden sm:inline">{tab.label}</span>
-              {tab.count !== null && tab.count > 0 && (
-                <span className={`text-xs rounded-full px-2.5 py-1 min-w-[24px] text-center font-black ${
-                  activeTab === tab.id
-                    ? 'bg-white/30 text-white backdrop-blur-sm'
-                    : 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md'
-                }`}>
-                  {tab.count > 99 ? '99+' : tab.count}
-                </span>
-              )}
-            </button>
-          ))}
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide py-3">
+          {tabs.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as DashboardTab)}
+                className="group flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-semibold transition-all duration-200 active:scale-95"
+                style={{
+                  background: active ? '#0B0B0F' : 'rgba(15, 23, 42, 0.04)',
+                  color: active ? '#FFFFFF' : '#475569',
+                  border: active ? '1px solid #0B0B0F' : '1px solid rgba(15, 23, 42, 0.06)',
+                  boxShadow: active ? '0 6px 16px -6px rgba(11,11,15,0.45)' : 'none',
+                  letterSpacing: '-0.01em'
+                }}
+              >
+                <span className="text-[15px] leading-none">{tab.icon}</span>
+                <span>{tab.label}</span>
+                {tab.count !== null && tab.count > 0 && (
+                  <span
+                    className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[10px] font-bold"
+                    style={{
+                      background: active ? 'rgba(255,255,255,0.15)' : '#FF6B35',
+                      color: '#FFFFFF',
+                      border: active ? '1px solid rgba(255,255,255,0.18)' : 'none'
+                    }}
+                  >
+                    {tab.count > 99 ? '99+' : tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 

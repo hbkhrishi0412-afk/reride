@@ -17,6 +17,12 @@ interface MobileHeaderProps {
   onToggleMenu?: () => void;
   /** Unread Activity notifications for the signed-in user (0 = no dot). */
   unreadNotificationCount?: number;
+  /**
+   * Logged-in service provider (separate identity from `currentUser`). When
+   * present, the menu shows the provider's identity and a shortcut to the
+   * service-provider dashboard / logout, even if no `currentUser` is set.
+   */
+  serviceProvider?: { name?: string; email?: string } | null;
 }
 
 /**
@@ -35,11 +41,19 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
   showMenu: showMenuProp,
   onToggleMenu,
   unreadNotificationCount = 0,
+  serviceProvider = null,
 }) => {
   const { t } = useTranslation();
   const [internalShowMenu, setInternalShowMenu] = useState(false);
   const showMenu = showMenuProp !== undefined ? showMenuProp : internalShowMenu;
   const setShowMenu = onToggleMenu || setInternalShowMenu;
+  const isAuthed = Boolean(currentUser) || Boolean(serviceProvider);
+  const displayName =
+    currentUser?.name || serviceProvider?.name || (isAuthed ? 'Account' : 'Guest');
+  const displaySubtitle =
+    currentUser?.email ||
+    serviceProvider?.email ||
+    (serviceProvider ? 'Service provider' : 'Not logged in');
   
   // Check if current view should have transparent header
   const isGradientView = currentView && (
@@ -163,7 +177,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                 )}
 
                 {/* Notifications Icon */}
-                {currentUser && (
+                {isAuthed && (
                   <button
                     type="button"
                     onClick={() => {
@@ -211,12 +225,8 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                   <div className="flex items-center gap-3">
                     <Logo size="sm" showText variant="onDark" />
                     <div>
-                      <p className="text-white font-semibold text-sm">
-                        {currentUser?.name || 'Guest'}
-                      </p>
-                      <p className="text-orange-100 text-xs">
-                        {currentUser?.email || 'Not logged in'}
-                      </p>
+                      <p className="text-white font-semibold text-sm">{displayName}</p>
+                      <p className="text-orange-100 text-xs">{displaySubtitle}</p>
                     </div>
                   </div>
                   <button
@@ -296,6 +306,16 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                     )}
                   </>
                 )}
+                {serviceProvider && (
+                  <MenuItem
+                    icon={<DashboardIcon />}
+                    label="Service Provider Dashboard"
+                    onClick={() => {
+                      onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
+                      setShowMenu(false);
+                    }}
+                  />
+                )}
                 
                 <div className="border-t border-gray-200 my-2"></div>
                 <MenuItem
@@ -320,7 +340,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                 />
                 
                 {/* Logout Option */}
-                {currentUser && (
+                {isAuthed && (
                   <>
                     <div className="border-t border-gray-200 my-2"></div>
                     <MenuItem
@@ -332,7 +352,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                 )}
                 
                 {/* Login Option for Guests */}
-                {!currentUser && (
+                {!isAuthed && (
                   <>
                     <div className="border-t border-gray-200 my-2"></div>
                     <MenuItem
