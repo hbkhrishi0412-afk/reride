@@ -195,7 +195,10 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
       });
 
       if (response.ok) {
-        const result = await response.json().catch(() => ({}));
+        const result = await response.json().catch(() => ({})) as { success?: boolean; reason?: string };
+        if (result && typeof result === 'object' && result.success === false) {
+          console.warn('⚠️ Consolidated endpoint returned success:false:', result.reason || result);
+        } else {
         console.log('✅ Vehicle data saved to Supabase via consolidated endpoint:', result);
         
         // Supabase save succeeded - NOW save to localStorage
@@ -210,6 +213,7 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
         }
         
         return true;
+        }
       } else {
         console.warn(`⚠️ Consolidated endpoint failed with ${response.status}: ${response.statusText}`);
         const errorText = await response.text();
@@ -228,7 +232,10 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
       });
 
       if (response.ok) {
-        const result = await response.json().catch(() => ({}));
+        const result = await response.json().catch(() => ({})) as { success?: boolean; reason?: string };
+        if (result && typeof result === 'object' && result.success === false) {
+          console.warn('⚠️ Standalone endpoint returned success:false:', result.reason || result);
+        } else {
         console.log('✅ Vehicle data saved to Supabase via standalone endpoint:', result);
         
         // Supabase save succeeded - NOW save to localStorage
@@ -243,6 +250,7 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
         }
         
         return true;
+        }
       } else {
         console.warn(`⚠️ Standalone endpoint failed with ${response.status}: ${response.statusText}`);
         const errorText = await response.text();

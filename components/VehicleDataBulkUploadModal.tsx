@@ -8,11 +8,10 @@ interface BulkUploadModalProps {
     onUpdateData: (newData: VehicleData) => void | Promise<void>;
 }
 
-// Robust CSV line parser: handles quoted fields, escaped quotes, embedded commas, and CRLF.
-// Returns rows as arrays of strings. Handles entire text (not line-by-line) so quoted fields
-// with embedded newlines still work correctly.
-const parseCSVText = (input: string): string[][] => {
-    // Strip UTF-8 BOM that Excel adds to CSV files
+// Robust delimited-text parser (CSV / Excel "CSV" with ; or tab): quoted fields, escaped quotes,
+// embedded delimiters, and CRLF. Production CSP blocks third-party script CDNs, so Excel uses
+// the bundled `xlsx` package instead of loading SheetJS from a CDN.
+const parseDelimitedText = (input: string, delimiter: ',' | ';' | '\t' = ','): string[][] => {
     const text = input.replace(/^\uFEFF/, '');
     const rows: string[][] = [];
     let current = '';
@@ -25,7 +24,6 @@ const parseCSVText = (input: string): string[][] => {
         if (inQuotes) {
             if (ch === '"') {
                 if (text[i + 1] === '"') {
-                    // Escaped quote inside quoted field
                     current += '"';
                     i++;
                 } else {
@@ -41,13 +39,12 @@ const parseCSVText = (input: string): string[][] => {
             inQuotes = true;
             continue;
         }
-        if (ch === ',') {
+        if (ch === delimiter) {
             row.push(current);
             current = '';
             continue;
         }
         if (ch === '\r') {
-            // Swallow; treat \r\n as single line break
             continue;
         }
         if (ch === '\n') {
@@ -60,41 +57,48 @@ const parseCSVText = (input: string): string[][] => {
         current += ch;
     }
 
-    // Flush last field / row
     if (current.length > 0 || row.length > 0) {
         row.push(current);
         rows.push(row);
     }
 
-    // Drop completely empty rows
     return rows.filter(r => r.some(cell => cell && cell.trim().length > 0));
 };
 
-// Dynamically load SheetJS from CDN on demand so .xlsx / .xls uploads work
-// without adding a build-time dependency.
-const SHEETJS_CDN = 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js';
-let sheetJsLoadPromise: Promise<any> | null = null;
-const loadSheetJS = (): Promise<any> => {
-    if (typeof window === 'undefined') return Promise.reject(new Error('Excel parsing is only available in the browser.'));
-    const existing = (window as any).XLSX;
-    if (existing) return Promise.resolve(existing);
-    if (sheetJsLoadPromise) return sheetJsLoadPromise;
-    sheetJsLoadPromise = new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = SHEETJS_CDN;
-        script.async = true;
-        script.onload = () => {
-            const xlsx = (window as any).XLSX;
-            if (xlsx) resolve(xlsx);
-            else reject(new Error('Failed to initialize Excel parser.'));
-        };
-        script.onerror = () => {
-            sheetJsLoadPromise = null;
-            reject(new Error('Failed to load Excel parser. Please check your internet connection or save the file as CSV.'));
-        };
-        document.head.appendChild(script);
-    });
-    return sheetJsLoadPromise;
+const getFirstNonEmptyLine = (input: string): string => {
+    const text = input.replace(/^\uFEFF/, '');
+    const lines = text.split(/\r?\n/);
+    for (const line of lines) {
+        if (line.trim()) return line;
+    }
+    return '';
+};
+
+/** Excel in many locales exports CSV with `;` instead of `,`. */
+const detectDelimiterFromText = (input: string): ',' | ';' | '\t' => {
+    const line = getFirstNonEmptyLine(input);
+    if (!line) return ',';
+    let inQuotes = false;
+    const counts = { ',': 0, ';': 0, '\t': 0 };
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+                i++;
+                continue;
+            }
+            inQuotes = !inQuotes;
+            continue;
+        }
+        if (!inQuotes) {
+            if (ch === ',') counts[',']++;
+            else if (ch === ';') counts[';']++;
+            else if (ch === '\t') counts['\t']++;
+        }
+    }
+    if (counts['\t'] >= counts[','] && counts['\t'] >= counts[';'] && counts['\t'] > 0) return '\t';
+    if (counts[';'] > counts[',']) return ';';
+    return ',';
 };
 
 const readFileAsText = (file: File): Promise<string> =>
@@ -113,16 +117,16 @@ const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> =>
         reader.readAsArrayBuffer(file);
     });
 
-// Extract rows from an Excel file using SheetJS, returning a CSV-like string[][]
+// Extract rows from Excel using bundled SheetJS (avoids CSP blocking a CDN script on reride.co.in).
 const extractRowsFromExcel = async (file: File): Promise<string[][]> => {
-    const xlsx = await loadSheetJS();
+    const XLSX = await import('xlsx');
     const buffer = await readFileAsArrayBuffer(file);
-    const workbook = xlsx.read(buffer, { type: 'array' });
+    const workbook = XLSX.read(buffer, { type: 'array' });
     const firstSheetName = workbook.SheetNames[0];
     if (!firstSheetName) return [];
     const sheet = workbook.Sheets[firstSheetName];
-    const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false }) as any[][];
-    return rows.map(r => r.map(cell => (cell == null ? '' : String(cell))));
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false }) as unknown[][];
+    return rows.map(r => (Array.isArray(r) ? r : []).map(cell => (cell == null ? '' : String(cell))));
 };
 
 interface ParseResult {
@@ -132,45 +136,88 @@ interface ParseResult {
     warnings: string[];
 }
 
+type ColumnIndices = { idxCategory: number; idxMake: number; idxModel: number; idxVariant: number };
+
+/** Map header cell text to canonical column, or null if unrecognized. */
+const headerCellToField = (cell: string): 'category' | 'make' | 'model' | 'variant' | null => {
+    const n = (cell || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (n === 'category' || n === 'categories' || n === 'vehicle category') return 'category';
+    if (n === 'make' || n === 'brand' || n === 'manufacturer' || n === 'oem') return 'make';
+    if (n === 'model') return 'model';
+    if (n === 'variant' || n === 'variants' || n === 'trim' || n === 'version') return 'variant';
+    return null;
+};
+
+const resolveColumnIndicesFromHeaderRow = (cells: string[]): ColumnIndices | null => {
+    const fields: Partial<Record<'category' | 'make' | 'model' | 'variant', number>> = {};
+    cells.forEach((cell, colIdx) => {
+        const f = headerCellToField(cell);
+        if (f && fields[f] === undefined) {
+            fields[f] = colIdx;
+        }
+    });
+    const { category, make, model, variant } = fields as Record<string, number | undefined>;
+    if (category === undefined || make === undefined || model === undefined) {
+        return null;
+    }
+    return {
+        idxCategory: category,
+        idxMake: make,
+        idxModel: model,
+        idxVariant: variant !== undefined ? variant : -1,
+    };
+};
+
+const findHeaderRowAndIndices = (rows: string[][]): { headerRow: number; indices: ColumnIndices } => {
+    const maxScan = Math.min(40, rows.length);
+    for (let h = 0; h < maxScan; h++) {
+        const indices = resolveColumnIndicesFromHeaderRow(rows[h]);
+        if (indices) {
+            return { headerRow: h, indices };
+        }
+    }
+    const preview = rows
+        .slice(0, 5)
+        .map((r, i) => `Row ${i + 1}: ${r.map(c => (c || '').trim()).join(' | ')}`)
+        .join('\n');
+    throw new Error(
+        'Could not find a header row with columns category, make, and model (aliases: brand, manufacturer for make; variant/trim optional). ' +
+            'Put those headers on one row — Excel title rows above the table are OK.\n\n' +
+            `First rows in file:\n${preview || '(empty)'}`,
+    );
+};
+
 const buildVehicleDataFromRows = (rows: string[][]): ParseResult => {
     if (rows.length < 1) {
         throw new Error('File is empty.');
     }
 
-    const rawHeaders = rows[0].map(h => (h || '').trim().toLowerCase());
-    const headerIndex = (name: string) => rawHeaders.indexOf(name);
-
-    const idxCategory = headerIndex('category');
-    const idxMake = headerIndex('make');
-    const idxModel = headerIndex('model');
-    const idxVariant = headerIndex('variant');
-
-    const missing: string[] = [];
-    if (idxCategory === -1) missing.push('category');
-    if (idxMake === -1) missing.push('make');
-    if (idxModel === -1) missing.push('model');
-    if (missing.length > 0) {
-        throw new Error(
-            `File must contain the following column headers (case-insensitive): ${missing.join(', ')}. Found headers: ${rawHeaders.join(', ') || '(none)'}.`
-        );
-    }
+    const { headerRow, indices } = findHeaderRowAndIndices(rows);
+    const { idxCategory, idxMake, idxModel, idxVariant } = indices;
+    const dataRows = rows.slice(headerRow + 1);
 
     const newData: VehicleData = {};
     const warnings: string[] = [];
     let skipped = 0;
     let rowCount = 0;
 
-    for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const category = (row[idxCategory] || '').trim();
-        const make = (row[idxMake] || '').trim();
-        const model = (row[idxModel] || '').trim();
-        const variant = idxVariant >= 0 ? (row[idxVariant] || '').trim() : '';
+    for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const pad = (idx: number) => (row[idx] != null ? String(row[idx]) : '').trim();
+        const category = pad(idxCategory);
+        const make = pad(idxMake);
+        const model = pad(idxModel);
+        const variant = idxVariant >= 0 ? pad(idxVariant) : '';
+        const fileRowNumber = headerRow + i + 2;
+
+        if (!category && !make && !model) {
+            continue;
+        }
 
         if (!category || !make || !model) {
             skipped++;
             if (warnings.length < 5) {
-                warnings.push(`Row ${i + 1}: missing category/make/model — skipped.`);
+                warnings.push(`Row ${fileRowNumber}: missing category/make/model — skipped.`);
             }
             continue;
         }
@@ -230,7 +277,8 @@ export const VehicleDataBulkUploadModal: React.FC<BulkUploadModalProps> = ({ onC
                 rows = await extractRowsFromExcel(file);
             } else {
                 const text = await readFileAsText(file);
-                rows = parseCSVText(text);
+                const delimiter = detectDelimiterFromText(text);
+                rows = parseDelimitedText(text, delimiter);
             }
 
             if (rows.length < 2) {
@@ -346,7 +394,7 @@ export const VehicleDataBulkUploadModal: React.FC<BulkUploadModalProps> = ({ onC
                                 )}
                             </div>
                             <p className="text-xs text-gray-500">
-                                Required columns: <code>category</code>, <code>make</code>, <code>model</code>. Optional column: <code>variant</code>. Column order doesn't matter and headers are case-insensitive.
+                                Required columns: <code>category</code>, <code>make</code> (or <code>brand</code>), <code>model</code>. Optional: <code>variant</code>. Headers are case-insensitive; the header row can be below a title row; CSV may use comma or semicolon separators (Excel regional export).
                             </p>
                             {error && <p className="text-red-600 text-sm mt-2 bg-red-50 border border-red-200 rounded-md p-2 text-left whitespace-pre-wrap">{error}</p>}
                         </div>

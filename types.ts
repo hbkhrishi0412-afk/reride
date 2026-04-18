@@ -478,12 +478,13 @@ export interface TicketReply {
 }
 
 export interface SupportTicket {
-  id: number;
+  /** Server row id (often a string like `ticket_<timestamp>`); may be numeric in mock data. */
+  id: string | number;
   userEmail: string;
   userName: string;
   subject: string;
   message: string;
-  status: 'Open' | 'In Progress' | 'Closed';
+  status: 'Open' | 'In Progress' | 'Resolved' | 'Closed';
   createdAt: string;
   updatedAt: string;
   replies: TicketReply[];

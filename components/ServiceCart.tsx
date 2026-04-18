@@ -787,27 +787,10 @@ const ServiceCart: React.FC<Props> = ({
     const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
     const [addressForm, setAddressForm] = useState<Partial<Address>>({});
 
-    // Persist cart state
-    useEffect(() => {
-        try {
-            const payload = {
-                items,
-                selectedAddress,
-                selectedBookingDate,
-                selectedSlot,
-                selectedCoupon,
-                selectedAddOns,
-                selectedProviders,
-                note,
-                carDetails,
-                addresses,
-            };
-            localStorage.setItem(CART_KEY, JSON.stringify(payload));
-        } catch { /* storage unavailable */ }
-    }, [items, selectedAddress, selectedBookingDate, selectedSlot, selectedCoupon, selectedAddOns, selectedProviders, note, carDetails, addresses]);
-
-    // Load persisted cart (but skip if prefill is present - prefill takes priority)
-    useEffect(() => {
+    // Hydrate cart from localStorage before the persist effect runs; otherwise the first
+    // persist write would overwrite storage with default mock addresses and deletions
+    // would "come back" after refresh.
+    useLayoutEffect(() => {
         let hasPrefill: string | null = null;
         try { hasPrefill = sessionStorage.getItem('service_cart_prefill'); } catch { /* storage unavailable */ }
         if (hasPrefill) {
@@ -816,11 +799,16 @@ const ServiceCart: React.FC<Props> = ({
             if (!raw) return;
             try {
                 const parsed = JSON.parse(raw);
-                if (parsed.addresses && Array.isArray(parsed.addresses) && parsed.addresses.length > 0) {
+                if (Array.isArray(parsed.addresses)) {
                     setAddresses(parsed.addresses);
                 }
+                const nextAddresses: Address[] = Array.isArray(parsed.addresses) ? parsed.addresses : initialAddresses;
                 // Don't set items - let prefill handle it
-                setSelectedAddress(parsed.selectedAddress || addresses[0]?.id || '');
+                setSelectedAddress(
+                    parsed.selectedAddress && nextAddresses.some((a: Address) => a.id === parsed.selectedAddress)
+                        ? parsed.selectedAddress
+                        : nextAddresses[0]?.id || '',
+                );
                 setSelectedBookingDate(resolveStoredBookingDate(parsed.selectedBookingDate));
                 setSelectedSlot(
                     parsed.selectedSlot && timeSlots.some(s => s.id === parsed.selectedSlot)
@@ -841,17 +829,22 @@ const ServiceCart: React.FC<Props> = ({
             }
             return;
         }
-        
+
         let raw: string | null = null;
         try { raw = localStorage.getItem(CART_KEY); } catch { /* storage unavailable */ }
         if (!raw) return;
         try {
             const parsed = JSON.parse(raw);
-            if (parsed.addresses && Array.isArray(parsed.addresses) && parsed.addresses.length > 0) {
+            if (Array.isArray(parsed.addresses)) {
                 setAddresses(parsed.addresses);
             }
+            const nextAddresses: Address[] = Array.isArray(parsed.addresses) ? parsed.addresses : initialAddresses;
             setItems(parsed.items || []);
-            setSelectedAddress(parsed.selectedAddress || addresses[0]?.id || '');
+            setSelectedAddress(
+                parsed.selectedAddress && nextAddresses.some((a: Address) => a.id === parsed.selectedAddress)
+                    ? parsed.selectedAddress
+                    : nextAddresses[0]?.id || '',
+            );
             setSelectedBookingDate(resolveStoredBookingDate(parsed.selectedBookingDate));
             setSelectedSlot(
                 parsed.selectedSlot && timeSlots.some(s => s.id === parsed.selectedSlot)
@@ -872,6 +865,25 @@ const ServiceCart: React.FC<Props> = ({
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Persist cart state
+    useEffect(() => {
+        try {
+            const payload = {
+                items,
+                selectedAddress,
+                selectedBookingDate,
+                selectedSlot,
+                selectedCoupon,
+                selectedAddOns,
+                selectedProviders,
+                note,
+                carDetails,
+                addresses,
+            };
+            localStorage.setItem(CART_KEY, JSON.stringify(payload));
+        } catch { /* storage unavailable */ }
+    }, [items, selectedAddress, selectedBookingDate, selectedSlot, selectedCoupon, selectedAddOns, selectedProviders, note, carDetails, addresses]);
 
     // Store prefill data in a ref to use in multiple effects
     const prefillDataRef = useRef<{

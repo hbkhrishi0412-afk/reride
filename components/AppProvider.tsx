@@ -5377,7 +5377,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         setSupportTickets(prev => Array.isArray(prev) ? prev.map(t =>
-          t && t.id === ticket.id ? ticket : t
+          t && String(t.id) === String(ticket.id) ? ticket : t
         ) : []);
         addToast(t('toast.supportTicketUpdated'), 'success');
       } catch (error) {
