@@ -6354,12 +6354,17 @@ async function handleGemini(req: VercelRequest, res: VercelResponse) {
 // Content handler - consolidates content.ts
 async function handleContent(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   if (!USE_SUPABASE) {
-    // For GET requests, return 200 with empty array instead of 503
+    // For GET requests, return 200 with empty payload instead of 503
     if (req.method === 'GET') {
       const { type } = req.query;
       res.setHeader('X-Data-Fallback', 'true');
-      if (type === 'faqs' || type === 'support-tickets') {
+      if (type === 'faqs') {
         return res.status(200).json([]);
+      }
+      // Support tickets client expects { success, tickets, count } — returning a
+      // bare [] makes data.tickets undefined on the client and shows 0 tickets.
+      if (type === 'support-tickets') {
+        return res.status(200).json({ success: true, tickets: [], count: 0 });
       }
     }
     return res.status(503).json({
@@ -6385,7 +6390,7 @@ async function handleContent(req: VercelRequest, res: VercelResponse, _options: 
   } catch (error) {
     console.error('Content API Error:', error);
     
-    // For GET requests, always return 200 with empty array instead of 500
+    // For GET requests, always return 200 with empty payload instead of 500
     if (req.method === 'GET') {
       const { type } = req.query;
       if (type === 'faqs') {
@@ -6394,7 +6399,7 @@ async function handleContent(req: VercelRequest, res: VercelResponse, _options: 
       }
       if (type === 'support-tickets') {
         res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json([]);
+        return res.status(200).json({ success: true, tickets: [], count: 0 });
       }
     }
     
@@ -6572,8 +6577,17 @@ async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, faqsPath
 // Support Tickets Handler
 async function handleSupportTickets(req: VercelRequest, res: VercelResponse) {
   const ticketsPath = 'support_tickets';
-  const auth = requireAuth(req, res, 'Support tickets');
-  if (!auth) {
+  // Accept either the legacy app JWT or a Supabase access token so that admins
+  // signed in via Supabase OAuth can read/manage tickets (previously the admin
+  // panel showed 0 tickets because the legacy-only auth rejected Supabase tokens).
+  const auth = await authenticateRequestDual(req);
+  if (!auth.isValid) {
+    logWarn('⚠️ Support tickets - Authentication failed:', auth.error);
+    res.status(401).json({
+      success: false,
+      reason: auth.error || 'Authentication required.',
+      error: 'Invalid or expired authentication token'
+    });
     return;
   }
 
@@ -6682,6 +6696,15 @@ async function handleCreateSupportTicket(
 
     await adminCreate(ticketsPath, ticket, id);
 
+    // Fan out a notification to every admin so the admin panel shows a real-time
+    // alert when a new support ticket arrives. Failures here must not block the
+    // ticket response — admins will still see the ticket in the list.
+    try {
+      await notifyAdminsOfSupportTicket(ticket);
+    } catch (notifyErr) {
+      logWarn('⚠️ Failed to notify admins of new support ticket (non-fatal):', notifyErr);
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Support ticket created successfully',
@@ -6693,6 +6716,67 @@ async function handleCreateSupportTicket(
       success: false,
       error: 'Failed to create support ticket'
     });
+  }
+}
+
+// Insert one notification row per admin user when a new support ticket arrives.
+// Uses the same `notifications` table/schema as user notifications so the
+// existing polling + realtime pipeline in the admin UI picks them up with no
+// additional wiring. Silent on failure.
+async function notifyAdminsOfSupportTicket(ticket: Record<string, unknown>): Promise<void> {
+  if (!USE_SUPABASE) return;
+  try {
+    const supabase = getSupabaseAdminClient();
+    const { data: admins, error } = await supabase
+      .from('users')
+      .select('email')
+      .eq('role', 'admin');
+
+    if (error) {
+      logWarn('notifyAdminsOfSupportTicket: failed to load admins', error);
+      return;
+    }
+
+    const adminEmails = (admins || [])
+      .map((u: { email?: string | null }) => (u.email || '').toLowerCase().trim())
+      .filter((e: string) => !!e);
+
+    if (adminEmails.length === 0) return;
+
+    const subject = String(ticket.subject || 'New support ticket');
+    const requester = String(ticket.userName || ticket.userEmail || 'A user');
+    const ticketId = String(ticket.id || '');
+    const now = new Date().toISOString();
+
+    // notifications.id column is TEXT — store string form of a numeric-looking
+    // id so downstream clients that treat it as a number can still parse it.
+    const baseId = Date.now();
+    const rows = adminEmails.map((email: string, idx: number) => ({
+      id: String(baseId + idx),
+      user_id: email,
+      recipient_email: email,
+      type: 'general_admin',
+      title: 'New support ticket',
+      message: `${requester} opened: ${subject}`,
+      read: false,
+      created_at: now,
+      updated_at: now,
+      metadata: {
+        targetType: 'general_admin',
+        targetId: ticketId,
+        ticketId,
+        subject,
+        userEmail: ticket.userEmail,
+        userName: ticket.userName
+      }
+    }));
+
+    const { error: insertError } = await supabase.from('notifications').insert(rows);
+    if (insertError) {
+      logWarn('notifyAdminsOfSupportTicket: insert failed', insertError);
+    }
+  } catch (err) {
+    logWarn('notifyAdminsOfSupportTicket: unexpected error', err);
   }
 }
 
@@ -8058,8 +8142,9 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
     let isAdmin = false;
     
     if (req.method === 'GET') {
-      // Try to authenticate, but don't fail if no token
-      auth = authenticateRequest(req);
+      // Try to authenticate with either legacy app JWT or a Supabase access token,
+      // but don't fail if no token (preserves existing "return empty for unauthed" UX).
+      auth = await authenticateRequestDual(req);
       if (auth.isValid && auth.user) {
         normalizedAuthEmail = auth.user.email ? auth.user.email.toLowerCase().trim() : '';
         isAdmin = auth.user.role === 'admin';

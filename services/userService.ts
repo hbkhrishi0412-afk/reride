@@ -374,22 +374,23 @@ const registerLocal = async (credentials: any): Promise<{ success: boolean, user
 
 // --- Production (API) Functions ---
 
-const getUsersApi = async (role?: 'seller' | 'customer' | 'admin'): Promise<User[]> => {
+const getUsersApi = async (role?: 'seller' | 'customer' | 'admin' | 'service_provider'): Promise<User[]> => {
   // Use authenticatedFetch for production API calls
+  const isPublicRole = role === 'seller' || role === 'service_provider';
   try {
     const { authenticatedFetch } = await import('../utils/authenticatedFetch');
-    // Public dealer list: GET /api/users?role=seller — skip auth + simple headers so WebView does not send a CORS preflight (avoids CORS errors on Android appassets).
+    // Public dealer/service list: GET /api/users?role=seller|service_provider — skip auth + simple headers so WebView does not send a CORS preflight (avoids CORS errors on Android appassets).
     const url = role ? `/api/users?role=${role}` : '/api/users';
     const response = await authenticatedFetch(url, {
-      skipAuth: role === 'seller',
+      skipAuth: isPublicRole,
     });
     return handleResponse(response);
   } catch (error) {
     // If authenticatedFetch fails, try regular fetch (for development)
-    // For sellers, use regular fetch since it's public access
+    // For public roles, use regular fetch since it's public access
     const url = role ? `/api/users?role=${role}` : '/api/users';
     const response = await fetch(url, {
-      headers: role === 'seller' ? {} : getAuthHeader(),
+      headers: isPublicRole ? {} : getAuthHeader(),
     });
     return handleResponse(response);
   }
@@ -582,7 +583,7 @@ const isDevelopment = (() => {
 
 // --- Exported Environment-Aware Service Functions ---
 
-export const getUsers = async (role?: 'seller' | 'customer' | 'admin'): Promise<User[]> => {
+export const getUsers = async (role?: 'seller' | 'customer' | 'admin' | 'service_provider'): Promise<User[]> => {
   try {
     // Always try API first for production, with fallback to local
     if (!isDevelopment) {
@@ -639,6 +640,11 @@ export const getUsers = async (role?: 'seller' | 'customer' | 'admin'): Promise<
 // Convenience function to fetch sellers only (public access)
 export const getSellers = async (): Promise<User[]> => {
   return getUsers('seller');
+};
+
+// Convenience function to fetch car-service providers only (public access)
+export const getServiceProviders = async (): Promise<User[]> => {
+  return getUsers('service_provider');
 };
 export const updateUser = async (userData: Partial<User> & { email: string }): Promise<User> => {
   // Always try API first for production, with fallback to local

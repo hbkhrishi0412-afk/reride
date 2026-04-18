@@ -135,8 +135,13 @@ async function handleOAuthReturnUrl(url: string): Promise<void> {
 
 /**
  * Called once at startup. Handles:
- * - Capacitor: App URL open when returning from Custom Tab
- * - Standalone WebView: MainActivity.evaluateJavascript → window.__rerideNativeOAuthUrl(url)
+ * - Capacitor: {@code appUrlOpen} when returning from the system browser deep link
+ * - Capacitor: {@code appStateChange} (resume) — re-checks {@code getLaunchUrl()} so OEMs
+ *   that drop {@code appUrlOpen} (MIUI/ColorOS battery savers, cold-start races) still
+ *   exchange the PKCE code once the WebView is foregrounded again
+ * - Standalone WebView: {@code MainActivity.evaluateJavascript} → {@code window.__rerideNativeOAuthUrl(url)}
+ *
+ * Dedupe on {@code lastHandledOAuthUrl} means the overlapping paths are safe to run together.
  */
 export function initNativeGoogleOAuthReturnHandler(): void {
   if (typeof window === 'undefined' || oauthReturnHandlerInstalled) return;
@@ -155,11 +160,28 @@ export function initNativeGoogleOAuthReturnHandler(): void {
     App.addListener('appUrlOpen', ({ url }) => {
       void handleOAuthReturnUrl(url);
     });
-    App.getLaunchUrl()
-      .then((res) => {
-        if (res?.url) void handleOAuthReturnUrl(res.url);
-      })
-      .catch(() => {});
+
+    const checkLaunchUrl = () => {
+      App.getLaunchUrl()
+        .then((res) => {
+          if (res?.url) void handleOAuthReturnUrl(res.url);
+        })
+        .catch(() => {});
+    };
+
+    // Initial check on cold start (app was launched directly by the deep link).
+    checkLaunchUrl();
+
+    // Resume check: user returns from the external browser. MainActivity.onNewIntent has
+    // already called setIntent(), so getLaunchUrl() now returns the fresh oauth-callback URL.
+    // Guarded by lastHandledOAuthUrl so we only run the PKCE exchange once per callback.
+    App.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) checkLaunchUrl();
+    });
+
+    App.addListener('resume', () => {
+      checkLaunchUrl();
+    });
   });
 }
 

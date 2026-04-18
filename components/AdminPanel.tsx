@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import type { Vehicle, User, Conversation, PlatformSettings, AuditLogEntry, VehicleData, SupportTicket, FAQItem, SubscriptionPlan, PlanDetails } from '../types';
+import type { Vehicle, User, Conversation, PlatformSettings, AuditLogEntry, VehicleData, SupportTicket, FAQItem, SubscriptionPlan, PlanDetails, Notification } from '../types';
 import { View } from '../types';
 import EditUserModal from './EditUserModal';
 import EditVehicleModal from './EditVehicleModal';
@@ -172,6 +172,9 @@ interface AdminPanelProps {
     onUpdateFaq: (faq: FAQItem) => void;
     onDeleteFaq: (id: number) => void;
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => void;
+    notifications?: Notification[];
+    onMarkAllNotificationsAsRead?: () => void;
+    onMarkNotificationAsRead?: (notificationId: number | string) => void;
 }
 
 type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps' | 'serviceManagement';
@@ -934,7 +937,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         onResolveFlag, platformSettings: _platformSettings, onUpdateSettings: _onUpdateSettings, onSendBroadcast: _onSendBroadcast,
         auditLog, onExportUsers, onImportUsers, onExportVehicles, onImportVehicles, onNavigate: _onNavigate, onLogout, vehicleData, onUpdateVehicleData,
         supportTickets, onUpdateSupportTicket, faqItems, onAddFaq, onUpdateFaq, onDeleteFaq,
-        onCertificationApproval
+        onCertificationApproval,
+        notifications = [],
+        onMarkAllNotificationsAsRead
     } = props;
     const [activeView, setActiveView] = useState<AdminView>('analytics');
     const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -950,6 +955,30 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     // Modal states
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+
+    // Admin notification bell state
+    const [isNotifOpen, setIsNotifOpen] = useState(false);
+    const notifRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!isNotifOpen) return;
+        const handleOutside = (e: MouseEvent) => {
+            if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+                setIsNotifOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleOutside);
+        return () => document.removeEventListener('mousedown', handleOutside);
+    }, [isNotifOpen]);
+
+    const adminEmailLc = (currentUser?.email || '').toLowerCase().trim();
+    const adminNotifications = useMemo(() => {
+        return (notifications || []).filter(n => (n.recipientEmail || '').toLowerCase().trim() === adminEmailLc);
+    }, [notifications, adminEmailLc]);
+    const unreadNotifCount = useMemo(
+        () => adminNotifications.filter(n => !n.isRead).length,
+        [adminNotifications]
+    );
     
     // Loading states for actions
     const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
@@ -3467,6 +3496,78 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     </div>
                 </aside>
                 <main className="flex-1 p-8">
+                    {/* Admin top bar with notification bell */}
+                    <div className="flex items-center justify-end mb-4">
+                        <div className="relative" ref={notifRef}>
+                            <button
+                                type="button"
+                                onClick={() => setIsNotifOpen(p => !p)}
+                                className="relative p-2 rounded-full bg-white/80 backdrop-blur-xl shadow-md border border-white/40 hover:bg-white transition-colors"
+                                aria-label="Admin notifications"
+                                title="Admin notifications"
+                            >
+                                <svg className="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                </svg>
+                                {unreadNotifCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-bold rounded-full h-5 min-w-[1.25rem] px-1 flex items-center justify-center">
+                                        {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                                    </span>
+                                )}
+                            </button>
+                            {isNotifOpen && (
+                                <div className="absolute right-0 mt-2 w-96 max-w-[90vw] bg-white rounded-xl shadow-2xl border border-gray-200 z-30 overflow-hidden">
+                                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                                        <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+                                        {unreadNotifCount > 0 && onMarkAllNotificationsAsRead && (
+                                            <button
+                                                type="button"
+                                                onClick={() => { onMarkAllNotificationsAsRead(); }}
+                                                className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                                            >
+                                                Mark all as read
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="max-h-96 overflow-y-auto">
+                                        {adminNotifications.length === 0 ? (
+                                            <div className="px-4 py-10 text-center text-sm text-gray-500">
+                                                You&apos;re all caught up — no notifications.
+                                            </div>
+                                        ) : (
+                                            adminNotifications.slice(0, 20).map(n => (
+                                                <button
+                                                    key={String(n.id)}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (n.targetType === 'general_admin' || n.type === 'general_admin') {
+                                                            setActiveView('support');
+                                                        }
+                                                        setIsNotifOpen(false);
+                                                    }}
+                                                    className={`w-full text-left px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 transition-colors ${n.isRead ? 'bg-white' : 'bg-blue-50/60'}`}
+                                                >
+                                                    <div className="flex items-start gap-3">
+                                                        <span className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${n.isRead ? 'bg-gray-300' : 'bg-blue-500'}`}></span>
+                                                        <div className="min-w-0 flex-1">
+                                                            {n.title && (
+                                                                <p className="text-sm font-semibold text-gray-900 truncate">{n.title}</p>
+                                                            )}
+                                                            <p className="text-sm text-gray-700 line-clamp-2">{n.message}</p>
+                                                            <p className="text-xs text-gray-400 mt-1">
+                                                                {new Date(n.timestamp).toLocaleString()}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 min-h-[600px]">
                         {/* Configuration Error Banner */}
                         {configError && (

@@ -5259,12 +5259,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // Supabase update succeeded - NOW update local state
         setVehicleData(newData);
-        
+
+        // Invalidate the VehicleList filter cache (5-min TTL) and notify any
+        // listeners (public site filters, other tabs) so they pick up the new
+        // makes / models / variants immediately instead of serving stale data.
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('reRideVehicleDataFilters');
+            localStorage.setItem('reRideVehicleData', JSON.stringify(newData));
+          }
+        } catch {
+          /* storage unavailable */
+        }
+        try {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('vehicleDataUpdated', { detail: { vehicleData: newData } })
+            );
+          }
+        } catch {
+          /* ignore */
+        }
+
         // Log audit entry for vehicle data update
         const actor = currentUser?.name || currentUser?.email || 'System';
         const entry = logAction(actor, 'Update Vehicle Data', 'Vehicle Data', 'Updated vehicle data configuration');
         setAuditLog(prev => [entry, ...prev]);
-        
+
         addToast(t('toast.vehicleDataUpdated'), 'success');
         console.log('✅ Vehicle data updated via API:', newData);
       } catch (error) {

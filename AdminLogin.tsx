@@ -10,8 +10,8 @@ interface AdminLoginProps {
 }
 
 const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onNavigate }) => {
-  const [email, setEmail] = useState('admin@test.com');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -83,6 +83,16 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onNavigate }) => {
               required
               showLabel={false}
             />
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => onNavigate(View.FORGOT_PASSWORD)}
+              className="text-sm font-medium text-red-600 hover:text-orange-600 transition-colors duration-300"
+            >
+              Forgot your password?
+            </button>
           </div>
         </div>
 
