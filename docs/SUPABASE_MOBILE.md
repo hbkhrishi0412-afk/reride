@@ -76,7 +76,7 @@ The app resolves `/api/*` to **`https://www.reride.co.in`** in native WebView (s
 
 | Flow | Behavior |
 |------|----------|
-| **UnifiedLogin** email/password | ReRide API login → JWT + optional **Supabase `signInWithPassword`** bridge for same credentials |
+| **UnifiedLogin** email/password | ReRide API login → JWT. **`signInWithPassword` bridge is opt-in** (`VITE_SUPABASE_PASSWORD_BRIDGE=true`); only enable if API users exist in Supabase Auth with the same password. |
 | **Seller `Login.tsx`** | Supabase email/password → `syncWithBackend` |
 | **Google (web)** | `signInWithOAuth` → redirect in the same tab → `AppProvider` finishes with `syncWithBackend` |
 | **Google (Android / iOS, recommended)** | If `VITE_GOOGLE_WEB_CLIENT_ID` is set: **native** Google Sign-In (`@capawesome/capacitor-google-sign-in`) → `signInWithIdToken` → no full-site Chrome tab. Requires Web + Android OAuth clients in Google Cloud and both IDs in Supabase Google provider. |
@@ -99,6 +99,7 @@ Native shell uses **HashRouter** (`index.tsx`) so paths like `/used-cars` are no
 1. Web: open site, sign in, confirm Network calls to `*.supabase.co` succeed.
 2. Android: install debug build, sign in, cold-kill app, reopen — user should restore from storage or Supabase session resync.
 3. Google: complete OAuth; you should return to the app and land logged in after `syncWithBackend`.
+4. **Ship new web code in the APK:** run `npm run android:bundle` (rebuilds `dist/` and syncs without a dev `server.url`). If the app still looks old, Android Studio → **Build → Clean Project**, then **Run** again so the WebView is not using a stale install.
 
 ## 10. Common issues
 
@@ -110,6 +111,7 @@ Native shell uses **HashRouter** (`index.tsx`) so paths like `/used-cars` are no
 | No Supabase features | `VITE_SUPABASE_*` missing in **built** bundle — rebuild mobile after env fix. |
 | Chrome shows eride.co.in after Google; app not logged in | Add **`com.reride.app://oauth-callback`** to Supabase **Redirect URLs** (see §3). Otherwise Supabase sends users to your Site URL inside the Custom Tab. |
 | “Why not 100% inside WebView?” | Google OAuth is **disallowed in embedded WebViews**; Custom Tab (or native Google Sign-In + `signInWithIdToken`) is required. |
+| Android shows **old UI / old bugs** after you fixed the repo | WebView is loading a **remote** URL from a past `cap sync` with `RERIDE_VITE_DEV_SERVER_URL` set, or the native install was not rebuilt. Run **`npm run android:bundle`**, clean/rebuild in Android Studio, reinstall. |
 
 ---
 

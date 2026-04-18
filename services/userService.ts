@@ -111,25 +111,57 @@ const clearTokens = () => {
   }
 };
 
+/** Remove only custom JWT pair (keeps `reRideCurrentUser` until handleLogin rewrites it). */
+const clearStaleJwtTokensOnly = (): void => {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  try {
+    localStorage.removeItem('reRideAccessToken');
+    localStorage.removeItem('reRideRefreshToken');
+  } catch {
+    /* ignore */
+  }
+};
+
 /**
- * After API login/register, establish a Supabase Auth session with the same password when
- * the user exists in Supabase Auth. Enables Realtime, Storage RLS, and consistent auth
- * across web + Capacitor without blocking login if this step fails.
+ * LocalStorage demo login does not issue JWTs. Stale tokens + Supabase keys from a prior
+ * session cause POST /api/users refresh-token (401) and Supabase token calls (400) in DevTools.
+ */
+const cleanupStaleSessionsAfterLocalAuth = (): void => {
+  clearStaleJwtTokensOnly();
+  void import('../lib/supabase')
+    .then(({ getSupabaseClient }) => getSupabaseClient().auth.signOut({ scope: 'local' }))
+    .catch(() => {});
+};
+
+/**
+ * After API login/register, optionally establish a Supabase Auth session with the same password.
+ * **Opt-in only** (`VITE_SUPABASE_PASSWORD_BRIDGE=true`): most API users are not mirrored in
+ * Supabase Auth; calling `signInWithPassword` by default caused 400s in DevTools and could
+ * interact badly with auth listeners. Enable only when your backend creates matching Auth users.
  */
 async function bridgeSupabasePasswordSession(
   email: string,
   password: string,
 ): Promise<void> {
   try {
+    if (String(import.meta.env.VITE_SUPABASE_PASSWORD_BRIDGE || '').toLowerCase() !== 'true') {
+      return;
+    }
     const { getSupabaseClient } = await import('../lib/supabase');
     const supabase = getSupabaseClient();
     const { error } = await supabase.auth.signInWithPassword({
       email: email.toLowerCase().trim(),
       password,
     });
-    if (error && process.env.NODE_ENV === 'development') {
-      // Common: user exists in DB but not in Supabase Auth, or email not confirmed
-      console.warn('[ReRide] Supabase Auth bridge skipped:', error.message);
+    if (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[ReRide] Supabase Auth bridge failed:', error.message);
+      }
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {
+        /* ignore */
+      }
     }
   } catch {
     /* non-fatal */
@@ -732,7 +764,11 @@ export const login = async (credentials: { email?: string; password?: string; ro
   } else {
     // Development — use local storage
     const skipRoleCheck = !credentials.role;
-    return await loginLocal({ ...credentials, skipRoleCheck });
+    const out = await loginLocal({ ...credentials, skipRoleCheck });
+    if (out.success) {
+      cleanupStaleSessionsAfterLocalAuth();
+    }
+    return out;
   }
 };
 export const register = async (credentials: { email?: string; password?: string; name?: string; mobile?: string; role?: string; [key: string]: unknown }): Promise<{ success: boolean, user?: User, reason?: string }> => {
@@ -770,7 +806,11 @@ export const register = async (credentials: { email?: string; password?: string;
       return await registerLocal(credentials);
     }
   } else {
-    return await registerLocal(credentials);
+    const out = await registerLocal(credentials);
+    if (out.success) {
+      cleanupStaleSessionsAfterLocalAuth();
+    }
+    return out;
   }
 };
 
@@ -799,6 +839,7 @@ export const refreshAccessToken = async (): Promise<{ success: boolean; accessTo
 
     const response = await authenticatedFetch('/api/users', {
       method: 'POST',
+      skipAuth: true,
       body: JSON.stringify({ action: 'refresh-token', refreshToken }),
     });
 

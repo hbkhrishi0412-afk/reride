@@ -258,10 +258,67 @@ export function isLocalSocketIoEnvironment(): boolean {
   }
 
   const port = window.location.port || '';
-  const vitePorts = new Set(['5173', '4173', '3000', '8080', '5174', '24678']);
+  const vitePorts = new Set([
+    '5173',
+    '5174',
+    '5175',
+    '5176',
+    '4173',
+    '3000',
+    '8080',
+    '24678',
+  ]);
   const onViteDevServer = viteDev && vitePorts.has(port);
 
   return Boolean(onViteDevServer || mobileLocalDev);
+}
+
+/**
+ * True when the HTML/JS is served by `vite` (DEV) on a known dev port — including
+ * Capacitor live reload at `http://10.0.2.2:5173` or `http://<lan-ip>:5173`.
+ * In that case relative `/api/*` must stay same-origin so Vite's proxy reaches `dev-api-server.js`.
+ */
+function isDocumentServedByViteDevServer(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (typeof import.meta === 'undefined' || !import.meta.env || import.meta.env.DEV !== true) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  const port = window.location.port || '';
+  const vitePorts = new Set([
+    '5173',
+    '5174',
+    '5175',
+    '5176',
+    '4173',
+    '3000',
+    '8080',
+    '24678',
+  ]);
+  if (!vitePorts.has(port)) return false;
+
+  const h = window.location.hostname.toLowerCase();
+  if (
+    h === 'localhost' ||
+    h === '127.0.0.1' ||
+    h === '[::1]' ||
+    h === '10.0.2.2'
+  ) {
+    return true;
+  }
+
+  // Physical device hitting the dev machine by LAN IP (Capacitor `server.url`).
+  try {
+    const cap = (window as any).Capacitor;
+    if (cap?.isNativePlatform?.() === true) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
 }
 
 /**
@@ -410,6 +467,11 @@ export function getApiBaseUrl(): string {
     return normalizeRerideApiHostToWww(
       rewriteLocalhostForAndroidEmulator(envOverride.replace(/\/+$/, ''))
     );
+  }
+
+  // Capacitor + Vite live reload (or mobile browser on dev URL): same-origin `/api` → Vite proxy.
+  if (typeof window !== 'undefined' && isDocumentServedByViteDevServer()) {
+    return '';
   }
 
   // Android WebViewAssetLoader (Chrome Custom Tab / packaged host): never rely solely on
