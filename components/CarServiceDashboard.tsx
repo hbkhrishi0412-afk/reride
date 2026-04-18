@@ -28,6 +28,106 @@ interface Provider {
   serviceCategories?: ServiceCategory[];
 }
 
+// ---------------------------------------------------------------------------
+// Stable presentational helpers for the Profile tab.
+//
+// IMPORTANT: keep these declared at module scope. Earlier they were defined
+// inside the parent component's render callback, which produced a *new*
+// component reference on every render. React then treated each render as a
+// different component type at the same JSX position and unmounted/remounted
+// the underlying <input> on every keystroke, dropping focus and making the
+// City / State / District (and other) fields impossible to type into.
+// ---------------------------------------------------------------------------
+const PROFILE_INPUT_CLS =
+  'w-full px-3.5 py-2.5 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition';
+
+const PROFILE_USER_ICON = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+  </svg>
+);
+const PROFILE_MAIL_ICON = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+  </svg>
+);
+const PROFILE_PHONE_ICON = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+  </svg>
+);
+const PROFILE_PIN_ICON = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+);
+const PROFILE_MAP_ICON = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+  </svg>
+);
+const PROFILE_CLOCK_ICON = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const ProfileFieldView: React.FC<{
+  label: string;
+  icon: React.ReactNode;
+  value: string;
+  emptyHint?: string;
+  locked?: boolean;
+  helper?: string;
+}> = ({ label, icon, value, emptyHint, locked, helper }) => (
+  <div>
+    <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">
+      <span className="text-gray-400">{icon}</span>
+      {label}
+      {locked && (
+        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 normal-case tracking-normal">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          Locked
+        </span>
+      )}
+    </label>
+    {value ? (
+      <div className="px-3.5 py-2.5 bg-white rounded-lg border border-gray-200 text-gray-900 font-medium text-sm">
+        {value}
+      </div>
+    ) : (
+      <div className="px-3.5 py-2.5 rounded-lg border border-dashed border-amber-300 bg-amber-50/60 text-amber-700 text-sm flex items-center gap-2">
+        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        {emptyHint || `Add your ${label.toLowerCase()}`}
+      </div>
+    )}
+    {helper && <p className="mt-1 text-[11px] text-gray-400">{helper}</p>}
+  </div>
+);
+
+const ProfileFieldEdit: React.FC<{
+  label: string;
+  icon: React.ReactNode;
+  required?: boolean;
+  children: React.ReactNode;
+  helper?: string;
+}> = ({ label, icon, required, children, helper }) => (
+  <div>
+    <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1.5">
+      <span className="text-gray-400">{icon}</span>
+      {label}
+      {required && <span className="text-red-500 normal-case tracking-normal">*</span>}
+    </label>
+    {children}
+    {helper && <p className="mt-1 text-[11px] text-gray-400">{helper}</p>}
+  </div>
+);
+
 type RequestStatus = 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
 
 type ServiceLineItem = { id: string; name: string; quantity?: number; price?: number };
@@ -2227,95 +2327,19 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
               return match ? match.label : val;
             };
 
-            const FieldView: React.FC<{
-              label: string;
-              icon: React.ReactNode;
-              value: string;
-              emptyHint?: string;
-              locked?: boolean;
-              helper?: string;
-            }> = ({ label, icon, value, emptyHint, locked, helper }) => (
-              <div>
-                <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">
-                  <span className="text-gray-400">{icon}</span>
-                  {label}
-                  {locked && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 normal-case tracking-normal">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                      Locked
-                    </span>
-                  )}
-                </label>
-                {value ? (
-                  <div className="px-3.5 py-2.5 bg-white rounded-lg border border-gray-200 text-gray-900 font-medium text-sm">
-                    {value}
-                  </div>
-                ) : (
-                  <div className="px-3.5 py-2.5 rounded-lg border border-dashed border-amber-300 bg-amber-50/60 text-amber-700 text-sm flex items-center gap-2">
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {emptyHint || `Add your ${label.toLowerCase()}`}
-                  </div>
-                )}
-                {helper && <p className="mt-1 text-[11px] text-gray-400">{helper}</p>}
-              </div>
-            );
-
-            const FieldEdit: React.FC<{
-              label: string;
-              icon: React.ReactNode;
-              required?: boolean;
-              children: React.ReactNode;
-              helper?: string;
-            }> = ({ label, icon, required, children, helper }) => (
-              <div>
-                <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1.5">
-                  <span className="text-gray-400">{icon}</span>
-                  {label}
-                  {required && <span className="text-red-500 normal-case tracking-normal">*</span>}
-                </label>
-                {children}
-                {helper && <p className="mt-1 text-[11px] text-gray-400">{helper}</p>}
-              </div>
-            );
-
-            const userIcon = (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            );
-            const mailIcon = (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            );
-            const phoneIcon = (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-              </svg>
-            );
-            const pinIcon = (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            );
-            const mapIcon = (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-              </svg>
-            );
-            const clockIcon = (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            );
-
-            const inputCls =
-              'w-full px-3.5 py-2.5 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition';
+            // FieldView / FieldEdit and the icon constants are intentionally
+            // declared at module scope (see top of file) so the <input>
+            // elements keep their identity across renders and don't lose
+            // focus on every keystroke.
+            const FieldView = ProfileFieldView;
+            const FieldEdit = ProfileFieldEdit;
+            const userIcon = PROFILE_USER_ICON;
+            const mailIcon = PROFILE_MAIL_ICON;
+            const phoneIcon = PROFILE_PHONE_ICON;
+            const pinIcon = PROFILE_PIN_ICON;
+            const mapIcon = PROFILE_MAP_ICON;
+            const clockIcon = PROFILE_CLOCK_ICON;
+            const inputCls = PROFILE_INPUT_CLS;
 
             return (
               <section className="space-y-5">
