@@ -2203,6 +2203,7 @@ const AppContent: React.FC = () => {
                     } catch (error) {
                       logError('❌ Failed to add vehicle:', error);
                       addToast('Failed to add vehicle. Please try again.', 'error');
+                      throw error;
                     }
                   }}
                   onUpdateVehicle={async (vehicleData) => {
@@ -2269,6 +2270,7 @@ const AppContent: React.FC = () => {
                     averageRating: 0,
                     ratingCount: 0,
                     isFeatured: isFeaturing,
+                    status: 'published' as const,
                     createdAt: new Date().toISOString(),
                     listingExpiresAt,
                   };
@@ -2294,6 +2296,7 @@ const AppContent: React.FC = () => {
                 } catch (error) {
                   logError('❌ Failed to add vehicle:', error);
                   addToast('Failed to add vehicle', 'error');
+                  throw error;
                 }
               }}
               onAddMultipleVehicles={async (vehiclesData) => {
@@ -2348,6 +2351,7 @@ const AppContent: React.FC = () => {
                 } catch (error) {
                   logError('❌ Failed to add vehicles:', error);
                   addToast('Failed to add vehicles', 'error');
+                  throw error;
                 }
               }}
               onUpdateVehicle={async (vehicleData) => {
@@ -3863,6 +3867,7 @@ const AppContent: React.FC = () => {
               } catch (error) {
                 logError('❌ Failed to add vehicle:', error);
                 addToast('Failed to add vehicle. Please try again.', 'error');
+                throw error;
               }
             }}
             onUpdateVehicle={async (vehicleData) => {

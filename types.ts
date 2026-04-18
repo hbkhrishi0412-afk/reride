@@ -93,7 +93,6 @@ export interface Vehicle {
   groundClearance: string; // e.g., "165 mm"
   bootSpace: string; // e.g., "235 litres"
   qualityReport?: {
-    summary: string;
     fixesDone: string[];
   };
   certifiedInspection?: CertifiedInspection | null;

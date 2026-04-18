@@ -21,7 +21,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
         if (vehicle) {
             setFormData({
               ...vehicle,
-              qualityReport: vehicle.qualityReport || { summary: '', fixesDone: [] }
+              qualityReport: vehicle.qualityReport || { fixesDone: [] }
             });
         }
     }, [vehicle]);
@@ -105,17 +105,6 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
         }
     };
 
-    const handleQualityReportChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            qualityReport: {
-                ...(prev.qualityReport!),
-                [name]: value,
-            },
-        }));
-    };
-
     const handleAddFeature = () => {
         if (featureInput.trim() && !formData.features.includes(featureInput.trim())) {
             setFormData(prev => ({ ...prev, features: [...prev.features, featureInput.trim()] }));
@@ -132,7 +121,6 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
             setFormData(prev => ({
                 ...prev,
                 qualityReport: {
-                    summary: prev.qualityReport?.summary || '',
                     fixesDone: [...(prev.qualityReport?.fixesDone || []), fixInput.trim()]
                 }
             }));
@@ -144,7 +132,6 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
         setFormData(prev => ({
             ...prev,
             qualityReport: {
-                summary: prev.qualityReport?.summary || '',
                 fixesDone: (prev.qualityReport?.fixesDone || []).filter(f => f !== fixToRemove)
             }
         }));
@@ -517,19 +504,9 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                     <span>✅</span> Quality Report
                                 </h3>
                                 <div className="space-y-6">
-                                    <div>
-                                        <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
-                                            Quality Summary
-                                        </label>
-                                        <textarea 
-                                            name="summary" 
-                                            value={formData.qualityReport?.summary} 
-                                            onChange={handleQualityReportChange} 
-                                            rows={4} 
-                                            placeholder="Describe the overall condition and quality of the vehicle..."
-                                            className="block w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent resize-none"
-                                        />
-                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        Tip: edit the overall condition and history in the <span className="font-semibold">Vehicle Description</span> on the Basic Info tab. Use this section to highlight specific fixes and upgrades.
+                                    </p>
                                     <div>
                                         <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
                                             Fixes Done / Upgrades
