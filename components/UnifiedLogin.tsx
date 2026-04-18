@@ -229,9 +229,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
     if (authError) {
       setSuccessMessage('');
-      setError(
-        decodeURIComponent(errorDescription || authError).replace(/\+/g, ' ')
-      );
+      const raw = errorDescription || authError;
+      let readable = raw;
+      try {
+        readable = decodeURIComponent(raw).replace(/\+/g, ' ');
+      } catch {
+        readable = raw.replace(/\+/g, ' ');
+      }
+      setError(readable);
       return;
     }
 

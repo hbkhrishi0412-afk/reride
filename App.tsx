@@ -1,4 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation, useSearchParams, useNavigate as useRouterNavigate } from 'react-router-dom';
 import { AppProvider, useApp } from './components/AppProvider';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -311,7 +312,8 @@ const AppContent: React.FC = () => {
   const routerNavigate = useRouterNavigate();
   // Detect if running as mobile app (standalone/installed PWA)
   const { isMobileApp } = useIsMobileApp();
-  
+  const { t } = useTranslation();
+
   // Get all app context values in a single hook call
   const { 
     currentView, 
@@ -448,13 +450,28 @@ const AppContent: React.FC = () => {
     };
   }, [addToast]);
 
+  /** Android: customers land on HOME after login; a single system-back there used to call exitApp() immediately. */
+  const lastHomeExitBackRef = React.useRef<number>(0);
+  useEffect(() => {
+    if (currentView !== ViewEnum.HOME) {
+      lastHomeExitBackRef.current = 0;
+    }
+  }, [currentView]);
+
   useEffect(() => {
     if (!isCapacitorNativeApp()) return;
     setCapacitorAndroidBackHandler(() => {
       if (currentView === ViewEnum.HOME) {
-        void import('@capacitor/app').then(({ App }) => {
-          void App.exitApp();
-        });
+        const now = Date.now();
+        const prev = lastHomeExitBackRef.current;
+        if (prev > 0 && now - prev < 2000) {
+          void import('@capacitor/app').then(({ App }) => {
+            void App.exitApp();
+          });
+          return;
+        }
+        lastHomeExitBackRef.current = now;
+        addToast(t('toast.pressBackAgainToExit'), 'info');
         return;
       }
       if (currentView === ViewEnum.DETAIL) {
@@ -464,7 +481,7 @@ const AppContent: React.FC = () => {
       goBack(ViewEnum.HOME);
     });
     return () => setCapacitorAndroidBackHandler(null);
-  }, [goBack, currentView]);
+  }, [goBack, currentView, addToast, t]);
   
   // Preload critical components after initial render
   React.useEffect(() => {
@@ -3258,7 +3275,13 @@ const AppContent: React.FC = () => {
 
       case ViewEnum.LOGIN_PORTAL:
       case ViewEnum.CUSTOMER_LOGIN:
-      case ViewEnum.SELLER_LOGIN:
+      case ViewEnum.SELLER_LOGIN: {
+        const loginForcedRole =
+          currentView === ViewEnum.CUSTOMER_LOGIN
+            ? ('customer' as const)
+            : currentView === ViewEnum.SELLER_LOGIN
+              ? ('seller' as const)
+              : undefined;
         return (
           <AuthenticationErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
@@ -3287,10 +3310,12 @@ const AppContent: React.FC = () => {
                   navigate(ViewEnum.FORGOT_PASSWORD);
                 }}
                 allowedRoles={['customer', 'seller', 'service_provider']}
+                forcedRole={loginForcedRole}
               />
             </Suspense>
           </AuthenticationErrorBoundary>
         );
+      }
 
       case ViewEnum.ADMIN_LOGIN:
         return (

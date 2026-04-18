@@ -256,7 +256,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   }, [recentIds, allVehicles]);
 
   const continueRef = useRevealOnScroll<HTMLDivElement>(0);
-  const quickActionsRef = useRevealOnScroll<HTMLDivElement>(0);
 
   const featuredRef = useRevealOnScroll<HTMLDivElement>(0);
   const categoriesRef = useRevealOnScroll<HTMLDivElement>(0);
@@ -732,79 +731,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           />
           <MobileStat value={200} label={t('home.stats.checks') || 'Checks'} suffix="+" visible={statsVisible} />
           <MobileStat value={4.8} label={t('home.stats.rating') || 'Rating'} visible={statsVisible} formatter={(n) => n.toFixed(1)} />
-        </div>
-      </div>
-
-      {/* Quick Actions — 4 tappable tiles linking into existing views.
-          Sits right after the stats strip so the most common return-user
-          intents (sell, check wishlist, compare, dashboard) are reachable
-          without scrolling past the featured carousel. */}
-      <div
-        ref={quickActionsRef}
-        className="reveal-on-scroll bg-white border-t border-gray-100 px-4 py-4"
-      >
-        <div className="grid grid-cols-4 gap-2">
-          {[
-            {
-              key: 'sell',
-              label: t('mobile.home.quickActions.sell'),
-              onClick: () => onNavigate(ViewEnum.SELL_CAR),
-              tint: 'from-orange-500 to-pink-500',
-              badge: null as number | null,
-              // "tag with rupee" icon
-              path: 'M7 7h.01M5 3h8l7 7-8 8-8-8V5a2 2 0 012-2z',
-            },
-            {
-              key: 'wishlist',
-              label: t('mobile.home.quickActions.wishlist'),
-              onClick: () => onNavigate(ViewEnum.WISHLIST),
-              tint: 'from-pink-500 to-red-500',
-              badge: wishlist.length > 0 ? wishlist.length : null,
-              path: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
-            },
-            {
-              key: 'compare',
-              label: t('mobile.home.quickActions.compare'),
-              onClick: () => onNavigate(ViewEnum.COMPARISON),
-              tint: 'from-blue-500 to-indigo-500',
-              badge: comparisonList.length > 0 ? comparisonList.length : null,
-              // "scales" icon (balance)
-              path: 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3',
-            },
-            {
-              key: 'activity',
-              label: t('mobile.home.quickActions.activity'),
-              onClick: () => onNavigate(ViewEnum.BUYER_DASHBOARD),
-              tint: 'from-purple-500 to-fuchsia-500',
-              badge: null as number | null,
-              // "chart" icon
-              path: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
-            },
-          ].map((action) => (
-            <button
-              key={action.key}
-              type="button"
-              onClick={action.onClick}
-              className="relative flex flex-col items-center gap-1.5 p-2 rounded-xl active:scale-95 transition-transform"
-              style={{ minHeight: '76px' }}
-            >
-              <span
-                className={`relative w-11 h-11 rounded-xl bg-gradient-to-br ${action.tint} flex items-center justify-center shadow-md`}
-              >
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={action.path} />
-                </svg>
-                {action.badge !== null && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
-                    {action.badge > 99 ? '99+' : action.badge}
-                  </span>
-                )}
-              </span>
-              <span className="text-[11px] font-semibold text-gray-800 text-center leading-tight">
-                {action.label}
-              </span>
-            </button>
-          ))}
         </div>
       </div>
 

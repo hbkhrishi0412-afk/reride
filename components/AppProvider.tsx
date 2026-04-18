@@ -1,4 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  startTransition,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../lib/i18n';
 import { useNavigate as useRouterNavigate, useLocation } from 'react-router-dom';
@@ -95,6 +104,25 @@ function getUserFriendlyErrorMessage(error: unknown, defaultMessage: string): st
     return formatSupabaseError(error);
   }
   return defaultMessage;
+}
+
+/**
+ * Capacitor Android WebView often OOM-kills the renderer when session storage, toast, router,
+ * and a heavy first paint (e.g. mobile HOME) run in the same frame right after sign-in.
+ * Spread that work across animation frames + a transition update.
+ */
+function scheduleCapacitorPostLoginUi(fn: () => void): void {
+  if (typeof window === 'undefined' || !isCapacitorNative()) {
+    fn();
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        startTransition(fn);
+      }, 0);
+    });
+  });
 }
 
 /**
@@ -1069,65 +1097,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
-    addToast(t('toast.welcomeBack', { name: userForSession.name }), 'success');
+    const previousViewAtLogin = currentView;
 
-    // Navigate based on user role
-    // Directly set view since we've already validated the user
-    // The navigate function will validate again, but we know the user is valid
-    let postLoginView = View.HOME;
-    if (userForSession.role === 'admin') {
-      postLoginView = View.ADMIN_PANEL;
-      setCurrentView(View.ADMIN_PANEL);
-    } else if (userForSession.role === 'seller') {
-      logDebug('🔄 Setting seller dashboard view after login');
-      postLoginView = View.SELLER_DASHBOARD;
-      setCurrentView(View.SELLER_DASHBOARD);
-    } else if (userForSession.role === 'service_provider') {
-      postLoginView = View.CAR_SERVICE_DASHBOARD;
-      setCurrentView(View.CAR_SERVICE_DASHBOARD);
+    const applyPostLoginNavigation = (): void => {
+      addToast(t('toast.welcomeBack', { name: userForSession.name }), 'success');
+
+      // Navigate based on user role
+      // Directly set view since we've already validated the user
+      // The navigate function will validate again, but we know the user is valid
+      let postLoginView = View.HOME;
+      if (userForSession.role === 'admin') {
+        postLoginView = View.ADMIN_PANEL;
+        setCurrentView(View.ADMIN_PANEL);
+      } else if (userForSession.role === 'seller') {
+        logDebug('🔄 Setting seller dashboard view after login');
+        postLoginView = View.SELLER_DASHBOARD;
+        setCurrentView(View.SELLER_DASHBOARD);
+      } else if (userForSession.role === 'service_provider') {
+        postLoginView = View.CAR_SERVICE_DASHBOARD;
+        setCurrentView(View.CAR_SERVICE_DASHBOARD);
+        try {
+          const loc =
+            typeof userForSession.location === 'string' && userForSession.location.trim()
+              ? userForSession.location.trim()
+              : '';
+          const detail = {
+            id: userForSession.id,
+            name: (userForSession.name && String(userForSession.name).trim()) || 'Service provider',
+            email: userForSession.email,
+            phone: userForSession.mobile || '',
+            city: loc || '',
+          };
+          window.dispatchEvent(new CustomEvent('reride:service-provider-oauth', { detail }));
+        } catch {
+          /* ignore */
+        }
+      } else if (userForSession.role === 'customer') {
+        postLoginView = View.HOME;
+        setCurrentView(View.HOME);
+      } else {
+        setCurrentView(View.HOME);
+      }
+
+      // Keep React Router URL in sync; otherwise location sync maps /login → LOGIN_PORTAL and overwrites HOME.
       try {
-        const loc =
-          typeof userForSession.location === 'string' && userForSession.location.trim()
-            ? userForSession.location.trim()
-            : '';
-        const detail = {
-          id: userForSession.id,
-          name: (userForSession.name && String(userForSession.name).trim()) || 'Service provider',
-          email: userForSession.email,
-          phone: userForSession.mobile || '',
-          city: loc || '',
-        };
-        window.dispatchEvent(new CustomEvent('reride:service-provider-oauth', { detail }));
+        const pathByRole =
+          userForSession.role === 'admin'
+            ? '/admin'
+            : userForSession.role === 'seller'
+              ? '/seller/dashboard'
+              : userForSession.role === 'service_provider'
+                ? '/car-services/dashboard'
+                : '/';
+        routerNavigate(pathByRole, {
+          state: {
+            view: postLoginView,
+            previousView: previousViewAtLogin,
+            timestamp: Date.now(),
+          },
+        });
       } catch {
         /* ignore */
       }
-    } else if (userForSession.role === 'customer') {
-      postLoginView = View.HOME;
-      setCurrentView(View.HOME);
-    } else {
-      setCurrentView(View.HOME);
-    }
+    };
 
-    // Keep React Router URL in sync; otherwise location sync maps /login → LOGIN_PORTAL and overwrites HOME.
-    try {
-      const pathByRole =
-        userForSession.role === 'admin'
-          ? '/admin'
-          : userForSession.role === 'seller'
-            ? '/seller/dashboard'
-            : userForSession.role === 'service_provider'
-              ? '/car-services/dashboard'
-            : '/';
-      routerNavigate(pathByRole, {
-        state: {
-          view: postLoginView,
-          previousView: currentView,
-          timestamp: Date.now(),
-        },
-      });
-    } catch {
-      /* ignore */
-    }
+    scheduleCapacitorPostLoginUi(applyPostLoginNavigation);
   }, [addToast, currentView, routerNavigate, t]);
 
   // After Supabase Google OAuth redirect: session exists; sync profile with ReRide API and log in
@@ -1376,42 +1410,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sessionMatches: storedInSession ? JSON.parse(storedInSession).email === user.email : false,
       localMatches: storedInLocal ? JSON.parse(storedInLocal).email === user.email : false
     });
-    
-    addToast(t('toast.welcomeNewUser', { name: user.name }), 'success');
-    
-    // Navigate based on user role
-    // Directly set view since we've already validated the user
-    // The navigate function will validate again, but we know the user is valid
-    if (user.role === 'admin') {
-      setCurrentView(View.ADMIN_PANEL);
-    } else if (user.role === 'seller') {
-      logDebug('🔄 Setting seller dashboard view after registration');
-      setCurrentView(View.SELLER_DASHBOARD);
-    } else if (user.role === 'service_provider') {
-      setCurrentView(View.CAR_SERVICE_DASHBOARD);
-      try {
-        const loc =
-          typeof user.location === 'string' && user.location.trim() ? user.location.trim() : '';
-        window.dispatchEvent(
-          new CustomEvent('reride:service-provider-oauth', {
-            detail: {
-              id: user.id,
-              name: (user.name && String(user.name).trim()) || 'Service provider',
-              email: user.email,
-              phone: user.mobile || '',
-              city: loc || '',
-            },
-          }),
-        );
-      } catch {
-        /* ignore */
+
+    const applyPostRegisterNavigation = (): void => {
+      addToast(t('toast.welcomeNewUser', { name: user.name }), 'success');
+
+      // Navigate based on user role
+      if (user.role === 'admin') {
+        setCurrentView(View.ADMIN_PANEL);
+      } else if (user.role === 'seller') {
+        logDebug('🔄 Setting seller dashboard view after registration');
+        setCurrentView(View.SELLER_DASHBOARD);
+      } else if (user.role === 'service_provider') {
+        setCurrentView(View.CAR_SERVICE_DASHBOARD);
+        try {
+          const loc =
+            typeof user.location === 'string' && user.location.trim() ? user.location.trim() : '';
+          window.dispatchEvent(
+            new CustomEvent('reride:service-provider-oauth', {
+              detail: {
+                id: user.id,
+                name: (user.name && String(user.name).trim()) || 'Service provider',
+                email: user.email,
+                phone: user.mobile || '',
+                city: loc || '',
+              },
+            }),
+          );
+        } catch {
+          /* ignore */
+        }
+      } else if (user.role === 'customer') {
+        setCurrentView(View.HOME);
+      } else {
+        setCurrentView(View.HOME);
       }
-    } else if (user.role === 'customer') {
-      // Customers go to HOME (they can access BUYER_DASHBOARD from profile/navigation)
-      setCurrentView(View.HOME);
-    } else {
-      setCurrentView(View.HOME);
-    }
+    };
+
+    scheduleCapacitorPostLoginUi(applyPostRegisterNavigation);
   }, [addToast, t]);
 
   const syncUserCachesByEmail = useCallback((email: string, updates: Partial<User>) => {
@@ -2034,9 +2069,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setCurrentView(View.SELLER_DASHBOARD);
         } else if (currentUser.role === 'admin' && currentView !== View.ADMIN_PANEL) {
           setCurrentView(View.ADMIN_PANEL);
-        } else if (currentUser.role === 'customer' && currentView !== View.HOME) {
-          setCurrentView(View.HOME);
         }
+        // Customer: do not set HOME here — handleLogin schedules navigation on Capacitor to avoid
+        // the same-frame renderer OOM that looks like the app force-closing after sign-in.
       }
     }
   }, [currentUser, currentView]);

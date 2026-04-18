@@ -1,5 +1,20 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
+/**
+ * Live reload from the Vite dev server (same JS/API as Chrome on localhost:5173).
+ * Uses `RERIDE_VITE_DEV_SERVER_URL` (not Capacitor's generic `CAPACITOR_SERVER_URL`) so a stale
+ * global env var cannot leave the Android app pointing at a dead dev URL → blank WebView.
+ *
+ * - Emulator: see npm script `cap:android:live` (default `http://10.0.2.2:5173`; override if Vite uses another port).
+ * - Physical device: `RERIDE_VITE_DEV_SERVER_URL=http://<pc-lan-ip>:5173` then `npx cap sync android`.
+ * Packaged app: omit the var and run `npm run android:sync` (or `npx cap sync android`).
+ *
+ * **Android still on old JS?** If you ever synced with `RERIDE_VITE_DEV_SERVER_URL` set, the APK
+ * loads that URL instead of `dist/`. Run **`npm run android:bundle`** (clears the var for this
+ * command), then **Build → Clean Project** in Android Studio and reinstall the APK.
+ */
+const liveReloadUrl = (process.env.RERIDE_VITE_DEV_SERVER_URL || '').trim();
+
 const config: CapacitorConfig = {
   appId: 'com.reride.app',
   appName: 'ReRide',
@@ -7,7 +22,10 @@ const config: CapacitorConfig = {
   server: {
     // https → WebView is a secure context; http://10.0.2.2 (local dev API) needs mixed-content
     // allowance in MainActivity.java. Do not switch to http here unless you accept non-HTTPS WebView.
-    androidScheme: 'https'
+    androidScheme: 'https',
+    ...(liveReloadUrl
+      ? { url: liveReloadUrl, cleartext: true }
+      : {}),
   },
   plugins: {
     // Native Google: @capawesome/capacitor-google-sign-in + VITE_GOOGLE_WEB_CLIENT_ID at Vite build time.
