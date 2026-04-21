@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getDisplayNameForCity, primaryLocationLabel } from '../utils/cityMapping';
-import { INDIAN_STATES, CITIES_BY_STATE } from '../constants/location.js';
+import { INDIAN_STATES, CITIES_BY_STATE, CITY_COORDINATES } from '../constants/location.js';
+import { supportEmail } from '../constants/legalContact';
+import { calculateDistance } from '../services/locationService';
 
 interface LocationModalProps {
     isOpen: boolean;
@@ -22,12 +25,128 @@ function formatCityAndState(
     return stateName ? `${displayCity}, ${stateName}` : displayCity;
 }
 
+/** When reverse-geocode fails, snap to the nearest city with known coordinates (pan-India coverage). */
+function labelFromNearestCatalogCoordinate(
+  lat: number,
+  lon: number,
+  allCities: Array<{ city: string; stateCode: string }>,
+  indianStates: Array<{ name: string; code: string }>
+): string {
+  let bestName = 'Mumbai';
+  let bestD = Infinity;
+  for (const [name, c] of Object.entries(CITY_COORDINATES)) {
+    const d = calculateDistance(
+      { lat, lng: lon },
+      { lat: c.lat, lng: c.lng }
+    );
+    if (d < bestD) {
+      bestD = d;
+      bestName = name;
+    }
+  }
+  const display = getDisplayNameForCity(bestName);
+  const row = allCities.find(
+    (r) => getDisplayNameForCity(r.city).toLowerCase() === display.toLowerCase()
+  );
+  if (row) {
+    return formatCityAndState(row.city, row.stateCode, indianStates);
+  }
+  return getDisplayNameForCity(bestName);
+}
+
+/** Nominatim public policy: be gentle (≈1 req/s). Spacing is enforced between outbound calls. */
+let lastNominatimRequestAt = 0;
+const NOMINATIM_MIN_INTERVAL_MS = 1100;
+const NOMINATIM_RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
+async function waitForNominatimSlot(): Promise<void> {
+  const elapsed = Date.now() - lastNominatimRequestAt;
+  if (elapsed < NOMINATIM_MIN_INTERVAL_MS) {
+    await new Promise((r) => setTimeout(r, NOMINATIM_MIN_INTERVAL_MS - elapsed));
+  }
+  lastNominatimRequestAt = Date.now();
+}
+
+/**
+ * One reverse call with client timeout, optional retry on network failure or
+ * retryable HTTP status (503/429/etc.), while respecting the rate limiter.
+ */
+async function fetchNominatimReverse(latitude: number, longitude: number): Promise<Response> {
+  const buildUrl = () =>
+    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(
+      String(latitude)
+    )}&lon=${encodeURIComponent(String(longitude))}&zoom=14&addressdetails=1&accept-language=en&email=${encodeURIComponent(
+      supportEmail
+    )}`;
+
+  const doAttempt = async (): Promise<Response> => {
+    await waitForNominatimSlot();
+    const ac = new AbortController();
+    const httpTimeout = window.setTimeout(() => ac.abort(), 12000);
+    try {
+      return await fetch(buildUrl(), {
+        signal: ac.signal,
+        headers: {
+          'User-Agent': 'ReRide-App/1.0 (https://www.reride.co.in)',
+          Accept: 'application/json',
+          'Accept-Language': 'en,en-IN,en-GB',
+        },
+      });
+    } finally {
+      clearTimeout(httpTimeout);
+    }
+  };
+
+  const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  let res: Response;
+  try {
+    res = await doAttempt();
+  } catch {
+    await delay(900);
+    res = await doAttempt();
+  }
+
+  if (res.ok) return res;
+  if (NOMINATIM_RETRYABLE_STATUS.has(res.status)) {
+    await delay(900);
+    res = await doAttempt();
+  }
+  return res;
+}
+
+/** WiFi / desktop: low accuracy is faster and more reliable; retry with GPS on timeout / coarse failure. */
+function getCurrentPositionWithFallback(): Promise<GeolocationPosition> {
+  const opts: PositionOptions[] = [
+    { enableHighAccuracy: false, timeout: 22000, maximumAge: 120000 },
+    { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 },
+  ];
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('no-geolocation'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, opts[0]!);
+  }).catch((err: unknown) => {
+    const ge = err as Partial<GeolocationPositionError> | null;
+    const code = typeof ge?.code === 'number' ? ge.code : -1;
+    if (code === 2 || code === 3) {
+      return new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, opts[1]!);
+      });
+    }
+    return Promise.reject(err);
+  });
+}
+
 const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentLocation, onLocationChange, addToast }) => {
+    const { t } = useTranslation();
     const [selectedOption, setSelectedOption] = useState<LocationOption>('detect');
     const [selectedDistrict, setSelectedDistrict] = useState('');
     const [selectedCity, setSelectedCity] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [isDetecting, setIsDetecting] = useState(false);
+    const detectingInFlightRef = useRef(false);
     const userEditedRef = useRef(false);
     const prevIsOpenRef = useRef(false);
 
@@ -45,6 +164,15 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             if (document.body) document.body.style.overflow = '';
         };
     }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [isOpen, onClose]);
 
     // Get all cities flattened
     const allCities = useMemo(
@@ -186,147 +314,123 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
     }, [selectedDistrict, citiesByState]);
 
     const handleDetectLocation = () => {
+        if (detectingInFlightRef.current) return;
         if (!navigator.geolocation) {
-            addToast('Geolocation is not supported by your browser.', 'error');
+            addToast(t('locationModal.geoNotSupported'), 'error');
             return;
         }
-        console.log('Starting geolocation detection...');
+        detectingInFlightRef.current = true;
         setIsDetecting(true);
-        navigator.geolocation.getCurrentPosition(
-            async (position) => {
+        const geoErrorTKey = (code: number) => {
+            if (code === 1) return 'locationModal.error.denied';
+            if (code === 2) return 'locationModal.error.unavailable';
+            if (code === 3) return 'locationModal.error.timeout';
+            return 'locationModal.error.fallback';
+        };
+
+        void (async () => {
+            try {
+                const position = await getCurrentPositionWithFallback();
                 const { latitude, longitude } = position.coords;
-                
+                const allCitiesList = Object.values(citiesByState).flat();
+                const resolveLabel = (lat: number, lon: number) =>
+                    labelFromNearestCatalogCoordinate(lat, lon, allCities, indianStates);
+
                 try {
-                    const response = await fetch(
-                        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=14&addressdetails=1`,
-                        {
-                            headers: {
-                                'User-Agent': 'ReRide-App'
-                            }
-                        }
-                    );
-                    
+                    const response = await fetchNominatimReverse(latitude, longitude);
+
                     if (!response.ok) {
                         throw new Error('Geocoding failed');
                     }
-                    
+
                     const contentType = response.headers.get('content-type');
                     if (!contentType || !contentType.includes('application/json')) {
                         throw new Error('Geocoding API returned non-JSON response');
                     }
-                    
-                    const data = await response.json();
-                    const address = data.address;
-                    const detectedCity = address.city || address.town || address.village || address.suburb || address.state_district || address.locality || address.county;
-                    const allCitiesList = Object.values(citiesByState).flat();
 
-                    let matchedCity = null;
+                    const data = (await response.json()) as { address?: Record<string, string> };
+                    const address = data.address || {};
+                    const detectedCity =
+                        address.city ||
+                        address.town ||
+                        address.municipality ||
+                        address.city_district ||
+                        address.district ||
+                        address.village ||
+                        address.suburb ||
+                        address.neighbourhood ||
+                        address.locality ||
+                        address.state_district ||
+                        address.county;
+
+                    let matchedCity: string | null = null;
                     if (detectedCity) {
-                        matchedCity = allCitiesList.find(city => 
-                            city.toLowerCase() === detectedCity.toLowerCase()
-                        ) || allCitiesList.find(city => 
-                            city.toLowerCase().includes(detectedCity.toLowerCase()) ||
-                            detectedCity.toLowerCase().includes(city.toLowerCase())
-                        );
+                        const dLower = String(detectedCity).toLowerCase();
+                        matchedCity =
+                            allCitiesList.find((city) => city.toLowerCase() === dLower) ||
+                            allCitiesList.find(
+                                (city) => getDisplayNameForCity(city).toLowerCase() === dLower
+                            ) ||
+                            allCitiesList.find(
+                                (city) =>
+                                    city.toLowerCase().includes(dLower) ||
+                                    dLower.includes(city.toLowerCase()) ||
+                                    getDisplayNameForCity(city).toLowerCase().includes(dLower)
+                            ) ||
+                            null;
                     }
-                    
-                    const finalLocation = matchedCity || detectedCity || 'Mumbai';
-                    const row = allCities.find(
-                        (c) => c.city.toLowerCase() === (matchedCity || finalLocation).toLowerCase()
-                    );
+
+                    const row = matchedCity
+                        ? allCities.find(
+                              (c) =>
+                                  c.city.toLowerCase() === matchedCity!.toLowerCase() ||
+                                  getDisplayNameForCity(c.city).toLowerCase() ===
+                                      getDisplayNameForCity(matchedCity!).toLowerCase()
+                          )
+                        : null;
+
                     const displayLocation = row
                         ? formatCityAndState(row.city, row.stateCode, indianStates)
-                        : getDisplayNameForCity(finalLocation);
+                        : matchedCity
+                          ? getDisplayNameForCity(matchedCity)
+                          : resolveLabel(latitude, longitude);
 
                     onLocationChange(displayLocation);
-                    addToast(`Location detected: ${displayLocation}`, 'success');
-                    setIsDetecting(false);
+                    addToast(t('locationModal.toast.detected', { place: displayLocation }), 'success');
                     onClose();
-                    
-                } catch (error) {
-                    console.error('Reverse geocoding error:', error);
-                    const nearest = findNearestCity(latitude, longitude);
-                    const row = allCities.find((c) => c.city.toLowerCase() === nearest.toLowerCase());
-                    const nearestLabel = row
-                        ? formatCityAndState(row.city, row.stateCode, indianStates)
-                        : getDisplayNameForCity(nearest);
-                    onLocationChange(nearestLabel);
-                    addToast(`Location detected: ${nearestLabel}`, 'success');
-                    setIsDetecting(false);
+                } catch {
+                    const snap = resolveLabel(latitude, longitude);
+                    onLocationChange(snap);
+                    addToast(t('locationModal.toast.detected', { place: snap }), 'success');
                     onClose();
                 }
-            },
-            (error) => {
-                console.error('Geolocation error:', error);
-                let errorMessage = 'Unable to retrieve your location. ';
-                if (error.code === 1) {
-                    errorMessage += 'Please allow location access in your browser settings.';
-                } else if (error.code === 2) {
-                    errorMessage += 'Location unavailable.';
-                } else if (error.code === 3) {
-                    errorMessage += 'Location request timed out.';
+            } catch (e: unknown) {
+                if (e && typeof e === 'object' && 'code' in e) {
+                    const code = (e as GeolocationPositionError).code;
+                    if (typeof code === 'number') {
+                        addToast(t(geoErrorTKey(code)), 'error');
+                    } else {
+                        addToast(t('locationModal.error.fallback'), 'error');
+                    }
                 } else {
-                    errorMessage += 'Please select manually.';
+                    addToast(t('locationModal.error.fallback'), 'error');
                 }
-                addToast(errorMessage, 'error');
+            } finally {
+                detectingInFlightRef.current = false;
                 setIsDetecting(false);
-            },
-            {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
             }
-        );
-    };
-    
-    const findNearestCity = (lat: number, lon: number): string => {
-        const majorCities: { name: string; lat: number; lon: number }[] = [
-            { name: 'Mumbai', lat: 19.0760, lon: 72.8777 },
-            { name: 'Delhi', lat: 28.7041, lon: 77.1025 },
-            { name: 'Bangalore', lat: 12.9716, lon: 77.5946 },
-            { name: 'Hyderabad', lat: 17.3850, lon: 78.4867 },
-            { name: 'Chennai', lat: 13.0827, lon: 80.2707 },
-            { name: 'Kolkata', lat: 22.5726, lon: 88.3639 },
-            { name: 'Pune', lat: 18.5204, lon: 73.8567 },
-            { name: 'Ahmedabad', lat: 23.0225, lon: 72.5714 },
-        ];
-        
-        const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-            const R = 6371;
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c;
-        };
-        
-        let nearestCity = 'Mumbai';
-        let minDistance = Infinity;
-        
-        for (const city of majorCities) {
-            const distance = calculateDistance(lat, lon, city.lat, city.lon);
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearestCity = city.name;
-            }
-        }
-        
-        return nearestCity;
+        })();
     };
     
     const handleSave = () => {
         if (selectedOption === 'detect') {
-            // Trigger location detection
-            console.log('Detect automatically selected, starting detection...');
             handleDetectLocation();
             return;
         }
         
         if (selectedOption === 'all') {
             onLocationChange('All of India');
-            addToast('Location set to All of India', 'success');
+            addToast(t('locationModal.toast.allIndiaSet'), 'success');
             onClose();
             return;
         }
@@ -334,7 +438,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         if (selectedOption === 'district' && selectedDistrict) {
             const stateName = indianStates.find(s => s.code === selectedDistrict)?.name || selectedDistrict;
             onLocationChange(stateName);
-            addToast(`Location set to ${stateName}`, 'success');
+            addToast(t('locationModal.toast.setTo', { place: stateName }), 'success');
             onClose();
             return;
         }
@@ -377,13 +481,13 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                 const sc = stateCode || allCities.find((c) => c.city === city)?.stateCode;
                 const label = sc ? formatCityAndState(city, sc, indianStates) : getDisplayNameForCity(city);
                 onLocationChange(label);
-                addToast(`Location set to ${label}`, 'success');
+                addToast(t('locationModal.toast.setTo', { place: label }), 'success');
                 onClose();
                 return;
             }
         }
 
-        addToast('Please select a city from the list or choose a state / All of India', 'info');
+        addToast(t('locationModal.selectPrompt'), 'info');
     };
 
     const handleCitySelect = (cityName: string, stateCode: string) => {
@@ -407,8 +511,10 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             }}
         >
             <div 
-                className="bg-white rounded-lg shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col absolute top-4 left-1/2 -translate-x-1/2" 
+                className="bg-white rounded-lg shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col absolute top-4 left-1/2 -translate-x-1/2 notranslate" 
                 onClick={e => e.stopPropagation()}
+                data-no-translate
+                translate="no"
                 style={{ 
                     maxWidth: '420px',
                     minHeight: '400px',
@@ -421,11 +527,11 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0"
                     style={{ minHeight: '60px' }}
                 >
-                    <h2 className="text-lg font-semibold text-gray-900">My city</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">{t('locationModal.title')}</h2>
                     <button 
                         onClick={onClose} 
                         className="p-1 rounded-full hover:bg-gray-100 transition-colors"
-                        aria-label="Close"
+                        aria-label={t('locationModal.close')}
                     >
                         <svg 
                             xmlns="http://www.w3.org/2000/svg" 
@@ -458,7 +564,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                     setSelectedOption('city');
                                 }
                             }}
-                            placeholder="City or state"
+                            placeholder={t('locationModal.searchPlaceholder')}
                             className="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                         <svg 
@@ -485,8 +591,16 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     }}
                 >
                     <div className="space-y-1">
-                        {/* Detect automatically */}
-                        <label className="flex items-center gap-3 p-3 rounded-md hover:bg-gray-50 cursor-pointer">
+                        {/* Auto-detect city via geolocation — row tap runs detection (same as Save) */}
+                        <label
+                            className="flex items-center gap-3 rounded-lg border border-gray-200/90 bg-gray-50/90 p-3 cursor-pointer transition-colors hover:bg-gray-100/90"
+                            onClick={() => {
+                                markUserEdited();
+                                setSelectedOption('detect');
+                                setSearchTerm('');
+                                handleDetectLocation();
+                            }}
+                        >
                             <input
                                 type="radio"
                                 name="location"
@@ -496,11 +610,22 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                     markUserEdited();
                                     setSelectedOption('detect');
                                 }}
-                                className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                                className="w-4 h-4 text-blue-600 focus:ring-blue-500 flex-shrink-0"
                             />
-                            <span className="text-sm text-gray-900">Detect automatically</span>
+                            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 24 24"
+                                    fill="currentColor"
+                                    className="h-5 w-5 flex-shrink-0 text-gray-400"
+                                    aria-hidden
+                                >
+                                    <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.05 11H1v2h2.05A8.994 8.994 0 0 0 11 20.95V23h2v-2.05A8.994 8.994 0 0 0 20.95 13H23v-2h-2.05zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
+                                </svg>
+                                <span className="text-sm text-[#3c4043]">{t('locationModal.autoDetect')}</span>
+                            </div>
                             {isDetecting && selectedOption === 'detect' && (
-                                <span className="ml-auto text-xs text-blue-600">Detecting...</span>
+                                <span className="flex-shrink-0 text-xs text-blue-600">{t('locationModal.detecting')}</span>
                             )}
                         </label>
 
@@ -517,7 +642,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                 }}
                                 className="w-4 h-4 text-blue-600 focus:ring-blue-500"
                             />
-                            <span className="text-sm text-gray-900">All of India</span>
+                            <span className="text-sm text-gray-900">{t('locationModal.allIndia')}</span>
                         </label>
 
                         {/* District Options */}
@@ -605,8 +730,8 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                         {/* Show popular cities when search is active or city option is selected */}
                         {searchTerm && filteredCities.length === 0 && (
                             <div className="p-3 text-sm text-gray-500 text-center">
-                                No cities found matching "{searchTerm}"
-                                    </div>
+                                {t('locationModal.noCities', { term: searchTerm })}
+                            </div>
                         )}
                         </div>
                     </div>
@@ -620,14 +745,14 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                         onClick={onClose}
                         className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
                     >
-                        Cancel
+                        {t('locationModal.cancel')}
                     </button>
                     <button
                         onClick={handleSave}
                         disabled={isDetecting}
                         className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                        {isDetecting ? 'Detecting...' : 'Save'}
+                        {isDetecting ? t('locationModal.detecting') : t('locationModal.save')}
                     </button>
                 </div>
             </div>

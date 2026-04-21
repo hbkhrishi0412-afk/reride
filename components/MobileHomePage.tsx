@@ -542,8 +542,10 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 type="button"
                 onClick={() => setIsLocationModalOpen(true)}
                 aria-label={t('a11y.chooseLocation') || 'Choose location'}
-                className="inline-flex items-center gap-1.5 max-w-[55%] px-3 py-1.5 bg-white/15 hover:bg-white/25 active:bg-white/30 backdrop-blur-md rounded-full border border-white/25 text-white text-[11px] font-semibold tracking-wide transition-colors active:scale-95"
+                className="inline-flex items-center gap-1.5 max-w-[55%] px-3 py-1.5 bg-white/15 hover:bg-white/25 active:bg-white/30 backdrop-blur-md rounded-full border border-white/25 text-white text-[11px] font-semibold tracking-wide transition-colors active:scale-95 notranslate"
                 style={{ minHeight: '32px' }}
+                data-no-translate
+                translate="no"
               >
                 <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />

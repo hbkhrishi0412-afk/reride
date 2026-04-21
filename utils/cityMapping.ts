@@ -4,6 +4,8 @@
  * actual city names stored in vehicle data (e.g., "Delhi", "New Delhi")
  */
 
+import { INDIAN_STATES } from '../constants/location';
+
 export interface CityMapping {
   displayName: string;
   actualNames: string[]; // All possible city names that should match
@@ -105,3 +107,27 @@ export function getStateCodeForCity(cityName: string, citiesByState: Record<stri
   return null;
 }
 
+/**
+ * Canonical English label for persisted header / filter location.
+ * Keeps vehicle matching reliable (listings use Latin city names) and dedupes aliases.
+ */
+export function normalizeUserLocationForStorage(raw: string): string {
+  const t = (raw ?? '').trim();
+  if (!t) return '';
+  if (/^all of india$/i.test(t)) return 'All of India';
+
+  const stateOnly = INDIAN_STATES.find((s) => s.name.toLowerCase() === t.toLowerCase());
+  if (stateOnly) return stateOnly.name;
+
+  const comma = t.indexOf(',');
+  if (comma !== -1) {
+    const cityPart = t.slice(0, comma).trim();
+    const tail = t.slice(comma + 1).trim();
+    const cityNorm = getDisplayNameForCity(primaryLocationLabel(cityPart)) || cityPart;
+    const stateName = INDIAN_STATES.find((s) => s.name.toLowerCase() === tail.toLowerCase())?.name;
+    if (stateName) return `${cityNorm}, ${stateName}`;
+    return `${cityNorm}, ${tail}`;
+  }
+
+  return getDisplayNameForCity(primaryLocationLabel(t)) || t;
+}

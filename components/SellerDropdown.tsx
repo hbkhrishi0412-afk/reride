@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Vehicle } from '../types';
+import { useIsMdUp } from '../hooks/useIsMdUp';
 
 interface SellerDropdownProps {
   allVehicles: Vehicle[];
@@ -16,6 +17,7 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
   onSellScrapCar 
 }) => {
   const { t } = useTranslation();
+  const isMdUp = useIsMdUp();
   const [isOpen, setIsOpen] = useState(false);
   const [cities, setCities] = useState<string[]>([]);
 
@@ -53,11 +55,17 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
   const rightColumnCities = cities.slice(midPoint);
 
   return (
-    <div className="relative">
+    <div
+      className="relative"
+      onMouseEnter={isMdUp ? () => setIsOpen(true) : undefined}
+      onMouseLeave={isMdUp ? () => setIsOpen(false) : undefined}
+    >
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setIsOpen((o) => !o)}
         className="inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl px-4 text-[15px] font-semibold text-gray-700 transition-all duration-300 hover:-translate-y-0.5 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600"
+        aria-expanded={isOpen}
+        aria-haspopup="true"
       >
         {t('nav.sellCar')}
         <svg 
@@ -72,14 +80,18 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
 
       {isOpen && (
         <>
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 z-10" 
-            onClick={() => setIsOpen(false)}
-          />
-          
-          {/* Dropdown */}
-          <div className="absolute top-full left-0 mt-2 w-96 bg-gradient-to-br from-purple-900 to-purple-800 rounded-xl shadow-2xl border border-purple-700 z-20 overflow-hidden">
+          {!isMdUp && (
+            <div 
+              className="fixed inset-0 z-10" 
+              onClick={() => setIsOpen(false)}
+            />
+          )}
+
+          <div
+            className="absolute top-full left-0 z-20 pt-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-96 bg-gradient-to-br from-purple-900 to-purple-800 rounded-xl shadow-2xl border border-purple-700 overflow-hidden">
             <div className="p-4">
               <div className="grid grid-cols-2 gap-4">
                 {/* Left Column */}
@@ -135,6 +147,7 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
                   </button>
                 </div>
               </div>
+            </div>
             </div>
           </div>
         </>
