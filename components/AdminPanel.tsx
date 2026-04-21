@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import type { Vehicle, User, Conversation, PlatformSettings, AuditLogEntry, VehicleData, SupportTicket, FAQItem, SubscriptionPlan, PlanDetails, Notification } from '../types';
+import type { Vehicle, User, Conversation, PlatformSettings, AuditLogEntry, VehicleData, SupportTicket, FAQItem, SubscriptionPlan, PlanDetails } from '../types';
 import { View } from '../types';
 import EditUserModal from './EditUserModal';
 import EditVehicleModal from './EditVehicleModal';
@@ -14,8 +14,20 @@ import ImportVehiclesModal from './ImportVehiclesModal';
 import ImportUsersModal from './ImportUsersModal';
 import AdminServiceOps from './AdminServiceOps';
 import ServiceManagement from './ServiceManagement';
+import SellCarAdmin from './SellCarAdmin';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 import { isRerideStaffPick } from '../utils/staffPick';
+import {
+    AdminContentFrame,
+    AdminStatTile,
+    AdminDataTableFrame,
+    AdminBarChartPanel,
+    AdminSegmentedTabs,
+    AdminEmptyState,
+    AdminPageIntro,
+    AdminToolbar,
+    adminTableHeadClass,
+} from './admin/AdminPrimitives';
 
 /** Safe ₹ formatting — API/mock data can omit or invalidate numeric fields. */
 function formatInrAmount(value: unknown): string {
@@ -70,7 +82,7 @@ const SellerFilterDropdown: React.FC<SellerFilterDropdownProps> = ({
         <div className="relative" ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-left min-w-[200px] flex justify-between items-center hover:bg-gray-50"
+                className="flex min-w-[200px] items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
             >
                 <span className="truncate">{selectedSellerName}</span>
                 <svg 
@@ -173,13 +185,10 @@ interface AdminPanelProps {
     onUpdateFaq: (faq: FAQItem) => void;
     onDeleteFaq: (id: number) => void;
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => void;
-    notifications?: Notification[];
-    onMarkAllNotificationsAsRead?: () => void;
-    onMarkNotificationAsRead?: (notificationId: number | string) => void;
 }
 
 type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps' | 'serviceManagement';
-type RoleFilter = 'all' | 'customer' | 'seller' | 'admin';
+type RoleFilter = 'all' | 'customer' | 'seller' | 'admin' | 'finance_partner';
 // FIX: Restrict sortable keys to prevent comparison errors on incompatible types.
 type SortableUserKey = 'name' | 'status';
 type SortConfig = {
@@ -187,31 +196,117 @@ type SortConfig = {
     direction: 'ascending' | 'descending';
 };
 
+const ADMIN_SIDEBAR_COLLAPSED_KEY = 'reride_admin_sidebar_collapsed';
+
+/** Compact icons for collapsed (rail) sidebar — matches `AdminView` routes. */
+const AdminViewNavIcon: React.FC<{ view: AdminView; className?: string }> = ({ view, className = 'h-5 w-5' }) => {
+    const c = `${className} shrink-0`;
+    switch (view) {
+        case 'analytics':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+            );
+        case 'users':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+            );
+        case 'listings':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+            );
+        case 'sellCarAdmin':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+            );
+        case 'vehicleData':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+            );
+        case 'moderation':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                </svg>
+            );
+        case 'certificationRequests':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+            );
+        case 'payments':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+            );
+        case 'planManagement':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+            );
+        case 'support':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+            );
+        case 'faq':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            );
+        case 'serviceOps':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655-5.653a2.548 2.548 0 010-3.586L11.42 15.17z"
+                    />
+                </svg>
+            );
+        case 'serviceManagement':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+            );
+        case 'auditLog':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+            );
+        case 'settings':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            );
+        default:
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            );
+    }
+};
+
 // --- Sub-components ---
-
-const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode, onClick?: () => void }> = ({ title, value, icon, onClick }) => (
-  <div className={`bg-white p-6 rounded-lg shadow-md flex items-center ${onClick ? 'cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-transform' : ''}`} onClick={onClick}>
-    <div className="p-3 rounded-full mr-4" style={{ background: 'rgba(30, 136, 229, 0.1)' }}>{icon}</div>
-    <div>
-      <h3 className="text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">{title}</h3>
-      <p className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark">{value}</p>
-    </div>
-  </div>
-);
-
-const TableContainer: React.FC<{ title: string; children: React.ReactNode; actions?: React.ReactNode }> = ({ title, children, actions }) => (
-    <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-            <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">{title}</h2>
-            {actions && <div className="w-full sm:w-auto">{actions}</div>}
-        </div>
-        <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
-            <div className="inline-block min-w-full align-middle">
-                {children}
-            </div>
-        </div>
-    </div>
-);
 
 const SortableHeader: React.FC<{
     title: string;
@@ -223,40 +318,14 @@ const SortableHeader: React.FC<{
     const direction = isSorted ? sortConfig.direction : undefined;
 
     return (
-        <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">
-            <button onClick={() => requestSort(sortKey)} className="flex items-center gap-1.5 group hover:text-gray-900">
+        <th className={`${adminTableHeadClass} px-3 py-2.5 whitespace-nowrap`}>
+            <button onClick={() => requestSort(sortKey)} className="group flex items-center gap-1.5 hover:text-slate-900">
                 <span className="group-hover:text-gray-900">{title}</span>
                 <span className="text-gray-500 text-xs">
                     {isSorted ? (direction === 'ascending' ? '▲' : '▼') : '↕'}
                 </span>
             </button>
         </th>
-    );
-};
-
-const BarChart: React.FC<{ title: string; data: { label: string; value: number }[] }> = ({ title, data }) => {
-    const maxValue = Math.max(...(data || []).map(d => d.value), 1);
-    return (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-lg font-bold text-reride-text-dark dark:text-reride-text-dark mb-4">{title}</h3>
-            <div className="space-y-4">
-                {(data || []).map(({ label, value }) => (
-                    <div key={label} className="grid grid-cols-[100px_1fr] items-center gap-4 text-sm">
-                        <span className="font-medium text-reride-text-dark dark:text-reride-text-dark truncate text-right">{label}</span>
-                        <div className="flex items-center gap-2">
-                            <div className="w-full bg-gray-100 dark:bg-white rounded-full h-5">
-                                <div
-                                    className="h-5 rounded-full text-white text-xs flex items-center justify-end pr-2"
-                                    style={{ width: `${(value / maxValue) * 100}%`, background: 'var(--gradient-warm)' }}
-                                >
-                                    {value}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
     );
 };
 
@@ -315,25 +384,33 @@ const CertificationRequestsView: React.FC<{
     };
 
     return (
-        <TableContainer title={`Pending Certification Requests (${requests.length})`}>
+        <AdminDataTableFrame
+            title="Certification requests"
+            subtitle={`${requests.length} pending`}
+        >
             {requests.length > 0 ? (
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-white dark:bg-white">
+                <table className="min-w-full divide-y divide-slate-100">
+                    <thead>
                         <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium uppercase">Vehicle</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium uppercase">Seller</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium uppercase">Plan Details</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium uppercase">Actions</th>
+                            <th className={`${adminTableHeadClass} px-4 py-3`}>Vehicle</th>
+                            <th className={`${adminTableHeadClass} px-4 py-3`}>Seller</th>
+                            <th className={`${adminTableHeadClass} px-4 py-3`}>Plan details</th>
+                            <th className={`${adminTableHeadClass} px-4 py-3 text-right`}>Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
-                        {requests.map(vehicle => (
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                        {requests.map((vehicle) => (
                             <CertificationRequestRow key={vehicle.id} vehicle={vehicle} />
                         ))}
                     </tbody>
                 </table>
-            ) : <p className="text-center py-8 text-reride-text-dark dark:text-reride-text-dark">No pending certification requests.</p>}
-        </TableContainer>
+            ) : (
+                <AdminEmptyState
+                    title="No pending requests"
+                    description="When sellers request certification, they will appear in this table for review."
+                />
+            )}
+        </AdminDataTableFrame>
     );
 };
 
@@ -355,39 +432,43 @@ const AuditLogView: React.FC<{ auditLog: AuditLogEntry[] }> = ({ auditLog }) => 
   const searchAction = (
     <input
       type="text"
-      placeholder="Search logs..."
+      placeholder="Search logs…"
       value={searchTerm}
       onChange={(e) => setSearchTerm(e.target.value)}
-      className="flex-grow p-2 border border-gray-200 dark:border-gray-300 rounded-lg bg-white dark:text-reride-text-dark focus:outline-none transition w-full sm:w-64" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
+      className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200 sm:w-72"
     />
   );
 
   return (
-    <TableContainer title="Audit Log" actions={searchAction}>
-      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-white dark:bg-white text-reride-text-dark dark:text-reride-text-dark">
+    <AdminDataTableFrame title="Audit log" subtitle="Immutable history of admin actions" actions={searchAction}>
+      <table className="min-w-full divide-y divide-slate-100">
+        <thead>
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium uppercase">Timestamp</th>
-            <th className="px-6 py-3 text-left text-xs font-medium uppercase">Actor</th>
-            <th className="px-6 py-3 text-left text-xs font-medium uppercase">Action</th>
-            <th className="px-6 py-3 text-left text-xs font-medium uppercase">Target</th>
-            <th className="px-6 py-3 text-left text-xs font-medium uppercase">Details</th>
+            <th className={`${adminTableHeadClass} px-4 py-3`}>Timestamp</th>
+            <th className={`${adminTableHeadClass} px-4 py-3`}>Actor</th>
+            <th className={`${adminTableHeadClass} px-4 py-3`}>Action</th>
+            <th className={`${adminTableHeadClass} px-4 py-3`}>Target</th>
+            <th className={`${adminTableHeadClass} px-4 py-3`}>Details</th>
           </tr>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
-          {filteredLog.map(entry => (
-            <tr key={entry.id}>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-reride-text-dark dark:text-reride-text-dark">{new Date(entry.timestamp).toLocaleString()}</td>
-              <td className="px-6 py-4 whitespace-nowrap font-medium">{entry.actor}</td>
-              <td className="px-6 py-4 whitespace-nowrap">{entry.action}</td>
-              <td className="px-6 py-4 whitespace-nowrap">{entry.target}</td>
-              <td className="px-6 py-4 text-sm text-reride-text-dark dark:text-reride-text-dark truncate max-w-xs" title={entry.details}>{entry.details}</td>
+        <tbody className="divide-y divide-slate-100 bg-white">
+          {filteredLog.map((entry) => (
+            <tr key={entry.id} className="transition-colors hover:bg-violet-50/[0.35]">
+              <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">{new Date(entry.timestamp).toLocaleString()}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900">{entry.actor}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{entry.action}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{entry.target}</td>
+              <td className="max-w-xs truncate px-4 py-3 text-sm text-slate-600" title={entry.details}>{entry.details}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      {filteredLog.length === 0 && <p className="text-center py-8 text-reride-text-dark dark:text-reride-text-dark">No log entries found matching your search.</p>}
-    </TableContainer>
+      {filteredLog.length === 0 && (
+        <div className="px-4 py-10">
+          <AdminEmptyState title="No entries" description="Try another search term or clear the filter." />
+        </div>
+      )}
+    </AdminDataTableFrame>
   );
 };
 
@@ -939,8 +1020,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         auditLog, onExportUsers, onImportUsers, onExportVehicles, onImportVehicles, onNavigate: _onNavigate, onLogout, vehicleData, onUpdateVehicleData,
         supportTickets, onUpdateSupportTicket, faqItems, onAddFaq, onUpdateFaq, onDeleteFaq,
         onCertificationApproval,
-        notifications = [],
-        onMarkAllNotificationsAsRead
     } = props;
     const [activeView, setActiveView] = useState<AdminView>('analytics');
     const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -961,30 +1040,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
 
-    // Admin notification bell state
-    const [isNotifOpen, setIsNotifOpen] = useState(false);
-    const notifRef = useRef<HTMLDivElement | null>(null);
-
-    useEffect(() => {
-        if (!isNotifOpen) return;
-        const handleOutside = (e: MouseEvent) => {
-            if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-                setIsNotifOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleOutside);
-        return () => document.removeEventListener('mousedown', handleOutside);
-    }, [isNotifOpen]);
-
-    const adminEmailLc = (currentUser?.email || '').toLowerCase().trim();
-    const adminNotifications = useMemo(() => {
-        return (notifications || []).filter(n => (n.recipientEmail || '').toLowerCase().trim() === adminEmailLc);
-    }, [notifications, adminEmailLc]);
-    const unreadNotifCount = useMemo(
-        () => adminNotifications.filter(n => !n.isRead).length,
-        [adminNotifications]
-    );
-    
     // Loading states for actions
     const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
     const [showImportModal, setShowImportModal] = useState(false);
@@ -1193,6 +1248,103 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         };
     }, [users, vehicles, conversations]);
 
+    const openSupportCount = useMemo(
+        () => (supportTickets || []).filter((t) => t.status === 'Open').length,
+        [supportTickets]
+    );
+
+    /** Grouped admin nav: sidebar sections + mobile optgroups share this structure. */
+    const adminNavGroups = useMemo(
+        () =>
+            [
+                {
+                    id: 'overview',
+                    label: 'Overview',
+                    items: [{ view: 'analytics' as const, label: 'Analytics' }],
+                },
+                {
+                    id: 'people',
+                    label: 'People & accounts',
+                    items: [{ view: 'users' as const, label: 'User management' }],
+                },
+                {
+                    id: 'marketplace',
+                    label: 'Marketplace & listings',
+                    items: [
+                        { view: 'listings' as const, label: 'Listings' },
+                        { view: 'sellCarAdmin' as const, label: 'Sell car submissions' },
+                        { view: 'vehicleData' as const, label: 'Vehicle data' },
+                    ],
+                },
+                {
+                    id: 'trust',
+                    label: 'Trust & safety',
+                    items: [
+                        { view: 'moderation' as const, label: 'Moderation queue', count: analytics.flaggedContent },
+                        {
+                            view: 'certificationRequests' as const,
+                            label: 'Certification requests',
+                            count: analytics.certificationRequests,
+                        },
+                    ],
+                },
+                {
+                    id: 'commerce',
+                    label: 'Commerce & billing',
+                    items: [
+                        { view: 'payments' as const, label: 'Payment requests' },
+                        { view: 'planManagement' as const, label: 'Plan management' },
+                    ],
+                },
+                {
+                    id: 'support',
+                    label: 'Support & content',
+                    items: [
+                        { view: 'support' as const, label: 'Support tickets', count: openSupportCount },
+                        { view: 'faq' as const, label: 'FAQ management' },
+                    ],
+                },
+                {
+                    id: 'services',
+                    label: 'Services',
+                    items: [
+                        { view: 'serviceOps' as const, label: 'Service ops' },
+                        { view: 'serviceManagement' as const, label: 'Service management' },
+                    ],
+                },
+                {
+                    id: 'system',
+                    label: 'System',
+                    items: [
+                        { view: 'auditLog' as const, label: 'Audit log' },
+                        { view: 'settings' as const, label: 'Settings' },
+                    ],
+                },
+            ] as const,
+        [analytics.certificationRequests, analytics.flaggedContent, openSupportCount]
+    );
+
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        try {
+            return window.localStorage.getItem(ADMIN_SIDEBAR_COLLAPSED_KEY) === '1';
+        } catch {
+            return false;
+        }
+    });
+
+    const toggleSidebarCollapsed = () => {
+        setSidebarCollapsed((prev) => {
+            const next = !prev;
+            try {
+                window.localStorage.setItem(ADMIN_SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+            } catch {
+                /* ignore */
+            }
+            return next;
+        });
+    };
+
     const handleSaveUser = (email: string, details: Partial<User>) => {
         onAdminUpdateUser(email, details);
         setEditingUser(null);
@@ -1215,9 +1367,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     };
 
     const sortedUsers = useMemo(() => {
-        if (!sortConfig) return users;
-        
-        return [...users].sort((a, b) => {
+        const list = users || [];
+        if (!sortConfig) return list;
+
+        return [...list].sort((a, b) => {
             const aValue = a[sortConfig.key];
             const bValue = b[sortConfig.key];
             
@@ -1239,6 +1392,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             customer: list.filter(u => u.role === 'customer').length,
             seller: list.filter(u => u.role === 'seller').length,
             admin: list.filter(u => u.role === 'admin').length,
+            finance_partner: list.filter(u => u.role === 'finance_partner').length,
         };
     }, [users]);
 
@@ -1279,10 +1433,11 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
     // Pagination logic for vehicles
     const filteredVehicles = useMemo(() => {
-        if (selectedSeller === 'all') return vehicles;
+        const vList = vehicles || [];
+        if (selectedSeller === 'all') return vList;
         // Normalize emails for comparison (critical for production)
         const normalizedSelectedSeller = selectedSeller ? selectedSeller.toLowerCase().trim() : '';
-        return vehicles.filter(vehicle => {
+        return vList.filter(vehicle => {
           if (!vehicle?.sellerEmail) return false;
           return vehicle.sellerEmail.toLowerCase().trim() === normalizedSelectedSeller;
         });
@@ -1310,72 +1465,105 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             case 'analytics':
                 // Show loading skeleton if data is still loading
                 // Only show loading if explicitly loading OR if we have no data AND no cache (first load)
-                const hasNoData = users.length === 0 && vehicles.length === 0;
+                const safeUsersLen = (users || []).length;
+                const safeVehiclesLen = (vehicles || []).length;
+                const hasNoData = safeUsersLen === 0 && safeVehiclesLen === 0;
                 const hasCache = typeof window !== 'undefined' && 
                     (localStorage.getItem('reRideVehicles_prod') || localStorage.getItem('reRideUsers_prod'));
                 if (isLoading || (hasNoData && !hasCache)) {
                     return (
                         <div className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                                 {[1, 2, 3, 4].map((i) => (
-                                    <div key={i} className="bg-white p-6 rounded-lg shadow-md animate-pulse">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <div className="h-6 bg-gray-200 rounded w-24"></div>
-                                            <div className="w-8 h-8 bg-gray-200 rounded"></div>
+                                    <div
+                                        key={i}
+                                        className="animate-pulse rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"
+                                    >
+                                        <div className="mb-4 flex items-center justify-between">
+                                            <div className="h-5 w-24 rounded bg-slate-200" />
+                                            <div className="h-10 w-10 rounded-xl bg-slate-200" />
                                         </div>
-                                        <div className="h-8 bg-gray-200 rounded w-20"></div>
+                                        <div className="h-8 w-20 rounded bg-slate-200" />
                                     </div>
                                 ))}
                             </div>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <div className="bg-white p-6 rounded-lg shadow-md animate-pulse">
-                                    <div className="h-6 bg-gray-200 rounded w-40 mb-4"></div>
-                                    <div className="h-64 bg-gray-200 rounded"></div>
+                            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                                <div className="h-72 animate-pulse rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+                                    <div className="mb-4 h-6 w-40 rounded bg-slate-200" />
+                                    <div className="h-52 rounded-xl bg-slate-100" />
                                 </div>
-                                <div className="bg-white p-6 rounded-lg shadow-md animate-pulse">
-                                    <div className="h-6 bg-gray-200 rounded w-32 mb-4"></div>
-                                    <div className="space-y-4">
-                                        <div className="h-4 bg-gray-200 rounded"></div>
-                                        <div className="h-4 bg-gray-200 rounded"></div>
+                                <div className="h-72 animate-pulse rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+                                    <div className="mb-4 h-6 w-32 rounded bg-slate-200" />
+                                    <div className="space-y-3">
+                                        <div className="h-4 rounded bg-slate-200" />
+                                        <div className="h-4 rounded bg-slate-200" />
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex items-center justify-center py-8">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                                    <span className="text-gray-600">Loading admin data...</span>
-                                </div>
+                            <div className="flex items-center justify-center gap-3 py-10">
+                                <div className="h-6 w-6 animate-spin rounded-full border-2 border-violet-600 border-t-transparent" />
+                                <span className="text-sm font-medium text-slate-600">Loading dashboard…</span>
                             </div>
                         </div>
                     );
                 }
-                
+
                 return (
                     <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <StatCard title="Total Users" value={analytics.totalUsers} icon={<span className="text-2xl">👥</span>} />
-                            <StatCard title="Total Vehicles" value={analytics.totalVehicles} icon={<span className="text-2xl">🚗</span>} />
-                            <StatCard title="Active Listings" value={analytics.activeListings} icon={<span className="text-2xl">📋</span>} />
-                            <StatCard title="Total Sales" value={`₹${formatInrAmount(analytics.totalSales)}`} icon={<span className="text-2xl">💰</span>} />
+                        <AdminPageIntro
+                            eyebrow="Overview"
+                            title="Operations dashboard"
+                            description="Live snapshot of users, inventory, and items that need trust or certification attention."
+                        />
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                            <AdminStatTile
+                                accent="violet"
+                                title="Total users"
+                                value={analytics.totalUsers}
+                                icon={<span className="text-xl">👥</span>}
+                            />
+                            <AdminStatTile
+                                accent="sky"
+                                title="Total vehicles"
+                                value={analytics.totalVehicles}
+                                icon={<span className="text-xl">🚗</span>}
+                            />
+                            <AdminStatTile
+                                accent="emerald"
+                                title="Active listings"
+                                value={analytics.activeListings}
+                                icon={<span className="text-xl">📋</span>}
+                            />
+                            <AdminStatTile
+                                accent="amber"
+                                title="Total sales"
+                                value={`₹${formatInrAmount(analytics.totalSales)}`}
+                                icon={<span className="text-xl">💰</span>}
+                            />
                         </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <BarChart title="Top Vehicle Makes" data={analytics.listingsByMake} />
-            <div className="bg-white p-6 rounded-lg shadow-md">
-                                <h3 className="text-lg font-bold text-reride-text-dark dark:text-reride-text-dark mb-4">Quick Stats</h3>
-                                <div className="space-y-4">
-                                    <div className="flex justify-between">
-                                        <span>Flagged Content:</span>
-                                        <span className="font-semibold">{analytics.flaggedContent}</span>
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                            <AdminBarChartPanel title="Top vehicle makes" data={analytics.listingsByMake} />
+                            <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm ring-1 ring-slate-900/[0.04] sm:p-6">
+                                <h3 className="text-base font-semibold tracking-tight text-slate-900">Trust queue</h3>
+                                <p className="mt-0.5 text-xs text-slate-500">Moderation and certification workload</p>
+                                <div className="mt-6 space-y-3">
+                                    <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-gradient-to-r from-slate-50/80 to-violet-50/30 px-4 py-3.5">
+                                        <span className="text-sm font-medium text-slate-600">Flagged content</span>
+                                        <span className="text-xl font-bold tabular-nums text-slate-900">
+                                            {analytics.flaggedContent}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-gradient-to-r from-slate-50/80 to-indigo-50/30 px-4 py-3.5">
+                                        <span className="text-sm font-medium text-slate-600">Certification requests</span>
+                                        <span className="text-xl font-bold tabular-nums text-slate-900">
+                                            {analytics.certificationRequests}
+                                        </span>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
                     </div>
-                                    <div className="flex justify-between">
-                                        <span>Certification Requests:</span>
-                                        <span className="font-semibold">{analytics.certificationRequests}</span>
-                    </div>
-                    </div>
-            </div>
-            </div>
-        </div>
-    );
+                );
             case 'users':
     return (
                     <div className="space-y-5">
@@ -1493,6 +1681,17 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         >
                                             Admins <span className="text-gray-400 font-normal">({userRoleCounts.admin})</span>
                                         </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setRoleFilter('finance_partner')}
+                                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all sm:text-sm ${
+                                                roleFilter === 'finance_partner'
+                                                    ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-gray-200/80'
+                                                    : 'text-gray-600 hover:text-gray-900'
+                                            }`}
+                                        >
+                                            Finance partners <span className="text-gray-400 font-normal">({userRoleCounts.finance_partner})</span>
+                                        </button>
                                     </div>
                                     <label className="relative block w-full sm:max-w-xs">
                                         <span className="sr-only">Search users</span>
@@ -1510,46 +1709,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 </div>
                             </div>
                         </div>
-
-                        {roleFilter === 'seller' || roleFilter === 'all' ? (() => {
-                            const sellers = filteredUsers.filter(
-                                u => u.role === 'seller' || u.role === 'service_provider'
-                            );
-                            const sellersWithBanks = sellers.filter(s => s.partnerBanks && s.partnerBanks.length > 0);
-                            const totalBanks = sellersWithBanks.reduce((acc, s) => acc + (s.partnerBanks?.length || 0), 0);
-
-                            return (
-                                <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-r from-violet-50/90 via-white to-sky-50/80 px-4 py-3 sm:px-5 sm:py-4 shadow-sm">
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700">
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                                                </svg>
-                                            </span>
-                                            <div>
-                                                <h3 className="text-sm font-semibold text-gray-900">Finance partner summary</h3>
-                                                <p className="text-xs text-gray-500 hidden sm:block">Counts reflect the current role filter.</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2 sm:justify-end">
-                                            <span className="inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-gray-700 ring-1 ring-gray-200/80 shadow-sm">
-                                                <span className="text-gray-500">Sellers</span>
-                                                <span className="tabular-nums font-semibold text-gray-900">{sellers.length}</span>
-                                            </span>
-                                            <span className="inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-gray-700 ring-1 ring-violet-200/80 shadow-sm">
-                                                <span className="text-gray-500">With partners</span>
-                                                <span className="tabular-nums font-semibold text-violet-700">{sellersWithBanks.length}</span>
-                                            </span>
-                                            <span className="inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-gray-700 ring-1 ring-sky-200/80 shadow-sm">
-                                                <span className="text-gray-500">Partnerships</span>
-                                                <span className="tabular-nums font-semibold text-sky-700">{totalBanks}</span>
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })() : null}
 
                         <div className="rounded-2xl border border-gray-200/90 bg-white shadow-sm overflow-hidden">
                             <div className="flex flex-col gap-1 border-b border-gray-100 bg-gray-50/90 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
@@ -1600,7 +1759,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Recommended</th>
                                             ) : null}
                                             <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Documents</th>
-                                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Actions</th>
+                                            <th className="w-1 px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">
+                                                Actions
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
@@ -1643,6 +1804,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                         user.role === 'admin' ? 'bg-purple-100 text-purple-700' :
                                                         user.role === 'seller' ? 'bg-blue-100 text-blue-700' :
                                                         user.role === 'service_provider' ? 'bg-teal-100 text-teal-800' :
+                                                        user.role === 'finance_partner' ? 'bg-amber-100 text-amber-800' :
                                                         'bg-emerald-100 text-emerald-800'
                                                     }`}>
                                                         {user.role}
@@ -1719,8 +1881,12 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td className="px-3 py-2.5 whitespace-nowrap">
-                                                    <div className="inline-flex flex-wrap items-center gap-1 rounded-lg bg-gray-50/80 p-0.5 ring-1 ring-gray-200/60">
+                                                <td className="whitespace-nowrap px-2 py-2 text-right">
+                                                    <div
+                                                        className="inline-flex shrink-0 items-center justify-end gap-0.5"
+                                                        role="group"
+                                                        aria-label={`Actions for ${user.name || user.email}`}
+                                                    >
                                                         <button
                                                             type="button"
                                                             onClick={(e) => {
@@ -1728,9 +1894,17 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                                 e.stopPropagation();
                                                                 setEditingUser(user);
                                                             }}
-                                                            className="rounded-md px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-white hover:shadow-sm"
+                                                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-indigo-600 transition hover:bg-indigo-50 hover:text-indigo-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                                                            title="Edit user"
+                                                            aria-label={`Edit ${user.email}`}
                                                         >
-                                                            Edit
+                                                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                                                />
+                                                            </svg>
                                                         </button>
                                                         <button
                                                             type="button"
@@ -1739,35 +1913,74 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                                 e.stopPropagation();
                                                                 const action = user.status === 'active' ? 'suspend' : 'activate';
                                                                 if (window.confirm(`Are you sure you want to ${action} user ${user.email}?`)) {
-                                                                    handleActionWithLoading(`toggle-user-${user.email}`, () => onToggleUserStatus(user.email));
+                                                                    handleActionWithLoading(`toggle-user-${user.email}`, () =>
+                                                                        onToggleUserStatus(user.email)
+                                                                    );
                                                                 }
                                                             }}
                                                             disabled={loadingActions.has(`toggle-user-${user.email}`)}
-                                                            className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                                                            title={
+                                                                user.status === 'active' ? 'Suspend account' : 'Activate account'
+                                                            }
+                                                            aria-label={
+                                                                user.status === 'active'
+                                                                    ? `Suspend ${user.email}`
+                                                                    : `Activate ${user.email}`
+                                                            }
+                                                            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
                                                                 loadingActions.has(`toggle-user-${user.email}`)
-                                                                    ? 'text-gray-400 cursor-not-allowed'
-                                                                    : 'text-amber-800 hover:bg-white hover:shadow-sm'
+                                                                    ? 'cursor-not-allowed text-slate-300'
+                                                                    : 'text-amber-700 hover:bg-amber-50 hover:text-amber-900'
                                                             }`}
                                                         >
-                                                            {loadingActions.has(`toggle-user-${user.email}`) ? '…' : (user.status === 'active' ? 'Suspend' : 'Activate')}
+                                                            {loadingActions.has(`toggle-user-${user.email}`) ? (
+                                                                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" aria-hidden />
+                                                            ) : user.status === 'active' ? (
+                                                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6" />
+                                                                </svg>
+                                                            ) : (
+                                                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                </svg>
+                                                            )}
                                                         </button>
                                                         <button
                                                             type="button"
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
-                                                                if (window.confirm(`Are you sure you want to delete user ${user.email}? This action cannot be undone.`)) {
-                                                                    handleActionWithLoading(`delete-user-${user.email}`, () => onDeleteUser(user.email));
+                                                                if (
+                                                                    window.confirm(
+                                                                        `Are you sure you want to delete user ${user.email}? This action cannot be undone.`
+                                                                    )
+                                                                ) {
+                                                                    handleActionWithLoading(`delete-user-${user.email}`, () =>
+                                                                        onDeleteUser(user.email)
+                                                                    );
                                                                 }
                                                             }}
                                                             disabled={loadingActions.has(`delete-user-${user.email}`)}
-                                                            className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                                                            title="Delete user"
+                                                            aria-label={`Delete ${user.email}`}
+                                                            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
                                                                 loadingActions.has(`delete-user-${user.email}`)
-                                                                    ? 'text-gray-400 cursor-not-allowed'
-                                                                    : 'text-red-700 hover:bg-white hover:shadow-sm'
+                                                                    ? 'cursor-not-allowed text-slate-300'
+                                                                    : 'text-red-600 hover:bg-red-50 hover:text-red-800'
                                                             }`}
                                                         >
-                                                            {loadingActions.has(`delete-user-${user.email}`) ? '…' : 'Delete'}
+                                                            {loadingActions.has(`delete-user-${user.email}`) ? (
+                                                                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-red-500 border-t-transparent" aria-hidden />
+                                                            ) : (
+                                                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                                    />
+                                                                </svg>
+                                                            )}
                                                         </button>
                                                     </div>
                                                 </td>
@@ -1828,63 +2041,79 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             case 'listings':
                 return (
                     <div className="space-y-6">
-                        <div className="flex justify-between items-center">
-                            <div className="flex gap-4">
-                                <SellerFilterDropdown 
-                                    sellers={users.filter(u => u.role === 'seller')}
-                                    selectedSeller={selectedSeller}
-                                    onSellerChange={setSelectedSeller}
-                                />
-                                <select
-                                    value={itemsPerPage}
-                                    onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg"
-                                >
-                                    <option value={10}>10 per page</option>
-                                    <option value={20}>20 per page</option>
-                                    <option value={50}>50 per page</option>
-                                    <option value={100}>100 per page</option>
-                                </select>
-                            </div>
-                            <button 
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setShowImportModal(true);
-                                }} 
-                                className="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 cursor-pointer"
-                            >
-                                Import Vehicles
-                            </button>
-                            <button 
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleActionWithLoading('export-vehicles', onExportVehicles);
-                                }} 
-                                disabled={loadingActions.has('export-vehicles')}
-                                className={`px-4 py-2 rounded-lg cursor-pointer ${
-                                    loadingActions.has('export-vehicles') 
-                                        ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
-                                        : 'bg-green-500 text-white hover:bg-green-600'
-                                }`}
-                            >
-                                {loadingActions.has('export-vehicles') ? 'Exporting...' : 'Export Vehicles'}
-                            </button>
-                        </div>
-                        <TableContainer title={`All Listings (${filteredVehicles.length} total, showing ${paginatedVehicles.length})`}>
-                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                <thead className="bg-white dark:bg-white">
+                        <AdminPageIntro
+                            eyebrow="Marketplace"
+                            title="Vehicle listings"
+                            description="Filter by seller, paginate in bulk, and import or export inventory for operations."
+                        />
+                        <AdminToolbar
+                            left={
+                                <>
+                                    <SellerFilterDropdown
+                                        sellers={users.filter((u) => u.role === 'seller')}
+                                        selectedSeller={selectedSeller}
+                                        onSellerChange={setSelectedSeller}
+                                    />
+                                    <select
+                                        value={itemsPerPage}
+                                        onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                                    >
+                                        <option value={10}>10 per page</option>
+                                        <option value={20}>20 per page</option>
+                                        <option value={50}>50 per page</option>
+                                        <option value={100}>100 per page</option>
+                                    </select>
+                                </>
+                            }
+                            right={
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setShowImportModal(true);
+                                        }}
+                                        className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                                    >
+                                        Import vehicles
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleActionWithLoading('export-vehicles', onExportVehicles);
+                                        }}
+                                        disabled={loadingActions.has('export-vehicles')}
+                                        className={`inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition ${
+                                            loadingActions.has('export-vehicles')
+                                                ? 'cursor-not-allowed bg-slate-200 text-slate-500'
+                                                : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                        }`}
+                                    >
+                                        {loadingActions.has('export-vehicles') ? 'Exporting…' : 'Export vehicles'}
+                                    </button>
+                                </>
+                            }
+                        />
+                        <AdminDataTableFrame
+                            title="All listings"
+                            subtitle={`${filteredVehicles.length} total · showing ${paginatedVehicles.length} on this page`}
+                        >
+                            <table className="min-w-full divide-y divide-slate-100">
+                                <thead>
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Vehicle</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Seller</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Price</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Offer</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
+                                        <th className={`${adminTableHeadClass} px-4 py-3`}>Vehicle</th>
+                                        <th className={`${adminTableHeadClass} px-4 py-3`}>Seller</th>
+                                        <th className={`${adminTableHeadClass} px-4 py-3`}>Price</th>
+                                        <th className={`${adminTableHeadClass} px-4 py-3`}>Status</th>
+                                        <th className={`${adminTableHeadClass} px-4 py-3`}>Offer</th>
+                                        <th className={`${adminTableHeadClass} px-4 py-3 text-right`}>Actions</th>
                                     </tr>
                                 </thead>
-                        <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
+                                <tbody className="divide-y divide-slate-100 bg-white">
                                     {paginatedVehicles.map(vehicle => (
                                         <tr key={vehicle.id}>
                                             <td className="px-6 py-4 whitespace-nowrap font-medium">{vehicle.year} {vehicle.make} {vehicle.model}</td>
@@ -1991,27 +2220,29 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         </tbody>
                     </table>
                             {totalPages > 1 && (
-                                <div className="flex justify-center items-center gap-2 mt-4">
+                                <div className="mt-4 flex items-center justify-center gap-2 border-t border-slate-100 px-4 py-3">
                                     <button
+                                        type="button"
                                         onClick={() => handlePageChange(currentPage - 1)}
                                         disabled={currentPage === 1}
-                                        className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-40 hover:bg-slate-50"
                                     >
                                         Previous
                                     </button>
-                                    <span className="px-3 py-1">
+                                    <span className="px-3 text-sm font-medium tabular-nums text-slate-600">
                                         Page {currentPage} of {totalPages}
                                     </span>
                                     <button
+                                        type="button"
                                         onClick={() => handlePageChange(currentPage + 1)}
                                         disabled={currentPage === totalPages}
-                                        className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-40 hover:bg-slate-50"
                                     >
                                         Next
                                     </button>
                                 </div>
                             )}
-            </TableContainer>
+            </AdminDataTableFrame>
         </div>
     );
             case 'moderation':
@@ -2028,24 +2259,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     />
                 );
             case 'sellCarAdmin':
-                return (
-                    <div className="p-6">
-                        <div className="text-center">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-4">Sell Car Submissions</h2>
-                            <p className="text-gray-600 mb-6">Manage customer car selling requests</p>
-                            <button
-                                onClick={() => {
-                                    if (props.onNavigate) {
-                                        props.onNavigate(View.SELL_CAR_ADMIN);
-                                    }
-                                }}
-                                className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                            >
-                                Open Sell Car Admin Panel
-                            </button>
-                        </div>
-                    </div>
-                );
+                return props.onNavigate ? (
+                    <SellCarAdmin onNavigate={props.onNavigate} embedded />
+                ) : null;
             case 'auditLog':
                 return <AuditLogView auditLog={auditLog} />;
             case 'settings':
@@ -2093,57 +2309,42 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
     return (
             <div className="space-y-6">
-                {/* Filter Tabs */}
-                    <div className="flex gap-2">
-                    <button
-                        onClick={() => setFilter('all')}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                            filter === 'all' 
-                                ? 'bg-blue-500 text-white' 
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                    >
-                        All ({flaggedVehicles.length + flaggedConversations.length})
-                            </button>
-                    <button
-                        onClick={() => setFilter('vehicles')}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                            filter === 'vehicles' 
-                                ? 'bg-blue-500 text-white' 
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                    >
-                        Vehicles ({flaggedVehicles.length})
-                    </button>
-                    <button
-                        onClick={() => setFilter('conversations')}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                            filter === 'conversations' 
-                                ? 'bg-blue-500 text-white' 
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                    >
-                        Conversations ({flaggedConversations.length})
-                    </button>
-                    </div>
+                <AdminPageIntro
+                    eyebrow="Trust & safety"
+                    title="Moderation queue"
+                    description="Review flagged vehicles and conversations. Resolve when issues are cleared."
+                />
+                <AdminSegmentedTabs
+                    aria-label="Moderation filter"
+                    value={filter}
+                    onChange={setFilter}
+                    items={[
+                        {
+                            id: 'all',
+                            label: 'All',
+                            count: flaggedVehicles.length + flaggedConversations.length,
+                        },
+                        { id: 'vehicles', label: 'Vehicles', count: flaggedVehicles.length },
+                        {
+                            id: 'conversations',
+                            label: 'Conversations',
+                            count: flaggedConversations.length,
+                        },
+                    ]}
+                />
 
-                {/* Content */}
                 {getFilteredItems().length === 0 ? (
-                    <div className="bg-white p-8 rounded-lg shadow-md text-center">
-                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                </div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">All Clear!</h3>
-                        <p className="text-gray-600">No flagged content requiring moderation.</p>
-                                </div>
+                    <AdminEmptyState
+                        variant="success"
+                        title="All clear"
+                        description="No flagged content is waiting in the queue right now."
+                    />
                 ) : (
                     <div className="space-y-4">
                         {/* Flagged Vehicles */}
                         {filter === 'all' || filter === 'vehicles' ? (
                             flaggedVehicles.length > 0 && (
-                                <TableContainer title={`Flagged Vehicles (${flaggedVehicles.length})`}>
+                                <AdminDataTableFrame title={`Flagged Vehicles (${flaggedVehicles.length})`}>
                                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                         <thead className="bg-white dark:bg-white">
                                             <tr>
@@ -2194,14 +2395,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             ))}
                                         </tbody>
                                     </table>
-                                </TableContainer>
+                                </AdminDataTableFrame>
                             )
                         ) : null}
 
                         {/* Flagged Conversations */}
                         {filter === 'all' || filter === 'conversations' ? (
                             flaggedConversations.length > 0 && (
-                                <TableContainer title={`Flagged Conversations (${flaggedConversations.length})`}>
+                                <AdminDataTableFrame title={`Flagged Conversations (${flaggedConversations.length})`}>
                                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                         <thead className="bg-white dark:bg-white">
                                             <tr>
@@ -2246,7 +2447,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             })}
                                         </tbody>
                                     </table>
-                                </TableContainer>
+                                </AdminDataTableFrame>
                             )
                         ) : null}
                         </div>
@@ -2278,16 +2479,21 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         };
 
         return (
-            <div className="space-y-6 max-w-2xl">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Platform settings</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Values are persisted to Supabase (<code>platform_settings</code> table) and apply to every
-                    visitor across all devices. The current tab also keeps a local copy so changes appear
-                    instantly while the server round-trip completes.
-                </p>
-                <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+            <div className="mx-auto max-w-2xl space-y-8">
+                <AdminPageIntro
+                    eyebrow="System"
+                    title="Platform settings"
+                    description="Persisted to Supabase (platform_settings). Changes sync across devices; this session keeps a local copy for instant feedback."
+                />
+                <form
+                    onSubmit={handleSubmit}
+                    className="space-y-5 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm ring-1 ring-slate-900/[0.04] dark:border-slate-700 dark:bg-slate-900/40"
+                >
                     <div>
-                        <label htmlFor="admin-listing-fee" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <label
+                            htmlFor="admin-listing-fee"
+                            className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200"
+                        >
                             Listing fee (₹)
                         </label>
                         <input
@@ -2299,11 +2505,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             onChange={(e) =>
                                 setDraft((d) => ({ ...d, listingFee: e.target.value === '' ? 0 : Number(e.target.value) }))
                             }
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-900 dark:text-white"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200 dark:border-slate-600 dark:bg-slate-950 dark:text-white"
                         />
                     </div>
                     <div>
-                        <label htmlFor="admin-site-announcement" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <label
+                            htmlFor="admin-site-announcement"
+                            className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200"
+                        >
                             Site announcement
                         </label>
                         <textarea
@@ -2312,12 +2521,12 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             value={draft.siteAnnouncement}
                             onChange={(e) => setDraft((d) => ({ ...d, siteAnnouncement: e.target.value }))}
                             placeholder="Short message for banners or future homepage use"
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-900 dark:text-white"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200 dark:border-slate-600 dark:bg-slate-950 dark:text-white"
                         />
                     </div>
                     <button
                         type="submit"
-                        className="px-4 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90 font-medium"
+                        className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-violet-700 hover:to-indigo-700"
                     >
                         Save settings
                     </button>
@@ -2388,43 +2597,50 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
         return (
             <div className="space-y-6">
-                {/* Filter Tabs */}
-                <div className="flex gap-2">
-                    {(['All', 'Open', 'In Progress', 'Closed'] as const).map(status => (
-                        <button
-                            key={status}
-                            onClick={() => setStatusFilter(status)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                                statusFilter === status
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                        >
-                            {status} ({status === 'All' ? (supportTickets || []).length : (supportTickets || []).filter(t => t.status === status).length})
-                        </button>
-                    ))}
-                </div>
+                <AdminPageIntro
+                    eyebrow="Support"
+                    title="Support tickets"
+                    description="Track customer issues from open through closed. Use quick actions to move tickets forward."
+                />
+                <AdminSegmentedTabs
+                    aria-label="Ticket status"
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    items={(['All', 'Open', 'In Progress', 'Closed'] as const).map((status) => ({
+                        id: status,
+                        label: status,
+                        count:
+                            status === 'All'
+                                ? (supportTickets || []).length
+                                : (supportTickets || []).filter((t) => t.status === status).length,
+                    }))}
+                />
 
-                {/* Tickets Table */}
-                <TableContainer title={`Support Tickets (${filteredTickets.length})`}>
+                <AdminDataTableFrame
+                    title="Ticket inbox"
+                    subtitle={`${filteredTickets.length} in this view`}
+                >
                     {filteredTickets.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                            No support tickets found for the selected filter.
+                        <div className="px-4 py-10">
+                            <AdminEmptyState
+                                title="No tickets"
+                                description="Nothing matches this filter right now."
+                            />
                         </div>
                     ) : (
-                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                            <thead className="bg-white dark:bg-white">
+                        <table className="min-w-full divide-y divide-slate-100">
+                            <thead>
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">ID</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">User</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Subject</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Priority</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Created</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
+                                    <th className={`${adminTableHeadClass} px-4 py-3`}>ID</th>
+                                    <th className={`${adminTableHeadClass} px-4 py-3`}>User</th>
+                                    <th className={`${adminTableHeadClass} px-4 py-3`}>Subject</th>
+                                    <th className={`${adminTableHeadClass} px-4 py-3`}>Priority</th>
+                                    <th className={`${adminTableHeadClass} px-4 py-3`}>Status</th>
+                                    <th className={`${adminTableHeadClass} px-4 py-3`}>Created</th>
+                                    <th className={`${adminTableHeadClass} px-4 py-3 text-right`}>Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
+                            <tbody className="divide-y divide-slate-100 bg-white">
                                 {filteredTickets.map(ticket => (
                                     <tr key={String(ticket.id)} data-testid="support-ticket" className="hover:bg-gray-50">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -2477,7 +2693,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             </tbody>
                         </table>
                     )}
-                </TableContainer>
+                </AdminDataTableFrame>
 
                 {editingTicket && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -2607,48 +2823,41 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             }
         };
 
+        const faqTabItems = [
+            { id: 'All' as const, label: 'All', count: faqItems?.length || 0 },
+            ...categories.map((c) => ({
+                id: c,
+                label: c,
+                count: (faqItems || []).filter((f) => f.category === c).length,
+            })),
+        ];
+
         return (
             <div className="space-y-6">
-                {/* Header with Add Button */}
-                <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">FAQ Management</h2>
-                    <button
-                        onClick={() => setShowAddModal(true)}
-                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                    >
-                        + Add FAQ
-                    </button>
-                </div>
-
-                {/* Filter Tabs */}
-                <div className="flex gap-2 flex-wrap">
-                    <button
-                        onClick={() => setCategoryFilter('All')}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                            categoryFilter === 'All' 
-                                ? 'bg-blue-500 text-white' 
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                    >
-                        All ({faqItems?.length || 0})
-                    </button>
-                    {categories.map(category => (
+                <AdminPageIntro
+                    eyebrow="Content"
+                    title="FAQ management"
+                    description="Curate help articles by category. Edits apply to the public FAQ when saved."
+                    actions={
                         <button
-                            key={category}
-                            onClick={() => setCategoryFilter(category)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                                categoryFilter === category 
-                                    ? 'bg-blue-500 text-white' 
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
+                            type="button"
+                            onClick={() => setShowAddModal(true)}
+                            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
                         >
-                            {category} ({(faqItems || []).filter(f => f.category === category).length})
+                            + Add FAQ
                         </button>
-                    ))}
-                </div>
+                    }
+                />
+
+                <AdminSegmentedTabs
+                    aria-label="FAQ category"
+                    value={categoryFilter}
+                    onChange={(id) => setCategoryFilter(id)}
+                    items={faqTabItems}
+                />
 
                 {/* FAQs Table */}
-                <TableContainer title={`FAQs (${filteredFaqs.length})`}>
+                <AdminDataTableFrame title={`FAQs (${filteredFaqs.length})`}>
                     {filteredFaqs.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
                             {faqItems?.length === 0 
@@ -2706,7 +2915,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             </tbody>
                         </table>
                     )}
-                </TableContainer>
+                </AdminDataTableFrame>
 
                 {/* Add FAQ Modal */}
                 {showAddModal && (
@@ -3032,11 +3241,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             const featureList = Array.isArray(plan.features) ? plan.features : [];
 
             return (
-                <div key={plan.id} className={`border rounded-lg p-6 hover:shadow-lg transition-shadow ${
-                    isCustom 
-                        ? 'border-purple-300 dark:border-purple-600 bg-purple-50 dark:bg-purple-900/20' 
-                        : 'border-gray-200 dark:border-gray-700'
-                }`}>
+                <div
+                    key={plan.id}
+                    className={`rounded-2xl border p-6 shadow-sm ring-1 ring-slate-900/[0.03] transition-shadow hover:shadow-md ${
+                        isCustom
+                            ? 'border-violet-300 bg-gradient-to-b from-violet-50/80 to-white dark:border-violet-600 dark:from-violet-950/40 dark:to-slate-900/40'
+                            : 'border-slate-200/90 bg-white dark:border-slate-700 dark:bg-slate-900/30'
+                    }`}
+                >
                     <div className="flex justify-between items-start mb-4">
                         <div>
                             <div className="flex items-center gap-2">
@@ -3208,119 +3420,131 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         };
 
         return (
-            <div className="space-y-6">
-                {/* Plan Statistics - Sellers Only */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <StatCard 
-                        title="Free Sellers" 
-                        value={planStats.free} 
-                        icon={<span className="text-2xl">🆓</span>} 
+            <div className="space-y-8">
+                <AdminPageIntro
+                    eyebrow="Commerce"
+                    title="Plan management"
+                    description="Monitor seller distribution by tier, edit plan definitions, and assign subscriptions."
+                />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                    <AdminStatTile
+                        accent="violet"
+                        title="Free sellers"
+                        value={planStats.free}
+                        icon={<span className="text-xl">🆓</span>}
                         onClick={() => setPlanFilter('free')}
                     />
-                    <StatCard 
-                        title="Basic Sellers" 
-                        value={planStats.basic} 
-                        icon={<span className="text-2xl">📋</span>} 
+                    <AdminStatTile
+                        accent="sky"
+                        title="Basic sellers"
+                        value={planStats.basic}
+                        icon={<span className="text-xl">📋</span>}
                         onClick={() => setPlanFilter('basic')}
                     />
-                    <StatCard 
-                        title="Pro Sellers" 
-                        value={planStats.pro} 
-                        icon={<span className="text-2xl">⭐</span>} 
+                    <AdminStatTile
+                        accent="emerald"
+                        title="Pro sellers"
+                        value={planStats.pro}
+                        icon={<span className="text-xl">⭐</span>}
                         onClick={() => setPlanFilter('pro')}
                     />
-                    <StatCard 
-                        title="Premium Sellers" 
-                        value={planStats.premium} 
-                        icon={<span className="text-2xl">👑</span>} 
+                    <AdminStatTile
+                        accent="amber"
+                        title="Premium sellers"
+                        value={planStats.premium}
+                        icon={<span className="text-xl">👑</span>}
                         onClick={() => setPlanFilter('premium')}
                     />
-                    <StatCard 
-                        title="Total Sellers" 
-                        value={users.filter(u => u.role === 'seller').length} 
-                        icon={<span className="text-2xl">👥</span>} 
+                    <AdminStatTile
+                        accent="violet"
+                        title="Total sellers"
+                        value={users.filter((u) => u.role === 'seller').length}
+                        icon={<span className="text-xl">👥</span>}
                         onClick={() => setPlanFilter('all')}
                     />
                 </div>
 
-                {/* Plan Configuration */}
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                    <div className="flex justify-between items-center mb-6">
+                <section className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm ring-1 ring-slate-900/[0.04] sm:p-8">
+                    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                            <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">Plan Configuration</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            <h2 className="text-lg font-semibold tracking-tight text-slate-900">Plan configuration</h2>
+                            <p className="mt-1 text-sm text-slate-500">
                                 {(plans || []).length}/4 plans configured
                             </p>
                         </div>
-                        <div className="flex gap-2">
-                            <button 
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
                                 onClick={async () => {
                                     const allPlans = await planService.getAllPlans();
                                     setPlans(allPlans);
                                     alert('Plans refreshed successfully!');
                                 }}
-                                className="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors"
+                                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
                             >
-                                🔄 Refresh
+                                Refresh
                             </button>
-                            <button 
+                            <button
+                                type="button"
                                 onClick={handleAddNewPlan}
                                 disabled={(plans || []).length >= 4}
-                                className={`font-bold py-2 px-4 rounded-lg transition-colors ${
+                                className={`rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition ${
                                     (plans || []).length < 4
-                                        ? 'bg-reride-orange text-white hover:bg-reride-orange/90'
-                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600'
+                                        : 'cursor-not-allowed bg-slate-200 text-slate-500'
                                 }`}
                             >
-                                {(plans || []).length < 4 ? '+ Add New Plan' : 'Max Plans Reached'}
+                                {(plans || []).length < 4 ? '+ Add new plan' : 'Max plans reached'}
                             </button>
                         </div>
                     </div>
-                    
-                    <div className={`grid gap-6 ${(plans || []).length <= 2 ? 'grid-cols-1 md:grid-cols-2' : (plans || []).length === 3 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}>
+
+                    <div
+                        className={`grid gap-6 ${(plans || []).length <= 2 ? 'grid-cols-1 md:grid-cols-2' : (plans || []).length === 3 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}
+                    >
                         {(plans || []).map(plan => (
                             <PlanCard key={plan.id} plan={plan} />
                         ))}
                     </div>
-                </div>
+                </section>
 
-                {/* User Plan Management - Sellers Only */}
-                <TableContainer 
-                    title={`Seller Plan Management ${planFilter !== 'all' ? `(${planFilter})` : ''}`}
+                <AdminDataTableFrame
+                    title="Seller directory"
+                    subtitle={planFilter !== 'all' ? `Filtered: ${planFilter}` : 'All subscription tiers'}
                     actions={
-                        <select 
-                            value={planFilter} 
+                        <select
+                            value={planFilter}
                             onChange={(e) => setPlanFilter(e.target.value as SubscriptionPlan)}
-                            className="p-2 border border-gray-200 dark:border-gray-300 rounded-lg bg-white dark:text-reride-text-dark"
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200"
                         >
-                            <option value="all">All Plans</option>
+                            <option value="all">All plans</option>
                             <option value="free">Free</option>
                             <option value="basic">Basic</option>
                             <option value="pro">Pro</option>
                             <option value="premium">Premium</option>
-                    </select>
+                        </select>
                     }
                 >
-                       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                        <thead className="bg-white dark:bg-white">
+                    <table className="min-w-full divide-y divide-slate-100">
+                        <thead>
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">User</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Current Plan</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Usage</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Featured Credits</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Actions</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Plan Activated</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Expiry Date</th>
+                                <th className={`${adminTableHeadClass} px-4 py-3`}>User</th>
+                                <th className={`${adminTableHeadClass} px-4 py-3`}>Current plan</th>
+                                <th className={`${adminTableHeadClass} px-4 py-3`}>Usage</th>
+                                <th className={`${adminTableHeadClass} px-4 py-3`}>Featured credits</th>
+                                <th className={`${adminTableHeadClass} px-4 py-3`}>Actions</th>
+                                <th className={`${adminTableHeadClass} px-4 py-3`}>Activated</th>
+                                <th className={`${adminTableHeadClass} px-4 py-3`}>Expiry</th>
                             </tr>
                         </thead>
-                            <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
+                        <tbody className="divide-y divide-slate-100 bg-white">
                                 {filteredUsers.map(user => {
                                     const currentPlan = user.subscriptionPlan || 'free';
                                     return <UserRow key={user.email} user={user} currentPlan={currentPlan} />;
                                 })}
                             </tbody>
                        </table>
-                   </TableContainer>
+                   </AdminDataTableFrame>
 
                 {/* Plan Edit Modal */}
                 {showPlanModal && editingPlan && (
@@ -3742,178 +3966,246 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         );
     };
 
-    const NavItem: React.FC<{ view: AdminView; label: string; count?: number }> = ({ view, label, count }) => (
-            <button
-                onClick={() => setActiveView(view)}
-            className={`group w-full flex items-center justify-between px-4 py-3 text-left rounded-xl transition-all duration-300 ${
+    const NavItemButton: React.FC<{ view: AdminView; label: string; count?: number }> = ({ view, label, count }) => (
+        <button
+            type="button"
+            onClick={() => setActiveView(view)}
+            className={`group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 activeView === view
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transform scale-105'
-                    : 'text-gray-600 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:shadow-md hover:-translate-y-0.5'
+                    ? 'bg-violet-600 font-medium text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-slate-100'
             }`}
         >
-            <span className="font-medium">{label}</span>
+            <span className="min-w-0 flex-1 leading-snug">{label}</span>
             {count !== undefined && count > 0 && (
-                <span className={`text-xs font-bold rounded-full px-2 py-0.5 ${
-                    activeView === view 
-                        ? 'bg-white/20 text-white' 
-                        : 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
-                }`}>
-                    {count}
+                <span
+                    className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                        activeView === view ? 'bg-white/20 text-white' : 'bg-rose-500 text-white'
+                    }`}
+                >
+                    {count > 99 ? '99+' : count}
                 </span>
             )}
-            </button>
+        </button>
     );
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 relative overflow-hidden">
+        <div className="relative min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50">
             {/* Background Elements */}
             <div className="absolute inset-0 overflow-hidden">
                 <div className="absolute top-20 right-20 w-80 h-80 bg-gradient-to-br from-blue-200/20 to-purple-200/20 rounded-full blur-3xl animate-pulse"></div>
                 <div className="absolute bottom-20 left-20 w-96 h-96 bg-gradient-to-tr from-orange-200/15 to-pink-200/15 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
             </div>
             
-            <div className="relative z-10 flex">
-                <aside className="w-64 bg-white/80 backdrop-blur-xl shadow-xl border-r border-white/20">
-                    <div className="p-6">
-                        <div className="flex items-center gap-3 mb-8">
-                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-                                </svg>
-                            </div>
-                            <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">Admin Panel</h1>
-                        </div>
-                        <nav className="space-y-2">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                                    <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/>
+            <div className="relative z-10 flex min-h-screen min-w-0 w-full flex-col lg:flex-row">
+                {/* Mobile / small tablet: jump menu grouped like the sidebar */}
+                <div className="sticky top-0 z-30 border-b border-slate-200/90 bg-white/95 px-3 py-2.5 backdrop-blur-md lg:hidden">
+                    <label htmlFor="admin-panel-view" className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        Admin workspace
+                    </label>
+                    <select
+                        id="admin-panel-view"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-800 shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                        value={activeView}
+                        onChange={(e) => setActiveView(e.target.value as AdminView)}
+                    >
+                        {adminNavGroups.map((group) => (
+                            <optgroup key={group.id} label={group.label}>
+                                {group.items.map((item) => (
+                                    <option key={item.view} value={item.view}>
+                                        {item.label}
+                                        {item.count !== undefined && item.count > 0 ? ` (${item.count > 99 ? '99+' : item.count})` : ''}
+                                    </option>
+                                ))}
+                            </optgroup>
+                        ))}
+                    </select>
+                </div>
+
+                <aside
+                    className={`hidden shrink-0 flex-col border-r border-slate-200/80 bg-white/90 shadow-xl backdrop-blur-xl transition-[width] duration-200 ease-out lg:flex ${
+                        sidebarCollapsed ? 'w-[4.5rem]' : 'w-72'
+                    }`}
+                >
+                    <div
+                        className={`flex max-h-screen min-h-0 flex-1 flex-col ${
+                            sidebarCollapsed ? 'items-center p-2' : 'p-5'
+                        }`}
+                    >
+                        {sidebarCollapsed ? (
+                            <div className="mb-2 flex w-full shrink-0 flex-col items-center gap-2">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-700">
+                                    <svg className="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+                                        <path
+                                            fillRule="evenodd"
+                                            d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"
+                                            clipRule="evenodd"
+                                        />
                                     </svg>
                                 </div>
-                                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Admin Panel</h3>
-                            </div>
-                            <NavItem view="analytics" label="Analytics" />
-                            <NavItem view="users" label="User Management" />
-                            <NavItem view="listings" label="Listings" />
-                            <NavItem view="moderation" label="Moderation Queue" count={analytics.flaggedContent} />
-                            <NavItem view="certificationRequests" label="Certification Requests" count={analytics.certificationRequests} />
-                             <NavItem view="support" label="Support Tickets" count={(supportTickets || []).filter(t => t.status === 'Open').length} />
-                            <NavItem view="payments" label="Payment Requests" />
-                            <NavItem view="planManagement" label="Plan Management" />
-                            <NavItem view="faq" label="FAQ Management" />
-                            <NavItem view="serviceOps" label="Service Ops" />
-                            <NavItem view="serviceManagement" label="Service Management" />
-                            <NavItem view="vehicleData" label="Vehicle Data" />
-                            <NavItem view="sellCarAdmin" label="Sell Car Submissions" />
-                            <NavItem view="auditLog" label="Audit Log" />
-                            <NavItem view="settings" label="Settings" />
-                        </nav>
-                        
-                        {/* Profile Section */}
-                        <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-                            <div className="flex items-center space-x-3 mb-4">
-                                <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center">
-                                    <span className="text-white font-bold text-sm">
-                                        {currentUser.name?.charAt(0)?.toUpperCase() || 'A'}
-                                    </span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                        {currentUser.name}
-                                    </p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                                        {currentUser.email}
-                                    </p>
-                                </div>
-                            </div>
-                            {onLogout && (
                                 <button
-                                    onClick={onLogout}
-                                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                    type="button"
+                                    onClick={toggleSidebarCollapsed}
+                                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-violet-700"
+                                    title="Expand sidebar"
+                                    aria-label="Expand sidebar"
                                 >
-                                    Log Out
+                                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                    </svg>
                                 </button>
-                            )}
-                        </div>
+                            </div>
+                        ) : (
+                            <div className="mb-5 shrink-0">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-700">
+                                            <svg className="h-6 w-6 text-white" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+                                                <path
+                                                    fillRule="evenodd"
+                                                    d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"
+                                                    clipRule="evenodd"
+                                                />
+                                            </svg>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h1 className="text-lg font-bold tracking-tight text-slate-900">Admin</h1>
+                                            <p className="text-xs text-slate-500">ReRide operations</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={toggleSidebarCollapsed}
+                                        className="shrink-0 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-violet-700"
+                                        title="Minimize sidebar"
+                                        aria-label="Minimize sidebar"
+                                    >
+                                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {sidebarCollapsed ? (
+                            <nav
+                                className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto py-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300"
+                                aria-label="Admin navigation"
+                            >
+                                {adminNavGroups.map((group, gi) => (
+                                    <React.Fragment key={group.id}>
+                                        {gi > 0 && <div className="mx-auto my-1 h-px w-8 bg-slate-200" aria-hidden />}
+                                        {group.items.map((item) => {
+                                            const count = 'count' in item ? item.count : undefined;
+                                            const c = count !== undefined && count > 0 ? `${item.label} (${count > 99 ? '99+' : count})` : item.label;
+                                            return (
+                                                <button
+                                                    key={item.view}
+                                                    type="button"
+                                                    onClick={() => setActiveView(item.view)}
+                                                    title={c}
+                                                    aria-label={item.label}
+                                                    aria-current={activeView === item.view ? 'page' : undefined}
+                                                    className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                                                        activeView === item.view
+                                                            ? 'bg-violet-600 text-white shadow-sm'
+                                                            : 'text-slate-600 hover:bg-slate-100'
+                                                    }`}
+                                                >
+                                                    <AdminViewNavIcon view={item.view} className="h-5 w-5" />
+                                                    {count !== undefined && count > 0 && (
+                                                        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-0.5 text-[9px] font-bold text-white tabular-nums">
+                                                            {count > 99 ? '99+' : count}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </React.Fragment>
+                                ))}
+                            </nav>
+                        ) : (
+                            <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300">
+                                {adminNavGroups.map((group) => (
+                                    <div key={group.id} className="border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
+                                        <div className="mb-1 px-1 py-1.5">
+                                            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                                                {group.label}
+                                            </span>
+                                        </div>
+                                        <div className="space-y-0.5">
+                                            {group.items.map((item) => (
+                                                <NavItemButton
+                                                    key={item.view}
+                                                    view={item.view}
+                                                    label={item.label}
+                                                    count={'count' in item ? item.count : undefined}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </nav>
+                        )}
+
+                        {sidebarCollapsed ? (
+                            <div className="mt-auto flex shrink-0 flex-col items-center gap-2 border-t border-slate-200 pt-3 dark:border-gray-700">
+                                <div
+                                    className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white"
+                                    title={`${currentUser.name ?? 'Admin'} — ${currentUser.email ?? ''}`}
+                                >
+                                    {currentUser.name?.charAt(0)?.toUpperCase() || 'A'}
+                                </div>
+                                {onLogout && (
+                                    <button
+                                        type="button"
+                                        onClick={onLogout}
+                                        className="flex h-9 w-9 items-center justify-center rounded-lg text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20"
+                                        title="Log out"
+                                        aria-label="Log out"
+                                    >
+                                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                                            />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="mt-4 shrink-0 border-t border-slate-200 pt-4 dark:border-gray-700">
+                                <div className="mb-4 flex items-center space-x-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-500">
+                                        <span className="text-sm font-bold text-white">
+                                            {currentUser.name?.charAt(0)?.toUpperCase() || 'A'}
+                                        </span>
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium text-gray-900 dark:text-white">{currentUser.name}</p>
+                                        <p className="truncate text-xs text-gray-500 dark:text-gray-400">{currentUser.email}</p>
+                                    </div>
+                                </div>
+                                {onLogout && (
+                                    <button
+                                        type="button"
+                                        onClick={onLogout}
+                                        className="w-full rounded-lg px-3 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    >
+                                        Log Out
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </aside>
-                <main className="flex-1 p-8">
-                    {/* Admin top bar with notification bell */}
-                    <div className="flex items-center justify-end mb-4">
-                        <div className="relative" ref={notifRef}>
-                            <button
-                                type="button"
-                                onClick={() => setIsNotifOpen(p => !p)}
-                                className="relative p-2 rounded-full bg-white/80 backdrop-blur-xl shadow-md border border-white/40 hover:bg-white transition-colors"
-                                aria-label="Admin notifications"
-                                title="Admin notifications"
-                            >
-                                <svg className="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                                </svg>
-                                {unreadNotifCount > 0 && (
-                                    <span className="absolute -top-1 -right-1 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-bold rounded-full h-5 min-w-[1.25rem] px-1 flex items-center justify-center">
-                                        {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
-                                    </span>
-                                )}
-                            </button>
-                            {isNotifOpen && (
-                                <div className="absolute right-0 mt-2 w-96 max-w-[90vw] bg-white rounded-xl shadow-2xl border border-gray-200 z-30 overflow-hidden">
-                                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                                        <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
-                                        {unreadNotifCount > 0 && onMarkAllNotificationsAsRead && (
-                                            <button
-                                                type="button"
-                                                onClick={() => { onMarkAllNotificationsAsRead(); }}
-                                                className="text-xs font-medium text-blue-600 hover:text-blue-800"
-                                            >
-                                                Mark all as read
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div className="max-h-96 overflow-y-auto">
-                                        {adminNotifications.length === 0 ? (
-                                            <div className="px-4 py-10 text-center text-sm text-gray-500">
-                                                You&apos;re all caught up — no notifications.
-                                            </div>
-                                        ) : (
-                                            adminNotifications.slice(0, 20).map(n => (
-                                                <button
-                                                    key={String(n.id)}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (n.targetType === 'general_admin' || n.type === 'general_admin') {
-                                                            setActiveView('support');
-                                                        }
-                                                        setIsNotifOpen(false);
-                                                    }}
-                                                    className={`w-full text-left px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 transition-colors ${n.isRead ? 'bg-white' : 'bg-blue-50/60'}`}
-                                                >
-                                                    <div className="flex items-start gap-3">
-                                                        <span className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${n.isRead ? 'bg-gray-300' : 'bg-blue-500'}`}></span>
-                                                        <div className="min-w-0 flex-1">
-                                                            {n.title && (
-                                                                <p className="text-sm font-semibold text-gray-900 truncate">{n.title}</p>
-                                                            )}
-                                                            <p className="text-sm text-gray-700 line-clamp-2">{n.message}</p>
-                                                            <p className="text-xs text-gray-400 mt-1">
-                                                                {new Date(n.timestamp).toLocaleString()}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </button>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 min-h-[600px]">
+                <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+                    <div className="min-h-[min(600px,80vh)] overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white via-white to-slate-50/50 p-4 shadow-[0_24px_60px_-28px_rgba(49,46,129,0.2)] ring-1 ring-slate-900/[0.04] sm:rounded-3xl sm:p-6 lg:p-8">
                         {/* Configuration Error Banner */}
                         {configError && (
-                            <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+                            <div className="mb-6 rounded-2xl border border-red-200/80 bg-red-50/95 p-4 shadow-sm ring-1 ring-red-900/[0.06]">
                             <div className="flex items-start">
                                 <div className="flex-shrink-0">
                                     <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
@@ -3958,7 +4250,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             </div>
                         </div>
                         )}
-                        {renderContent()}
+                        <AdminContentFrame>{renderContent()}</AdminContentFrame>
                     </div>
                 </main>
             </div>

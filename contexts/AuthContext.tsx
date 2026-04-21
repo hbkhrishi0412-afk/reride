@@ -60,7 +60,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       if (
         !user?.email ||
         !user?.role ||
-        !['customer', 'seller', 'admin', 'service_provider'].includes(user.role)
+        !['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(user.role)
       ) {
         localStorage.removeItem('reRideCurrentUser');
         sessionStorage.removeItem('currentUser');

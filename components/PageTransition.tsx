@@ -13,7 +13,7 @@ interface PageTransitionProps {
 
 // Views that must not be wrapped in AnimatePresence (e.g. contain Leaflet map)
 /** DETAIL: avoid transform containing-block so in-DOM fixed UI behaves; framer still breaks portaled bars if nested. */
-const VIEWS_WITHOUT_TRANSITION = ['DEALER_PROFILES', 'DETAIL'];
+const VIEWS_WITHOUT_TRANSITION = ['DEALER_PROFILES', 'DETAIL', 'ADMIN_PANEL'];
 
 const PageTransition: React.FC<PageTransitionProps> = ({ children, currentView }) => {
   const { i18n } = useTranslation();

@@ -517,70 +517,63 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-8 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Manage Vehicle Data</h1>
-            <p className="text-blue-100 text-lg">
-              Manage dropdown options for the vehicle creation form
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-900 via-violet-900 to-indigo-900 p-6 text-white shadow-lg ring-1 ring-slate-900/10 sm:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-200/90">Vehicle catalogue</p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Manage vehicle data</h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/75">
+              Configure categories, makes, models, and variants used across listing and sell flows.
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-shrink-0 flex-wrap gap-3">
             <button
+              type="button"
               onClick={onPreview}
-              className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 backdrop-blur-sm border border-white/20"
+              className="rounded-xl border border-white/25 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
             >
-              📋 Show Seller Form Preview
+              Form preview
             </button>
             <button
+              type="button"
               onClick={onBulkUpload}
-              className="bg-white hover:bg-gray-100 text-blue-600 px-6 py-3 rounded-lg font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
+              className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-violet-800 shadow-md transition hover:bg-violet-50"
             >
-              📤 Bulk Upload
+              Bulk upload
             </button>
           </div>
         </div>
       </div>
 
-      {/* Search and Stats */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search vehicle data..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
-            </div>
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm ring-1 ring-slate-900/[0.04] dark:border-slate-700 dark:bg-slate-900/40 sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <svg className="h-5 w-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search vehicle data…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200 dark:border-slate-600 dark:bg-slate-950 dark:text-white"
+            />
           </div>
-          <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{categories.length}</span>
-              <span>Categories</span>
+          <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-300">
+            <div className="rounded-lg bg-slate-50 px-3 py-1.5 font-medium tabular-nums dark:bg-slate-800">
+              {categories.length} categories
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{Object.values(vehicleData).flat().length}</span>
-              <span>Makes</span>
+            <div className="rounded-lg bg-slate-50 px-3 py-1.5 font-medium tabular-nums dark:bg-slate-800">
+              {Object.values(vehicleData).flat().length} makes
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-medium">
-                {Object.values(vehicleData).flat().reduce((acc, make: any) => acc + (make.models?.length || 0), 0)}
-              </span>
-              <span>Models</span>
+            <div className="rounded-lg bg-slate-50 px-3 py-1.5 font-medium tabular-nums dark:bg-slate-800">
+              {Object.values(vehicleData).flat().reduce((acc, make: any) => acc + (make.models?.length || 0), 0)} models
             </div>
           </div>
         </div>
       </div>
 
-      {/* Data Management Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         {renderColumn("Categories", filteredCategories.map(formatCategoryName), [], selectedCategory ? formatCategoryName(selectedCategory) : null, handleSelectCategory, 'category')}
         {renderColumn("Makes", filteredMakes, selectedCategory ? [selectedCategory] : [], selectedMake, handleSelectMake, 'make', !selectedCategory)}
         {renderColumn("Models", filteredModels, selectedCategory && selectedMake ? [selectedCategory, selectedMake] : [], selectedModel, handleSelectModel, 'model', !selectedMake)}
