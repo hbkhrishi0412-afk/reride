@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { User, Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
 import VerifiedBadge, { isUserVerified } from './VerifiedBadge';
+import { getSellerTrustChecklistSummary } from '../lib/sellerTrustChecklist';
 import BadgeDisplay from './BadgeDisplay';
 import TrustBadgeDisplay from './TrustBadgeDisplay';
 import { followSeller, unfollowSeller, isFollowingSeller, getFollowersCount, getFollowingCount } from '../services/buyerEngagementService';
@@ -187,6 +188,21 @@ const MSP_STYLES = `
   .msp-verif-item.msp-ok .msp-verif-label { color: #065f46; }
   .msp-verif-state { font-size: 10px; font-weight: 800; color: #94a3b8; }
   .msp-verif-item.msp-ok .msp-verif-state { color: #10b981; }
+  .msp-verif-platform {
+    display: flex; align-items: flex-start; gap: .65rem;
+    padding: .65rem .7rem;
+    border-radius: 12px;
+    background: linear-gradient(90deg, rgba(209,250,229,.55), rgba(236,253,245,.55));
+    border: 1px solid rgba(16,185,129,.32);
+  }
+  .msp-verif-platform-ic {
+    flex-shrink: 0; width: 38px; height: 38px; border-radius: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg,#10b981,#059669); color: white;
+    box-shadow: 0 8px 18px -10px rgba(16,185,129,.6);
+  }
+  .msp-verif-platform .msp-verif-title { color: #065f46; }
+  .msp-verif-platform .msp-verif-sub { color: #047857; font-weight: 600; font-size: 11.5px; line-height: 1.45; }
 
   /* Bio */
   .msp-bio {
@@ -394,42 +410,31 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
     style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0,
   }).format(value);
 
-  // Verification (data-driven)
-  const verificationItems = [
-    {
-      key: 'phone',
-      label: 'Phone',
-      verified: Boolean(seller.verificationStatus?.phoneVerified || seller.phoneVerified),
-      icon: (
+  const { items: checklistItems, verifiedCount, total: checklistTotal, pct: verificationPct, isPlatformVerifiedOnly } =
+    getSellerTrustChecklistSummary(seller);
+  const showVerifiedBadgeOnProfile = isUserVerified(seller);
+  const verificationItems = checklistItems.map((item) => ({
+    ...item,
+    icon:
+      item.key === 'phone' ? (
         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
           <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
         </svg>
-      ),
-    },
-    {
-      key: 'email',
-      label: 'Email',
-      verified: Boolean(seller.verificationStatus?.emailVerified || seller.emailVerified),
-      icon: (
+      ) : item.key === 'email' ? (
         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
           <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
           <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
         </svg>
-      ),
-    },
-    {
-      key: 'id',
-      label: 'Government ID',
-      verified: Boolean(seller.verificationStatus?.govtIdVerified || seller.govtIdVerified),
-      icon: (
+      ) : (
         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+          <path
+            fillRule="evenodd"
+            d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
+            clipRule="evenodd"
+          />
         </svg>
       ),
-    },
-  ];
-  const verifiedCount = verificationItems.filter(v => v.verified).length;
-  const verificationPct = Math.round((verifiedCount / verificationItems.length) * 100);
+  }));
 
   const memberSinceLabel = (() => {
     const dateStr = seller.createdAt || seller.joinedDate;
@@ -472,7 +477,7 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
                 loading="lazy" decoding="async"
               />
             </div>
-            {isUserVerified(seller) && (
+            {showVerifiedBadgeOnProfile && (
               <span className="msp-avatar-verified" aria-label="Verified">
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -483,7 +488,7 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
 
           <h1 className="msp-name mt-3 text-xl font-black inline-flex items-center gap-1.5 flex-wrap justify-center">
             <span className="truncate max-w-[280px]">{seller.dealershipName || seller.name}</span>
-            <VerifiedBadge show={isUserVerified(seller)} size="sm" />
+            <VerifiedBadge show={showVerifiedBadgeOnProfile} size="sm" />
           </h1>
 
           <div className="mt-2">
@@ -542,36 +547,68 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
             </button>
           </div>
 
-          {/* Verification */}
+          {/* Trust checklist — legacy isVerified-only sellers get a platform banner instead of 0% + Pending */}
           <div className="msp-verif mt-4 w-full text-left">
-            <div className="flex items-center gap-2.5 mb-2.5">
-              <div
-                className="msp-verif-ring"
-                style={{ ['--msp-pct' as any]: `${verificationPct}%` }}
-                aria-hidden
-              >
-                <span className="msp-verif-ring-pct">{verificationPct}%</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="msp-verif-title">Verification</div>
-                <div className="msp-verif-sub">{verifiedCount} of {verificationItems.length} completed</div>
-              </div>
-            </div>
-            {verificationItems.map((item) => (
-              <div key={item.key} className={`msp-verif-item ${item.verified ? 'msp-ok' : ''}`}>
-                <span className="msp-verif-dot">
-                  {item.verified ? (
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  ) : (
-                    item.icon
-                  )}
+            {isPlatformVerifiedOnly ? (
+              <div className="msp-verif-platform">
+                <span className="msp-verif-platform-ic" aria-hidden>
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
                 </span>
-                <span className="msp-verif-label">{item.label}</span>
-                <span className="msp-verif-state">{item.verified ? 'Verified' : 'Pending'}</span>
+                <div className="min-w-0">
+                  <div className="msp-verif-title">Verified on Reride</div>
+                  <p className="msp-verif-sub mt-0.5">
+                    This seller’s account was verified by our team.
+                  </p>
+                </div>
               </div>
-            ))}
+            ) : (
+              <>
+                <div className="flex items-center gap-2.5 mb-2.5">
+                  <div
+                    className="msp-verif-ring"
+                    style={{ ['--msp-pct' as any]: `${verificationPct}%` }}
+                    aria-hidden
+                  >
+                    <span className="msp-verif-ring-pct">{verificationPct}%</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="msp-verif-title">Trust checklist</div>
+                    <div className="msp-verif-sub">
+                      {verifiedCount === checklistTotal
+                        ? 'All checks passed'
+                        : `${verifiedCount} of ${checklistTotal} checks passed`}
+                    </div>
+                  </div>
+                </div>
+                {verificationItems.map((item) => (
+                  <div key={item.key} className={`msp-verif-item ${item.verified ? 'msp-ok' : ''}`}>
+                    <span className="msp-verif-dot">
+                      {item.verified ? (
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path
+                            fillRule="evenodd"
+                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      ) : (
+                        item.icon
+                      )}
+                    </span>
+                    <span className="msp-verif-label">{item.label}</span>
+                    <span className="msp-verif-state">
+                      {item.verified ? 'Verified' : isOwnerSeller ? 'Finish in profile' : 'Not verified'}
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
 
           {/* Bio */}
