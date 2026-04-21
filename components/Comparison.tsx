@@ -8,6 +8,7 @@ interface ComparisonProps {
   vehicles: Vehicle[];
   onBack: () => void;
   onToggleCompare: (id: number) => void;
+  onClearCompare: () => void;
 }
 
 const specFields: (keyof Vehicle)[] = ['price', 'year', 'mileage', 'engine', 'transmission', 'fuelType', 'fuelEfficiency', 'color', 'sellerName', 'city', 'averageRating', 'sellerAverageRating', 'registrationYear', 'noOfOwners', 'displacement'];
@@ -21,7 +22,7 @@ const XIcon: React.FC = () => (
 );
 
 
-const Comparison: React.FC<ComparisonProps> = ({ vehicles, onBack: onBackToHome, onToggleCompare }) => {
+const Comparison: React.FC<ComparisonProps> = ({ vehicles, onBack: onBackToHome, onToggleCompare, onClearCompare }) => {
   const { t, i18n } = useTranslation();
   const [highlightDiffs, setHighlightDiffs] = useState(true);
 
@@ -45,6 +46,16 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, onBack: onBackToHome,
     }),
     [t, i18n.language]
   );
+
+  // Must run unconditionally — never place hooks after a conditional return.
+  const allFeatures = useMemo(() => {
+    if (vehicles.length === 0) return [];
+    const featureSet = new Set<string>();
+    vehicles.forEach((v) => {
+      (v.features ?? []).forEach((feature) => featureSet.add(feature));
+    });
+    return Array.from(featureSet).sort();
+  }, [vehicles]);
 
   if (vehicles.length === 0) {
     return (
@@ -74,14 +85,6 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, onBack: onBackToHome,
     if (key === 'sellerAverageRating' && value > 0 && value === maxSellerAverageRating) return true;
     return false;
   }
-  
-  const allFeatures = useMemo(() => {
-    const featureSet = new Set<string>();
-    vehicles.forEach(v => {
-        v.features.forEach(feature => featureSet.add(feature));
-    });
-    return Array.from(featureSet).sort();
-  }, [vehicles]);
 
   const areValuesDifferent = (key: keyof Vehicle) => {
       if (vehicles.length <= 1) return false;
@@ -96,11 +99,20 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, onBack: onBackToHome,
         backLabel={t('compare.backToListings')}
         onBack={onBackToHome}
         rightSlot={
-          <div className="flex items-center space-x-3 bg-reride-off-white dark:bg-brand-gray-700 p-2 rounded-lg">
-            <label htmlFor="highlight-toggle" className="text-sm font-medium text-reride-text-dark dark:text-brand-gray-200">{t('compare.highlightDiffs')}</label>
-            <button onClick={() => setHighlightDiffs(!highlightDiffs)} id="highlight-toggle" className={`${highlightDiffs ? '' : 'bg-brand-gray-300 dark:bg-brand-gray-600'} relative inline-flex items-center h-6 rounded-full w-11 transition-colors`} style={highlightDiffs ? { background: '#FF6B35' } : undefined}>
-                <span className={`${highlightDiffs ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full transition-transform`} />
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={onClearCompare}
+              className="text-sm font-semibold text-reride-orange hover:text-reride-orange/90 px-3 py-1.5 rounded-lg border border-reride-orange/40 hover:bg-reride-orange/10 transition-colors"
+            >
+              {t('compare.clearAll')}
             </button>
+            <div className="flex items-center space-x-3 bg-reride-off-white dark:bg-brand-gray-700 p-2 rounded-lg">
+              <label htmlFor="highlight-toggle" className="text-sm font-medium text-reride-text-dark dark:text-brand-gray-200">{t('compare.highlightDiffs')}</label>
+              <button type="button" onClick={() => setHighlightDiffs(!highlightDiffs)} id="highlight-toggle" className={`${highlightDiffs ? '' : 'bg-brand-gray-300 dark:bg-brand-gray-600'} relative inline-flex items-center h-6 rounded-full w-11 transition-colors`} style={highlightDiffs ? { background: '#FF6B35' } : undefined}>
+                  <span className={`${highlightDiffs ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full transition-transform`} />
+              </button>
+            </div>
           </div>
         }
       />

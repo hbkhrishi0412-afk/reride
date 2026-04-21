@@ -143,7 +143,7 @@ const Header: React.FC<HeaderProps> = memo(({
 
     return (
         <>
-            <header className="bg-white/80 backdrop-blur-xl border-b border-white/20 sticky top-0 z-50 shadow-lg">
+            <header className="bg-white/80 backdrop-blur-xl border-b border-white/20 sticky top-0 z-[1200] shadow-lg">
                 {/* Premium Top Bar */}
                 <div className="bg-gradient-to-r from-blue-50/50 to-purple-50/50 border-b border-gray-100/50">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center py-1.5">
