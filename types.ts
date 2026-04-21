@@ -187,7 +187,7 @@ export interface User {
   email: string;
   password?: string; // Optional for API responses, required for registration/login
   mobile: string;
-  role: 'seller' | 'customer' | 'admin' | 'service_provider';
+  role: 'seller' | 'customer' | 'admin' | 'service_provider' | 'finance_partner';
   location: string;
   address?: string; // Full address (street, city, state, etc.)
   /** Indian postal PIN (6 digits) — used with address for map pin and area grouping */
@@ -857,7 +857,7 @@ export const isUser = (obj: any): obj is User => {
     typeof obj.name === 'string' &&
     (obj.password === undefined || typeof obj.password === 'string') &&
     (obj.mobile === undefined || typeof obj.mobile === 'string') &&
-    ['customer', 'seller', 'admin', 'service_provider'].includes(obj.role);
+    ['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(obj.role);
 };
 
 export const isConversation = (obj: any): obj is Conversation => {

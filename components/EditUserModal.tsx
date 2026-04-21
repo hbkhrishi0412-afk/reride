@@ -169,6 +169,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                     <option value="customer">Customer</option>
                                     <option value="seller">Seller</option>
                                     <option value="admin">Admin</option>
+                                    <option value="service_provider">Service provider</option>
+                                    <option value="finance_partner">Finance partner</option>
                                 </select>
                             </div>
                             <div className="space-y-2 md:col-span-2">
@@ -247,6 +249,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                     <option value="customer">Customer</option>
                                     <option value="seller">Seller</option>
                                     <option value="admin">Admin</option>
+                                    <option value="service_provider">Service provider</option>
+                                    <option value="finance_partner">Finance partner</option>
                                 </select>
                             </div>
                             <div>

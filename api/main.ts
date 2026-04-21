@@ -113,7 +113,7 @@ function normalizeUser(user: UserType | null | undefined): NormalizedUser | null
   }
   
   // Ensure role is present (critical for seller / service provider dashboard access)
-  const validRoles = ['customer', 'seller', 'admin', 'service_provider'] as const;
+  const validRoles = ['customer', 'seller', 'admin', 'service_provider', 'finance_partner'] as const;
   let role: (typeof validRoles)[number] = user.role as (typeof validRoles)[number];
   if (!role || typeof role !== 'string' || !validRoles.includes(role as (typeof validRoles)[number])) {
     logWarn('⚠️ User object missing or invalid role field:', user.email, 'role:', role);
@@ -1378,8 +1378,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         const fallbackId = user.id || normalizedEmail.replace(/[.#$[\]]/g, '_');
         const fallbackEmail = (user.email && String(user.email).trim()) || normalizedEmail;
         const fallbackRole =
-          user.role && ['customer', 'seller', 'admin', 'service_provider'].includes(user.role)
-            ? (user.role as 'customer' | 'seller' | 'admin' | 'service_provider')
+          user.role && ['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(user.role)
+            ? (user.role as 'customer' | 'seller' | 'admin' | 'service_provider' | 'finance_partner')
             : 'customer';
         normalizedUser = {
           id: fallbackId,

@@ -306,6 +306,11 @@ const preloadCriticalComponents = () => {
   }
 };
 
+/** API/session may surface role with different casing; keep admin checks consistent. */
+function userHasAdminRole(user: User | null | undefined): boolean {
+  return (user?.role || '').toLowerCase().trim() === 'admin';
+}
+
 const AppContent: React.FC = () => {
   const routerLocation = useLocation();
   const [routerSearchParams, setRouterSearchParams] = useSearchParams();
@@ -1433,7 +1438,7 @@ const AppContent: React.FC = () => {
         return;
       }
       
-      if (!['customer', 'seller', 'admin', 'service_provider'].includes(parsedUser.role)) {
+      if (!['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(parsedUser.role)) {
         localStorage.removeItem('reRideCurrentUser');
         sessionStorage.removeItem('currentUser');
         return;
@@ -1458,6 +1463,9 @@ const AppContent: React.FC = () => {
             break;
           case 'service_provider':
             setCurrentView(ViewEnum.CAR_SERVICE_DASHBOARD);
+            break;
+          case 'finance_partner':
+            setCurrentView(ViewEnum.BUYER_DASHBOARD);
             break;
           default:
             setCurrentView(ViewEnum.BUYER_DASHBOARD);
@@ -2909,7 +2917,7 @@ const AppContent: React.FC = () => {
         );
 
       case ViewEnum.ADMIN_PANEL:
-        return currentUser?.role === 'admin' ? (
+        return userHasAdminRole(currentUser) ? (
           <AdminPanelErrorBoundary>
             <AdminPanel 
               users={users}
@@ -2950,9 +2958,6 @@ const AppContent: React.FC = () => {
               onUpdateFaq={onUpdateFaq}
               onDeleteFaq={onDeleteFaq}
               onCertificationApproval={onCertificationApproval}
-              notifications={notifications}
-              onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
-              onMarkNotificationAsRead={(id) => handleMarkNotificationsAsRead([Number(id)])}
             />
           </AdminPanelErrorBoundary>
         ) : (
@@ -3932,7 +3937,7 @@ const AppContent: React.FC = () => {
 
     if (isDashboardView && currentUser) {
       // For admin users, show the full AdminPanel (which is responsive)
-      if (currentUser.role === 'admin') {
+      if (userHasAdminRole(currentUser)) {
         return (
           <>
             <SEO {...seoMeta} />
@@ -3974,9 +3979,6 @@ const AppContent: React.FC = () => {
             onUpdateFaq={onUpdateFaq}
             onDeleteFaq={onDeleteFaq}
             onCertificationApproval={onCertificationApproval}
-            notifications={notifications}
-            onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
-            onMarkNotificationAsRead={(id) => handleMarkNotificationsAsRead([Number(id)])}
           />
           </>
         );
@@ -4441,6 +4443,9 @@ const AppContent: React.FC = () => {
   }
   
   // Render Desktop/Website Layout
+  /** When true, hide site footer (admin ops area); header is always shown on desktop, including on /admin. */
+  const isDesktopAdminNoFooter = currentView === ViewEnum.ADMIN_PANEL && userHasAdminRole(currentUser);
+
   return (
     <>
       <SEO {...seoMeta} />
@@ -4456,7 +4461,7 @@ const AppContent: React.FC = () => {
         onNavigate={navigate}
       />
       <OfflineIndicator />
-      <div className="min-h-screen bg-gray-50">
+      <div className={`min-h-screen ${isDesktopAdminNoFooter ? 'bg-slate-100' : 'bg-gray-50'}`}>
         <Header 
           onNavigate={navigate}
           currentUser={currentUser}
@@ -4488,7 +4493,7 @@ const AppContent: React.FC = () => {
             </Suspense>
           </ErrorBoundary>
         </main>
-        <Footer onNavigate={navigate} />
+        {!isDesktopAdminNoFooter && <Footer onNavigate={navigate} />}
         
         {/* Desktop Global Components */}
         <PWAInstallPrompt />

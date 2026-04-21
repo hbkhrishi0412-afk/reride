@@ -24,9 +24,11 @@ interface SellCarSubmission {
 
 interface SellCarAdminProps {
   onNavigate: (view: ViewEnum) => void;
+  /** When true, render for use inside AdminPanel (no full-page chrome or “back to home”). */
+  embedded?: boolean;
 }
 
-const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate }) => {
+const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate, embedded = false }) => {
   const [submissions, setSubmissions] = useState<SellCarSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -133,7 +135,13 @@ const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div
+        className={
+          embedded
+            ? 'flex min-h-[280px] items-center justify-center'
+            : 'min-h-screen bg-gray-50 flex items-center justify-center'
+        }
+      >
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading submissions...</p>
@@ -143,27 +151,36 @@ const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Sell Car Submissions</h1>
-              <p className="text-gray-600 mt-1">Manage customer car selling requests</p>
+    <div className={embedded ? 'min-h-0' : 'min-h-screen bg-gray-50'}>
+      {!embedded && (
+        <div className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center py-6">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Sell Car Submissions</h1>
+                <p className="text-gray-600 mt-1">Manage customer car selling requests</p>
+              </div>
+              <button
+                onClick={() => onNavigate(ViewEnum.HOME)}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Back to Home
+              </button>
             </div>
-            <button
-              onClick={() => onNavigate(ViewEnum.HOME)}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Back to Home
-            </button>
           </div>
         </div>
-      </div>
+      )}
+
+      {embedded && (
+        <div className="mb-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-violet-600">Intake</p>
+          <h2 className="mt-1 text-xl font-bold text-slate-900 sm:text-2xl">Sell car submissions</h2>
+          <p className="mt-1 text-sm text-slate-600">Manage customer car selling requests</p>
+        </div>
+      )}
 
       {/* Filters */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className={embedded ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6'}>
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>

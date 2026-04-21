@@ -34,11 +34,11 @@ const VIEW_TO_PATH: Record<View, string> = {
   [View.DEALER_PROFILES]: '/dealers',
   [View.DETAIL]: '/vehicle',
   [View.SELLER_DASHBOARD]: '/seller/dashboard',
-  [View.ADMIN_PANEL]: '/admin/panel',
+  [View.ADMIN_PANEL]: '/admin',
   [View.LOGIN_PORTAL]: '/login',
   [View.CUSTOMER_LOGIN]: '/login',
   [View.SELLER_LOGIN]: '/login',
-  [View.ADMIN_LOGIN]: '/admin',
+  [View.ADMIN_LOGIN]: '/admin/login',
   [View.COMPARISON]: '/compare',
   [View.WISHLIST]: '/wishlist',
   [View.PROFILE]: '/profile',
@@ -61,6 +61,8 @@ const VIEW_TO_PATH: Record<View, string> = {
 export function pathToView(path: string): View {
   const p = path.toLowerCase();
   if (p === '/' || p === '') return View.HOME;
+  // Legacy deep link (same as /admin dashboard)
+  if (p === '/admin/panel') return View.ADMIN_PANEL;
 
   // Check exact matches first
   for (const [view, viewPath] of Object.entries(VIEW_TO_PATH)) {

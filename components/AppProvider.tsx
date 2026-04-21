@@ -3,6 +3,7 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useMemo,
   useRef,
@@ -226,11 +227,14 @@ function pathToView(path: string): View {
   }
   if (normalizedPath === '/vehicle') return View.DETAIL;
   if (normalizedPath === '/seller/dashboard') return View.SELLER_DASHBOARD;
-  if (normalizedPath === '/admin' || normalizedPath === '/admin/login') return View.ADMIN_LOGIN;
+  // Admin login lives at /admin/login. /admin (and /admin/panel) is the signed-in dashboard URL
+  // and must map to ADMIN_PANEL — otherwise location sync clobbers the panel whenever users/vehicles update.
+  if (normalizedPath === '/admin/login') return View.ADMIN_LOGIN;
   if (normalizedPath === '/admin/new-cars' || normalizedPath === '/admin/new-cars/manage') {
     return View.ADMIN_PANEL;
   }
   if (normalizedPath === '/admin/sell-car') return View.SELL_CAR_ADMIN;
+  if (normalizedPath === '/admin' || normalizedPath === '/admin/panel') return View.ADMIN_PANEL;
   if (normalizedPath === '/login') return View.LOGIN_PORTAL;
   if (normalizedPath === '/compare') return View.COMPARISON;
   if (normalizedPath === '/wishlist') return View.WISHLIST;
@@ -291,7 +295,38 @@ function resolveViewFromPathAndState(path: string, routerState: HistoryState | n
   if (pathView !== View.DETAIL && routerState?.view === View.DETAIL) {
     return pathView;
   }
+  // Stale location.state.view must not win over a real /admin* URL, or the app stays on HOME/another view
+  // with an empty or wrong main area while the address bar shows /admin (user sees header + no dashboard).
+  if (
+    pathView === View.ADMIN_PANEL ||
+    pathView === View.ADMIN_LOGIN ||
+    pathView === View.SELL_CAR_ADMIN
+  ) {
+    return pathView;
+  }
   return routerState?.view ?? pathView;
+}
+
+/**
+ * First paint must match the real URL; defaulting to HOME until an effect runs
+ * left /admin showing the marketing shell with an empty or wrong main region.
+ * Bootstrap from window (pathname + hash) and ignore history.state so stale view cannot win on refresh.
+ */
+function readInitialAppViewFromBrowser(): View {
+  if (typeof window === 'undefined') return View.HOME;
+  try {
+    const path = getAppPathFromRouter({
+      pathname: window.location.pathname || '/',
+      hash: window.location.hash || '',
+    });
+    return resolveViewFromPathAndState(path, null);
+  } catch {
+    return View.HOME;
+  }
+}
+
+function isAdminUserRole(role: string | undefined | null): boolean {
+  return (role || '').toLowerCase().trim() === 'admin';
 }
 
 /** Dev-only: POST NDJSON to Vite middleware → `debug-4f3bea.log` in repo root. */
@@ -509,7 +544,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const toastTimestampsRef = useRef<Map<number, number>>(new Map());
   
   // All state from App.tsx moved here
-  const [currentView, setCurrentView] = useState<View>(View.HOME);
+  const [currentView, setCurrentView] = useState<View>(readInitialAppViewFromBrowser);
   /** Latest view for URL sync effect — avoids clobbering programmatic navigate() before the router path updates. */
   const currentViewRef = useRef<View>(View.HOME);
   currentViewRef.current = currentView;
@@ -577,7 +612,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         
         // Ensure role is a valid value (include service_provider — car-services accounts)
-        if (!['customer', 'seller', 'admin', 'service_provider'].includes(user.role)) {
+        if (!['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(user.role)) {
           logWarn('⚠️ Invalid role in user object:', user.role, '- defaulting to customer');
           user.role = 'customer'; // Safe default instead of clearing
           // Save corrected user back
@@ -604,7 +639,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           user &&
           user.email &&
           user.role &&
-          ['customer', 'seller', 'admin', 'service_provider'].includes(user.role)
+          ['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(user.role)
         ) {
           logInfo('🔄 Restoring logged-in user from sessionStorage:', {
             name: user.name,
@@ -1023,7 +1058,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const rawRole = user.role;
     const trimmed = typeof rawRole === 'string' ? rawRole.trim() : '';
     let normalizedRole: User['role'] | null = null;
-    if (['customer', 'seller', 'admin', 'service_provider'].includes(trimmed)) {
+    if (['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(trimmed)) {
       normalizedRole = trimmed as User['role'];
     } else if (trimmed === 'service-provider' || trimmed.toLowerCase() === 'provider') {
       normalizedRole = 'service_provider';
@@ -1032,7 +1067,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Ensure role is valid (API / Supabase may return service_provider for provider accounts)
     if (
       !normalizedRole ||
-      !['customer', 'seller', 'admin', 'service_provider'].includes(normalizedRole)
+      !['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(normalizedRole)
     ) {
       logError('❌ Invalid role in handleLogin:', user.role);
       addToast(t('toast.loginInvalidRole'), 'error');
@@ -1132,6 +1167,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } catch {
           /* ignore */
         }
+      } else if (userForSession.role === 'finance_partner') {
+        postLoginView = View.HOME;
+        setCurrentView(View.HOME);
       } else if (userForSession.role === 'customer') {
         postLoginView = View.HOME;
         setCurrentView(View.HOME);
@@ -1148,7 +1186,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ? '/seller/dashboard'
               : userForSession.role === 'service_provider'
                 ? '/car-services/dashboard'
-                : '/';
+                : userForSession.role === 'finance_partner'
+                  ? '/'
+                  : '/';
         routerNavigate(pathByRole, {
           state: {
             view: postLoginView,
@@ -1388,7 +1428,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     
     // Ensure role is valid
-    if (!['customer', 'seller', 'admin', 'service_provider'].includes(user.role)) {
+    if (!['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(user.role)) {
       logError('❌ Invalid role in handleRegister:', user.role);
       addToast(t('toast.registerInvalidRole'), 'error');
       return;
@@ -1847,7 +1887,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // All validation passed - navigate to seller dashboard
       console.log('✅ Navigating to seller dashboard');
       setCurrentView(View.SELLER_DASHBOARD);
-    } else if (view === View.ADMIN_PANEL && currentUser?.role !== 'admin') {
+    } else if (view === View.ADMIN_PANEL && !isAdminUserRole(currentUser?.role)) {
       if (currentView !== View.ADMIN_LOGIN) {
         setCurrentView(View.ADMIN_LOGIN);
       }
@@ -2067,7 +2107,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (currentUser.role === 'seller' && currentView !== View.SELLER_DASHBOARD) {
           console.log('🔄 Auto-navigating seller to dashboard from login view');
           setCurrentView(View.SELLER_DASHBOARD);
-        } else if (currentUser.role === 'admin' && currentView !== View.ADMIN_PANEL) {
+        } else if (isAdminUserRole(currentUser.role) && currentView !== View.ADMIN_PANEL) {
           setCurrentView(View.ADMIN_PANEL);
         }
         // Customer: do not set HOME here — handleLogin schedules navigation on Capacitor to avoid
@@ -2075,6 +2115,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
   }, [currentUser, currentView]);
+
+  // Before paint: if URL is the admin dashboard and the session is admin, force ADMIN_PANEL so App never
+  // renders the marketing layout over an empty main (currentView still HOME for one frame).
+  useLayoutEffect(() => {
+    const path = getAppPathFromRouter(location ?? { pathname: '/' });
+    if (pathToView(path) !== View.ADMIN_PANEL) return;
+    if (!isAdminUserRole(currentUser?.role)) return;
+    if (currentViewRef.current !== View.ADMIN_PANEL) {
+      setCurrentView(View.ADMIN_PANEL);
+    }
+  }, [location.pathname, location.hash, currentUser?.role, location]);
 
   // Map initial path once on mount (React Router pathname — correct for HashRouter + BrowserRouter).
   // NEVER depend on selectedVehicle: re-running reset currentView from URL while pathname lags

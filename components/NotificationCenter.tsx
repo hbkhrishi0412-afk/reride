@@ -149,7 +149,20 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ notifications, 
                     </div>
                 ) : (
                     <div className="p-8 text-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                        <svg
+                            className="mx-auto h-12 w-12 text-emerald-600/90 dark:text-emerald-500/90"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={1.5}
+                            aria-hidden
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                        </svg>
                         <h4 className="mt-2 text-sm font-semibold text-reride-text-dark dark:text-reride-text-dark">All caught up!</h4>
                         <p className="mt-1 text-xs text-reride-text-dark dark:text-reride-text-dark">You have no new notifications.</p>
                     </div>
