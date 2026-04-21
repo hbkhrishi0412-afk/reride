@@ -190,10 +190,19 @@ interface AdminPanelProps {
 type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps' | 'serviceManagement';
 type RoleFilter = 'all' | 'customer' | 'seller' | 'admin' | 'finance_partner';
 // FIX: Restrict sortable keys to prevent comparison errors on incompatible types.
-type SortableUserKey = 'name' | 'status';
+type SortableUserKey = 'name' | 'status' | 'partnerBanks';
 type SortConfig = {
     key: SortableUserKey;
     direction: 'ascending' | 'descending';
+};
+
+/** Users with linked bank partners (sellers/service providers) or the finance_partner role — matches the "Finance partners" column and tab. */
+const userHasFinancePartnerAffiliation = (u: User): boolean => {
+    if (u.role === 'finance_partner') return true;
+    if (u.role === 'seller' || u.role === 'service_provider') {
+        return Array.isArray(u.partnerBanks) && u.partnerBanks.length > 0;
+    }
+    return false;
 };
 
 const ADMIN_SIDEBAR_COLLAPSED_KEY = 'reride_admin_sidebar_collapsed';
@@ -1371,6 +1380,17 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         if (!sortConfig) return list;
 
         return [...list].sort((a, b) => {
+            if (sortConfig.key === 'partnerBanks') {
+                const firstBank = (p?: string[]) =>
+                    p?.length
+                        ? [...p].sort((x, y) => x.localeCompare(y, undefined, { sensitivity: 'base' }))[0]!.toLowerCase()
+                        : '';
+                const av = firstBank(a.partnerBanks);
+                const bv = firstBank(b.partnerBanks);
+                if (av < bv) return sortConfig.direction === 'ascending' ? -1 : 1;
+                if (av > bv) return sortConfig.direction === 'ascending' ? 1 : -1;
+                return 0;
+            }
             const aValue = a[sortConfig.key];
             const bValue = b[sortConfig.key];
             
@@ -1382,6 +1402,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
     const filteredUsers = useMemo(() => {
         if (roleFilter === 'all') return sortedUsers;
+        if (roleFilter === 'finance_partner') {
+            return sortedUsers.filter(userHasFinancePartnerAffiliation);
+        }
         return sortedUsers.filter(user => user.role === roleFilter);
     }, [sortedUsers, roleFilter]);
 
@@ -1392,7 +1415,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             customer: list.filter(u => u.role === 'customer').length,
             seller: list.filter(u => u.role === 'seller').length,
             admin: list.filter(u => u.role === 'admin').length,
-            finance_partner: list.filter(u => u.role === 'finance_partner').length,
+            finance_partner: list.filter(u => userHasFinancePartnerAffiliation(u)).length,
         };
     }, [users]);
 
@@ -1404,7 +1427,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             const email = (u.email || '').toLowerCase();
             const mobile = (u.mobile || '').replace(/\s/g, '').toLowerCase();
             const addr = (u.address || u.location || '').toLowerCase();
-            return name.includes(q) || email.includes(q) || mobile.includes(q) || addr.includes(q);
+            const banks = (u.partnerBanks || []).join(' ').toLowerCase();
+            return name.includes(q) || email.includes(q) || mobile.includes(q) || addr.includes(q) || banks.includes(q);
         });
     }, [filteredUsers, userListSearch]);
 
@@ -1417,6 +1441,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         const start = (userDirectoryPage - 1) * userDirectoryPageSize;
         return usersDisplayed.slice(start, start + userDirectoryPageSize);
     }, [usersDisplayed, userDirectoryNeedsPagination, userDirectoryPage, userDirectoryPageSize]);
+
+    const showUserDirectorySellerColumns =
+        roleFilter === 'all' || roleFilter === 'seller' || roleFilter === 'finance_partner';
+    const userDirectoryColumnCount = showUserDirectorySellerColumns ? 11 : 9;
 
     useEffect(() => {
         setUserDirectoryPage(1);
@@ -1573,7 +1601,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                     <div className="min-w-0">
                                         <h2 className="text-lg font-semibold text-gray-900 tracking-tight">User management</h2>
                                         <p className="text-xs text-gray-500 mt-1 max-w-xl">
-                                            Role filters and search run locally. Refresh pulls the latest users from the server (Supabase-backed API) and updates the app instantly—no full page reload.
+                                            Role filters and search run locally. The Finance partners tab lists anyone with the finance partner role or with linked partner banks (sellers and service providers). Refresh pulls the latest users from the server (Supabase-backed API) and updates the app instantly—no full page reload.
                                         </p>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -1702,7 +1730,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             type="search"
                                             value={userListSearch}
                                             onChange={(e) => setUserListSearch(e.target.value)}
-                                            placeholder="Search name, email, phone…"
+                                            placeholder="Search name, email, phone, bank…"
                                             className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                                         />
                                     </label>
@@ -1752,10 +1780,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Role</th>
                                             <SortableHeader title="Status" sortKey="status" sortConfig={sortConfig} requestSort={requestSort} />
                                             <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Member Since</th>
-                                            {roleFilter === 'seller' || roleFilter === 'all' ? (
-                                              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Finance Partners</th>
+                                            {showUserDirectorySellerColumns ? (
+                                              <SortableHeader title="Finance partners" sortKey="partnerBanks" sortConfig={sortConfig} requestSort={requestSort} />
                                             ) : null}
-                                            {roleFilter === 'seller' || roleFilter === 'all' ? (
+                                            {showUserDirectorySellerColumns ? (
                                               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Recommended</th>
                                             ) : null}
                                             <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Documents</th>
@@ -1767,7 +1795,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {directoryTableRows.length === 0 ? (
                                             <tr>
-                                                <td colSpan={12} className="px-4 py-10 text-center text-sm text-gray-500">
+                                                <td colSpan={userDirectoryColumnCount} className="px-4 py-10 text-center text-sm text-gray-500">
                                                     No users match this filter or search.
                                                 </td>
                                             </tr>
@@ -1818,9 +1846,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     </span>
                                                 </td>
                                                 <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-600">{formattedDate}</td>
-                                                {(roleFilter === 'seller' || roleFilter === 'all') && (
+                                                {showUserDirectorySellerColumns && (
                                                   <td className="px-3 py-2.5 whitespace-nowrap">
-                                                    {(user.role === 'seller' || user.role === 'service_provider') && user.partnerBanks && user.partnerBanks.length > 0 ? (
+                                                    {user.partnerBanks && user.partnerBanks.length > 0 &&
+                                                    (user.role === 'seller' || user.role === 'service_provider' || user.role === 'finance_partner') ? (
                                                       <div className="flex flex-wrap gap-1">
                                                         {user.partnerBanks.slice(0, 2).map((bank, idx) => (
                                                           <span
@@ -1838,12 +1867,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                       </div>
                                                     ) : user.role === 'seller' || user.role === 'service_provider' ? (
                                                       <span className="text-xs text-gray-400">No partners</span>
+                                                    ) : user.role === 'finance_partner' ? (
+                                                      <span className="text-xs text-gray-400">Role account</span>
                                                     ) : (
                                                       <span className="text-xs text-gray-400">-</span>
                                                     )}
                                                   </td>
                                                 )}
-                                                {(roleFilter === 'seller' || roleFilter === 'all') && (
+                                                {showUserDirectorySellerColumns && (
                                                   <td className="px-3 py-2.5 whitespace-nowrap">
                                                     {user.role === 'seller' || user.role === 'service_provider' ? (
                                                       <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded-full ${
