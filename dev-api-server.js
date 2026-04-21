@@ -1139,7 +1139,7 @@ const getRequestActorId = (req) => {
 
 // GET /api/users
 app.get('/api/users', (req, res) => {
-  const { action, email } = req.query;
+  const { action, email, role } = req.query;
   
   if (action === 'trust-score' && email) {
     const user = mockUsers.find(u => u.email === email);
@@ -1149,6 +1149,11 @@ app.get('/api/users', (req, res) => {
     // Simple trust score calculation
     const trustScore = 85; // Mock score
     return res.json({ success: true, trustScore, email: user.email, name: user.name });
+  }
+
+  // Mirror production public catalog (api/main.ts): role-scoped lists for dealer directory.
+  if (role === 'seller' || role === 'service_provider') {
+    return res.json(mockUsers.filter((u) => u.role === role));
   }
   
   res.json(mockUsers);

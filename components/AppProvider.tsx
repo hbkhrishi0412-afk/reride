@@ -21,8 +21,8 @@ import {
   processSyncQueue,
 } from '../services/syncService';
 import { realtimeChatService, type ChatEphemeralThreadMeta } from '../services/realtimeChatService';
-import { getSettings } from '../services/settingsService';
-import { getAuditLog, logAction, saveAuditLog } from '../services/auditLogService';
+import { getSettings, saveSettings, fetchSettings, updateSettings } from '../services/settingsService';
+import { getAuditLog, logAction, saveAuditLog, fetchAuditLog } from '../services/auditLogService';
 import { getFaqs, saveFaqs } from '../services/faqService';
 import {
   getSupportTickets,
@@ -433,7 +433,7 @@ interface AppContextType {
     onToggleVehicleStatus: (vehicleId: number) => Promise<void>;
     onToggleVehicleFeature: (vehicleId: number) => Promise<void>;
   onResolveFlag: (type: 'vehicle' | 'conversation', id: number | string) => void;
-  onUpdateSettings: (settings: PlatformSettings) => void;
+  onUpdateSettings: (settings: PlatformSettings) => Promise<void> | void;
   onSendBroadcast: (message: string) => void;
   onExportUsers: () => void;
   onImportUsers: (users: Omit<User, 'id'>[]) => Promise<void>;
@@ -3547,6 +3547,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser?.email, currentUser?.role]);
 
+  // Hydrate platform settings and audit log from the Supabase-backed API once
+  // the admin is authenticated. This replaces the per-browser localStorage-only
+  // model so that a setting change from one admin/device is visible to every
+  // other admin/device after a refresh.
+  useEffect(() => {
+    let cancelled = false;
+
+    // Settings: available to all visitors (announcement is public).
+    // We still fetch in the background so the current tab picks up any admin
+    // update from another tab/device.
+    (async () => {
+      try {
+        const next = await fetchSettings();
+        if (!cancelled) {
+          setPlatformSettings(next);
+        }
+      } catch {
+        // fetchSettings already swallows errors and returns the cached copy.
+      }
+    })();
+
+    // Audit log: admin-only endpoint. Only hydrate when the current user is
+    // an admin; otherwise we leave the locally cached copy alone.
+    if (currentUser?.role === 'admin') {
+      (async () => {
+        try {
+          const entries = await fetchAuditLog(500);
+          if (!cancelled && entries.length > 0) {
+            setAuditLog(entries);
+          }
+        } catch {
+          // Non-blocking: keep the local cache on failure.
+        }
+      })();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.email, currentUser?.role]);
+
   // Reliability: force a conversation sync after resume / reconnect.
   useEffect(() => {
     if (!currentUser?.email || (currentUser.role !== 'seller' && currentUser.role !== 'customer')) return;
@@ -5009,16 +5050,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
       }
     },
-    onUpdateSettings: (settings: PlatformSettings) => {
+    onUpdateSettings: async (settings: PlatformSettings) => {
+      // Optimistic local update + cache write so the current tab reflects the
+      // change immediately even if the API round-trip is slow.
       setPlatformSettings(settings);
-      
-      // Log audit entry for settings update
+      saveSettings(settings);
+
       const actor = currentUser?.name || currentUser?.email || 'System';
       const changedSettings = Object.keys(settings).join(', ');
-      const entry = logAction(actor, 'Update Platform Settings', 'Platform', `Updated settings: ${changedSettings}`);
-      setAuditLog(prev => [entry, ...prev]);
-      
-      addToast(t('toast.settingsUpdated'), 'success');
+
+      try {
+        const persisted = await updateSettings(settings);
+        // Replace with the server's canonical copy (includes server-side
+        // normalization like Math.max(0, Math.floor(listingFee))).
+        setPlatformSettings(persisted);
+
+        const entry = logAction(actor, 'Update Platform Settings', 'Platform', `Updated settings: ${changedSettings}`);
+        setAuditLog(prev => [entry, ...prev]);
+        addToast(t('toast.settingsUpdated'), 'success');
+      } catch (error) {
+        logError('Failed to persist platform settings to API:', error);
+        // Even on API failure, keep the local change and still log it.
+        const entry = logAction(
+          actor,
+          'Update Platform Settings',
+          'Platform',
+          `Updated settings locally (API sync failed): ${changedSettings}`,
+        );
+        setAuditLog(prev => [entry, ...prev]);
+        addToast(
+          t('toast.settingsUpdatedLocalOnly') || 'Settings saved locally but failed to sync with server.',
+          'error',
+        );
+      }
     },
     onSendBroadcast: (message: string) => {
       setNotifications(prev => [...prev, {

@@ -405,8 +405,8 @@ class DataService {
   }
 
   /**
-   * Public seller rows (includes `mobile` for listing Call button). Anonymous GET /users returns [];
-   * the API exposes this data at GET /users?role=seller (see api/main.ts handleUsers).
+   * Public dealer rows (includes `mobile` for listing Call button). Anonymous GET /users returns [];
+   * the API exposes sellers at GET /users?role=seller and car-service providers at GET /users?role=service_provider.
    */
   private async fetchPublicSellersForCatalog(): Promise<User[]> {
     try {

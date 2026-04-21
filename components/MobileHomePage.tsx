@@ -424,13 +424,15 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
   // Budget quick-filter chips — deep-link straight to structured filters
   // so they work even if the AI proxy is offline. Prices are in INR.
-  const budgetChips = useMemo(
+  const budgetChips = useMemo<
+    Array<{ key: string; label: string; filters: Record<string, string | number> }>
+  >(
     () => [
-      { key: 'under3', label: t('mobile.home.budget.under3'), filters: { maxPrice: 300000 } },
-      { key: '3to5', label: t('mobile.home.budget.3to5'), filters: { minPrice: 300000, maxPrice: 500000 } },
-      { key: '5to8', label: t('mobile.home.budget.5to8'), filters: { minPrice: 500000, maxPrice: 800000 } },
-      { key: '8to15', label: t('mobile.home.budget.8to15'), filters: { minPrice: 800000, maxPrice: 1500000 } },
-      { key: 'above15', label: t('mobile.home.budget.above15'), filters: { minPrice: 1500000 } },
+      { key: 'under3', label: t('mobile.home.budget.under3'), filters: { maxPrice: 300000 } as Record<string, string | number> },
+      { key: '3to5', label: t('mobile.home.budget.3to5'), filters: { minPrice: 300000, maxPrice: 500000 } as Record<string, string | number> },
+      { key: '5to8', label: t('mobile.home.budget.5to8'), filters: { minPrice: 500000, maxPrice: 800000 } as Record<string, string | number> },
+      { key: '8to15', label: t('mobile.home.budget.8to15'), filters: { minPrice: 800000, maxPrice: 1500000 } as Record<string, string | number> },
+      { key: 'above15', label: t('mobile.home.budget.above15'), filters: { minPrice: 1500000 } as Record<string, string | number> },
     ],
     [t]
   );

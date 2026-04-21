@@ -10,6 +10,8 @@ import { DealerMap, type CompanyLocation } from './DealerProfiles';
 import { getSellerMapCoordinates, normalizeIndianPincode } from '../utils/sellerLocation';
 import { resolveSellerLogoUrl, sellerInitialsAvatarDataUri } from '../utils/imageUtils';
 import { sellerMatchesHeaderRegion } from '../utils/dealerRegionFilter';
+import { isRerideStaffPick } from '../utils/staffPick';
+import { getPublicDealerRating } from '../utils/dealerRatingDisplay';
 
 // Fix for default marker icons in Leaflet (when map is used)
 if (typeof L !== 'undefined' && L.Icon?.Default?.prototype) {
@@ -259,12 +261,6 @@ const MDP_STYLES = `
   }
   .mdp-btn-ghost:active { background: #eef2ff; color: #3730a3; border-color: #c7d2fe; }
 
-  .mdp-btn-gold {
-    color: #78350f;
-    background: linear-gradient(135deg,#fde68a,#f59e0b);
-    box-shadow: 0 12px 22px -12px rgba(245,158,11,.55), inset 0 1px 0 rgba(255,255,255,.6);
-  }
-
   /* ===== Map overlays ===== */
   .mdp-legend {
     display: inline-flex; align-items: center; gap: .5rem; flex-wrap: wrap;
@@ -357,12 +353,11 @@ interface MobileDealerProfilesPageProps {
   userLocation?: string;
 }
 
-/** Mobile dealer card: same info as website (address, status, Call now, Reride Recommends) */
+/** Mobile dealer card: same info as website (address, status, Call now; staff pick = admin `rerideRecommended`) */
 const MobileDealerCard: React.FC<{
   seller: User;
   onViewProfile: (sellerEmail: string) => void;
   onSelect?: (sellerEmail: string, coords: CompanyLocation | null) => void;
-  isRecommended?: boolean;
   coords?: CompanyLocation | null;
   isSelected?: boolean;
   vehicleCount: number;
@@ -373,7 +368,6 @@ const MobileDealerCard: React.FC<{
   seller,
   onViewProfile,
   onSelect,
-  isRecommended = false,
   coords = null,
   isSelected = false,
   vehicleCount,
@@ -385,8 +379,8 @@ const MobileDealerCard: React.FC<{
   //   role === 'service_provider'  -> "Car Service"
   //   role === 'seller'            -> "Showroom"
   const companyType: 'showroom' | 'car-service' = seller.role === 'service_provider' ? 'car-service' : 'showroom';
-  const hasProPlan = seller.subscriptionPlan === 'pro' || seller.subscriptionPlan === 'premium';
-  const shouldShowRecommendButton = isRecommended || hasProPlan || !!seller.rerideRecommended;
+  const showStaffPickRibbon = isRerideStaffPick(seller.rerideRecommended);
+  const dealerRating = getPublicDealerRating(seller);
 
   const getStatus = () => {
     const now = new Date();
@@ -440,7 +434,7 @@ const MobileDealerCard: React.FC<{
       }}
       style={{ cursor: coords ? 'pointer' : 'default' }}
     >
-      {shouldShowRecommendButton && (
+      {showStaffPickRibbon && (
         <div className="mdp-ribbon" aria-hidden>
           <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2l2.39 6.95H22l-6 4.43 2.39 6.95L12 16.9l-6.39 3.43L8 13.38l-6-4.43h7.61z" />
@@ -511,6 +505,20 @@ const MobileDealerCard: React.FC<{
               <span>{vehicleCount} {vehicleCount === 1 ? 'listing' : 'listings'}</span>
               <span className="text-slate-300">·</span>
               <span>{followersCount} followers</span>
+              {dealerRating ? (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <span className="inline-flex items-center gap-0.5 text-amber-700" aria-label={`Rating ${dealerRating.average} of 5`}>
+                    <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <path d="M12 2l2.39 6.95H22l-6 4.43 2.39 6.95L12 16.9l-6.39 3.43L8 13.38l-6-4.43h7.61z" />
+                    </svg>
+                    {dealerRating.average}/5
+                    {dealerRating.count != null ? (
+                      <span className="text-slate-400 font-medium">({dealerRating.count})</span>
+                    ) : null}
+                  </span>
+                </>
+              ) : null}
               <span className="text-slate-300">·</span>
               <span>{languages.join(', ')}</span>
             </div>
@@ -542,17 +550,6 @@ const MobileDealerCard: React.FC<{
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
             </svg>
           </button>
-          {shouldShowRecommendButton && (
-            <span
-              className="mdp-btn-gold text-[13px] font-bold px-3.5 py-2 rounded-xl inline-flex items-center gap-1.5 select-none pointer-events-none"
-              aria-label="Top Rated dealer"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l2.39 6.95H22l-6 4.43 2.39 6.95L12 16.9l-6.39 3.43L8 13.38l-6-4.43h7.61z" />
-              </svg>
-              Top Rated
-            </span>
-          )}
         </div>
       </div>
     </div>
@@ -908,7 +905,7 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
           </div>
         ) : (
           <div className="space-y-3 mdp-stagger">
-            {filteredSellers.map((seller, index) => {
+            {filteredSellers.map((seller) => {
               const sellerWithCoords = sellersWithCoords.find(item => item.seller.email === seller.email);
               return (
                 <div key={seller.email} ref={(el) => { cardRefs.current[seller.email] = el; }}>
@@ -916,7 +913,6 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
                     seller={seller}
                     onViewProfile={onViewProfile}
                     onSelect={handleDealerSelect}
-                    isRecommended={index === 0}
                     coords={sellerWithCoords?.coords ?? null}
                     isSelected={selectedDealerEmail === seller.email}
                     vehicleCount={vehicleCountMap.get(seller.email?.toLowerCase().trim() || '') || 0}

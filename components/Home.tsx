@@ -385,13 +385,15 @@ const Home: React.FC<HomeProps> = ({
     // --- Budget chips --------------------------------------------------------
     // Structured price filters rather than natural-language queries so they
     // apply deterministically via URL params.
-    const budgetChips = useMemo(
+    const budgetChips = useMemo<
+        Array<{ label: string; filters: Record<string, string | number> }>
+    >(
         () => [
-            { label: t('mobile.home.budget.under3'), filters: { maxPrice: 300000 } },
-            { label: t('mobile.home.budget.3to5'), filters: { minPrice: 300000, maxPrice: 500000 } },
-            { label: t('mobile.home.budget.5to8'), filters: { minPrice: 500000, maxPrice: 800000 } },
-            { label: t('mobile.home.budget.8to15'), filters: { minPrice: 800000, maxPrice: 1500000 } },
-            { label: t('mobile.home.budget.above15'), filters: { minPrice: 1500000 } },
+            { label: t('mobile.home.budget.under3'), filters: { maxPrice: 300000 } as Record<string, string | number> },
+            { label: t('mobile.home.budget.3to5'), filters: { minPrice: 300000, maxPrice: 500000 } as Record<string, string | number> },
+            { label: t('mobile.home.budget.5to8'), filters: { minPrice: 500000, maxPrice: 800000 } as Record<string, string | number> },
+            { label: t('mobile.home.budget.8to15'), filters: { minPrice: 800000, maxPrice: 1500000 } as Record<string, string | number> },
+            { label: t('mobile.home.budget.above15'), filters: { minPrice: 1500000 } as Record<string, string | number> },
         ],
         [t, i18n.language]
     );

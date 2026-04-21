@@ -238,6 +238,16 @@ const SP_STYLES = `
     color: #94a3b8;
   }
   .sp-verif-item.sp-ok .sp-verif-state { color: #10b981; }
+  .sp-verif-summary {
+    padding: .55rem .7rem;
+    border-radius: 10px;
+    background: #ffffff;
+    border: 1px solid #eef2f7;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #64748b;
+    line-height: 1.45;
+  }
   .sp-verif-platform {
     display: flex; align-items: flex-start; gap: .75rem;
     padding: .7rem .75rem;
@@ -531,6 +541,9 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
     const { items: checklistItems, verifiedCount, total: checklistTotal, pct: verificationPct, isPlatformVerifiedOnly } =
         getSellerTrustChecklistSummary(seller);
     const showVerifiedBadgeOnProfile = isUserVerified(seller);
+    /** Visitors: avoid three identical “Not verified” rows when nothing is complete yet */
+    const showVisitorTrustSummaryOnly =
+        !isOwnerSeller && verifiedCount === 0 && !isPlatformVerifiedOnly;
     const verificationItems = checklistItems.map((item) => ({
         ...item,
         icon:
@@ -732,36 +745,42 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                                                 </div>
                                             </div>
 
-                                            <div>
-                                                {verificationItems.map((item) => (
-                                                    <div
-                                                        key={item.key}
-                                                        className={`sp-verif-item ${item.verified ? 'sp-ok' : ''}`}
-                                                    >
-                                                        <span className="sp-verif-dot">
-                                                            {item.verified ? (
-                                                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                                    <path
-                                                                        fillRule="evenodd"
-                                                                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                                                        clipRule="evenodd"
-                                                                    />
-                                                                </svg>
-                                                            ) : (
-                                                                item.icon
-                                                            )}
-                                                        </span>
-                                                        <span className="sp-verif-label">{item.label}</span>
-                                                        <span className="sp-verif-state">
-                                                            {item.verified
-                                                                ? 'Verified'
-                                                                : isOwnerSeller
-                                                                  ? 'Finish in profile'
-                                                                  : 'Not verified'}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
+                                            {showVisitorTrustSummaryOnly ? (
+                                                <p className="sp-verif-summary">
+                                                    Phone, email, and government ID are not shown as verified on this profile yet.
+                                                </p>
+                                            ) : (
+                                                <div>
+                                                    {verificationItems.map((item) => (
+                                                        <div
+                                                            key={item.key}
+                                                            className={`sp-verif-item ${item.verified ? 'sp-ok' : ''}`}
+                                                        >
+                                                            <span className="sp-verif-dot">
+                                                                {item.verified ? (
+                                                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                                        <path
+                                                                            fillRule="evenodd"
+                                                                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                                            clipRule="evenodd"
+                                                                        />
+                                                                    </svg>
+                                                                ) : (
+                                                                    item.icon
+                                                                )}
+                                                            </span>
+                                                            <span className="sp-verif-label">{item.label}</span>
+                                                            <span className="sp-verif-state">
+                                                                {item.verified
+                                                                    ? 'Verified'
+                                                                    : isOwnerSeller
+                                                                      ? 'Finish in profile'
+                                                                      : 'Not verified'}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </>
                                     )}
                                 </div>

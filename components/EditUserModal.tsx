@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../types.js';
+import { isRerideStaffPick } from '../utils/staffPick.js';
 
 interface EditUserModalProps {
     user: User;
@@ -31,7 +32,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                 role: user.role,
                 location: user.location || '',
                 address: user.address || '',
-                rerideRecommended: !!user.rerideRecommended,
+                rerideRecommended: isRerideStaffPick(user.rerideRecommended),
             });
         }
     }, [user]);

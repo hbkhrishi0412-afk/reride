@@ -11,6 +11,8 @@ import {
 } from '../utils/sellerLocation.js';
 import { resolveSellerLogoUrl, sellerInitialsAvatarDataUri } from '../utils/imageUtils.js';
 import { sellerMatchesHeaderRegion } from '../utils/dealerRegionFilter.js';
+import { isRerideStaffPick } from '../utils/staffPick.js';
+import { getPublicDealerRating } from '../utils/dealerRatingDisplay.js';
 
 // Fix for default marker icons in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -289,14 +291,6 @@ const DP_STYLES = `
     transition: all .2s ease;
   }
   .dp-btn-ghost:hover { background: #eef2ff; color: #3730a3; border-color: #c7d2fe; }
-
-  .dp-btn-gold {
-    color: #78350f;
-    background: linear-gradient(135deg,#fde68a,#f59e0b);
-    box-shadow: 0 12px 24px -12px rgba(245,158,11,.55), inset 0 1px 0 rgba(255,255,255,.6);
-    transition: transform .2s ease, box-shadow .25s ease;
-  }
-  .dp-btn-gold:hover { transform: translateY(-1px); box-shadow: 0 18px 30px -12px rgba(245,158,11,.7); }
 
   /* ===== Scrollbar ===== */
   .dp-scroll::-webkit-scrollbar { width: 10px; }
@@ -782,12 +776,11 @@ const CompanyCard: React.FC<{
   onViewProfile: (sellerEmail: string) => void;
   onSelect?: (sellerEmail: string, coords: CompanyLocation | null) => void;
   onCall?: (phone: string) => void;
-  isRecommended?: boolean;
   coords?: CompanyLocation | null;
   isSelected?: boolean;
   currentUser?: User | null;
   onRequireLogin?: () => void;
-}> = ({ seller, onViewProfile, onSelect, onCall, isRecommended = false, coords = null, isSelected = false, currentUser, onRequireLogin }) => {
+}> = ({ seller, onViewProfile, onSelect, onCall, coords = null, isSelected = false, currentUser, onRequireLogin }) => {
   const [dealerLogoSrc, setDealerLogoSrc] = useState(() => resolveSellerLogoUrl(seller));
   useEffect(() => {
     setDealerLogoSrc(resolveSellerLogoUrl(seller));
@@ -798,9 +791,9 @@ const CompanyCard: React.FC<{
   // - role === 'seller'            -> "Showroom" (regardless of top_seller badge; that's a separate recognition)
   const companyType: 'showroom' | 'car-service' = isCarServiceProvider(seller) ? 'car-service' : 'showroom';
   
-  // Check if seller has pro or premium plan - show yellow button for pro/premium plan sellers
-  const hasProPlan = seller.subscriptionPlan === 'pro' || seller.subscriptionPlan === 'premium';
-  const shouldShowRecommendButton = isRecommended || hasProPlan || !!seller.rerideRecommended;
+  /** Matches admin "Recommended" (stored flag only — not list order or subscription). */
+  const showStaffPickRibbon = isRerideStaffPick(seller.rerideRecommended);
+  const dealerRating = getPublicDealerRating(seller);
   
   // Determine status based on current time (Indian Standard Time)
   const getStatus = () => {
@@ -881,7 +874,7 @@ const CompanyCard: React.FC<{
         if (onSelect && coords) onSelect(seller.email, coords);
       }}
     >
-      {shouldShowRecommendButton && (
+      {showStaffPickRibbon && (
         <div className="dp-ribbon" aria-hidden>
           <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2l2.39 6.95H22l-6 4.43 2.39 6.95L12 16.9l-6.39 3.43L8 13.38l-6-4.43h7.61z" />
@@ -954,12 +947,30 @@ const CompanyCard: React.FC<{
             </p>
 
             {/* Languages */}
-            <p className="text-[11px] text-slate-500 mb-3 inline-flex items-center gap-1">
+            <p
+              className={`text-[11px] text-slate-500 inline-flex items-center gap-1 ${dealerRating ? 'mb-2' : 'mb-3'}`}
+            >
               <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
               </svg>
               {languages.join(' · ')}
             </p>
+
+            {dealerRating ? (
+              <p
+                className="text-[12px] text-slate-700 font-semibold mb-3 inline-flex items-center gap-1"
+                aria-label={`Rating ${dealerRating.average} out of 5${dealerRating.count != null ? `, ${dealerRating.count} reviews` : ''}`}
+              >
+                <svg className="w-3.5 h-3.5 text-amber-500 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M12 2l2.39 6.95H22l-6 4.43 2.39 6.95L12 16.9l-6.39 3.43L8 13.38l-6-4.43h7.61z" />
+                </svg>
+                <span>{dealerRating.average}</span>
+                <span className="text-slate-400 font-medium">/5</span>
+                {dealerRating.count != null ? (
+                  <span className="text-slate-400 font-normal">({dealerRating.count})</span>
+                ) : null}
+              </p>
+            ) : null}
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-2">
@@ -986,17 +997,6 @@ const CompanyCard: React.FC<{
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
-              {shouldShowRecommendButton && (
-                <span
-                  className="dp-btn-gold dp-badge-static text-sm font-bold px-3.5 py-2 rounded-xl inline-flex items-center gap-1.5 select-none pointer-events-none"
-                  aria-label="Top Rated dealer"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2l2.39 6.95H22l-6 4.43 2.39 6.95L12 16.9l-6.39 3.43L8 13.38l-6-4.43h7.61z" />
-                  </svg>
-                  Top Rated
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -1341,7 +1341,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
               </div>
             ) : (
               <div ref={listRef} className="py-2 dp-stagger">
-                {filteredSellers.map((seller, index) => {
+                {filteredSellers.map((seller) => {
                   const sellerWithCoords = sellersWithCoords.find(item => item.seller.email === seller.email);
                   return (
                     <div
@@ -1353,7 +1353,6 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
                         onViewProfile={onViewProfile}
                         onSelect={handleDealerSelect}
                         onCall={handleCall}
-                        isRecommended={index === 0}
                         coords={sellerWithCoords?.coords || null}
                         isSelected={selectedDealerEmail === seller.email}
                         currentUser={currentUser}
