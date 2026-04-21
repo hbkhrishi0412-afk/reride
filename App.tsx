@@ -2136,6 +2136,7 @@ const AppContent: React.FC = () => {
               }}
               onSelectVehicle={selectVehicle}
               onBack={() => goBack(ViewEnum.USED_CARS)}
+              onClearCompare={() => setComparisonList([])}
             />
           );
         }
@@ -2150,6 +2151,7 @@ const AppContent: React.FC = () => {
                   : [...prev, id]
               );
             }}
+            onClearCompare={() => setComparisonList([])}
           />
         );
 

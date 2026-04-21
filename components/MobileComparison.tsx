@@ -9,6 +9,7 @@ interface MobileComparisonProps {
   onRemoveFromCompare: (vehicleId: number) => void;
   onSelectVehicle: (vehicle: Vehicle) => void;
   onBack?: () => void;
+  onClearCompare?: () => void;
 }
 
 /**
@@ -23,7 +24,8 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
   comparisonList,
   onRemoveFromCompare,
   onSelectVehicle,
-  onBack
+  onBack,
+  onClearCompare
 }) => {
   const { t, i18n } = useTranslation();
   const comparisonVehicles = useMemo(() => {
@@ -107,7 +109,17 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-xl font-bold text-gray-900">{t('compare.pageTitle')}</h1>
+          <h1 className="text-xl font-bold text-gray-900 flex-1 min-w-0">{t('compare.pageTitle')}</h1>
+          {onClearCompare && (
+            <button
+              type="button"
+              onClick={onClearCompare}
+              className="text-sm font-semibold text-orange-500 shrink-0 py-2 px-2"
+              style={{ minHeight: '44px' }}
+            >
+              {t('compare.clearAll')}
+            </button>
+          )}
         </div>
       )}
 

@@ -1115,7 +1115,8 @@ const AppContent: React.FC = () => {
         return <Comparison 
           vehicles={vehicles.filter(v => comparisonList.includes(v.id))} 
           onBack={() => navigate(View.USED_CARS)} 
-          onToggleCompare={handleToggleCompare} 
+          onToggleCompare={handleToggleCompare}
+          onClearCompare={() => setComparisonList([])}
         />;
       case View.PROFILE: 
         return currentUser && <Profile 
