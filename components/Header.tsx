@@ -9,6 +9,7 @@ import CityDropdown from './CityDropdown';
 import SellerDropdown from './SellerDropdown';
 import LanguageSwitcher from './LanguageSwitcher';
 import { supportTelHref } from '../utils/whatsappShare.js';
+import { useIsMdUp } from '../hooks/useIsMdUp';
 
 interface HeaderProps {
     onNavigate: (view: ViewEnum, params?: { city?: string }) => void;
@@ -56,6 +57,7 @@ const Header: React.FC<HeaderProps> = memo(({
     allVehicles
 }) => {
     const { t } = useTranslation();
+    const isMdUp = useIsMdUp();
     const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -176,10 +178,12 @@ const Header: React.FC<HeaderProps> = memo(({
                                         setIsLocationModalOpen(true);
                                     }
                                 }}
-                                className="flex items-center gap-1.5 transition-colors font-medium text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 rounded-md" 
+                                className="flex items-center gap-1.5 transition-colors font-medium text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 rounded-md notranslate" 
                                 style={{ color: '#1E88E5' }}
                                 aria-label={t('a11y.chooseLocation')}
                                 title={t('a11y.chooseLocation')}
+                                data-no-translate
+                                translate="no"
                             >
                                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -249,7 +253,12 @@ const Header: React.FC<HeaderProps> = memo(({
                                 >
                                     {t('nav.dealers')}
                                 </button>
-                                <div className="relative" ref={moreMenuRef}>
+                                <div
+                                    className="relative"
+                                    ref={moreMenuRef}
+                                    onMouseEnter={isMdUp ? () => setIsMoreMenuOpen(true) : undefined}
+                                    onMouseLeave={isMdUp ? () => setIsMoreMenuOpen(false) : undefined}
+                                >
                                     <button
                                         type="button"
                                         onClick={() => setIsMoreMenuOpen((p) => !p)}
@@ -269,10 +278,11 @@ const Header: React.FC<HeaderProps> = memo(({
                                         </svg>
                                     </button>
                                     {isMoreMenuOpen && (
-                                        <div
-                                            className="absolute left-0 top-full z-20 mt-1 min-w-[200px] rounded-lg border border-gray-100 bg-white py-1 shadow-lg dark:border-gray-200"
-                                            role="menu"
-                                        >
+                                        <div className="absolute left-0 top-full z-20 pt-1">
+                                            <div
+                                                className="min-w-[200px] rounded-lg border border-gray-100 bg-white py-1 shadow-lg dark:border-gray-200"
+                                                role="menu"
+                                            >
                                             <button
                                                 type="button"
                                                 role="menuitem"
@@ -297,6 +307,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                             >
                                                 {t('nav.aboutUs')}
                                             </button>
+                                            </div>
                                         </div>
                                     )}
                                 </div>

@@ -10,6 +10,8 @@
 }
 
 html {
+  /* Single rem root for all breakpoints — avoids 769–1023px using 16px while 14px is used elsewhere */
+  font-size: 14px;
   -webkit-text-size-adjust: 100%;
   -moz-text-size-adjust: 100%;
   -ms-text-size-adjust: 100%;
@@ -1209,11 +1211,12 @@ input, textarea, select {
   box-sizing: border-box;
 }
 
-/* Prevent horizontal overflow on root element */
+/* Prevent horizontal overflow on root element — 1rem tracks html (14px) for the whole app */
 #root {
   width: 100%;
   max-width: 100vw;
   overflow-x: hidden;
+  font-size: 1rem;
 }
 
 body {
@@ -1223,7 +1226,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: #FFFFFF;
   color: #2C2C2C;
-  font-size: 14px; /* Reduced base size for better proportions */
+  font-size: 1rem; /* Matches html root — all rem/em utilities inherit this scale */
   line-height: 1.6;
   overflow-x: hidden; /* Prevent horizontal scrolling */
   width: 100%;
@@ -1801,27 +1804,10 @@ a:hover {
   --spacing-2xl: 3rem;
 }
 
-/* Responsive typography */
-@media (min-width: 1024px) {
-  html {
-    font-size: 14px; /* Reduced from 16px */
-  }
-}
-
-@media (min-width: 1280px) {
-  html {
-    font-size: 14px; /* Reduced from 16px - keep consistent, don't scale up */
-  }
-}
-
-/* Prevent unwanted zoom on mobile */
+/* Prevent iOS from zooming on focus (html root is 14px globally) */
 @media (max-width: 768px) {
-  html {
-    font-size: 14px; /* Reduced from 16px - still prevents iOS zoom on input focus */
-  }
-  
   input, select, textarea {
-    font-size: 14px !important; /* Reduced from 16px - still prevents zoom on iOS */
+    font-size: 14px !important; /* Still prevents zoom on iOS */
   }
 }
 

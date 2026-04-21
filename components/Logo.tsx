@@ -33,7 +33,10 @@ const Logo: React.FC<LogoProps> = ({
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-row items-center ${config.spacing} transition-all duration-300 hover:scale-105 ${className}`}
+      // Brand lockup must stay Latin + identical in every locale (dom auto-translate skips this subtree)
+      data-no-translate
+      translate="no"
+      className={`flex flex-row items-center ${config.spacing} transition-all duration-300 hover:scale-105 notranslate ${className}`}
     >
       <div
         className={`relative shrink-0 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ${

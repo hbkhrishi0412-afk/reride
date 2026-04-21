@@ -48,6 +48,7 @@ import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 import { sanitizePersistedChatMessage, supabaseRowToConversation } from '../services/supabase-conversation-service';
 import { emailToKey } from '../services/supabase-user-service';
 import { isCapacitorNative } from '../utils/apiConfig';
+import { normalizeUserLocationForStorage } from '../utils/cityMapping';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 import { getEffectiveMuteKeys, isStoryMuted } from '../utils/notificationMute';
 import { getSupabaseClient } from '../lib/supabase';
@@ -756,7 +757,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return 'Mumbai';
     try {
       const storedLocation = localStorage.getItem('reRideUserLocation');
-      if (storedLocation && storedLocation.trim().length > 0) return storedLocation;
+      if (storedLocation && storedLocation.trim().length > 0) {
+        const n = normalizeUserLocationForStorage(storedLocation);
+        if (n) return n;
+      }
     } catch (error) {
       logWarn('Failed to load user location from localStorage:', error);
     }
@@ -766,9 +770,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return '';
     try {
       const storedCity = localStorage.getItem('reRideSelectedCity');
-      if (storedCity && storedCity.trim().length > 0) return storedCity;
+      if (storedCity && storedCity.trim().length > 0) {
+        const n = normalizeUserLocationForStorage(storedCity);
+        if (n) return n;
+      }
       const storedLocation = localStorage.getItem('reRideUserLocation');
-      if (storedLocation && storedLocation.trim().length > 0) return storedLocation;
+      if (storedLocation && storedLocation.trim().length > 0) {
+        const n = normalizeUserLocationForStorage(storedLocation);
+        if (n) return n;
+      }
     } catch (error) {
       logWarn('Failed to load selected city from localStorage:', error);
     }
@@ -1580,7 +1590,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const updateUserLocation = useCallback((location: string) => {
-    const nextLocation = (location ?? '').trim();
+    const nextLocation = normalizeUserLocationForStorage((location ?? '').trim());
     if (nextLocation.length === 0) {
       setUserLocationState('Mumbai');
       setSelectedCityState('');
@@ -1612,14 +1622,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const updateSelectedCity = useCallback((city: string) => {
-    const trimmedCity = (city ?? '').trim();
+    const trimmedCity = normalizeUserLocationForStorage((city ?? '').trim());
 
-    setSelectedCityState(prev => (prev === trimmedCity ? prev : trimmedCity));
+    setSelectedCityState((prev) => (prev === trimmedCity ? prev : trimmedCity));
 
     try {
       if (trimmedCity.length > 0) {
         localStorage.setItem('reRideSelectedCity', trimmedCity);
-        setUserLocationState(prev => (prev === trimmedCity ? prev : trimmedCity));
+        setUserLocationState((prev) => (prev === trimmedCity ? prev : trimmedCity));
         localStorage.setItem('reRideUserLocation', trimmedCity);
       } else {
         localStorage.removeItem('reRideSelectedCity');

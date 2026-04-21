@@ -496,7 +496,7 @@ const Home: React.FC<HomeProps> = ({
     );
 
     return (
-        <div className="min-h-screen bg-white overflow-x-hidden w-full">
+        <div className="min-h-screen bg-white w-full">
             {/* Sticky compact search — appears once the hero scrolls off-screen */}
             {showStickySearch && (
                 <div
@@ -559,7 +559,7 @@ const Home: React.FC<HomeProps> = ({
                 ref={heroRef}
                 onMouseMove={onHeroMouseMove}
                 onMouseLeave={onHeroMouseLeave}
-                className="relative py-16 md:py-24 px-4 overflow-hidden bg-[#0B1020]"
+                className="relative pt-0 pb-16 md:pt-4 md:pb-24 px-4 overflow-hidden bg-[#0B1020]"
                 style={{
                     background:
                         'radial-gradient(1000px 600px at -10% -10%, rgba(255,107,53,0.18) 0%, transparent 60%), radial-gradient(900px 600px at 110% 10%, rgba(124,58,237,0.22) 0%, transparent 60%), radial-gradient(1200px 800px at 50% 120%, rgba(59,130,246,0.18) 0%, transparent 60%), linear-gradient(135deg, #0B1020 0%, #111834 50%, #1A1240 100%)',
@@ -603,7 +603,7 @@ const Home: React.FC<HomeProps> = ({
                 <div className="relative max-w-5xl mx-auto text-center">
                     {/* Trust Badge */}
                     <div 
-                        className="hero-rise hero-rise-1 inline-flex items-center gap-2 px-5 py-2 rounded-full mb-7 shadow-lg"
+                        className="hero-rise hero-rise-1 inline-flex items-center gap-2 px-5 py-2 rounded-full mb-4 shadow-lg"
                         style={{
                             background: 'rgba(159, 122, 234, 0.3)',
                             backdropFilter: 'blur(10px)',
@@ -630,7 +630,7 @@ const Home: React.FC<HomeProps> = ({
                     <h1 
                         className="hero-rise hero-rise-2 hero-gradient-text mb-5 leading-[1.1]"
                         style={{
-                            fontSize: 'clamp(36px, 5.2vw, 56px)',
+                            fontSize: 'clamp(30px, 4.25vw, 46px)',
                             fontWeight: 700,
                             fontFamily: "'Poppins', sans-serif",
                             letterSpacing: '-0.025em'
@@ -643,7 +643,7 @@ const Home: React.FC<HomeProps> = ({
                     <p 
                         className="hero-rise hero-rise-3 mb-10 max-w-2xl mx-auto"
                         style={{
-                            fontSize: 'clamp(15px, 1.6vw, 17px)',
+                            fontSize: 'clamp(14px, 1.45vw, 16px)',
                             fontWeight: 400,
                             fontFamily: "'Poppins', sans-serif",
                             color: 'rgba(255, 255, 255, 0.88)',
