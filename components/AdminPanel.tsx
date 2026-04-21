@@ -15,6 +15,7 @@ import ImportUsersModal from './ImportUsersModal';
 import AdminServiceOps from './AdminServiceOps';
 import ServiceManagement from './ServiceManagement';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
+import { isRerideStaffPick } from '../utils/staffPick';
 
 /** Safe ₹ formatting — API/mock data can omit or invalidate numeric fields. */
 function formatInrAmount(value: unknown): string {
@@ -934,7 +935,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         users, currentUser, vehicles, conversations, isLoading = false, onToggleUserStatus, onDeleteUser,
         onAdminUpdateUser, onUpdateUserPlan, onUpdateVehicle, onDeleteVehicle, onToggleVehicleStatus,
         onToggleVehicleFeature,
-        onResolveFlag, platformSettings: _platformSettings, onUpdateSettings: _onUpdateSettings, onSendBroadcast: _onSendBroadcast,
+        onResolveFlag, platformSettings, onUpdateSettings, onSendBroadcast: _onSendBroadcast,
         auditLog, onExportUsers, onImportUsers, onExportVehicles, onImportVehicles, onNavigate: _onNavigate, onLogout, vehicleData, onUpdateVehicleData,
         supportTickets, onUpdateSupportTicket, faqItems, onAddFaq, onUpdateFaq, onDeleteFaq,
         onCertificationApproval,
@@ -945,12 +946,16 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
     const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
+    const [userListSearch, setUserListSearch] = useState('');
     const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
     const [selectedSeller, setSelectedSeller] = useState<string>('all');
     
-    // Pagination state
+    // Pagination state (vehicle listings)
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
+
+    const [userDirectoryPage, setUserDirectoryPage] = useState(1);
+    const [userDirectoryPageSize, setUserDirectoryPageSize] = useState(10);
     
     // Modal states
     const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -1072,19 +1077,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         return;
                     }
                     
-                    // Update localStorage cache
                     if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
                         localStorage.setItem('reRideUsers_prod', JSON.stringify(usersData));
-                        // Trigger storage event to notify AppProvider
-                        window.dispatchEvent(new Event('storage'));
+                        localStorage.setItem('reRideUsers', JSON.stringify(usersData));
+                        window.dispatchEvent(
+                            new CustomEvent('usersCacheUpdated', { detail: { users: usersData } })
+                        );
                     }
-                    
-                    // Reload page to ensure AppProvider picks up the new data
-                    // This is necessary because AdminPanel receives users as props from AppProvider
-                    console.log('🔄 AdminPanel: Reloading page to sync user data...');
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 500);
+                    console.log('✅ AdminPanel: User list synced from database (no reload)');
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : String(error);
                     const errorAny = error as any;
@@ -1132,39 +1132,27 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         }
     };
     
-    // Refresh data from database
+    /** Sync users from API/Supabase without a full page reload (AppProvider listens for `usersCacheUpdated`). */
     const handleRefreshData = async () => {
         setIsRefreshing(true);
         try {
             const { dataService } = await import('../services/dataService');
-            // CRITICAL FIX: Force refresh to bypass cache and get fresh data from database
-            const [vehiclesData, usersData] = await Promise.all([
-                dataService.getVehicles(true, true), // includeAllStatuses=true, forceRefresh=true
-                dataService.getUsers(true) // forceRefresh=true
-            ]);
-            
-            console.log(`🔄 Refresh: Loaded ${vehiclesData.length} vehicles and ${usersData.length} users`);
-            
-            // Update localStorage cache with correct keys (matching AppProvider)
+            const usersData = await dataService.getUsers(true);
+            console.log(`🔄 Refresh: Loaded ${usersData.length} users from database`);
+
             if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-                // Use production cache keys to match AppProvider
-                localStorage.setItem('reRideVehicles_prod', JSON.stringify(vehiclesData));
                 localStorage.setItem('reRideUsers_prod', JSON.stringify(usersData));
-                // Also update legacy keys for backward compatibility
-                localStorage.setItem('reRideVehicles', JSON.stringify(vehiclesData));
                 localStorage.setItem('reRideUsers', JSON.stringify(usersData));
-                // Trigger storage event to notify other components
-                window.dispatchEvent(new Event('storage'));
             }
-            
-            // Force page reload to ensure all components get updated data
-            // This is the most reliable way to ensure sync
-            setTimeout(() => {
-                window.location.reload();
-            }, 500);
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                    new CustomEvent('usersCacheUpdated', { detail: { users: usersData } })
+                );
+            }
         } catch (error) {
             console.error('Failed to refresh data:', error);
             alert('Failed to refresh data. Please try again.');
+        } finally {
             setIsRefreshing(false);
         }
     };
@@ -1210,8 +1198,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         setEditingUser(null);
     };
 
-    const handleSaveVehicle = (updatedVehicle: Vehicle) => {
-        onUpdateVehicle(updatedVehicle);
+    const handleSaveVehicle = async (updatedVehicle: Vehicle) => {
+        await Promise.resolve(onUpdateVehicle(updatedVehicle));
         setEditingVehicle(null);
     };
 
@@ -1243,6 +1231,51 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         if (roleFilter === 'all') return sortedUsers;
         return sortedUsers.filter(user => user.role === roleFilter);
     }, [sortedUsers, roleFilter]);
+
+    const userRoleCounts = useMemo(() => {
+        const list = users || [];
+        return {
+            all: list.length,
+            customer: list.filter(u => u.role === 'customer').length,
+            seller: list.filter(u => u.role === 'seller').length,
+            admin: list.filter(u => u.role === 'admin').length,
+        };
+    }, [users]);
+
+    const usersDisplayed = useMemo(() => {
+        const q = userListSearch.trim().toLowerCase();
+        if (!q) return filteredUsers;
+        return filteredUsers.filter(u => {
+            const name = (u.name || '').toLowerCase();
+            const email = (u.email || '').toLowerCase();
+            const mobile = (u.mobile || '').replace(/\s/g, '').toLowerCase();
+            const addr = (u.address || u.location || '').toLowerCase();
+            return name.includes(q) || email.includes(q) || mobile.includes(q) || addr.includes(q);
+        });
+    }, [filteredUsers, userListSearch]);
+
+    const userDirectoryNeedsPagination = usersDisplayed.length > 10;
+
+    const userDirectoryTotalPages = Math.max(1, Math.ceil(usersDisplayed.length / userDirectoryPageSize));
+
+    const directoryTableRows = useMemo(() => {
+        if (!userDirectoryNeedsPagination) return usersDisplayed;
+        const start = (userDirectoryPage - 1) * userDirectoryPageSize;
+        return usersDisplayed.slice(start, start + userDirectoryPageSize);
+    }, [usersDisplayed, userDirectoryNeedsPagination, userDirectoryPage, userDirectoryPageSize]);
+
+    useEffect(() => {
+        setUserDirectoryPage(1);
+    }, [roleFilter, userListSearch]);
+
+    useEffect(() => {
+        setUserDirectoryPage(p => (p > userDirectoryTotalPages ? userDirectoryTotalPages : p));
+    }, [userDirectoryTotalPages]);
+
+    const handleUserDirectoryPageSizeChange = (size: number) => {
+        setUserDirectoryPageSize(size);
+        setUserDirectoryPage(1);
+    };
 
     // Pagination logic for vehicles
     const filteredVehicles = useMemo(() => {
@@ -1345,155 +1378,213 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     );
             case 'users':
     return (
-                    <div className="space-y-4">
-                        {/* Compact Header with Filters and Export */}
-                        <div className="bg-white rounded-lg border border-gray-200 p-4">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <span className="text-sm font-medium text-gray-700 mr-2">Filter:</span>
-                                    <button 
-                                        onClick={() => setRoleFilter('all')}
-                                        className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${
-                                            roleFilter === 'all' 
-                                                ? 'bg-blue-500 text-white shadow-sm' 
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                        }`}
-                                    >
-                                        All ({users.length})
-                                    </button>
-                                    <button 
-                                        onClick={() => setRoleFilter('customer')}
-                                        className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${
-                                            roleFilter === 'customer' 
-                                                ? 'bg-blue-500 text-white shadow-sm' 
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                        }`}
-                                    >
-                                        Customers ({users.filter(u => u.role === 'customer').length})
-                                    </button>
-                                    <button 
-                                        onClick={() => setRoleFilter('seller')}
-                                        className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${
-                                            roleFilter === 'seller' 
-                                                ? 'bg-blue-500 text-white shadow-sm' 
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                        }`}
-                                    >
-                                        Sellers ({users.filter(u => u.role === 'seller').length})
-                                    </button>
-                                    <button 
-                                        onClick={() => setRoleFilter('admin')}
-                                        className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${
-                                            roleFilter === 'admin' 
-                                                ? 'bg-blue-500 text-white shadow-sm' 
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                        }`}
-                                    >
-                                        Admins ({users.filter(u => u.role === 'admin').length})
-                                    </button>
+                    <div className="space-y-5">
+                        <div className="rounded-2xl border border-gray-200/90 bg-white shadow-sm overflow-hidden">
+                            <div className="border-b border-gray-100 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 px-4 py-4 sm:px-5">
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                    <div className="min-w-0">
+                                        <h2 className="text-lg font-semibold text-gray-900 tracking-tight">User management</h2>
+                                        <p className="text-xs text-gray-500 mt-1 max-w-xl">
+                                            Role filters and search run locally. Refresh pulls the latest users from the server (Supabase-backed API) and updates the app instantly—no full page reload.
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleRefreshData();
+                                            }}
+                                            disabled={isRefreshing}
+                                            className={`inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all ${
+                                                isRefreshing
+                                                    ? 'bg-slate-200 text-slate-600 cursor-wait'
+                                                    : 'bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 hover:shadow'
+                                            }`}
+                                            title="Fetch latest users from the database"
+                                        >
+                                            {isRefreshing ? (
+                                                <>
+                                                    <span className="h-4 w-4 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" aria-hidden />
+                                                    Syncing…
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                    </svg>
+                                                    Refresh
+                                                </>
+                                            )}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setShowImportUsersModal(true);
+                                            }}
+                                            className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+                                        >
+                                            Import
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleActionWithLoading('export-users', onExportUsers);
+                                            }}
+                                            disabled={loadingActions.has('export-users')}
+                                            className={`inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-medium shadow-sm transition-colors ${
+                                                loadingActions.has('export-users')
+                                                    ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                                                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                            }`}
+                                        >
+                                            {loadingActions.has('export-users') ? 'Exporting…' : 'Export'}
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="flex gap-2">
-                                    <button 
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            handleRefreshData();
-                                        }} 
-                                        disabled={isRefreshing}
-                                        className={`px-4 py-1.5 text-sm rounded-md font-medium cursor-pointer transition-colors flex items-center gap-2 ${
-                                            isRefreshing 
-                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                                                : 'bg-blue-500 text-white hover:bg-blue-600 shadow-sm'
-                                        }`}
-                                        title="Refresh data from database"
-                                    >
-                                        {isRefreshing ? (
-                                            <>
-                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                Refreshing...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                </svg>
-                                                Refresh
-                                            </>
-                                        )}
-                                    </button>
-                                    <button 
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            setShowImportUsersModal(true);
-                                        }} 
-                                        className="px-4 py-1.5 text-sm rounded-md font-medium cursor-pointer transition-colors bg-blue-500 text-white hover:bg-blue-600 shadow-sm"
-                                    >
-                                        Import Users
-                                    </button>
-                                    <button 
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            handleActionWithLoading('export-users', onExportUsers);
-                                        }} 
-                                        disabled={loadingActions.has('export-users')}
-                                        className={`px-4 py-1.5 text-sm rounded-md font-medium cursor-pointer transition-colors ${
-                                            loadingActions.has('export-users') 
-                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                                                : 'bg-green-500 text-white hover:bg-green-600 shadow-sm'
-                                        }`}
-                                    >
-                                        {loadingActions.has('export-users') ? 'Exporting...' : 'Export Users'}
-                                    </button>
+                                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="inline-flex flex-wrap rounded-xl bg-gray-100/90 p-1 gap-0.5" role="group" aria-label="Filter by role">
+                                        <button
+                                            type="button"
+                                            onClick={() => setRoleFilter('all')}
+                                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all sm:text-sm ${
+                                                roleFilter === 'all'
+                                                    ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-gray-200/80'
+                                                    : 'text-gray-600 hover:text-gray-900'
+                                            }`}
+                                        >
+                                            All <span className="text-gray-400 font-normal">({userRoleCounts.all})</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setRoleFilter('customer')}
+                                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all sm:text-sm ${
+                                                roleFilter === 'customer'
+                                                    ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-gray-200/80'
+                                                    : 'text-gray-600 hover:text-gray-900'
+                                            }`}
+                                        >
+                                            Customers <span className="text-gray-400 font-normal">({userRoleCounts.customer})</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setRoleFilter('seller')}
+                                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all sm:text-sm ${
+                                                roleFilter === 'seller'
+                                                    ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-gray-200/80'
+                                                    : 'text-gray-600 hover:text-gray-900'
+                                            }`}
+                                        >
+                                            Sellers <span className="text-gray-400 font-normal">({userRoleCounts.seller})</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setRoleFilter('admin')}
+                                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all sm:text-sm ${
+                                                roleFilter === 'admin'
+                                                    ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-gray-200/80'
+                                                    : 'text-gray-600 hover:text-gray-900'
+                                            }`}
+                                        >
+                                            Admins <span className="text-gray-400 font-normal">({userRoleCounts.admin})</span>
+                                        </button>
+                                    </div>
+                                    <label className="relative block w-full sm:max-w-xs">
+                                        <span className="sr-only">Search users</span>
+                                        <svg className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                        <input
+                                            type="search"
+                                            value={userListSearch}
+                                            onChange={(e) => setUserListSearch(e.target.value)}
+                                            placeholder="Search name, email, phone…"
+                                            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                        />
+                                    </label>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Compact Finance Partner Summary - Only for Seller/All views */}
                         {roleFilter === 'seller' || roleFilter === 'all' ? (() => {
-                            const sellers = filteredUsers.filter(u => u.role === 'seller');
+                            const sellers = filteredUsers.filter(
+                                u => u.role === 'seller' || u.role === 'service_provider'
+                            );
                             const sellersWithBanks = sellers.filter(s => s.partnerBanks && s.partnerBanks.length > 0);
                             const totalBanks = sellersWithBanks.reduce((acc, s) => acc + (s.partnerBanks?.length || 0), 0);
-                            
+
                             return (
-                                <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200 p-4">
-                                    <div className="flex items-center justify-between flex-wrap gap-4">
-                                        <div className="flex items-center gap-2">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                                            </svg>
-                                            <h3 className="text-sm font-semibold text-gray-900">Finance Partner Summary</h3>
+                                <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-r from-violet-50/90 via-white to-sky-50/80 px-4 py-3 sm:px-5 sm:py-4 shadow-sm">
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                                </svg>
+                                            </span>
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-gray-900">Finance partner summary</h3>
+                                                <p className="text-xs text-gray-500 hidden sm:block">Counts reflect the current role filter.</p>
+                                            </div>
                                         </div>
-                                        <div className="flex flex-wrap items-center gap-4 text-sm">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-gray-600">Total Sellers:</span>
-                                                <span className="font-bold text-gray-900">{sellers.length}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-gray-600">With Partners:</span>
-                                                <span className="font-bold text-purple-600">{sellersWithBanks.length}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-gray-600">Total Partnerships:</span>
-                                                <span className="font-bold text-blue-600">{totalBanks}</span>
-                                            </div>
+                                        <div className="flex flex-wrap gap-2 sm:justify-end">
+                                            <span className="inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-gray-700 ring-1 ring-gray-200/80 shadow-sm">
+                                                <span className="text-gray-500">Sellers</span>
+                                                <span className="tabular-nums font-semibold text-gray-900">{sellers.length}</span>
+                                            </span>
+                                            <span className="inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-gray-700 ring-1 ring-violet-200/80 shadow-sm">
+                                                <span className="text-gray-500">With partners</span>
+                                                <span className="tabular-nums font-semibold text-violet-700">{sellersWithBanks.length}</span>
+                                            </span>
+                                            <span className="inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-gray-700 ring-1 ring-sky-200/80 shadow-sm">
+                                                <span className="text-gray-500">Partnerships</span>
+                                                <span className="tabular-nums font-semibold text-sky-700">{totalBanks}</span>
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
                             );
                         })() : null}
-                        
-                        {/* Compact Table */}
-                        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+
+                        <div className="rounded-2xl border border-gray-200/90 bg-white shadow-sm overflow-hidden">
+                            <div className="flex flex-col gap-1 border-b border-gray-100 bg-gray-50/90 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                                 <h3 className="text-sm font-semibold text-gray-900">
-                                    User Management <span className="text-gray-600 font-normal">({filteredUsers.length} users)</span>
+                                    Directory
+                                    <span className="ml-1.5 font-normal text-gray-500">
+                                        {(() => {
+                                            const rangeSuffix =
+                                                userDirectoryNeedsPagination && usersDisplayed.length > 0
+                                                    ? ` · ${(userDirectoryPage - 1) * userDirectoryPageSize + 1}–${Math.min(
+                                                          userDirectoryPage * userDirectoryPageSize,
+                                                          usersDisplayed.length
+                                                      )} of ${usersDisplayed.length}`
+                                                    : '';
+                                            if (userListSearch.trim()) {
+                                                return `${usersDisplayed.length} shown · ${filteredUsers.length} in view${rangeSuffix}`;
+                                            }
+                                            return `${filteredUsers.length} in view${rangeSuffix}`;
+                                        })()}
+                                    </span>
                                 </h3>
+                                {userListSearch.trim() ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => setUserListSearch('')}
+                                        className="self-start text-xs font-medium text-indigo-600 hover:text-indigo-800 sm:self-auto"
+                                    >
+                                        Clear search
+                                    </button>
+                                ) : null}
                             </div>
                             <div className="overflow-x-auto">
-                                <table className="w-full divide-y divide-gray-200" style={{ minWidth: '800px' }}>
-                                    <thead className="bg-gray-50">
+                                <div className="max-h-[min(70vh,720px)] overflow-y-auto">
+                                <table className="w-full divide-y divide-gray-200" style={{ minWidth: '880px' }}>
+                                    <thead className="sticky top-0 z-10 bg-gray-50 shadow-[0_1px_0_0_rgb(229_231_235)]">
                                         <tr>
                                             <SortableHeader title="Name" sortKey="name" sortConfig={sortConfig} requestSort={requestSort} />
                                             <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Email</th>
@@ -1513,7 +1604,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
-                                        {filteredUsers.map(user => {
+                                        {directoryTableRows.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={12} className="px-4 py-10 text-center text-sm text-gray-500">
+                                                    No users match this filter or search.
+                                                </td>
+                                            </tr>
+                                        ) : null}
+                                        {directoryTableRows.map(user => {
                                             const memberSince = user.createdAt || user.joinedDate;
                                             const formattedDate = memberSince 
                                                 ? (() => {
@@ -1529,7 +1627,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                 })()
                                                 : 'N/A';
                                             return (
-                                            <tr key={user.email} className="hover:bg-gray-50 transition-colors">
+                                            <tr key={user.email} className="transition-colors odd:bg-white even:bg-slate-50/60 hover:bg-indigo-50/40">
                                                 <td className="px-3 py-2.5 whitespace-nowrap">
                                                     <div className="font-medium text-sm text-gray-900">{user.name}</div>
                                                 </td>
@@ -1544,7 +1642,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded-full ${
                                                         user.role === 'admin' ? 'bg-purple-100 text-purple-700' :
                                                         user.role === 'seller' ? 'bg-blue-100 text-blue-700' :
-                                                        'bg-green-100 text-green-700'
+                                                        user.role === 'service_provider' ? 'bg-teal-100 text-teal-800' :
+                                                        'bg-emerald-100 text-emerald-800'
                                                     }`}>
                                                         {user.role}
                                                     </span>
@@ -1559,7 +1658,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                 <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-600">{formattedDate}</td>
                                                 {(roleFilter === 'seller' || roleFilter === 'all') && (
                                                   <td className="px-3 py-2.5 whitespace-nowrap">
-                                                    {user.role === 'seller' && user.partnerBanks && user.partnerBanks.length > 0 ? (
+                                                    {(user.role === 'seller' || user.role === 'service_provider') && user.partnerBanks && user.partnerBanks.length > 0 ? (
                                                       <div className="flex flex-wrap gap-1">
                                                         {user.partnerBanks.slice(0, 2).map((bank, idx) => (
                                                           <span
@@ -1575,7 +1674,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                           </span>
                                                         )}
                                                       </div>
-                                                    ) : user.role === 'seller' ? (
+                                                    ) : user.role === 'seller' || user.role === 'service_provider' ? (
                                                       <span className="text-xs text-gray-400">No partners</span>
                                                     ) : (
                                                       <span className="text-xs text-gray-400">-</span>
@@ -1584,11 +1683,11 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                 )}
                                                 {(roleFilter === 'seller' || roleFilter === 'all') && (
                                                   <td className="px-3 py-2.5 whitespace-nowrap">
-                                                    {user.role === 'seller' ? (
+                                                    {user.role === 'seller' || user.role === 'service_provider' ? (
                                                       <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded-full ${
-                                                        user.rerideRecommended ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'
+                                                        isRerideStaffPick(user.rerideRecommended) ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'
                                                       }`}>
-                                                        {user.rerideRecommended ? 'Yes' : 'No'}
+                                                        {isRerideStaffPick(user.rerideRecommended) ? 'Yes' : 'No'}
                                                       </span>
                                                     ) : (
                                                       <span className="text-xs text-gray-400">-</span>
@@ -1621,19 +1720,20 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     </div>
                                                 </td>
                                                 <td className="px-3 py-2.5 whitespace-nowrap">
-                                                    <div className="flex items-center gap-2">
-                                                        <button 
+                                                    <div className="inline-flex flex-wrap items-center gap-1 rounded-lg bg-gray-50/80 p-0.5 ring-1 ring-gray-200/60">
+                                                        <button
+                                                            type="button"
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
                                                                 setEditingUser(user);
-                                                            }} 
-                                                            className="text-blue-600 hover:text-blue-800 text-xs font-medium cursor-pointer transition-colors"
+                                                            }}
+                                                            className="rounded-md px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-white hover:shadow-sm"
                                                         >
                                                             Edit
                                                         </button>
-                                                        <span className="text-gray-300">|</span>
-                                                        <button 
+                                                        <button
+                                                            type="button"
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
@@ -1641,33 +1741,33 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                                 if (window.confirm(`Are you sure you want to ${action} user ${user.email}?`)) {
                                                                     handleActionWithLoading(`toggle-user-${user.email}`, () => onToggleUserStatus(user.email));
                                                                 }
-                                                            }} 
+                                                            }}
                                                             disabled={loadingActions.has(`toggle-user-${user.email}`)}
-                                                            className={`text-xs font-medium cursor-pointer transition-colors ${
+                                                            className={`rounded-md px-2 py-1 text-xs font-semibold ${
                                                                 loadingActions.has(`toggle-user-${user.email}`)
                                                                     ? 'text-gray-400 cursor-not-allowed'
-                                                                    : 'text-yellow-600 hover:text-yellow-800'
+                                                                    : 'text-amber-800 hover:bg-white hover:shadow-sm'
                                                             }`}
                                                         >
-                                                            {loadingActions.has(`toggle-user-${user.email}`) ? '...' : (user.status === 'active' ? 'Suspend' : 'Activate')}
+                                                            {loadingActions.has(`toggle-user-${user.email}`) ? '…' : (user.status === 'active' ? 'Suspend' : 'Activate')}
                                                         </button>
-                                                        <span className="text-gray-300">|</span>
-                                                        <button 
+                                                        <button
+                                                            type="button"
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
                                                                 if (window.confirm(`Are you sure you want to delete user ${user.email}? This action cannot be undone.`)) {
                                                                     handleActionWithLoading(`delete-user-${user.email}`, () => onDeleteUser(user.email));
                                                                 }
-                                                            }} 
+                                                            }}
                                                             disabled={loadingActions.has(`delete-user-${user.email}`)}
-                                                            className={`text-xs font-medium cursor-pointer transition-colors ${
+                                                            className={`rounded-md px-2 py-1 text-xs font-semibold ${
                                                                 loadingActions.has(`delete-user-${user.email}`)
                                                                     ? 'text-gray-400 cursor-not-allowed'
-                                                                    : 'text-red-600 hover:text-red-800'
+                                                                    : 'text-red-700 hover:bg-white hover:shadow-sm'
                                                             }`}
                                                         >
-                                                            {loadingActions.has(`delete-user-${user.email}`) ? '...' : 'Delete'}
+                                                            {loadingActions.has(`delete-user-${user.email}`) ? '…' : 'Delete'}
                                                         </button>
                                                     </div>
                                                 </td>
@@ -1676,6 +1776,51 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         })}
                                     </tbody>
                                 </table>
+                                </div>
+                                {userDirectoryNeedsPagination ? (
+                                    <div className="flex flex-col gap-3 border-t border-gray-100 bg-gray-50/90 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                                        <label className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                                            <span className="font-medium text-gray-700">Rows per page</span>
+                                            <select
+                                                value={userDirectoryPageSize}
+                                                onChange={(e) => handleUserDirectoryPageSizeChange(Number(e.target.value))}
+                                                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                            >
+                                                <option value={10}>10</option>
+                                                <option value={20}>20</option>
+                                                <option value={50}>50</option>
+                                                <option value={100}>100</option>
+                                            </select>
+                                        </label>
+                                        <div className="flex flex-wrap items-center justify-end gap-2">
+                                            <span className="text-xs text-gray-500 tabular-nums sm:text-sm">
+                                                Page {userDirectoryPage} of {userDirectoryTotalPages}
+                                            </span>
+                                            <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 shadow-sm">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setUserDirectoryPage((p) => Math.max(1, p - 1))}
+                                                    disabled={userDirectoryPage <= 1}
+                                                    className="rounded-md px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40"
+                                                >
+                                                    Previous
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setUserDirectoryPage((p) =>
+                                                            Math.min(userDirectoryTotalPages, p + 1)
+                                                        )
+                                                    }
+                                                    disabled={userDirectoryPage >= userDirectoryTotalPages}
+                                                    className="rounded-md px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40"
+                                                >
+                                                    Next
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : null}
                             </div>
                         </div>
                     </div>
@@ -2110,13 +2255,76 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         );
     };
 
-    const PlatformSettingsView = () => (
-        <div className="space-y-6">
-            <div className="text-center py-8 text-gray-500">
-                Platform settings functionality would be implemented here
+    const PlatformSettingsView = () => {
+        const [draft, setDraft] = useState<PlatformSettings>(() => ({
+            listingFee: platformSettings.listingFee,
+            siteAnnouncement: platformSettings.siteAnnouncement || '',
+        }));
+
+        useEffect(() => {
+            setDraft({
+                listingFee: platformSettings.listingFee,
+                siteAnnouncement: platformSettings.siteAnnouncement || '',
+            });
+        }, [platformSettings.listingFee, platformSettings.siteAnnouncement]);
+
+        const handleSubmit = (e: React.FormEvent) => {
+            e.preventDefault();
+            const fee = Number(draft.listingFee);
+            onUpdateSettings({
+                listingFee: Number.isFinite(fee) ? Math.max(0, fee) : platformSettings.listingFee,
+                siteAnnouncement: String(draft.siteAnnouncement || '').trim(),
+            });
+        };
+
+        return (
+            <div className="space-y-6 max-w-2xl">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Platform settings</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Values are persisted to Supabase (<code>platform_settings</code> table) and apply to every
+                    visitor across all devices. The current tab also keeps a local copy so changes appear
+                    instantly while the server round-trip completes.
+                </p>
+                <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+                    <div>
+                        <label htmlFor="admin-listing-fee" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Listing fee (₹)
+                        </label>
+                        <input
+                            id="admin-listing-fee"
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={draft.listingFee}
+                            onChange={(e) =>
+                                setDraft((d) => ({ ...d, listingFee: e.target.value === '' ? 0 : Number(e.target.value) }))
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-900 dark:text-white"
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="admin-site-announcement" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Site announcement
+                        </label>
+                        <textarea
+                            id="admin-site-announcement"
+                            rows={4}
+                            value={draft.siteAnnouncement}
+                            onChange={(e) => setDraft((d) => ({ ...d, siteAnnouncement: e.target.value }))}
+                            placeholder="Short message for banners or future homepage use"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-900 dark:text-white"
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        className="px-4 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90 font-medium"
+                    >
+                        Save settings
+                    </button>
+                </form>
             </div>
-        </div>
-    );
+        );
+    };
 
     const SupportTicketsView = () => {
         const [statusFilter, setStatusFilter] = useState<'All' | 'Open' | 'In Progress' | 'Closed'>('All');

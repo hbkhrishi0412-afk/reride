@@ -7,6 +7,9 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { toastEn, toastHi, toastTe, toastTa } from './toastStrings';
+import { installDynamicTranslation } from './dynamicTranslate';
+import { installDOMAutoTranslation } from './domAutoTranslate';
+import { installDocumentLocaleSync } from './documentLocaleSync';
 
 const en = {
   'app.name': 'ReRide',
@@ -368,9 +371,9 @@ const en = {
   'user.greeting': 'Hi, {{name}}',
   'home.trustBadge1M': 'Trusted by 1M+ Customers',
   'home.trustBadgeVerified': '100% RTO-verified listings',
-  'home.premiumUsedCars': 'Premium Used Cars',
+  'home.premiumUsedCars': 'Upgrade Your Ride, Not Your EMI',
   'home.marketingSubhead':
-    'Discover exceptional vehicles with our comprehensive quality assurance and premium service',
+    '200+ quality checks. Fixed prices. Verified sellers. Cars, bikes, and more — handpicked for smarter buyers.',
   'home.card.qualityTitle': '200+ Quality Checks',
   'home.card.qualityDesc': 'Comprehensive inspection',
   'home.card.fixedTitle': 'Fixed Price',
@@ -463,7 +466,7 @@ const en = {
   'mobile.home.readyToSell': 'Ready to Sell?',
   'mobile.home.listVehicle': 'List your vehicle and reach thousands of buyers',
   'mobile.home.heroSub':
-    'Discover exceptional vehicles with comprehensive quality assurance',
+    '200+ quality checks. Verified sellers. Cars, bikes, and more — handpicked for smarter buyers.',
   'search.placeholderMobile': 'Search by brand, model, budget...',
   'mobile.home.browseAllCars': 'Browse All Cars',
   'mobile.home.exploreLocation': 'Explore by Location',
@@ -1255,9 +1258,9 @@ const hi: Record<string, string> = {
   'user.greeting': 'नमस्ते, {{name}}',
   'home.trustBadge1M': '10 लाख+ ग्राहकों का भरोसा',
   'home.trustBadgeVerified': '100% RTO-सत्यापित लिस्टिंग',
-  'home.premiumUsedCars': 'प्रीमियम प्रयुक्त कारें',
+  'home.premiumUsedCars': 'अपनी सवारी अपग्रेड करें, EMI नहीं',
   'home.marketingSubhead':
-    'विस्तृत गुणवत्ता आश्वासन और प्रीमियम सेवा के साथ शानदार वाहन खोजें',
+    '200+ गुणवत्ता जांच। तय कीमत। सत्यापित विक्रेता। कारें, बाइक और बहुत कुछ — समझदार खरीदारों के लिए चुनी गईं।',
   'home.card.qualityTitle': '200+ गुणवत्ता जांच',
   'home.card.qualityDesc': 'व्यापक निरीक्षण',
   'home.card.fixedTitle': 'निश्चित मूल्य',
@@ -1332,7 +1335,7 @@ const hi: Record<string, string> = {
   'mobile.home.readyToSell': 'बेचने के लिए तैयार?',
   'mobile.home.listVehicle': 'अपना वाहन लिस्ट करें और हजारों खरीदारों तक पहुंचें',
   'mobile.home.heroSub':
-    'विस्तृत गुणवत्ता आश्वासन के साथ शानदार वाहन खोजें',
+    '200+ गुणवत्ता जांच। सत्यापित विक्रेता। कारें, बाइक और बहुत कुछ — समझदार खरीदारों के लिए चुनी गईं।',
   'search.placeholderMobile': 'ब्रांड, मॉडल, बजट से खोजें...',
   'mobile.home.browseAllCars': 'सभी कारें ब्राउज़ करें',
   'mobile.home.exploreLocation': 'स्थान के अनुसार खोजें',
@@ -1950,9 +1953,9 @@ const te: Record<string, string> = {
   'user.greeting': 'హాయ్, {{name}}',
   'home.trustBadge1M': '10 లక్షల+ కస్టమర్ల విశ్వాసం',
   'home.trustBadgeVerified': '100% RTO-ధృవీకరించిన లిస్టింగ్‌లు',
-  'home.premiumUsedCars': 'ప్రీమియం వాడిన కార్లు',
+  'home.premiumUsedCars': 'మీ వాహనం అప్‌గ్రేడ్ చేయండి, EMI కాదు',
   'home.marketingSubhead':
-    'సమగ్ర నాణ్యత హామీ మరియు ప్రీమియం సేవతో అద్భుతమైన వాహనాలను కనుగొనండి',
+    '200+ నాణ్యత తనిఖీలు. నిర్ణీత ధరలు. ధృవీకరించబడిన విక్రేతలు. కార్లు, బైక్‌లు, మరెన్నో — తెలివైన కొనుగోలుదారుల కోసం ఎంపిక చేయబడినవి.',
   'home.card.qualityTitle': '200+ నాణ్యత తనిఖీలు',
   'home.card.qualityDesc': 'సమగ్ర పరిశీలన',
   'home.card.fixedTitle': 'స్థిర ధర',
@@ -2029,7 +2032,7 @@ const te: Record<string, string> = {
   'mobile.home.listVehicle':
     'మీ వాహనాన్ని జాబితా చేయండి మరియు వేలాది కొనుగోలుదారులకు చేరుకోండి',
   'mobile.home.heroSub':
-    'సమగ్ర నాణ్యత హామీతో అద్భుతమైన వాహనాలను కనుగొనండి',
+    '200+ నాణ్యత తనిఖీలు. ధృవీకరించబడిన విక్రేతలు. కార్లు, బైక్‌లు, మరెన్నో — తెలివైన కొనుగోలుదారుల కోసం ఎంపిక చేయబడినవి.',
   'search.placeholderMobile': 'బ్రాండ్, మోడల్, బడ్జెట్ ద్వారా శోధించండి...',
   'mobile.home.browseAllCars': 'అన్ని కార్లు బ్రౌజ్ చేయండి',
   'mobile.home.exploreLocation': 'స్థానం ప్రకారం అన్వేషించండి',
@@ -2778,9 +2781,9 @@ const ta: Record<string, string> = {
   'user.greeting': 'வணக்கம், {{name}}',
   'home.trustBadge1M': '10 லட்சம்+ வாடிக்கையாளர்களின் நம்பிக்கை',
   'home.trustBadgeVerified': '100% RTO-சரிபார்க்கப்பட்ட பட்டியல்கள்',
-  'home.premiumUsedCars': 'பிரீமியம் பயன்படுத்தப்பட்ட கார்கள்',
+  'home.premiumUsedCars': 'உங்கள் வாகனத்தை அப்‌கிரேட் செய்யுங்கள், EMI-ஐ அல்ல',
   'home.marketingSubhead':
-    'விரிவான தர உறுதிப்பாடு மற்றும் பிரீமியம் சேவையுடன் சிறந்த வாகனங்களைக் கண்டறியவும்',
+    '200+ தர சோதனைகள். நிலையான விலைகள். சரிபார்க்கப்பட்ட விற்பனையாளர்கள். கார்கள், பைக்குகள் மற்றும் பலவும் — புத்திசாலி வாங்குபவர்களுக்காகத் தேர்ந்தெடுக்கப்பட்டவை.',
   'home.card.qualityTitle': '200+ தர சோதனைகள்',
   'home.card.qualityDesc': 'விரிவான ஆய்வு',
   'home.card.fixedTitle': 'நிலையான விலை',
@@ -2857,7 +2860,7 @@ const ta: Record<string, string> = {
   'mobile.home.listVehicle':
     'உங்கள் வாகனத்தை பட்டியலிட்டு ஆயிரக்கணக்கான வாங்குபவர்களை அடையவும்',
   'mobile.home.heroSub':
-    'விரிவான தர உறுதிப்பாட்டுடன் சிறந்த வாகனங்களைக் கண்டறியவும்',
+    '200+ தர சோதனைகள். சரிபார்க்கப்பட்ட விற்பனையாளர்கள். கார்கள், பைக்குகள் மற்றும் பலவும் — புத்திசாலி வாங்குபவர்களுக்காகத் தேர்ந்தெடுக்கப்பட்டவை.',
   'search.placeholderMobile': 'பிராண்ட், மாதிரி, பட்ஜெட் மூலம் தேடு...',
   'mobile.home.browseAllCars': 'அனைத்து கார்களையும் உலாவு',
   'mobile.home.exploreLocation': 'இடத்தின்படி ஆராய்',
@@ -3438,6 +3441,27 @@ i18n
       bindI18n: 'languageChanged loaded',
       bindI18nStore: 'added removed',
     },
+    // Enable the 'missingKey' event so the dynamic translator can
+    // translate on-the-fly whenever a hi/te/ta string isn't authored yet.
+    saveMissing: true,
+    // We handle the event via i18n.on('missingKey', ...) in dynamicTranslate,
+    // not a handler on options, so new keys are still returned synchronously
+    // (English fallback) while the translation is fetched in the background.
   });
+
+// Install the missing-key auto-translator. Newly added English i18n keys
+// will be auto-translated into Hindi / Telugu / Tamil on first view and
+// cached in localStorage forever after.
+installDynamicTranslation(i18n);
+
+// Install the universal DOM auto-translator. Any hardcoded English text in
+// components that never called t() (dashboards, admin panels, seller
+// profiles, modals, etc.) will also be translated live when the user picks
+// Hindi / Telugu / Tamil, so the language selector truly applies end-to-end.
+// Opt an element out with data-no-translate.
+installDOMAutoTranslation(i18n);
+
+// <html lang>, document title, and primary SEO meta tags track the selected language.
+installDocumentLocaleSync(i18n);
 
 export default i18n;

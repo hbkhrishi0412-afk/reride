@@ -1,5 +1,6 @@
 import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
 import type { User } from '../types.js';
+import { isRerideStaffPick } from '../utils/staffPick.js';
 
 /** Stable `users.id` for email/password users (matches FK targets on conversations, etc.). */
 export function emailToKey(email: string): string {
@@ -49,6 +50,10 @@ function supabaseRowToUser(row: any): User {
     // Extract additional fields from metadata
     ...(row.metadata || {}),
   } as User;
+
+  (user as { rerideRecommended?: boolean }).rerideRecommended = isRerideStaffPick(
+    (user as { rerideRecommended?: unknown }).rerideRecommended,
+  );
 
   if (!isServerSide) {
     delete (user as { password?: string }).password;
@@ -764,7 +769,7 @@ export const supabaseUserService = {
   },
 
   // Find users by role
-  async findByRole(role: 'customer' | 'seller' | 'admin'): Promise<User[]> {
+  async findByRole(role: 'customer' | 'seller' | 'admin' | 'service_provider'): Promise<User[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
 
     // Supabase/PostgREST returns a default capped set if you don't paginate.

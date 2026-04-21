@@ -9,6 +9,7 @@ import { supabaseVehicleService } from '../services/supabase-vehicle-service.js'
 import { supabaseConversationService } from '../services/supabase-conversation-service.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { isRerideStaffPick } from '../utils/staffPick.js';
 import { verifySupabaseToken } from '../server/supabase-auth.js';
 import { readVehicleCatalogFromSupabase, writeVehicleCatalogToSupabase } from '../lib/vehicleCatalogSupabase.js';
 import { sendInquiryNotificationToSeller } from '../lib/email.js';
@@ -139,6 +140,10 @@ function normalizeUser(user: UserType | null | undefined): NormalizedUser | null
     email,
     role,
   };
+
+  normalized.rerideRecommended = isRerideStaffPick(
+    (normalized as { rerideRecommended?: unknown }).rerideRecommended,
+  );
 
   return normalized;
 }
@@ -649,6 +654,12 @@ async function mainHandler(
         } else if (checkPath.includes('/content') || checkPath.endsWith('/content')) {
           logInfo(`✅ Routing ${req.method} request from /api/main to handleContent (original: ${checkPath})`);
           return await handleContent(req, res, handlerOptions);
+        } else if (checkPath.includes('/audit-log') || checkPath.endsWith('/audit-log')) {
+          logInfo(`✅ Routing ${req.method} request from /api/main to handleAuditLog (original: ${checkPath})`);
+          return await handleAuditLog(req, res, handlerOptions);
+        } else if (checkPath.includes('/settings') || checkPath.endsWith('/settings')) {
+          logInfo(`✅ Routing ${req.method} request from /api/main to handlePlatformSettings (original: ${checkPath})`);
+          return await handlePlatformSettings(req, res, handlerOptions);
         } else if (checkPath.includes('/upload-image') || checkPath.endsWith('/upload-image')) {
           return await handleUploadImage(req, res);
         } else if (checkPath.includes('/service-providers/register')) {
@@ -792,6 +803,10 @@ async function mainHandler(
       // @ts-ignore - chat.js is a JavaScript file
       const { handleChat } = await import('./chat.js');
       return await handleChat(req, res);
+    } else if (pathname.includes('/audit-log') || pathname.endsWith('/audit-log')) {
+      return await handleAuditLog(req, res, handlerOptions);
+    } else if (pathname.includes('/settings') || pathname.endsWith('/settings')) {
+      return await handlePlatformSettings(req, res, handlerOptions);
     } else {
       // Default to users for backward compatibility
       // This catches any unmatched routes, especially important for PUT /api/users
@@ -1055,6 +1070,35 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           return res.status(200).json(normalizedSellers);
         } catch (error) {
           logError('❌ Error fetching sellers:', error);
+          return res.status(200).json([]);
+        }
+      }
+      if (pubRole === 'service_provider' && !pubAction && !pubEmail) {
+        if (!USE_SUPABASE) {
+          return res.status(200).json([]);
+        }
+        try {
+          logInfo('📊 GET /users?role=service_provider: Public access - fetching service providers...');
+          const providers = await userService.findByRole('service_provider');
+          logInfo(`✅ Fetched ${providers.length} service providers from database`);
+          const normalizedProviders = providers
+            .map((user) => {
+              const normalized = normalizeUser(user);
+              if (!normalized) {
+                logWarn(`⚠️ Service provider filtered out during normalization:`, {
+                  email: user.email,
+                  id: user.id,
+                });
+              }
+              return normalized;
+            })
+            .filter((u): u is NormalizedUser => u !== null);
+          logInfo(
+            `✅ Returning ${normalizedProviders.length} normalized service providers (${providers.length - normalizedProviders.length} filtered out)`,
+          );
+          return res.status(200).json(normalizedProviders);
+        } catch (error) {
+          logError('❌ Error fetching service providers:', error);
           return res.status(200).json([]);
         }
       }
@@ -4888,7 +4932,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       'registrationNumber', 'registrationYear', 'insuranceValidTill', 'insuranceValidity',
       'insuranceType', 'condition',
       'sellerName', 'sellerPhone', 'sellerType',
-      'qualityReport', 'offerDetails', 'tags', 'title', 'engine', 'engineCc',
+      'qualityReport', 'offerDetails',
+      'offerEnabled', 'offerTitle', 'offerStartDate', 'offerEndDate', 'offerDateLabel',
+      'offerDescription', 'offerHighlight', 'offerDisclaimer',
+      'tags', 'title', 'engine', 'engineCc',
       'kmDriven', 'variant', 'listingType', 'negotiable', 'status',
       'rto', 'displacement', 'groundClearance', 'bootSpace', 'documents',
     ] as const;
@@ -5015,12 +5062,20 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       const ALLOWED_VEHICLE_UPDATE_FIELDS = [
         'category', 'make', 'model', 'year', 'price', 'mileage',
         'fuelType', 'transmission', 'color', 'bodyType', 'numberOfOwners',
+        'noOfOwners', 'registrationYear',
         'description', 'features', 'location', 'city', 'state', 'pincode',
-        'registrationNumber', 'insuranceValidTill', 'condition',
+        'registrationNumber', 'insuranceValidTill', 'insuranceValidity', 'insuranceType',
+        'condition',
         'sellerName', 'sellerPhone', 'sellerType',
-        'qualityReport', 'offerDetails', 'tags', 'title', 'engineCc',
+        'qualityReport', 'offerDetails',
+        'offerEnabled', 'offerTitle', 'offerStartDate', 'offerEndDate', 'offerDateLabel',
+        'offerDescription', 'offerHighlight', 'offerDisclaimer',
+        'tags', 'title', 'engine', 'engineCc', 'fuelEfficiency',
         'kmDriven', 'variant', 'listingType', 'negotiable',
-        'images', 'status'
+        'rto', 'displacement', 'groundClearance', 'bootSpace', 'documents',
+        'images', 'status',
+        // Moderation / metadata (stored in vehicles.metadata via supabase-vehicle-service)
+        'isFlagged', 'flagReason', 'flaggedAt',
       ] as const;
       const ADMIN_ONLY_UPDATE_FIELDS = [
         'isFeatured', 'certificationStatus', 'trustScore', 'activeBoosts',
@@ -5035,6 +5090,19 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         for (const key of ADMIN_ONLY_UPDATE_FIELDS) {
           if (key in rawUpdate) sanitizedUpdate[key] = rawUpdate[key];
         }
+      }
+      // Client form uses noOfOwners; legacy key is numberOfOwners
+      if (sanitizedUpdate.noOfOwners === undefined && rawUpdate.numberOfOwners !== undefined) {
+        sanitizedUpdate.noOfOwners = rawUpdate.numberOfOwners;
+      }
+      // Accept either insurance validity field name from clients (e.g. EditVehicleModal)
+      if (sanitizedUpdate.insuranceValidity === undefined && rawUpdate.insuranceValidTill !== undefined) {
+        sanitizedUpdate.insuranceValidity = rawUpdate.insuranceValidTill;
+      } else if (
+        sanitizedUpdate.insuranceValidity === undefined &&
+        sanitizedUpdate.insuranceValidTill !== undefined
+      ) {
+        sanitizedUpdate.insuranceValidity = sanitizedUpdate.insuranceValidTill;
       }
       // Clamp status to the valid enum.
       if ('status' in sanitizedUpdate) {
@@ -7092,6 +7160,255 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
       error: 'Internal server error',
       message: errorMessage
     });
+  }
+}
+
+// ============================================================================
+// Platform Settings handler — reads/writes the single `platform_settings` row
+// (table created by scripts/add-platform-settings-and-audit-log.sql).
+// ============================================================================
+const PLATFORM_SETTINGS_ID = 'singleton';
+const DEFAULT_PLATFORM_SETTINGS = {
+  listingFee: 25,
+  siteAnnouncement: 'Welcome to ReRide! All EVs are 10% off this week.',
+} as const;
+
+async function handlePlatformSettings(
+  req: VercelRequest,
+  res: VercelResponse,
+  _options: HandlerOptions,
+) {
+  if (!USE_SUPABASE) {
+    if (req.method === 'GET') {
+      res.setHeader('X-Data-Fallback', 'true');
+      return res.status(200).json({ success: true, settings: { ...DEFAULT_PLATFORM_SETTINGS } });
+    }
+    return res.status(503).json({
+      success: false,
+      reason: 'Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+    });
+  }
+
+  try {
+    const supabase = getSupabaseAdminClient();
+
+    if (req.method === 'GET') {
+      const { data, error } = await supabase
+        .from('platform_settings')
+        .select('listingFee, siteAnnouncement, updatedAt, updatedBy')
+        .eq('id', PLATFORM_SETTINGS_ID)
+        .maybeSingle();
+
+      if (error) {
+        // If the table is missing, fall back to defaults so the app keeps working.
+        logWarn('platform_settings read failed, returning defaults:', error.message);
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json({ success: true, settings: { ...DEFAULT_PLATFORM_SETTINGS } });
+      }
+
+      const settings = data
+        ? {
+            listingFee: Number(data.listingFee ?? DEFAULT_PLATFORM_SETTINGS.listingFee),
+            siteAnnouncement: typeof data.siteAnnouncement === 'string'
+              ? data.siteAnnouncement
+              : (DEFAULT_PLATFORM_SETTINGS.siteAnnouncement as string),
+            updatedAt: data.updatedAt || null,
+            updatedBy: data.updatedBy || null,
+          }
+        : { ...DEFAULT_PLATFORM_SETTINGS };
+
+      return res.status(200).json({ success: true, settings });
+    }
+
+    if (req.method === 'PUT' || req.method === 'POST') {
+      const admin = requireAdmin(req, res, 'Update platform settings');
+      if (!admin) return;
+
+      const body = (req.body || {}) as Record<string, unknown>;
+      const rawFee = body.listingFee;
+      const rawAnnouncement = body.siteAnnouncement;
+
+      const feeNum = typeof rawFee === 'number'
+        ? rawFee
+        : typeof rawFee === 'string' && rawFee.trim() !== ''
+          ? Number(rawFee)
+          : undefined;
+
+      const payload: Record<string, unknown> = {
+        id: PLATFORM_SETTINGS_ID,
+        updatedAt: new Date().toISOString(),
+        updatedBy: admin.user?.email || null,
+      };
+
+      if (feeNum !== undefined && Number.isFinite(feeNum)) {
+        payload.listingFee = Math.max(0, Math.floor(feeNum));
+      }
+      if (typeof rawAnnouncement === 'string') {
+        payload.siteAnnouncement = rawAnnouncement.trim();
+      }
+
+      if (payload.listingFee === undefined && payload.siteAnnouncement === undefined) {
+        return res.status(400).json({
+          success: false,
+          reason: 'At least one of listingFee or siteAnnouncement is required.',
+        });
+      }
+
+      const { data, error } = await supabase
+        .from('platform_settings')
+        .upsert(payload, { onConflict: 'id' })
+        .select('listingFee, siteAnnouncement, updatedAt, updatedBy')
+        .maybeSingle();
+
+      if (error) {
+        logError('platform_settings upsert failed:', error.message);
+        return res.status(500).json({ success: false, reason: error.message });
+      }
+
+      return res.status(200).json({
+        success: true,
+        settings: data
+          ? {
+              listingFee: Number(data.listingFee ?? DEFAULT_PLATFORM_SETTINGS.listingFee),
+              siteAnnouncement: typeof data.siteAnnouncement === 'string'
+                ? data.siteAnnouncement
+                : (DEFAULT_PLATFORM_SETTINGS.siteAnnouncement as string),
+              updatedAt: data.updatedAt || null,
+              updatedBy: data.updatedBy || null,
+            }
+          : { ...DEFAULT_PLATFORM_SETTINGS },
+      });
+    }
+
+    return res.status(405).json({ success: false, reason: 'Method not allowed.' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logError('handlePlatformSettings error:', message);
+    if (req.method === 'GET') {
+      res.setHeader('X-Data-Fallback', 'true');
+      return res.status(200).json({ success: true, settings: { ...DEFAULT_PLATFORM_SETTINGS } });
+    }
+    return res.status(500).json({ success: false, reason: message });
+  }
+}
+
+// ============================================================================
+// Audit Log handler — admin-only append-and-list over `audit_log` table
+// (table created by scripts/add-platform-settings-and-audit-log.sql).
+// ============================================================================
+async function handleAuditLog(
+  req: VercelRequest,
+  res: VercelResponse,
+  _options: HandlerOptions,
+) {
+  if (!USE_SUPABASE) {
+    if (req.method === 'GET') {
+      res.setHeader('X-Data-Fallback', 'true');
+      return res.status(200).json({ success: true, entries: [] });
+    }
+    return res.status(503).json({
+      success: false,
+      reason: 'Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+    });
+  }
+
+  try {
+    const admin = requireAdmin(req, res, 'Audit log');
+    if (!admin) return;
+
+    const supabase = getSupabaseAdminClient();
+
+    if (req.method === 'GET') {
+      const limitRaw = firstQueryParam(req.query?.limit);
+      const limitNum = limitRaw ? Number(limitRaw) : 500;
+      const limit = Number.isFinite(limitNum) ? Math.min(Math.max(1, limitNum), 1000) : 500;
+
+      const { data, error } = await supabase
+        .from('audit_log')
+        .select('id, timestamp, actor, action, target, details')
+        .order('timestamp', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        logWarn('audit_log read failed, returning empty list:', error.message);
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json({ success: true, entries: [] });
+      }
+
+      const entries = (data || []).map((row) => ({
+        id: typeof row.id === 'number' ? row.id : Number(row.id),
+        timestamp: row.timestamp,
+        actor: row.actor,
+        action: row.action,
+        target: row.target,
+        details: row.details || undefined,
+      }));
+
+      return res.status(200).json({ success: true, entries });
+    }
+
+    if (req.method === 'POST') {
+      const body = (req.body || {}) as Record<string, unknown>;
+      const rawEntries = Array.isArray(body.entries)
+        ? (body.entries as Record<string, unknown>[])
+        : [body];
+
+      const rows = rawEntries
+        .map((entry) => {
+          const id = typeof entry.id === 'number'
+            ? entry.id
+            : typeof entry.id === 'string'
+              ? Number(entry.id)
+              : Date.now();
+          const actor = typeof entry.actor === 'string' ? entry.actor.slice(0, 255) : '';
+          const action = typeof entry.action === 'string' ? entry.action.slice(0, 255) : '';
+          const target = typeof entry.target === 'string' ? entry.target.slice(0, 500) : '';
+          const details = typeof entry.details === 'string' ? entry.details.slice(0, 2000) : null;
+          const timestamp = typeof entry.timestamp === 'string'
+            ? entry.timestamp
+            : new Date().toISOString();
+          if (!Number.isFinite(id) || !actor || !action || !target) {
+            return null;
+          }
+          return { id, timestamp, actor, action, target, details };
+        })
+        .filter((row): row is {
+          id: number;
+          timestamp: string;
+          actor: string;
+          action: string;
+          target: string;
+          details: string | null;
+        } => row !== null);
+
+      if (rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          reason: 'At least one valid entry with actor/action/target is required.',
+        });
+      }
+
+      const { error } = await supabase
+        .from('audit_log')
+        .upsert(rows, { onConflict: 'id' });
+
+      if (error) {
+        logError('audit_log insert failed:', error.message);
+        return res.status(500).json({ success: false, reason: error.message });
+      }
+
+      return res.status(200).json({ success: true, inserted: rows.length });
+    }
+
+    return res.status(405).json({ success: false, reason: 'Method not allowed.' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logError('handleAuditLog error:', message);
+    if (req.method === 'GET') {
+      res.setHeader('X-Data-Fallback', 'true');
+      return res.status(200).json({ success: true, entries: [] });
+    }
+    return res.status(500).json({ success: false, reason: message });
   }
 }
 

@@ -6,7 +6,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 import PageTransition from './components/PageTransition';
 import SEO from './components/SEO';
 import CookieConsentBanner from './components/CookieConsentBanner';
-import I18nDocumentSync from './components/I18nDocumentSync';
 import { 
   VehicleListErrorBoundary, 
   ChatErrorBoundary, 
@@ -4578,7 +4577,6 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <AppProvider>
-        <I18nDocumentSync />
         <AppContent />
         <CookieConsentBanner />
       </AppProvider>
