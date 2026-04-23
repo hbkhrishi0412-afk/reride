@@ -21,6 +21,7 @@ import {
   openGoogleOAuthUrl,
   shouldUseNativeGoogleOAuthFlow,
 } from '../utils/oauthMobile';
+import { clearSupabaseAuthStorage } from '../utils/authStorage';
 
 // ── Shared result types ─────────────────────────────────────────────────────
 
@@ -253,7 +254,7 @@ export const signUpWithEmail = async (
 export const signOut = async (): Promise<AuthResult> => {
   try {
     const supabase = getSupabaseClient();
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
 
     if (error) {
       return { success: false, reason: formatSupabaseError(error.message) };
@@ -262,6 +263,8 @@ export const signOut = async (): Promise<AuthResult> => {
     return { success: true };
   } catch (error: unknown) {
     return { success: false, reason: wrapError(error, 'Failed to sign out') };
+  } finally {
+    clearSupabaseAuthStorage();
   }
 };
 

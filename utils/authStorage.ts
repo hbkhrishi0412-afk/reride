@@ -67,6 +67,32 @@ export function getSupabaseAccessTokenFromStorage(): string | null {
 }
 
 /**
+ * Remove persisted Supabase Auth keys from localStorage without calling the network.
+ * Global `signOut()` hits `logout?scope=global` and returns 403 when the JWT is already invalid,
+ * which blocks logout; use `signOut({ scope: 'local' })` plus this as a safety net.
+ */
+export function clearSupabaseAuthStorage(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (key === 'sb-access-token' || key === 'supabase.auth.token') {
+        toRemove.push(key);
+        continue;
+      }
+      if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+        toRemove.push(key);
+      }
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
  * Prefer custom app JWT, then Supabase session token (website + mobile WebView).
  * If reRideAccessToken is present but not JWT-shaped (corrupt/legacy), fall back to Supabase
  * so API routes can use verifyIdTokenFromHeader after legacy verifyToken would fail.

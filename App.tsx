@@ -568,17 +568,19 @@ const AppContent: React.FC = () => {
     const onServiceProviderProfileUpdated = (e: Event) => {
       const detail = (e as CustomEvent<{ profile?: ServiceProvider; providerId?: string }>).detail;
       const p = detail?.profile;
-      if (!p || typeof p !== 'object' || !p.email) return;
+      if (!p || typeof p !== 'object') return;
+      const email = typeof p.email === 'string' ? p.email.trim() : '';
+      if (!email) return;
       setServiceProvider((prev) => {
         if (!prev) {
           return {
-            name: p.name || 'Provider',
-            email: p.email,
-            city: (p as ServiceProvider).city || '',
             ...p,
+            name: (typeof p.name === 'string' && p.name.trim()) || 'Provider',
+            email,
+            city: (p as ServiceProvider).city || '',
           } as ServiceProvider;
         }
-        if (prev.email && prev.email.toLowerCase() !== p.email.toLowerCase()) return prev;
+        if (prev.email && prev.email.toLowerCase() !== email.toLowerCase()) return prev;
         return { ...prev, ...p, name: p.name || prev.name, city: (p as ServiceProvider).city ?? prev.city };
       });
     };

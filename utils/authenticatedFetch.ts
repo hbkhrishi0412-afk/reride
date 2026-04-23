@@ -242,6 +242,15 @@ export const resetRefreshTokenInvalidFlag = () => {
 };
 
 /**
+ * After logout: drop cached CSRF and refresh state so the next login fetches fresh tokens.
+ */
+export const resetAuthFetchStateAfterLogout = (): void => {
+  csrfToken = null;
+  csrfTokenPromise = null;
+  resetRefreshTokenInvalidFlag();
+};
+
+/**
  * Public function to refresh authentication token
  * Use this for proactive token refresh before critical operations (e.g., password updates)
  * @returns Promise<string | null> - New access token or null if refresh failed

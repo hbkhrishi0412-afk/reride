@@ -15,6 +15,8 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { User } from '../types';
 import { View } from '../types';
 import { logInfo, logWarn } from '../utils/logger';
+import { clearSupabaseAuthStorage } from '../utils/authStorage';
+import { resetAuthFetchStateAfterLogout } from '../utils/authenticatedFetch';
 
 // ── Context type ────────────────────────────────────────────────────────────
 
@@ -103,8 +105,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       localStorage.removeItem('reRideAccessToken');
       localStorage.removeItem('reRideRefreshToken');
       localStorage.removeItem('reRideActiveChat');
+      localStorage.removeItem('reRideServiceProvider');
+      localStorage.removeItem('reride_oauth_role');
+      localStorage.removeItem('reride_last_role');
       sessionStorage.removeItem('currentUser');
       sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('reride_oauth_role');
+      sessionStorage.removeItem('reride_last_role');
+      clearSupabaseAuthStorage();
+      resetAuthFetchStateAfterLogout();
     } catch {
       // ignore storage errors
     }
