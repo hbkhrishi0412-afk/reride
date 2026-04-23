@@ -2919,7 +2919,7 @@ const AppContent: React.FC = () => {
         );
 
       case ViewEnum.ADMIN_PANEL:
-        return userHasAdminRole(currentUser) ? (
+        return userHasAdminRole(currentUser) && currentUser ? (
           <AdminPanelErrorBoundary>
             <AdminPanel 
               users={users}

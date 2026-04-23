@@ -1262,10 +1262,11 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         [supportTickets]
     );
 
+    type AdminNavItem = { view: AdminView; label: string; count?: number };
+    type AdminNavGroup = { id: string; label: string; items: AdminNavItem[] };
+
     /** Grouped admin nav: sidebar sections + mobile optgroups share this structure. */
-    const adminNavGroups = useMemo(
-        () =>
-            [
+    const adminNavGroups = useMemo((): AdminNavGroup[] => [
                 {
                     id: 'overview',
                     label: 'Overview',
@@ -1329,7 +1330,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         { view: 'settings' as const, label: 'Settings' },
                     ],
                 },
-            ] as const,
+        ],
         [analytics.certificationRequests, analytics.flaggedContent, openSupportCount]
     );
 

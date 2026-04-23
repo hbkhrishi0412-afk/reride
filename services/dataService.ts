@@ -8,6 +8,7 @@ import {
 } from '../utils/apiConfig';
 import { ensureCsrfToken } from '../utils/authenticatedFetch';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
+import { userRolesEqual } from '../utils/user-role';
 
 // Unified data service that handles both local and API data consistently
 class DataService {
@@ -1229,7 +1230,7 @@ class DataService {
       return { success: false, reason: 'Invalid credentials.' };
     }
     
-    if (credentials.role && user.role !== credentials.role) {
+    if (credentials.role && !userRolesEqual(user.role, credentials.role)) {
       return { success: false, reason: `User is not a registered ${credentials.role}.` };
     }
     

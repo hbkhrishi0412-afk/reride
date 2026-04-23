@@ -10,6 +10,7 @@ import { supabaseConversationService } from '../services/supabase-conversation-s
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
 import { isRerideStaffPick } from '../utils/staffPick.js';
+import { userRolesEqual, normalizeUserRoleString } from '../utils/user-role.js';
 import { verifySupabaseToken } from '../server/supabase-auth.js';
 import { readVehicleCatalogFromSupabase, writeVehicleCatalogToSupabase } from '../lib/vehicleCatalogSupabase.js';
 import { sendInquiryNotificationToSeller } from '../lib/email.js';
@@ -410,6 +411,9 @@ async function mainHandler(
     }
     return res.status(200).end();
   }
+
+  // Vercel rewrite to /api/main.ts: query may only appear on the URL string, not in req.query.
+  mergeQueryStringFromRequestUrl(req);
 
   // Extract pathname early for routing and Supabase Admin checks
   // Handle Vercel rewrites - check original path if available
@@ -823,6 +827,8 @@ async function mainHandler(
     
     // Ensure we always return JSON, never HTML
     res.setHeader('Content-Type', 'application/json');
+    mergeQueryStringFromRequestUrl(req);
+    const effectivePath = getEffectivePathnameForErrorFallback(req);
     
     // Last resort: If this is a PUT request to /api/users and routing failed,
     // try to route it to handleUsers directly
@@ -843,8 +849,8 @@ async function mainHandler(
     // Special handling for vehicle-data endpoints - NEVER return 500
     // Do not use req.url here: after Vercel rewrite it is often /api/main, which would skip fallbacks.
     const isVehicleDataEndpoint =
-      pathname.includes('/vehicle-data') ||
-      (pathname.includes('/vehicles') && firstQueryParam(req.query?.type) === 'data');
+      effectivePath.includes('/vehicle-data') ||
+      (effectivePath.includes('/vehicles') && firstQueryParam(req.query?.type) === 'data');
     
     if (isVehicleDataEndpoint) {
       res.setHeader('X-Data-Fallback', 'true');
@@ -892,7 +898,7 @@ async function mainHandler(
 
     // Public read paths: return empty JSON instead of 500 so the SPA and WebView stay usable.
     const isGet = req.method === 'GET';
-    if (isGet && pathname.includes('/csrf-token')) {
+    if (isGet && effectivePath.includes('/csrf-token')) {
       try {
         const token = generateCsrfToken();
         const cookieName = getCsrfCookieName();
@@ -913,11 +919,11 @@ async function mainHandler(
         });
       }
     }
-    if (isGet && pathname.includes('/users') && !firstQueryParam(req.query?.action)) {
+    if (isGet && effectivePath.includes('/users') && !firstQueryParam(req.query?.action)) {
       res.setHeader('X-Error-Fallback', 'true');
       return res.status(200).json([]);
     }
-    if (isGet && pathname.includes('/vehicles')) {
+    if (isGet && effectivePath.includes('/vehicles')) {
       res.setHeader('X-Error-Fallback', 'true');
       if (firstQueryParam(req.query?.aggregate) === 'storefront') {
         return res.status(200).json({
@@ -929,7 +935,7 @@ async function mainHandler(
       return res.status(200).json([]);
     }
     
-    const message = error instanceof Error ? error.message : 'An unexpected server error occurred.';
+    const message = errorToPublicMessage(error);
     return res.status(500).json({ success: false, reason: message, error: message });
   }
 }
@@ -938,6 +944,47 @@ async function mainHandler(
 function firstQueryParam(val: string | string[] | undefined): string | undefined {
   if (val === undefined) return undefined;
   return Array.isArray(val) ? val[0] : val;
+}
+
+/**
+ * Vercel rewrites /api/* → /api/main.ts; the query string may be present on `req.url` but not parsed into `req.query`.
+ * Merging before routing fixes resolveEffectiveApiPathname() (skipExpiryCheck, type=data, etc.).
+ */
+function mergeQueryStringFromRequestUrl(req: VercelRequest): void {
+  if (typeof req.url !== 'string' || !req.url.includes('?')) return;
+  try {
+    const qPart = req.url.split('?').slice(1).join('?');
+    if (!qPart) return;
+    const params = new URLSearchParams(qPart);
+    if (!req.query) {
+      req.query = {};
+    }
+    const q = req.query as Record<string, string | string[] | undefined>;
+    for (const [k, v] of params) {
+      if (q[k] === undefined) {
+        q[k] = v;
+      }
+    }
+  } catch {
+    // ignore malformed URLs
+  }
+}
+
+function errorToPublicMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const m = error.message;
+    if (m && m !== '[object Object]') return m;
+  } else if (typeof error === 'string' && error) {
+    return error;
+  }
+  try {
+    if (error !== null && error !== undefined && typeof error === 'object') {
+      return JSON.stringify(error);
+    }
+  } catch {
+    // ignore
+  }
+  return 'An unexpected server error occurred.';
 }
 
 /**
@@ -985,6 +1032,13 @@ function resolveEffectiveApiPathname(req: VercelRequest, pathname: string): stri
     if (t === 'data' || a === 'storefront' || skip === 'true' || act === 'track-view') {
       return '/api/vehicles';
     }
+    // Last resort: some runtimes only echo the public URL in a non-standard header.
+    for (const val of Object.values(req.headers)) {
+      const s = Array.isArray(val) ? val[0] : val;
+      if (typeof s !== 'string' || s.length < 6 || !s.includes('/api/')) continue;
+      const hit = scanPath(s);
+      if (hit) return hit;
+    }
   }
 
   return pathname;
@@ -995,6 +1049,7 @@ function resolveEffectiveApiPathname(req: VercelRequest, pathname: string): stri
  * Mirrors mainHandler's rewrite resolution so we don't treat /api/main as the real route.
  */
 function getEffectivePathnameForErrorFallback(req: VercelRequest): string {
+  mergeQueryStringFromRequestUrl(req);
   let pathname = '/';
   try {
     const originalPath = req.headers['x-vercel-original-path'] as string;
@@ -1311,7 +1366,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       
       // CRITICAL FIX: Check if user is a service provider trying to login as regular seller
       // Service providers should only login through the service provider login page
-      if (user.role === 'seller') {
+      if (normalizeUserRoleString(user.role) === 'seller') {
         try {
           const serviceProvider = await supabaseServiceProviderService.findByEmail(normalizedEmail);
           if (serviceProvider) {
@@ -1333,7 +1388,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         }
       }
       
-      if (sanitizedData.role && user.role !== sanitizedData.role) {
+      if (sanitizedData.role && !userRolesEqual(user.role, sanitizedData.role)) {
         return res.status(403).json({ success: false, reason: `User is not a registered ${sanitizedData.role}.` });
       }
       if (user.status === 'inactive') {
@@ -1399,7 +1454,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
 
       // Validate role matches requested role (critical for seller dashboard access)
-      if (sanitizedData.role && normalizedUser.role !== sanitizedData.role) {
+      if (sanitizedData.role && !userRolesEqual(normalizedUser.role, sanitizedData.role)) {
         logWarn('⚠️ Role mismatch in login response:', {
           userRole: normalizedUser.role,
           requestedRole: sanitizedData.role,
@@ -9117,6 +9172,8 @@ export default async function handler(
     }
     return res.status(200).end();
   }
+
+  mergeQueryStringFromRequestUrl(req);
 
   try {
     return await mainHandler(req, res);

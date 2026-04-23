@@ -1,5 +1,6 @@
 
 import type { User } from '../types';
+import { userRolesEqual } from '../utils/user-role';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { isCapacitorNative } from '../utils/apiConfig';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
@@ -724,8 +725,8 @@ export const login = async (credentials: { email?: string; password?: string; ro
         throw new Error('Invalid user data received from server');
       }
       
-      // Verify role matches requested role
-      if (credentials.role && result.user.role !== credentials.role) {
+      // Verify role matches requested role (case/alias-insensitive — DB may store "Customer", etc.)
+      if (credentials.role && !userRolesEqual(result.user.role, credentials.role)) {
         return { 
           success: false, 
           reason: `User is not a registered ${credentials.role}.`,
