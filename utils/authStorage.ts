@@ -5,6 +5,14 @@
  * Supabase v2 stores sessions under keys like `sb-<project-ref>-auth-token`, not `sb-access-token`.
  */
 
+/** Standard JWT: three base64url segments (header.payload.sig). */
+function looksLikeJwt(s: string): boolean {
+  const t = s.trim();
+  if (t.length < 20) return false;
+  const parts = t.split('.');
+  return parts.length === 3 && parts.every((p) => p.length > 0);
+}
+
 function tryParseAccessToken(raw: string | null): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
@@ -48,12 +56,17 @@ export function getSupabaseAccessTokenFromStorage(): string | null {
 
 /**
  * Prefer custom app JWT, then Supabase session token (website + mobile WebView).
+ * If reRideAccessToken is present but not JWT-shaped (corrupt/legacy), fall back to Supabase
+ * so API routes can use verifyIdTokenFromHeader after legacy verifyToken would fail.
  */
 export function getBrowserAccessTokenForApi(): string | null {
   try {
     if (typeof localStorage === 'undefined') return null;
     const custom = localStorage.getItem('reRideAccessToken');
-    if (custom && custom.trim().length > 10) return custom.trim();
+    if (custom && custom.trim().length > 10) {
+      const t = custom.trim();
+      if (looksLikeJwt(t)) return t;
+    }
     return getSupabaseAccessTokenFromStorage();
   } catch {
     return null;

@@ -114,48 +114,51 @@ async function notifyCandidateProvidersOnOpenRequest(
   }
 }
 
+async function resolveRoleForSupabaseUser(decoded: {
+  uid: string;
+  email: string;
+  user: { app_metadata?: { role?: string }; user_metadata?: { role?: string } } | null;
+}): Promise<string> {
+  let resolvedRole =
+    decoded.user?.app_metadata?.role || decoded.user?.user_metadata?.role || 'customer';
+
+  if (resolvedRole !== 'admin' && decoded.email) {
+    try {
+      const profile = await supabaseUserService.findByEmail(decoded.email);
+      if (profile?.role) {
+        resolvedRole = profile.role;
+      }
+    } catch {
+      // Keep JWT-derived role if user lookup fails
+    }
+  }
+
+  if (resolvedRole !== 'admin' && !isServiceProviderRole(String(resolvedRole))) {
+    try {
+      const sp = await supabaseServiceProviderService.findById(decoded.uid);
+      if (sp) {
+        resolvedRole = 'service_provider';
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return String(resolvedRole);
+}
+
+/**
+ * Order matches `getBrowserAccessTokenForApi`: try app JWT first, then Supabase.
+ * Supabase getUser() rejects reRide tokens; if we try Supabase first, we still fall back, but
+ * "Invalid token format" from jsonwebtoken for the wrong *kind* of JWT confused operators.
+ */
 async function resolveServiceRequestActor(req: VercelRequest): Promise<ActorInfo> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ') || authHeader.substring(7).trim() === '') {
     throw new Error('Missing bearer token');
   }
-  try {
-    const decoded = await verifyIdTokenFromHeader(req);
-    let resolvedRole =
-      decoded.user?.app_metadata?.role ||
-      decoded.user?.user_metadata?.role ||
-      'customer';
 
-    // If JWT metadata doesn't carry role, resolve from users table by email.
-    if (resolvedRole !== 'admin' && decoded.email) {
-      try {
-        const profile = await supabaseUserService.findByEmail(decoded.email);
-        if (profile?.role) {
-          resolvedRole = profile.role;
-        }
-      } catch {
-        // Keep JWT-derived role if user lookup fails
-      }
-    }
-
-    // Profiles were historically synced with role "seller"; treat service_providers row as source of truth.
-    if (resolvedRole !== 'admin' && !isServiceProviderRole(String(resolvedRole))) {
-      try {
-        const sp = await supabaseServiceProviderService.findById(decoded.uid);
-        if (sp) {
-          resolvedRole = 'service_provider';
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-
-    return { id: decoded.uid, role: String(resolvedRole) };
-  } catch {
-    const legacy = authenticateRequest(req);
-    if (!legacy.isValid || !legacy.user?.userId) {
-      throw new Error(legacy.error || 'Authentication required');
-    }
+  const legacy = authenticateRequest(req);
+  if (legacy.isValid && legacy.user?.userId) {
     let resolvedRole = legacy.user.role || 'customer';
     if (resolvedRole !== 'admin' && !isServiceProviderRole(String(resolvedRole))) {
       try {
@@ -168,6 +171,19 @@ async function resolveServiceRequestActor(req: VercelRequest): Promise<ActorInfo
       }
     }
     return { id: legacy.user.userId, role: String(resolvedRole) };
+  }
+
+  try {
+    const decoded = await verifyIdTokenFromHeader(req);
+    const resolvedRole = await resolveRoleForSupabaseUser(decoded);
+    return { id: decoded.uid, role: resolvedRole };
+  } catch (supabaseErr) {
+    const supMsg = supabaseErr instanceof Error ? supabaseErr.message : String(supabaseErr);
+    const legMsg = legacy.error;
+    if (legMsg && supMsg && legMsg !== supMsg) {
+      throw new Error(`Authentication failed: ${legMsg} | ${supMsg}`);
+    }
+    throw new Error(supMsg || legMsg || 'Authentication required');
   }
 }
 
