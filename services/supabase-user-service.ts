@@ -1,6 +1,7 @@
 import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
 import type { User } from '../types.js';
 import { isRerideStaffPick } from '../utils/staffPick.js';
+import { normalizeUserRoleString } from '../utils/user-role.js';
 
 /** Stable `users.id` for email/password users (matches FK targets on conversations, etc.). */
 export function emailToKey(email: string): string {
@@ -26,7 +27,7 @@ function supabaseRowToUser(row: any): User {
     mobile: row.mobile || '',
     // Password hash is required server-side for email login; never send it to the browser
     ...(isServerSide ? { password: row.password || undefined } : {}),
-    role: (row.role || 'customer') as 'customer' | 'seller' | 'admin' | 'service_provider',
+    role: normalizeUserRoleString(row.role),
     status: (row.status || 'active') as 'active' | 'inactive',
     avatarUrl: row.avatar_url || undefined,
     isVerified: row.is_verified || false,

@@ -121,7 +121,7 @@ function getCurrentPositionWithFallback(): Promise<GeolocationPosition> {
     { enableHighAccuracy: false, timeout: 22000, maximumAge: 120000 },
     { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 },
   ];
-  return new Promise((resolve, reject) => {
+  return new Promise<GeolocationPosition>((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error('no-geolocation'));
       return;
