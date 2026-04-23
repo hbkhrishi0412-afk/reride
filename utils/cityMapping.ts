@@ -4,7 +4,7 @@
  * actual city names stored in vehicle data (e.g., "Delhi", "New Delhi")
  */
 
-import { INDIAN_STATES } from '../constants/location';
+import { INDIAN_STATES } from '../constants/location.js';
 
 export interface CityMapping {
   displayName: string;
