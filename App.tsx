@@ -562,6 +562,30 @@ const AppContent: React.FC = () => {
       window.removeEventListener('reride:service-provider-oauth', onServiceProviderGoogleOAuth as EventListener);
   }, [navigate, addToast, setServiceProvider]);
 
+  // Keep `reRideServiceProvider` in sync when the dashboard saves (categories, skills, etc.),
+  // so a refresh and the `provider` prop do not drop fields that only exist in the API response.
+  React.useEffect(() => {
+    const onServiceProviderProfileUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<{ profile?: ServiceProvider; providerId?: string }>).detail;
+      const p = detail?.profile;
+      if (!p || typeof p !== 'object' || !p.email) return;
+      setServiceProvider((prev) => {
+        if (!prev) {
+          return {
+            name: p.name || 'Provider',
+            email: p.email,
+            city: (p as ServiceProvider).city || '',
+            ...p,
+          } as ServiceProvider;
+        }
+        if (prev.email && prev.email.toLowerCase() !== p.email.toLowerCase()) return prev;
+        return { ...prev, ...p, name: p.name || prev.name, city: (p as ServiceProvider).city ?? prev.city };
+      });
+    };
+    window.addEventListener('serviceProviderProfileUpdated', onServiceProviderProfileUpdated);
+    return () => window.removeEventListener('serviceProviderProfileUpdated', onServiceProviderProfileUpdated);
+  }, [setServiceProvider]);
+
   // If we have an active Supabase session AND the last-known role is
   // `service_provider`, try to restore the provider profile from the API
   // (e.g. after a hard refresh on mobile). This avoids the "No provider data.

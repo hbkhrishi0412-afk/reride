@@ -8,6 +8,16 @@ export const SERVICE_CATEGORY_MAP: Record<ServiceCategory, string[]> = {
   'Care Plus': ['Clutch & Suspension', 'Wheel Alignment & Balancing', 'Car AC Servicing'],
 };
 
+/** Short help copy in the provider dashboard: what each high-level category means. */
+export const SERVICE_CATEGORY_DESCRIPTIONS: Record<ServiceCategory, string> = {
+  'Essential Service':
+    'Core mechanical and health checks—routine service, engine work, and scanning. Pick this for general workshop jobs.',
+  'Deep Detailing':
+    'Cabin and body finish work. Pick this if you do deep interior cleaning, dent repair, or painting.',
+  'Care Plus':
+    'Driving comfort, drivetrain, and wheels. Pick this for AC, clutch and suspension, and alignment and balancing.',
+};
+
 export const SERVICE_OPTIONS = [
   'General',
   'Periodic Service',

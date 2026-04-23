@@ -1,10 +1,11 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { getSession } from '../services/supabase-auth-service';
+import { getValidAccessToken } from '../services/supabase-auth-service';
 import { getSupabaseClient } from '../lib/supabase';
 import {
   CAR_SERVICE_OPTIONS,
   DEFAULT_SERVICE_TEMPLATE_NAMES,
   SERVICE_CATEGORIES,
+  SERVICE_CATEGORY_DESCRIPTIONS,
   SERVICE_CATEGORY_MAP,
   SERVICE_TEMPLATE_PRESETS,
   type ServiceCategory,
@@ -71,6 +72,128 @@ const PROFILE_CLOCK_ICON = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
+);
+
+const ServiceCategoriesExplainerBox: React.FC<{ className?: string }> = ({ className = 'mb-4' }) => (
+  <div className={`rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left ${className}`}>
+    <p className="text-xs font-semibold text-gray-900">What are service categories?</p>
+    <p className="text-[11px] text-gray-500 mt-0.5 mb-2">
+      These are <span className="text-gray-700">high-level groups</span>. Each group turns on a fixed set of service types
+      (bookable in Services &amp; Pricing). This is shown here so you do not have to open &ldquo;Choose
+      categories&rdquo; only to read what they mean.
+    </p>
+    <ul className="space-y-1.5 text-[11px] text-gray-600 border-t border-gray-100 pt-2">
+      {SERVICE_CATEGORIES.map((cat) => (
+        <li key={cat}>
+          <span className="font-medium text-gray-800">{cat}</span>
+          <span> — {SERVICE_CATEGORY_DESCRIPTIONS[cat]}</span>
+          <div className="text-gray-500 mt-0.5">Service types included: {(SERVICE_CATEGORY_MAP[cat] || []).join(', ')}.</div>
+        </li>
+      ))}
+    </ul>
+  </div>
+);
+
+const ServiceCategoryEditorPanel: React.FC<{
+  selectedCategories: ServiceCategory[];
+  setSelectedCategories: React.Dispatch<React.SetStateAction<ServiceCategory[]>>;
+  recommendedCategories: ServiceCategory[];
+  onCancel: () => void;
+  onSave: () => void | Promise<void>;
+  savingProfile: boolean;
+  className?: string;
+}> = ({
+  selectedCategories,
+  setSelectedCategories,
+  recommendedCategories,
+  onCancel,
+  onSave,
+  savingProfile,
+  className = 'mt-4',
+}) => (
+  <div className={`rounded-lg border border-gray-200 bg-gray-50 p-3 ${className}`}>
+    <div className="flex items-center justify-between gap-2 mb-2">
+      <div>
+        <label className="block text-xs font-semibold text-gray-700">Select the categories you offer</label>
+        <p className="text-[11px] text-gray-500 mt-0.5 max-w-prose">
+          Each category turns on a set of service types you can price under Services. You can select more than one.{' '}
+          <span className="text-gray-700 font-medium">
+            Click &quot;Save categories&quot; to apply—checking boxes alone does not update your profile.
+          </span>
+        </p>
+      </div>
+      {recommendedCategories.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setSelectedCategories(recommendedCategories)}
+          className="text-xs font-semibold text-blue-600 hover:text-blue-800 shrink-0"
+        >
+          Auto-select suggested
+        </button>
+      )}
+    </div>
+    <div className="space-y-2">
+      {SERVICE_CATEGORIES.map((category) => {
+        const isSelected = selectedCategories.includes(category);
+        const includes = (SERVICE_CATEGORY_MAP[category] || []).join(', ');
+        return (
+          <label
+            key={category}
+            className={`block rounded-md border px-3 py-2.5 text-sm cursor-pointer ${
+              isSelected
+                ? 'border-blue-500 bg-blue-50 text-blue-900'
+                : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
+            }`}
+          >
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setSelectedCategories((prev) => {
+                    if (checked) {
+                      if (prev.includes(category)) return prev;
+                      return [...prev, category];
+                    }
+                    return prev.filter((c) => c !== category);
+                  });
+                }}
+                className="h-4 w-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <div className="min-w-0 flex-1">
+                <span className="font-medium block">{category}</span>
+                <p className="text-xs text-gray-600 mt-0.5 leading-snug">{SERVICE_CATEGORY_DESCRIPTIONS[category]}</p>
+                <p className="text-[11px] text-gray-500 mt-1.5">
+                  <span className="font-medium text-gray-600">Service types: </span>
+                  {includes}
+                </p>
+              </div>
+            </div>
+          </label>
+        );
+      })}
+    </div>
+    <div className="mt-3 flex justify-end gap-2">
+      <button
+        type="button"
+        onClick={onCancel}
+        className="px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-md"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void onSave();
+        }}
+        disabled={savingProfile}
+        className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
+      >
+        {savingProfile ? 'Saving...' : 'Save categories'}
+      </button>
+    </div>
+  </div>
 );
 
 const ProfileFieldView: React.FC<{
@@ -649,13 +772,15 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   );
 
   const profileReadiness = useMemo(() => {
+    const hasSavedCategories = Boolean((localProvider?.serviceCategories || []).length);
+    const hasPendingCategorySelection = editingCategories && selectedCategories.length > 0;
     const checks = [
       Boolean((localProvider?.city || '').trim()),
       Boolean((localProvider?.availability || '').trim()),
       Boolean(localProvider?.skills?.length),
       Boolean(localProvider?.workshops?.length),
       activeProviderServices.length > 0,
-      Boolean(localProvider?.serviceCategories?.length),
+      hasSavedCategories || hasPendingCategorySelection,
     ];
     const completed = checks.filter(Boolean).length;
     return {
@@ -664,7 +789,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       total: checks.length,
       checks,
     };
-  }, [activeProviderServices.length, localProvider]);
+  }, [activeProviderServices.length, localProvider, editingCategories, selectedCategories.length]);
 
   const avgServicePrice = useMemo(() => {
     const priced = activeProviderServices
@@ -853,23 +978,11 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   };
 
   const getAuthHeaders = async (): Promise<Record<string, string>> => {
-    try {
-      const sessionResult = await getSession();
-      if (sessionResult.success && sessionResult.session?.access_token) {
-        return { Authorization: `Bearer ${sessionResult.session.access_token}` };
-      }
-      if (process.env.NODE_ENV === 'development') {
-        return { 'x-mock-provider-id': provider?.email || provider?.name || 'dev-mock-provider' };
-      }
-      throw new Error('Not authenticated');
-    } catch (error) {
-      console.error('Error getting auth headers:', error);
-      // In development, still allow with mock provider
-      if (process.env.NODE_ENV === 'development') {
-        return { 'x-mock-provider-id': provider?.email || provider?.name || 'dev-mock-provider' };
-      }
-      throw error;
+    const t = await getValidAccessToken();
+    if (t.success && t.accessToken) {
+      return { Authorization: `Bearer ${t.accessToken}` };
     }
+    throw new Error(t.reason || 'Not authenticated. Please sign in again.');
   };
 
   // Dummy data helpers for quick UI checks (dev only)
@@ -1207,15 +1320,11 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   };
 
   const withToken = async (): Promise<string> => {
-    const sessionResult = await getSession();
-    if (!sessionResult.success || !sessionResult.session?.access_token) {
-      // In development, allow with mock provider
-      if (process.env.NODE_ENV === 'development') {
-        return 'dev-mock-token';
-      }
-      throw new Error('Not authenticated');
+    const t = await getValidAccessToken();
+    if (t.success && t.accessToken) {
+      return t.accessToken;
     }
-    return sessionResult.session.access_token;
+    throw new Error(t.reason || 'Not authenticated. Please sign in again.');
   };
 
   const fetchRequests = async () => {
@@ -1417,6 +1526,8 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   useEffect(() => {
     if (provider) {
       setLocalProvider(provider);
+      // Do not overwrite a draft while the categories panel is open.
+      setSelectedCategories((prev) => (editingCategories ? prev : (provider.serviceCategories || [])));
       setSkillsInput(provider.skills?.join(', ') || '');
       setWorkshopsInput(provider.workshops?.join(', ') || '');
       setProfileForm({
@@ -1432,7 +1543,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       fetchOpenRequests();
       fetchProviderServices();
     }
-  }, [provider]);
+  }, [provider, editingCategories]);
 
   // Listen for profile updates from other tabs/windows
   useEffect(() => {
@@ -1885,6 +1996,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                       style={{ width: `${profileReadiness.percent}%` }}
                     />
                   </div>
+                  <ServiceCategoriesExplainerBox />
                   <ul className="divide-y divide-gray-100">
                     {[
                       {
@@ -1931,14 +2043,25 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                       {
                         label: 'Service categories',
                         done: profileReadiness.checks[5],
-                        value: localProvider?.serviceCategories?.join(', '),
+                        value: (editingCategories
+                          ? selectedCategories
+                          : localProvider?.serviceCategories || []
+                        ).join(', '),
                         action: () => {
                           setSelectedCategories(localProvider?.serviceCategories || recommendedCategories);
                           setEditingCategories(true);
                         },
                         actionLabel: 'Choose categories',
+                        /** Was hidden once "done"—users could not reopen the editor. */
+                        alwaysShowAction: true,
                       },
-                    ].map((item) => (
+                    ].map((item) => {
+                      const showCta = !item.done || ('alwaysShowAction' in item && item.alwaysShowAction);
+                      const ctaLabel =
+                        'alwaysShowAction' in item && item.alwaysShowAction && item.done
+                          ? 'Change'
+                          : item.actionLabel;
+                      return (
                       <li key={item.label} className="flex items-center gap-3 py-3">
                         <span
                           className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
@@ -1957,17 +2080,18 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                             <p className="text-xs text-gray-500 truncate">{item.value}</p>
                           ) : null}
                         </div>
-                        {!item.done && (
+                        {showCta && (
                           <button
                             type="button"
                             onClick={item.action}
                             className="flex-shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
                           >
-                            {item.actionLabel}
+                            {ctaLabel}
                           </button>
                         )}
                       </li>
-                    ))}
+                    );
+                    })}
                   </ul>
 
                   {editingSkills && (
@@ -2037,73 +2161,67 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                   )}
 
                   {editingCategories && (
-                    <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="block text-xs font-semibold text-gray-700">Select the categories you offer</label>
-                        {recommendedCategories.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedCategories(recommendedCategories)}
-                            className="text-xs font-semibold text-blue-600 hover:text-blue-800"
-                          >
-                            Auto-select suggested
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        {SERVICE_CATEGORIES.map((category) => {
-                          const isSelected = selectedCategories.includes(category);
-                          return (
-                            <label
-                              key={category}
-                              className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm cursor-pointer ${
-                                isSelected
-                                  ? 'border-blue-500 bg-blue-50 text-blue-900'
-                                  : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedCategories([...selectedCategories, category]);
-                                  } else {
-                                    setSelectedCategories(selectedCategories.filter((c) => c !== category));
-                                  }
-                                }}
-                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="font-medium">{category}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                      <div className="mt-3 flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingCategories(false);
-                            setSelectedCategories(localProvider?.serviceCategories || []);
-                          }}
-                          className="px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-md"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={saveCategories}
-                          disabled={savingProfile}
-                          className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
-                        >
-                          {savingProfile ? 'Saving...' : 'Save categories'}
-                        </button>
-                      </div>
-                    </div>
+                    <ServiceCategoryEditorPanel
+                      className="mt-4"
+                      selectedCategories={selectedCategories}
+                      setSelectedCategories={setSelectedCategories}
+                      recommendedCategories={recommendedCategories}
+                      savingProfile={savingProfile}
+                      onSave={saveCategories}
+                      onCancel={() => {
+                        setEditingCategories(false);
+                        setSelectedCategories(localProvider?.serviceCategories || []);
+                      }}
+                    />
                   )}
                 </section>
               )}
 
+              {profileReadiness.percent >= 100 && (
+                <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="mb-1">
+                    <h2 className="text-base font-semibold text-gray-900">Service categories</h2>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      Review what each group includes, or change your selection. Same options as in profile setup.
+                    </p>
+                  </div>
+                  <ServiceCategoriesExplainerBox className="mb-3" />
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4 border-t border-gray-100 pt-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-gray-500">Your current selection</p>
+                      <p className="text-sm text-gray-900 break-words">
+                        {(localProvider?.serviceCategories || []).length
+                          ? (localProvider?.serviceCategories || []).join(', ')
+                          : 'None — choose categories to match your workshop.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategories(localProvider?.serviceCategories || recommendedCategories);
+                        setEditingCategories(true);
+                      }}
+                      className="flex-shrink-0 self-start rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                    >
+                      {editingCategories ? 'Editing…' : 'Change categories'}
+                    </button>
+                  </div>
+                  {editingCategories && (
+                    <ServiceCategoryEditorPanel
+                      className="mt-4"
+                      selectedCategories={selectedCategories}
+                      setSelectedCategories={setSelectedCategories}
+                      recommendedCategories={recommendedCategories}
+                      savingProfile={savingProfile}
+                      onSave={saveCategories}
+                      onCancel={() => {
+                        setEditingCategories(false);
+                        setSelectedCategories(localProvider?.serviceCategories || []);
+                      }}
+                    />
+                  )}
+                </section>
+              )}
 
               {/* KPI Stats */}
               <section className="mb-6">
