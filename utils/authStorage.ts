@@ -13,6 +13,18 @@ function looksLikeJwt(s: string): boolean {
   return parts.length === 3 && parts.every((p) => p.length > 0);
 }
 
+/** `exp` claim in seconds, or null if missing/unparseable. */
+function jwtExpSeconds(token: string): number | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1])) as { exp?: unknown };
+    return typeof payload.exp === 'number' ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
 function tryParseAccessToken(raw: string | null): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
@@ -65,7 +77,17 @@ export function getBrowserAccessTokenForApi(): string | null {
     const custom = localStorage.getItem('reRideAccessToken');
     if (custom && custom.trim().length > 10) {
       const t = custom.trim();
-      if (looksLikeJwt(t)) return t;
+      if (looksLikeJwt(t)) {
+        const exp = jwtExpSeconds(t);
+        const nowSec = Math.floor(Date.now() / 1000);
+        const bufferSec = 60;
+        if (exp != null && exp > nowSec + bufferSec) {
+          return t;
+        }
+        const supa = getSupabaseAccessTokenFromStorage();
+        if (supa) return supa;
+        return t;
+      }
     }
     return getSupabaseAccessTokenFromStorage();
   } catch {
