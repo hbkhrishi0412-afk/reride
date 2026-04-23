@@ -2391,7 +2391,7 @@ const AppContent: React.FC = () => {
                     markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
                   }}
                   onFlagContent={flagContent}
-                  onLogout={handleLogout}
+                  onLogout={handleLogoutAll}
                   onViewVehicle={selectVehicle}
                   onAddVehicle={async (vehicleData, isFeaturing = false) => {
                     try {
@@ -2897,7 +2897,7 @@ const AppContent: React.FC = () => {
               }}
               comparisonList={comparisonList}
               onViewSellerProfile={openSellerProfileByEmail}
-              onLogout={handleLogout}
+              onLogout={handleLogoutAll}
             />
           );
         }
@@ -2975,7 +2975,7 @@ const AppContent: React.FC = () => {
               onImportVehicles={onImportVehicles}
               onExportSales={onExportSales}
               onNavigate={navigate}
-              onLogout={handleLogout}
+              onLogout={handleLogoutAll}
               vehicleData={vehicleData}
               onUpdateVehicleData={onUpdateVehicleData}
               onToggleVerifiedStatus={onToggleVerifiedStatus}
@@ -3018,7 +3018,7 @@ const AppContent: React.FC = () => {
                 return false;
               }}
               onBack={() => goBack(ViewEnum.HOME)}
-              onLogout={handleLogout}
+              onLogout={handleLogoutAll}
               addToast={addToast}
             />
           );
@@ -3330,8 +3330,7 @@ const AppContent: React.FC = () => {
               } | null}
               onNavigate={navigate}
               onLogout={() => {
-                setServiceProvider(null);
-                handleLogout();
+                handleLogoutAll();
                 navigate(ViewEnum.HOME);
               }}
             />
@@ -3340,6 +3339,10 @@ const AppContent: React.FC = () => {
         return (
           <CarServiceDashboard
             provider={serviceProvider as { name: string; email: string; phone: string; city: string } | null}
+            onLogout={() => {
+              handleLogoutAll();
+              navigate(ViewEnum.HOME);
+            }}
           />
         );
 
@@ -3996,7 +3999,7 @@ const AppContent: React.FC = () => {
             onImportVehicles={onImportVehicles}
             onExportSales={onExportSales}
             onNavigate={navigate}
-            onLogout={handleLogout}
+            onLogout={handleLogoutAll}
             vehicleData={vehicleData}
             onUpdateVehicleData={onUpdateVehicleData}
             onToggleVerifiedStatus={onToggleVerifiedStatus}
@@ -4075,7 +4078,7 @@ const AppContent: React.FC = () => {
                 markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
               }}
               onFlagContent={flagContent}
-              onLogout={handleLogout}
+              onLogout={handleLogoutAll}
               onViewVehicle={selectVehicle}
               onAddVehicle={async (vehicleData, isFeaturing = false) => {
               try {
@@ -4274,7 +4277,7 @@ const AppContent: React.FC = () => {
               }}
               comparisonList={comparisonList}
               onViewSellerProfile={openSellerProfileByEmail}
-              onLogout={handleLogout}
+              onLogout={handleLogoutAll}
             />
           </MobileLayout>
           
@@ -4494,7 +4497,7 @@ const AppContent: React.FC = () => {
           onNavigate={navigate}
           currentUser={currentUser}
           serviceProvider={serviceProvider}
-          onLogout={handleLogout}
+          onLogout={handleLogoutAll}
           compareCount={comparisonList.length}
           wishlistCount={wishlist.length}
           inboxCount={unreadMessagesCount}
@@ -4535,7 +4538,7 @@ const AppContent: React.FC = () => {
             onClose={() => setIsCommandPaletteOpen(false)}
             onNavigate={navigate}
             currentUser={currentUser}
-            onLogout={handleLogout}
+            onLogout={handleLogoutAll}
           />
         </Suspense>
         <Suspense fallback={<MinimalLoader />}>
