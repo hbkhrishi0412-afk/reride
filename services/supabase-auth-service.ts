@@ -292,6 +292,50 @@ export const getSession = async (): Promise<{
   }
 };
 
+/**
+ * Resolves a Supabase access token for `Authorization: Bearer` on API calls.
+ * Proactively calls `refreshSession` when the access token is missing or expires
+ * within ~60s so the server (getUser) does not see an expired JWT.
+ */
+export const getValidAccessToken = async (): Promise<{
+  success: boolean;
+  accessToken?: string;
+  reason?: string;
+}> => {
+  try {
+    const supabase = getSupabaseClient();
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+    if (error) {
+      return { success: false, reason: formatSupabaseError(error.message) };
+    }
+
+    const accessToken = session?.access_token;
+    const expSec = session?.expires_at;
+    const stillValid =
+      Boolean(accessToken) &&
+      (typeof expSec !== 'number' || expSec * 1000 > Date.now() + 60_000);
+
+    if (stillValid) {
+      return { success: true, accessToken: accessToken! };
+    }
+
+    const { data, error: refError } = await supabase.auth.refreshSession();
+    if (refError) {
+      return { success: false, reason: formatSupabaseError(refError.message) };
+    }
+    const t = data.session?.access_token;
+    if (!t) {
+      return { success: false, reason: 'Not authenticated' };
+    }
+    return { success: true, accessToken: t };
+  } catch (error: unknown) {
+    return { success: false, reason: wrapError(error, 'Failed to get access token') };
+  }
+};
+
 export const getCurrentUser = async (): Promise<{
   success: boolean;
   user?: SupabaseAuthUser | null;

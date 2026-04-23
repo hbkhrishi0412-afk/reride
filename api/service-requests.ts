@@ -180,7 +180,11 @@ async function resolveServiceRequestActor(req: VercelRequest): Promise<ActorInfo
   } catch (supabaseErr) {
     const supMsg = supabaseErr instanceof Error ? supabaseErr.message : String(supabaseErr);
     const legMsg = legacy.error;
-    if (legMsg && supMsg && legMsg !== supMsg) {
+    // reRide JWT and Supabase JWT use different secrets; a valid Supabase access token
+    // always fails legacy verify with "Invalid token format". Do not chain that with
+    // the real error (e.g. expired session) or operators see a useless combined message.
+    const legacyFormatMismatch = !legacy.isValid && legMsg === 'Invalid token format';
+    if (legMsg && supMsg && legMsg !== supMsg && !legacyFormatMismatch) {
       throw new Error(`Authentication failed: ${legMsg} | ${supMsg}`);
     }
     throw new Error(supMsg || legMsg || 'Authentication required');

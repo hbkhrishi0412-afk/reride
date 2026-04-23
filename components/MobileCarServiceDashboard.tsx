@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getSession } from '../services/supabase-auth-service';
+import { getValidAccessToken } from '../services/supabase-auth-service';
 import { getSupabaseClient } from '../lib/supabase';
 import {
   CAR_SERVICE_OPTIONS,
   SERVICE_CATEGORIES,
+  SERVICE_CATEGORY_DESCRIPTIONS,
   SERVICE_CATEGORY_MAP,
   SERVICE_TEMPLATE_PRESETS,
   type ServiceCategory,
@@ -228,26 +229,12 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
   }, []);
 
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
-    try {
-      const sessionResult = await getSession();
-      if (sessionResult.success && sessionResult.session?.access_token) {
-        return { Authorization: `Bearer ${sessionResult.session.access_token}` };
-      }
-      if (process.env.NODE_ENV === 'development') {
-        return {
-          'x-mock-provider-id': provider?.email || provider?.name || 'dev-mock-provider',
-        };
-      }
-      throw new Error('Not authenticated');
-    } catch (err) {
-      if (process.env.NODE_ENV === 'development') {
-        return {
-          'x-mock-provider-id': provider?.email || provider?.name || 'dev-mock-provider',
-        };
-      }
-      throw err;
+    const t = await getValidAccessToken();
+    if (t.success && t.accessToken) {
+      return { Authorization: `Bearer ${t.accessToken}` };
     }
-  }, [provider?.email, provider?.name]);
+    throw new Error(t.reason || 'Not authenticated. Please sign in again.');
+  }, []);
 
   const fetchMyRequests = useCallback(async () => {
     if (!provider) return;
@@ -1609,34 +1596,61 @@ const ProfileEditorSheet: React.FC<ProfileEditorProps> = ({
             />
           </Field>
           <div>
-            <p className="text-[12px] font-semibold text-gray-700 mb-1.5">Service categories</p>
-            <div className="flex flex-wrap gap-1.5">
+            <p className="text-[12px] font-semibold text-gray-700">Service categories</p>
+            <p className="text-[11px] text-gray-500 mt-0.5 mb-1.5">
+              Tap a card to turn that group on or off. Each group unlocks the service types listed under it; you set
+              exact prices in Services.
+            </p>
+            <div className="mb-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[10px] text-gray-600">
+              <p className="font-semibold text-gray-800">What this means</p>
+              <p className="mt-0.5 leading-relaxed">
+                Categories are <span className="text-gray-800">buckets</span>, not the long checklist on Services &
+                Pricing. The Services tab has one dropdown per <span className="text-gray-800">main service</span> (e.g.
+                Periodic Services) and checkboxes for <span className="text-gray-800">sub-tasks</span> (e.g. oil change)
+                under that main service.
+              </p>
+            </div>
+            <div className="space-y-2">
               {SERVICE_CATEGORIES.map((cat) => {
                 const active = form.serviceCategories.includes(cat);
+                const includes = (SERVICE_CATEGORY_MAP[cat] || []).join(' · ');
                 return (
                   <button
                     key={cat}
                     type="button"
                     onClick={() => toggleCategory(cat)}
-                    className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${
-                      active
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-700 border-gray-200'
+                    className={`w-full text-left rounded-xl border p-2.5 transition ${
+                      active ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white active:bg-gray-50'
                     }`}
                   >
-                    {cat}
+                    <div className="flex items-start gap-2">
+                      <span
+                        className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 ${
+                          active ? 'border-blue-600 bg-blue-600' : 'border-gray-300 bg-white'
+                        }`}
+                        aria-hidden
+                      >
+                        {active ? (
+                          <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : null}
+                      </span>
+                      <div className="min-w-0">
+                        <p className={`text-[12px] font-semibold ${active ? 'text-blue-900' : 'text-gray-900'}`}>{cat}</p>
+                        <p className="text-[10px] text-gray-600 mt-0.5 leading-relaxed">
+                          {SERVICE_CATEGORY_DESCRIPTIONS[cat]}
+                        </p>
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          <span className="font-medium text-gray-600">Types: </span>
+                          {includes}
+                        </p>
+                      </div>
+                    </div>
                   </button>
                 );
               })}
             </div>
-            <p className="mt-1.5 text-[11px] text-gray-500">
-              Affects which services are recommended:{' '}
-              {form.serviceCategories
-                .flatMap((c) => SERVICE_CATEGORY_MAP[c] || [])
-                .slice(0, 3)
-                .join(', ') || 'none yet'}
-              {form.serviceCategories.flatMap((c) => SERVICE_CATEGORY_MAP[c] || []).length > 3 ? '…' : ''}
-            </p>
           </div>
         </div>
         <div className="sticky bottom-0 bg-white border-t border-gray-100 p-3">
