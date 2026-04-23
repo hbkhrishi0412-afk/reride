@@ -32,7 +32,7 @@ import {
   updateSupportTicketInSupabase,
 } from '../services/supportTicketService';
 import { dataService } from '../services/dataService';
-import { getAuthHeaders, refreshAuthToken } from '../utils/authenticatedFetch';
+import { getAuthHeaders, refreshAuthToken, resetAuthFetchStateAfterLogout } from '../utils/authenticatedFetch';
 import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
@@ -49,7 +49,7 @@ import { sanitizePersistedChatMessage, supabaseRowToConversation } from '../serv
 import { emailToKey } from '../services/supabase-user-service';
 import { isCapacitorNative } from '../utils/apiConfig';
 import { normalizeUserLocationForStorage } from '../utils/cityMapping';
-import { getBrowserAccessTokenForApi } from '../utils/authStorage';
+import { clearSupabaseAuthStorage, getBrowserAccessTokenForApi } from '../utils/authStorage';
 import { getEffectiveMuteKeys, isStoryMuted } from '../utils/notificationMute';
 import { getSupabaseClient } from '../lib/supabase';
 import { syncServiceProviderOAuth, syncWithBackend } from '../services/supabase-auth-service';
@@ -965,15 +965,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const handleLogout = useCallback(async () => {
     try {
-      // Sign out from Supabase if authenticated
+      // Local sign-out only: default global signOut() revokes on Supabase (logout?scope=global)
+      // and returns 403 when the access token is already expired, which blocks logout.
       try {
         const { getSupabaseClient } = await import('../lib/supabase');
         const supabase = getSupabaseClient();
-        await supabase.auth.signOut();
+        const { error: signOutErr } = await supabase.auth.signOut({ scope: 'local' });
+        if (signOutErr) {
+          logDebug('Supabase local sign out:', signOutErr.message);
+        }
       } catch (supabaseError) {
-        // Supabase may not be initialized or user may not be using Supabase auth
         logDebug('Supabase sign out skipped:', supabaseError);
       }
+      clearSupabaseAuthStorage();
 
       // Clear tokens via logout service
       try {
@@ -995,6 +999,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('reRideCurrentUser');
       localStorage.removeItem('reRideAccessToken');
       localStorage.removeItem('reRideRefreshToken');
+      try {
+        localStorage.removeItem('reride_oauth_role');
+        localStorage.removeItem('reride_last_role');
+      } catch {
+        /* ignore */
+      }
+      localStorage.removeItem('reRideServiceProvider');
       localStorage.removeItem('rememberedCustomerEmail');
       localStorage.removeItem('rememberedSellerEmail');
       clearRememberMeState();
@@ -1023,9 +1034,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       googleOAuthSyncDoneRef.current = false;
       oauthGoogleProfileSyncInFlightUidRef.current = null;
       localStorage.removeItem('reRideCurrentUser');
+      localStorage.removeItem('reRideAccessToken');
+      localStorage.removeItem('reRideRefreshToken');
+      try {
+        localStorage.removeItem('reride_oauth_role');
+        localStorage.removeItem('reride_last_role');
+      } catch {
+        /* ignore */
+      }
+      localStorage.removeItem('reRideServiceProvider');
+      localStorage.removeItem('rememberedCustomerEmail');
+      localStorage.removeItem('rememberedSellerEmail');
+      clearSupabaseAuthStorage();
+      try {
+        localStorage.removeItem('reride_wishlist');
+        localStorage.removeItem('reride_comparison_list');
+      } catch {
+        /* ignore */
+      }
+      resetAuthFetchStateAfterLogout();
       clearRememberMeState();
       setCurrentView(View.HOME);
       setActiveChat(null);
+      setComparisonList([]);
+      setWishlist([]);
       addToast(t('toast.loggedOut'), 'info');
     }
   }, [addToast, setComparisonList, setWishlist, t]);
@@ -1259,7 +1291,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } else {
               googleOAuthSyncDoneRef.current = false;
               addToast(result.reason || t('toast.googleSignInFailed'), 'error');
-              await supabase.auth.signOut();
+              await supabase.auth.signOut({ scope: 'local' });
+              clearSupabaseAuthStorage();
             }
             return;
           }
@@ -1274,13 +1307,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } else {
             googleOAuthSyncDoneRef.current = false;
             addToast(result.reason || t('toast.googleSignInFailed'), 'error');
-            await supabase.auth.signOut();
+            await supabase.auth.signOut({ scope: 'local' });
+            clearSupabaseAuthStorage();
           }
         } catch (e) {
           googleOAuthSyncDoneRef.current = false;
           logError('Google OAuth backend sync failed:', e);
           addToast(t('toast.googleSignInFailed'), 'error');
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: 'local' });
+          clearSupabaseAuthStorage();
         }
       } finally {
         oauthGoogleProfileSyncInFlightUidRef.current = null;

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { resetPassword, updatePassword } from '../services/supabase-auth-service';
 import { getSupabaseClient } from '../lib/supabase';
+import { clearSupabaseAuthStorage } from '../utils/authStorage';
 import PasswordInput from './PasswordInput';
 
 interface ForgotPasswordProps {
@@ -137,9 +138,11 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onResetSent }) 
       // password; also strip recovery params from the URL so a refresh doesn't
       // drop them back into recovery mode.
       try {
-        await getSupabaseClient().auth.signOut();
+        await getSupabaseClient().auth.signOut({ scope: 'local' });
       } catch {
         /* ignore */
+      } finally {
+        clearSupabaseAuthStorage();
       }
       try {
         const cleanHash = (window.location.hash || '').split('?')[0];

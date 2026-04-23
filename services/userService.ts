@@ -3,7 +3,12 @@ import type { User } from '../types';
 import { userRolesEqual } from '../utils/user-role';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { isCapacitorNative } from '../utils/apiConfig';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import {
+  authenticatedFetch,
+  handleApiResponse,
+  resetAuthFetchStateAfterLogout,
+} from '../utils/authenticatedFetch';
+import { clearSupabaseAuthStorage } from '../utils/authStorage';
 
 // Fallback mock users for development only (no credentials stored in source)
 // In production, all users come from Supabase — these are never used.
@@ -107,6 +112,8 @@ const clearTokens = () => {
     localStorage.removeItem('reRideAccessToken');
     localStorage.removeItem('reRideRefreshToken');
     localStorage.removeItem('reRideCurrentUser');
+    clearSupabaseAuthStorage();
+    resetAuthFetchStateAfterLogout();
   } catch (error) {
     console.warn('Failed to clear tokens:', error);
   }

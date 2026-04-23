@@ -10,6 +10,7 @@ import OTPLogin from './OTPLogin';
 import PasswordInput from './PasswordInput';
 import Logo from './Logo';
 import useIsMobileApp from '../hooks/useIsMobileApp';
+import { clearSupabaseAuthStorage } from '../utils/authStorage';
 
 interface UnifiedLoginProps {
   onLogin: (user: User) => void;
@@ -266,7 +267,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       } = await supabase.auth.getSession();
       if (!session?.user) {
         setError(t('auth.error.googleSignInFailed'));
-        await supabase.auth.signOut();
+        try {
+          await supabase.auth.signOut({ scope: 'local' });
+        } finally {
+          clearSupabaseAuthStorage();
+        }
         setShowGoogleRolePicker(false);
         return;
       }
@@ -296,9 +301,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     }
     setShowGoogleRolePicker(false);
     try {
-      await getSupabaseClient().auth.signOut();
+      await getSupabaseClient().auth.signOut({ scope: 'local' });
     } catch {
       /* ignore */
+    } finally {
+      clearSupabaseAuthStorage();
     }
   };
 
