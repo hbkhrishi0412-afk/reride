@@ -1121,27 +1121,32 @@ const ServiceCart: React.FC<Props> = ({
 
     // Get service categories from selected items
     const selectedServiceCategories = useMemo(() => {
-        return items.map(item => {
-            const category = SERVICE_PACKAGE_TO_CATEGORY[item.serviceId];
-            if (category) return category;
-            // Fallback: try to match by name
-            const svcMeta = availableServicePackages.find(s => s.id === item.serviceId);
-            return svcMeta?.name || item.serviceId;
-        }).filter(Boolean);
+        const list = items
+            .map((item) => {
+                const category = SERVICE_PACKAGE_TO_CATEGORY[item.serviceId];
+                if (category) return category;
+                const svcMeta = availableServicePackages.find((s) => s.id === item.serviceId);
+                return svcMeta?.name || item.serviceId;
+            })
+            .filter(Boolean);
+        return Array.from(new Set(list));
     }, [items, availableServicePackages]);
 
     // Get service types from selected items (for backward compatibility)
     const selectedServiceTypes = useMemo(() => {
-        const fromItems = items.map(item => {
-            const svcMeta = availableServicePackages.find(s => s.id === item.serviceId);
-            return svcMeta?.parentServiceType || svcMeta?.name || item.serviceId;
-        }).filter(Boolean);
-        if (fromItems.length > 0) return fromItems;
+        const fromItems = items
+            .map((item) => {
+                const svcMeta = availableServicePackages.find((s) => s.id === item.serviceId);
+                return svcMeta?.parentServiceType || svcMeta?.name || item.serviceId;
+            })
+            .filter(Boolean);
+        const unique = Array.from(new Set(fromItems));
+        if (unique.length > 0) return unique;
         if (activeServicePackageId) {
             const activeMeta = availableServicePackages.find((s) => s.id === activeServicePackageId);
             if (activeMeta?.name) return [activeMeta.name];
         }
-        return fromItems;
+        return unique;
     }, [items, availableServicePackages, activeServicePackageId]);
 
     const parentServicePackages = useMemo(
@@ -1164,6 +1169,53 @@ const ServiceCart: React.FC<Props> = ({
             } as ServicePackage;
         });
     }, [parentServicePackages]);
+
+    /** Parent package is in cart as full-service line and/or has sub-service lines selected. */
+    const isParentPackageInCart = useCallback(
+        (parentPkgId: string, cart: CartItem[]) => {
+            if (cart.some((i) => i.serviceId === parentPkgId)) return true;
+            const parentMeta = availableServicePackages.find((p) => p.id === parentPkgId);
+            if (!parentMeta) return false;
+            const parentType = (parentMeta.parentServiceType || parentMeta.name).toLowerCase();
+            return cart.some((entry) => {
+                const meta = availableServicePackages.find((p) => p.id === entry.serviceId);
+                return (
+                    Boolean(meta?.includedServiceId) &&
+                    (meta?.parentServiceType || '').toLowerCase() === parentType
+                );
+            });
+        },
+        [availableServicePackages],
+    );
+
+    const stripParentPackageFromCart = useCallback(
+        (cart: CartItem[], parentPkgId: string): CartItem[] => {
+            const parentMeta = availableServicePackages.find((p) => p.id === parentPkgId);
+            if (!parentMeta) return cart.filter((i) => i.serviceId !== parentPkgId);
+            const parentType = (parentMeta.parentServiceType || parentMeta.name).toLowerCase();
+            return cart.filter((entry) => {
+                if (entry.serviceId === parentPkgId) return false;
+                const meta = availableServicePackages.find((p) => p.id === entry.serviceId);
+                if (meta?.includedServiceId && (meta.parentServiceType || '').toLowerCase() === parentType) {
+                    return false;
+                }
+                return true;
+            });
+        },
+        [availableServicePackages],
+    );
+
+    useEffect(() => {
+        if (!activeServicePackageId) {
+            if (items.length === 0) setHasExplicitServiceSelection(false);
+            return;
+        }
+        if (!isParentPackageInCart(activeServicePackageId, items)) {
+            const fallback = websiteServicePackages.find((pkg) => isParentPackageInCart(pkg.id, items));
+            setActiveServicePackageId(fallback?.id ?? '');
+            if (!fallback && items.length === 0) setHasExplicitServiceSelection(false);
+        }
+    }, [items, activeServicePackageId, websiteServicePackages, isParentPackageInCart]);
 
     const includedOptionsForActiveService = useMemo(() => {
         if (!activeServicePackageId) return [];
@@ -1285,22 +1337,27 @@ const ServiceCart: React.FC<Props> = ({
     };
 
     const selectServiceForBooking = (serviceId: string) => {
-        setHasExplicitServiceSelection(true);
-        setActiveServicePackageId(serviceId);
         const selectedMeta =
             websiteServicePackages.find((pkg) => pkg.id === serviceId) ||
             availableServicePackages.find((pkg) => pkg.id === serviceId);
         if (!selectedMeta) return;
-        // Always default to "Full service" mode so customers get a single-click
-        // booking experience. They can switch to "Pick sub-services" via the
-        // toggle to customise which sub-services are included.
-        setItems([{ serviceId, quantity: 1 }]);
+        setHasExplicitServiceSelection(true);
+        setActiveServicePackageId(serviceId);
+        setItems((prev) => {
+            if (isParentPackageInCart(serviceId, prev)) {
+                return stripParentPackageFromCart(prev, serviceId);
+            }
+            return [...prev, { serviceId, quantity: 1 }];
+        });
     };
 
     /** Book the full bundled service (provider's declared base price). */
     const pickFullServiceForActive = () => {
         if (!activeServicePackageId) return;
-        setItems([{ serviceId: activeServicePackageId, quantity: 1 }]);
+        setItems((prev) => {
+            const cleared = stripParentPackageFromCart(prev, activeServicePackageId);
+            return [...cleared, { serviceId: activeServicePackageId, quantity: 1 }];
+        });
     };
 
     /** Switch to sub-service selection mode for the active parent service. */
@@ -2145,14 +2202,18 @@ const ServiceCart: React.FC<Props> = ({
 
                             <div className="space-y-2">
                                 {websiteServicePackages.map((pkg) => {
-                                    const isActive = hasExplicitServiceSelection && activeServicePackageId === pkg.id;
-                                    const subServices = isActive ? includedOptionsForActiveServicePriced : [];
+                                    const isSelected = isParentPackageInCart(pkg.id, items);
+                                    const isExpanded =
+                                        hasExplicitServiceSelection &&
+                                        isSelected &&
+                                        activeServicePackageId === pkg.id;
+                                    const subServices = isExpanded ? includedOptionsForActiveServicePriced : [];
                                     const hasSubs = subServices.length > 0;
-                                    const isFullServiceMode = isActive && items.some((i) => i.serviceId === pkg.id);
-                                    const selectedSubs = isActive
+                                    const isFullServiceMode = isExpanded && items.some((i) => i.serviceId === pkg.id);
+                                    const selectedSubs = isExpanded
                                         ? items.filter((i) => subServices.some((s) => s.id === i.serviceId)).length
                                         : 0;
-                                    const providerPrice = isActive
+                                    const providerPrice = isExpanded
                                         ? resolveItemUnitPrice({ serviceId: pkg.id, quantity: 1 }, selectedProviders[0])
                                         : undefined;
                                     const displayPrice = providerPrice ?? pkg.price;
@@ -2160,20 +2221,22 @@ const ServiceCart: React.FC<Props> = ({
                                         <div
                                             key={pkg.id}
                                             className={`rounded-lg border transition-colors ${
-                                                isActive
+                                                isSelected
                                                     ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/10'
                                                     : 'border-gray-200 dark:border-gray-700'
                                             }`}
                                         >
                                             <button
                                                 type="button"
+                                                role="checkbox"
+                                                aria-checked={isSelected}
                                                 onClick={() => selectServiceForBooking(pkg.id)}
                                                 className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left"
                                             >
                                                 <div className="flex items-center gap-2.5 min-w-0">
                                                     <span
-                                                        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                                                            isActive
+                                                        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                                                            isSelected
                                                                 ? 'border-blue-600 bg-blue-600 text-white'
                                                                 : 'border-gray-300 bg-white text-transparent'
                                                         }`}
@@ -2186,7 +2249,7 @@ const ServiceCart: React.FC<Props> = ({
                                                         <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                                                             {pkg.name}
                                                         </div>
-                                                        {pkg.description && !isActive && (
+                                                        {pkg.description && !isSelected && (
                                                             <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
                                                                 {pkg.description}
                                                             </div>
@@ -2200,8 +2263,8 @@ const ServiceCart: React.FC<Props> = ({
                                                 </span>
                                             </button>
 
-                                            {/* Inline detail panel for the active service */}
-                                            {isActive && hasSubs && (
+                                            {/* Inline detail panel for the expanded selected service */}
+                                            {isExpanded && hasSubs && (
                                                 <div className="border-t border-blue-100 dark:border-blue-900/40 px-3 py-3 space-y-2.5">
                                                     <div className="grid grid-cols-2 gap-2">
                                                         <button
@@ -2293,7 +2356,7 @@ const ServiceCart: React.FC<Props> = ({
                                                 </div>
                                             )}
 
-                                            {isActive && !hasSubs && (
+                                            {isExpanded && !hasSubs && (
                                                 <div className="border-t border-blue-100 dark:border-blue-900/40 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
                                                     Sub-services not published yet — provider will confirm pricing on acceptance.
                                                 </div>

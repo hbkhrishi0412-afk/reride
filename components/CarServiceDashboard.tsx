@@ -342,6 +342,8 @@ function ServiceRequestPackages({ services, total }: { services?: ServiceLineIte
 
 interface CarServiceDashboardProps {
   provider: Provider | null;
+  /** Clears provider session + app auth (same as site header logout). */
+  onLogout?: () => void;
 }
 
 const statusOptions: { value: RequestStatus; label: string }[] = [
@@ -513,7 +515,7 @@ const includedDraftsToPayload = (drafts: IncludedServiceDraft[]): IncludedServic
     })
     .filter((entry): entry is IncludedServicePrice => entry !== null);
 
-const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) => {
+const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onLogout }) => {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [openRequests, setOpenRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1824,17 +1826,28 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                 })()}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={loading || openLoading}
-              className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white text-sm font-semibold hover:from-blue-700 hover:via-purple-700 hover:to-pink-700 disabled:opacity-60 shadow-md transition-all flex items-center gap-2"
-            >
-              <svg className={`w-4 h-4 ${loading || openLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {loading || openLoading ? 'Refreshing...' : 'Refresh'}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-800 text-sm font-semibold hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Log out
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={loading || openLoading}
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white text-sm font-semibold hover:from-blue-700 hover:via-purple-700 hover:to-pink-700 disabled:opacity-60 shadow-md transition-all flex items-center gap-2"
+              >
+                <svg className={`w-4 h-4 ${loading || openLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {loading || openLoading ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </div>
           </div>
         </div>
       </header>
