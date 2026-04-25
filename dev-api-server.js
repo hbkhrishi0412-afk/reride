@@ -16,6 +16,7 @@
 // - conversation:new-message (for real-time chat)
 //
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { createServer } from 'http';
@@ -25,6 +26,7 @@ import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { appendFileSync } from 'fs';
+import { randomInt, randomBytes } from 'crypto';
 import { isValidServiceType, sanitizeServiceCategories } from './constants/serviceProviderCatalog.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +35,31 @@ config({ path: join(__dirname, '.env.local') });
 config({ path: join(__dirname, '.env') });
 
 const app = express();
+const apiGlobalRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 2000,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const serviceRequestsListRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const serviceRequestsMutationRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+// Registered before app.use('/api', apiGlobalRateLimit) — this route would otherwise skip that middleware.
+const sendSmsHookRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
@@ -95,6 +122,7 @@ app.use(cors());
 // Supabase Send SMS Hook — raw JSON body required for Standard Webhooks signature (see api/send-sms-hook.ts)
 app.post(
   '/api/send-sms-hook',
+  sendSmsHookRateLimit,
   express.raw({ type: 'application/json', limit: '512kb' }),
   async (req, res) => {
     try {
@@ -114,6 +142,8 @@ app.post(
 // send-sms-hook must stay before express.json() so the body is not parsed as JSON
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Baseline rate limit for all /api routes (CodeQL: missing rate limiting)
+app.use('/api', apiGlobalRateLimit);
 
 // Mock vehicle data for admin database
 let mockVehicleDataDb = [
@@ -193,7 +223,9 @@ const CITIES = [
 const FUEL = ['Petrol', 'Diesel', 'CNG'];
 const TRANS = ['Manual', 'Automatic'];
 
-function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function rand(min, max) {
+  return randomInt(min, max + 1);
+}
 function pick(arr) { return arr[rand(0, arr.length - 1)]; }
 
 function generateMockVehicles(count = 60) {
@@ -1864,7 +1896,7 @@ app.patch('/api/service-providers', (req, res) => {
 });
 
 // --- Service Requests (dev mock) ---
-app.get('/api/service-requests', (req, res) => {
+app.get('/api/service-requests', serviceRequestsListRateLimit, (req, res) => {
   const actorId = getRequestActorId(req);
   const scope = req.query.scope || 'mine';
 
@@ -1940,7 +1972,7 @@ app.get('/api/service-requests', (req, res) => {
   return res.json(records);
 });
 
-app.post('/api/service-requests', (req, res) => {
+app.post('/api/service-requests', serviceRequestsMutationRateLimit, (req, res) => {
   const {
     title,
     serviceType = 'General',
@@ -1968,7 +2000,7 @@ app.post('/api/service-requests', (req, res) => {
   if (!title) {
     return res.status(400).json({ error: 'Missing required field: title' });
   }
-  const id = `req-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
+  const id = `req-${Date.now()}-${randomBytes(4).toString('hex')}`;
   const customerId = req.body?.customerId || getRequestActorId(req);
   const record = {
     id,
@@ -2002,7 +2034,7 @@ app.post('/api/service-requests', (req, res) => {
   return res.status(201).json(record);
 });
 
-app.patch('/api/service-requests', (req, res) => {
+app.patch('/api/service-requests', serviceRequestsMutationRateLimit, (req, res) => {
   const uid = getRequestActorId(req);
   const { id, action, ...updates } = req.body || {};
   if (!id) return res.status(400).json({ error: 'Missing request id' });
@@ -3343,7 +3375,7 @@ if (io) {
 //           currentUserId = message.userId || undefined;
 //           currentUserName = message.userName || 'Guest';
 //           currentSessionId = message.sessionId || 
-//             (currentUserId ? `user_${currentUserId}_${Date.now()}` : `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+//             (currentUserId ? `user_${currentUserId}_${Date.now()}` : `anon_${Date.now()}_${randomBytes(6).toString('hex')}`);
 //           
 //           // Create/update session
 //           await ChatSession.findOneAndUpdate(

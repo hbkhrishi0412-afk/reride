@@ -1,5 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { getOptimizedImageUrl, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder } from '../utils/imageUtils';
+import {
+  getOptimizedImageUrl,
+  getSafeImageSrc,
+  VEHICLE_IMAGE_PLACEHOLDER_DATA_URI,
+  isInlineImagePlaceholder,
+  isPlaceholderService,
+  isSupabaseRenderTransformPublicUrl,
+} from '../utils/imageUtils';
 import { logError, logInfo, logWarn } from '../utils/logger';
 
 interface LazyImageProps {
@@ -106,16 +113,21 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
   const handleError = (e?: React.SyntheticEvent<HTMLImageElement, Event>) => {
     // Prevent infinite error loops
     const target = e?.target as HTMLImageElement;
-    if (target && !isInlineImagePlaceholder(target.src) && !target.src.includes('placeholder.com') && !target.src.includes('text=Car')) {
+    const textCarParam = (() => {
+      if (!target?.src) return false;
+      try {
+        return new URL(target.src, 'https://invalid.invalid/').searchParams.get('text') === 'Car';
+      } catch {
+        return false;
+      }
+    })();
+    if (target && !isInlineImagePlaceholder(target.src) && !isPlaceholderService(target.src) && !textCarParam) {
       // Supabase transform URL failed (e.g. project without the render endpoint
       // enabled, or a transient 4xx). Retry once with the raw `/object/public/`
       // URL before giving up — this fixes cards that would otherwise render
       // empty gray when the optimized variant 404s.
       const failedUrl = target.src;
-      if (
-        failedUrl.includes('supabase.co') &&
-        failedUrl.includes('/storage/v1/render/image/public/')
-      ) {
+      if (isSupabaseRenderTransformPublicUrl(failedUrl)) {
         const rawUrl = failedUrl
           .replace('/storage/v1/render/image/public/', '/storage/v1/object/public/')
           .split('?')[0];
@@ -177,7 +189,7 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
         logWarn('⚠️ LazyImage: Image failed to load:', {
           src: target.src,
           originalSrc: src,
-          isPlaceholder: isInlineImagePlaceholder(target.src) || target.src.includes('placeholder.com') || target.src.includes('text=Car'),
+          isPlaceholder: isInlineImagePlaceholder(target.src) || isPlaceholderService(target.src) || textCarParam,
         });
       }
     }
@@ -187,7 +199,8 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
 
   // Use a default placeholder if src is empty or invalid
   const defaultPlaceholder = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
-  const finalSrc = displaySrc || (src && src.trim() !== '' ? src : defaultPlaceholder);
+  const rawFinalSrc = displaySrc || (src && src.trim() !== '' ? src : defaultPlaceholder);
+  const finalSrc = getSafeImageSrc(rawFinalSrc, defaultPlaceholder);
 
   return (
     <div ref={containerRef} className={`relative overflow-hidden ${className}`}>
@@ -208,29 +221,26 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
         </div>
       )}
 
-      {/* Actual Image — optimize once (finalSrc already comes from getOptimizedImageUrl on validSrc) */}
-      {isInView && !hasError && finalSrc && (() => {
-        return (
-          <img
-            ref={imgRef}
-            src={finalSrc}
-            alt={alt}
-            className={`w-full h-full transition-opacity duration-300 ${
-              isLoaded ? 'opacity-100' : 'opacity-0'
-            }`}
-            style={{ objectFit: 'cover' }}
-            loading={eager ? 'eager' : 'lazy'}
-            fetchPriority={fetchPriority}
-            onLoad={handleLoad}
-            onError={handleError}
-            decoding="async"
-          />
-        );
-      })()}
+      {/* Actual Image — finalSrc is validated for URL/data/blob before use (CodeQL: DOM xss) */}
+      {isInView && !hasError && finalSrc && (
+        <img
+          ref={imgRef}
+          src={finalSrc}
+          alt={alt}
+          className={`w-full h-full transition-opacity duration-300 ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{ objectFit: 'cover' }}
+          loading={eager ? 'eager' : 'lazy'}
+          fetchPriority={fetchPriority}
+          onLoad={handleLoad}
+          onError={handleError}
+          decoding="async"
+        />
+      )}
 
       {/* Fallback for browsers without Intersection Observer or immediate load */}
-      {(typeof window === 'undefined' || !window.IntersectionObserver) && !hasError && finalSrc && (() => {
-        return (
+      {(typeof window === 'undefined' || !window.IntersectionObserver) && !hasError && finalSrc && (
         <img
           src={finalSrc}
           alt={alt}
@@ -241,8 +251,7 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
           onLoad={handleLoad}
           onError={handleError}
         />
-        );
-      })()}
+      )}
     </div>
   );
 });

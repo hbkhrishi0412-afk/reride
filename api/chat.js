@@ -1,4 +1,5 @@
 // Chat API endpoints and WebSocket handler
+import { randomBytes } from 'node:crypto';
 import express from 'express';
 import { ensureConnection } from '../lib/db.js';
 import { ChatMessage } from '../lib/models/ChatMessage.js';
@@ -26,9 +27,9 @@ router.post('/', async (req, res) => {
     // Generate or use existing session ID
     let finalSessionId = sessionId;
     if (!finalSessionId) {
-      finalSessionId = userId 
+      finalSessionId = userId
         ? `user_${userId}_${Date.now()}`
-        : `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        : `anon_${Date.now()}_${randomBytes(9).toString('hex')}`;
     }
 
     const finalUserName = userName || 'Guest';

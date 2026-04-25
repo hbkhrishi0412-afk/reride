@@ -3,6 +3,8 @@
  * Provides hooks and utilities for native mobile features
  */
 
+import { randomAlphanumeric } from './secureRandom';
+
 // ============================================
 // PUSH NOTIFICATIONS
 // ============================================
@@ -654,7 +656,7 @@ export async function queueOfflineAction(
     try {
       const registration = await navigator.serviceWorker.ready;
       const db = await openIndexedDB();
-      const actionId = `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const actionId = `action_${Date.now()}_${randomAlphanumeric(9)}`;
       
       await saveToIndexedDB(db, 'pendingActions', {
         id: actionId,

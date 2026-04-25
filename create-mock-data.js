@@ -1,5 +1,8 @@
 // Script to create mock data files for development
 import fs from 'fs';
+import { randomInt } from 'crypto';
+
+const pick = (arr) => arr[randomInt(0, arr.length)];
 
 const generateMockVehicles = (count = 50) => {
   const makes = ['Maruti Suzuki', 'Hyundai', 'Tata', 'Honda', 'Toyota', 'Mahindra', 'Kia', 'Nissan'];
@@ -22,12 +25,12 @@ const generateMockVehicles = (count = 50) => {
   const vehicles = [];
   
   for (let i = 1; i <= count; i++) {
-    const make = makes[Math.floor(Math.random() * makes.length)];
-    const model = models[make][Math.floor(Math.random() * models[make].length)];
-    const year = 2018 + Math.floor(Math.random() * 6);
-    const price = 300000 + Math.floor(Math.random() * 2000000);
-    const mileage = 10000 + Math.floor(Math.random() * 100000);
-    
+    const make = pick(makes);
+    const model = pick(models[make]);
+    const year = 2018 + randomInt(0, 6);
+    const price = 300000 + randomInt(0, 2_000_000);
+    const mileage = 10000 + randomInt(0, 100_000);
+
     vehicles.push({
       id: i,
       make,
@@ -35,32 +38,32 @@ const generateMockVehicles = (count = 50) => {
       year,
       price,
       mileage,
-      fuelType: fuelTypes[Math.floor(Math.random() * fuelTypes.length)],
-      transmission: transmissions[Math.floor(Math.random() * transmissions.length)],
-      location: cities[Math.floor(Math.random() * cities.length)],
-      sellerEmail: `seller${Math.floor(Math.random() * 5) + 1}@test.com`,
+      fuelType: pick(fuelTypes),
+      transmission: pick(transmissions),
+      location: pick(cities),
+      sellerEmail: `seller${randomInt(1, 6)}@test.com`,
       images: [`https://picsum.photos/seed/${make}${model}${i}/800/600`],
       description: `Well maintained ${make} ${model} in excellent condition. Single owner, no accidents.`,
       status: 'published',
-      isFeatured: Math.random() > 0.7,
-      views: Math.floor(Math.random() * 200),
-      inquiriesCount: Math.floor(Math.random() * 20),
-      certificationStatus: Math.random() > 0.5 ? 'certified' : 'none',
+      isFeatured: randomInt(0, 10) > 6,
+      views: randomInt(0, 200),
+      inquiriesCount: randomInt(0, 20),
+      certificationStatus: randomInt(0, 2) === 0 ? 'certified' : 'none',
       category: 'four-wheeler',
       features: ['Power Steering', 'Air Conditioning', 'Power Windows', 'Central Locking'],
-      engine: `${(1.0 + Math.random() * 2.0).toFixed(1)}L ${fuelTypes[Math.floor(Math.random() * fuelTypes.length)]}`,
-      fuelEfficiency: `${15 + Math.floor(Math.random() * 10)} KMPL`,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      noOfOwners: Math.floor(Math.random() * 3) + 1,
+      engine: `${(1.0 + randomInt(0, 2000) / 1000).toFixed(1)}L ${pick(fuelTypes)}`,
+      fuelEfficiency: `${15 + randomInt(0, 10)} KMPL`,
+      color: pick(colors),
+      noOfOwners: randomInt(0, 3) + 1,
       registrationYear: year,
-      insuranceValidity: `${new Date().getFullYear() + 1}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}`,
+      insuranceValidity: `${new Date().getFullYear() + 1}-${String(randomInt(1, 13)).padStart(2, '0')}`,
       insuranceType: 'Comprehensive',
-      rto: `${cities[Math.floor(Math.random() * cities.length)].substring(0, 2).toUpperCase()}${Math.floor(Math.random() * 99) + 1}`,
-      city: cities[Math.floor(Math.random() * cities.length)],
+      rto: `${pick(cities).substring(0, 2).toUpperCase()}${randomInt(1, 100)}`,
+      city: pick(cities),
       state: 'MH',
-      displacement: `${1000 + Math.floor(Math.random() * 2000)} cc`,
-      groundClearance: `${150 + Math.floor(Math.random() * 50)} mm`,
-      bootSpace: `${300 + Math.floor(Math.random() * 200)} litres`
+      displacement: `${1000 + randomInt(0, 2000)} cc`,
+      groundClearance: `${150 + randomInt(0, 50)} mm`,
+      bootSpace: `${300 + randomInt(0, 200)} litres`
     });
   }
   

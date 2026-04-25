@@ -14,6 +14,9 @@ import { getSupabaseClient } from '../lib/supabase.js';
 import type { User } from '../types';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
 
+/** In-memory only (not persisted) — avoids storing the phone number in sessionStorage. */
+let pendingOtpPhoneForVerification: string | null = null;
+
 function isMessageBotOtpEnabled(): boolean {
   try {
     return import.meta.env.VITE_OTP_SMS_PROVIDER === 'messagebot';
@@ -75,9 +78,7 @@ export const sendOTP = async (
           reason: data.reason || 'Failed to send OTP',
         };
       }
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('supabase_phone_auth', formattedNumber);
-      }
+      pendingOtpPhoneForVerification = formattedNumber;
       return {
         success: true,
         confirmationResult: { phone: formattedNumber },
@@ -123,10 +124,7 @@ export const sendOTP = async (
       return { success: false, reason: errorMessage };
     }
 
-    // Store phone for verification step
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('supabase_phone_auth', formattedNumber);
-    }
+    pendingOtpPhoneForVerification = formattedNumber;
 
     return {
       success: true,
@@ -157,10 +155,7 @@ export const verifyOTP = async (
 }> => {
   try {
     const phone =
-      confirmationResult?.phone ||
-      (typeof window !== 'undefined'
-        ? sessionStorage.getItem('supabase_phone_auth')
-        : null);
+      confirmationResult?.phone || pendingOtpPhoneForVerification;
 
     if (!phone) {
       return {
@@ -203,9 +198,7 @@ export const verifyOTP = async (
         refreshToken: data.refreshToken,
         user: data.user,
       });
-      if (typeof window !== 'undefined') {
-        sessionStorage.removeItem('supabase_phone_auth');
-      }
+      pendingOtpPhoneForVerification = null;
       return {
         success: true,
         sessionComplete: true,
@@ -225,10 +218,7 @@ export const verifyOTP = async (
       return { success: false, reason: error.message || 'Invalid OTP' };
     }
 
-    // Clear stored phone number
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('supabase_phone_auth');
-    }
+    pendingOtpPhoneForVerification = null;
 
     const userData = {
       phoneNumber: data.user?.phone || phone,

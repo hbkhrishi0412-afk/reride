@@ -3,6 +3,19 @@
 
 console.log('🔄 Starting data population...');
 
+function cryptoRandomInt(min, maxExclusive) {
+  if (typeof crypto === 'undefined' || !crypto.getRandomValues) {
+    throw new Error('crypto.getRandomValues is required');
+  }
+  const span = maxExclusive - min;
+  if (span <= 0) return min;
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return min + (buf[0] % span);
+}
+
+const pick = (arr) => arr[cryptoRandomInt(0, arr.length)];
+
 // Helper function
 const daysAgo = (days) => {
     const date = new Date();
@@ -29,10 +42,10 @@ const generateMockVehicles = (count) => {
     const transmissions = ['Manual', 'Automatic'];
     
     for (let i = 1; i <= count; i++) {
-        const make = makes[Math.floor(Math.random() * makes.length)];
-        const model = models[Math.floor(Math.random() * models.length)];
-        const year = 2015 + Math.floor(Math.random() * 9);
-        
+        const make = pick(makes);
+        const model = pick(models);
+        const year = 2015 + cryptoRandomInt(0, 9);
+
         vehicles.push({
             id: i,
             category: 'four-wheeler',
@@ -40,8 +53,8 @@ const generateMockVehicles = (count) => {
             model,
             variant: `${model} ZX`,
             year,
-            price: 500000 + Math.floor(Math.random() * 1500000),
-            mileage: Math.floor(Math.random() * 100000),
+            price: 500000 + cryptoRandomInt(0, 1_500_000),
+            mileage: cryptoRandomInt(0, 100_000),
             images: [
                 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=800',
                 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800'
@@ -51,21 +64,21 @@ const generateMockVehicles = (count) => {
             sellerEmail: 'seller@test.com',
             sellerName: 'Prestige Motors',
             engine: '1498 cc',
-            transmission: transmissions[Math.floor(Math.random() * transmissions.length)],
-            fuelType: fuelTypes[Math.floor(Math.random() * fuelTypes.length)],
+            transmission: pick(transmissions),
+            fuelType: pick(fuelTypes),
             fuelEfficiency: '15-18 km/l',
-            color: colors[Math.floor(Math.random() * colors.length)],
+            color: pick(colors),
             status: 'published',
-            isFeatured: Math.random() > 0.8,
-            views: Math.floor(Math.random() * 1000),
-            inquiriesCount: Math.floor(Math.random() * 50),
+            isFeatured: cryptoRandomInt(0, 10) > 7,
+            views: cryptoRandomInt(0, 1000),
+            inquiriesCount: cryptoRandomInt(0, 50),
             registrationYear: year,
             insuranceValidity: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
             insuranceType: 'Comprehensive',
             rto: 'MH-01',
             city: 'Mumbai',
             state: 'MH',
-            noOfOwners: 1 + Math.floor(Math.random() * 2),
+            noOfOwners: 1 + cryptoRandomInt(0, 2),
             displacement: '1498 cc',
             groundClearance: '170 mm',
             bootSpace: '350 litres'

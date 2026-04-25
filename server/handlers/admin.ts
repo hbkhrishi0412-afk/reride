@@ -11,7 +11,7 @@ import { verifyToken, hashPassword, type TokenPayload } from '../../utils/securi
 import { logSecurity, logError, logInfo } from '../../utils/logger.js';
 import { VehicleCategory } from '../../vehicle-category.js';
 import type { User as UserType, Vehicle as VehicleType } from '../../types.js';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomInt } from 'crypto';
 
 function generateRandomPassword(): string {
   return randomBytes(32).toString('hex');
@@ -149,29 +149,30 @@ export async function seedVehicles(): Promise<VehicleType[]> {
   } catch { /* skip cleanup errors */ }
 
   const vehicles: VehicleType[] = [];
+  const pick = <T>(arr: T[]): T => arr[randomInt(0, arr.length)]!;
   for (let i = 1; i <= 50; i++) {
-    const make = makes[Math.floor(Math.random() * makes.length)];
+    const make = pick(makes);
     const models = modelsByMake[make] || ['Model'];
-    const model = models[Math.floor(Math.random() * models.length)];
-    const city = cities[Math.floor(Math.random() * cities.length)];
+    const model = pick(models);
+    const city = pick(cities);
     const state = statesByCity[city] || 'MH';
-    const year = 2015 + Math.floor(Math.random() * 10);
-    const engineSize = 1000 + Math.floor(Math.random() * 1500);
+    const year = 2015 + randomInt(0, 10);
+    const engineSize = 1000 + randomInt(0, 1500);
 
     try {
       const v = await vehicleService.create({
         make, model, variant: model, year,
-        price: Math.round((300000 + Math.random() * 2000000) / 5000) * 5000,
-        mileage: Math.floor(Math.random() * 100000),
+        price: Math.round((300000 + randomInt(0, 2_000_000)) / 5000) * 5000,
+        mileage: randomInt(0, 100_000),
         category: VehicleCategory.FOUR_WHEELER,
         sellerEmail: 'seller@test.com',
-        status: 'published', isFeatured: Math.random() > 0.7,
-        views: Math.floor(Math.random() * 1000),
+        status: 'published', isFeatured: randomInt(0, 10) > 6,
+        views: randomInt(0, 1000),
         images: [`https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=800&sig=${i}`],
         features: ['Power Steering', 'AC', 'ABS', 'Airbags'],
         description: `${year} ${make} ${model} in ${city}`,
         engine: `${engineSize} cc`, transmission: 'Manual', fuelType: 'Petrol',
-        fuelEfficiency: `${12 + Math.floor(Math.random() * 13)} km/l`,
+        fuelEfficiency: `${12 + randomInt(0, 13)} km/l`,
         color: 'White', location: `${city}, ${state}`, city, state,
         registrationYear: year, insuranceValidity: new Date(Date.now() + 365 * 86400000).toISOString(),
         insuranceType: 'Comprehensive', rto: `${state}-01`,

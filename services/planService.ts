@@ -1,6 +1,7 @@
 import type { PlanDetails, SubscriptionPlan } from '../types';
 import { PLAN_DETAILS } from '../constants/plans.js';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import { randomAlphanumeric } from '../utils/secureRandom';
 
 // Lazy-load Plan model only when needed (server-side only)
 let PlanModel: any = null;
@@ -291,7 +292,7 @@ export const planService = {
             throw new Error('Plan creation is only available server-side');
         }
         try {
-            const planId = `custom_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+            const planId = `custom_${Date.now()}_${randomAlphanumeric(10)}`;
             
             await Plan.create({
                 planId,

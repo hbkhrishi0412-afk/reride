@@ -1,4 +1,5 @@
 import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
+import { randomAlphanumeric } from '../utils/secureRandom';
 
 // Detect if we're in a server context (serverless function)
 const isServerSide = typeof window === 'undefined';
@@ -159,7 +160,7 @@ export const supabaseServiceRequestService = {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
     // Generate ID if not provided
-    const id = requestData.id || `sr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const id = requestData.id || `sr_${Date.now()}_${randomAlphanumeric(9)}`;
     
     const row = serviceRequestToSupabaseRow({
       ...requestData,

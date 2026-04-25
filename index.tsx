@@ -29,6 +29,15 @@ import { ensureCsrfToken } from './utils/authenticatedFetch';
 import { isCapacitorNative } from './utils/apiConfig';
 import { initAnalytics, trackPageView } from './utils/analytics';
 
+function escapeHtmlMountMessage(s: string): string {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // i18n - must run before any component that uses useTranslation
 import './lib/i18n';
 
@@ -175,7 +184,10 @@ void (async () => {
       if (typeof (window as any).showLoadError === 'function') {
         (window as any).showLoadError('React mount failed: ' + msg);
       } else {
-        rootElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to load ReRide</h1><p style="color:#666;font-size:14px;margin-bottom:24px;line-height:1.6;word-break:break-all;">' + msg + '</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh</button></div></div>';
+        rootElement.innerHTML =
+          '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to load ReRide</h1><p style="color:#666;font-size:14px;margin-bottom:24px;line-height:1.6;word-break:break-all;">' +
+          escapeHtmlMountMessage(msg) +
+          '</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh</button></div></div>';
       }
     } else {
       throw mountError;

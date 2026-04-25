@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { randomBytes, createHmac } from 'crypto';
+import { randomBytes, createHmac, randomInt } from 'crypto';
 import { PLAN_DETAILS } from '../constants/plans.js';
 import type { User as UserType, Vehicle as VehicleType, VerificationStatus } from '../types.js';
 import { VehicleCategory } from '../vehicle-category.js';
@@ -76,6 +76,13 @@ import { isAndroidWebViewAssetLoaderOrigin } from '../utils/cors-origin.js';
 import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
 import { generateCsrfToken, validateCsrfToken, getCsrfCookieName, getCsrfHeaderName } from '../utils/csrf.js';
 import { checkUpstashRateLimit } from '../lib/rate-limit-upstash.js';
+import {
+  appendRefreshTokenCookie,
+  clearRefreshTokenCookie,
+  getRefreshTokenFromRequest,
+  isCapacitorAppClient,
+  refreshCookieMaxAgeSeconds,
+} from '../server/refresh-cookie.js';
 
 // Type for normalized user (without password)
 interface NormalizedUser extends Omit<UserType, 'password'> {
@@ -1181,8 +1188,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       logWarn('⚠️ POST /api/users: Missing or invalid action field', { body: req.body });
       return res.status(400).json({ 
         success: false, 
-        reason: 'Invalid action. Please provide a valid action: login, register, oauth-login, oauth-service-provider, or refresh-token.' 
+        reason: 'Invalid action. Please provide a valid action: login, register, oauth-login, oauth-service-provider, refresh-token, or logout.' 
       });
+    }
+
+    if (action === 'logout') {
+      clearRefreshTokenCookie(res);
+      return res.status(200).json({ success: true });
     }
 
     // LOGIN
@@ -1474,12 +1486,22 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         role: normalizedUser.role,
         userId: normalizedUser.id
       });
-      
+
+      const rtMax = refreshCookieMaxAgeSeconds();
+      if (!isCapacitorAppClient(req)) {
+        appendRefreshTokenCookie(res, refreshToken, rtMax);
+        return res.status(200).json({
+          success: true,
+          user: normalizedUser,
+          accessToken,
+        });
+      }
+
       return res.status(200).json({
         success: true,
         user: normalizedUser,
         accessToken,
-        refreshToken
+        refreshToken,
       });
       } catch (loginError) {
         logError('❌ Login handler error:', loginError);
@@ -1675,11 +1697,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         }
         
         logInfo('✅ Registration complete. User ID:', newUser.id);
-        return res.status(201).json({ 
-          success: true, 
+        const rtMaxReg = refreshCookieMaxAgeSeconds();
+        if (!isCapacitorAppClient(req)) {
+          appendRefreshTokenCookie(res, refreshToken, rtMaxReg);
+          return res.status(201).json({
+            success: true,
+            user: newUser,
+            accessToken,
+          });
+        }
+        return res.status(201).json({
+          success: true,
           user: newUser,
           accessToken,
-          refreshToken
+          refreshToken,
         });
       } catch (saveError) {
         logError('❌ Error saving user to Supabase:', saveError);
@@ -1866,11 +1897,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         });
       }
       
-      return res.status(200).json({ 
-        success: true, 
+      const rtMaxOAuth = refreshCookieMaxAgeSeconds();
+      if (!isCapacitorAppClient(req)) {
+        appendRefreshTokenCookie(res, refreshToken, rtMaxOAuth);
+        return res.status(200).json({
+          success: true,
+          user: normalizedUser,
+          accessToken,
+        });
+      }
+      return res.status(200).json({
+        success: true,
         user: normalizedUser,
         accessToken,
-        refreshToken
+        refreshToken,
       });
     }
 
@@ -2008,14 +2048,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
     // TOKEN REFRESH (with rotation + revocation)
     if (action === 'refresh-token') {
-      const { refreshToken: incomingRefreshToken } = req.body;
+      const incomingRefreshToken = getRefreshTokenFromRequest(req);
 
       if (!incomingRefreshToken) {
         logWarn('⚠️ Refresh token request missing token');
         return res.status(400).json({
           success: false,
           reason: 'Refresh token is required.',
-          error: 'No refresh token provided in request body',
+          error: 'No refresh token in body or cookie',
         });
       }
 
@@ -2034,6 +2074,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             email: preVerify.email,
             jti: preVerify.jti,
           });
+          clearRefreshTokenCookie(res);
           return res.status(401).json({
             success: false,
             reason: 'Refresh token has been revoked. Please log in again.',
@@ -2046,6 +2087,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         await revokeRefreshToken(rotated.oldJti, rotated.oldTtlSeconds);
 
         logInfo('✅ Access token refreshed + rotated successfully');
+        const rtMaxRot = refreshCookieMaxAgeSeconds();
+        if (!isCapacitorAppClient(req)) {
+          appendRefreshTokenCookie(res, rotated.refreshToken, rtMaxRot);
+          return res.status(200).json({
+            success: true,
+            accessToken: rotated.accessToken,
+          });
+        }
         return res.status(200).json({
           success: true,
           accessToken: rotated.accessToken,
@@ -2054,6 +2103,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         logWarn('❌ Refresh token failed:', errorMessage);
+        clearRefreshTokenCookie(res);
         return res.status(401).json({
           success: false,
           reason: 'Invalid or expired refresh token. Please log in again.',
@@ -2169,8 +2219,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           cleanedNumber = `+91${cleanedNumber}`;
         }
 
-        // Generate 6-digit OTP
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        // Generate 6-digit OTP (crypto; max is exclusive)
+        const otp = randomInt(100_000, 1_000_000).toString();
         
         // Store OTP in Supabase database with expiration (10 minutes)
         const supabase = getSupabaseAdminClient();
@@ -2302,11 +2352,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         const refreshToken = generateRefreshToken(user);
         const normalizedUser = normalizeUser(user);
 
-        return res.status(200).json({ 
-          success: true, 
+        const rtMaxPhone = refreshCookieMaxAgeSeconds();
+        if (!isCapacitorAppClient(req)) {
+          appendRefreshTokenCookie(res, refreshToken, rtMaxPhone);
+          return res.status(200).json({
+            success: true,
+            user: normalizedUser,
+            accessToken,
+          });
+        }
+        return res.status(200).json({
+          success: true,
           user: normalizedUser,
           accessToken,
-          refreshToken
+          refreshToken,
         });
       } catch (error: any) {
         logError('❌ OTP verification error:', error);
@@ -2346,17 +2405,17 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           cleanedNumber = `+91${cleanedNumber}`;
         }
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otp = randomInt(100_000, 1_000_000).toString();
 
         const supabase = getSupabaseAdminClient();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-        const crypto = await import('crypto');
+        const nodeCrypto = await import('crypto');
         const jwtSecret = getSecurityConfig().JWT.SECRET;
         if (!jwtSecret) {
           return res.status(503).json({ success: false, reason: 'Server configuration error. Please try again later.' });
         }
-        const otpHash = crypto.createHash('sha256').update(otp + jwtSecret).digest('hex');
+        const otpHash = nodeCrypto.createHash('sha256').update(otp + jwtSecret).digest('hex');
 
         const { error: storeError } = await supabase
           .from('otp_verifications')
@@ -2494,6 +2553,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         const refreshToken = generateRefreshToken(user);
         const normalizedUser = normalizeUser(user);
 
+        const rtMaxMb = refreshCookieMaxAgeSeconds();
+        if (!isCapacitorAppClient(req)) {
+          appendRefreshTokenCookie(res, refreshToken, rtMaxMb);
+          return res.status(200).json({
+            success: true,
+            user: normalizedUser,
+            accessToken,
+          });
+        }
         return res.status(200).json({
           success: true,
           user: normalizedUser,
@@ -5519,7 +5587,7 @@ async function handleUploadImage(req: VercelRequest, res: VercelResponse) {
       });
     }
     const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(2, 9);
+    const randomStr = randomBytes(8).toString('hex');
     let ext = (fileName.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, '');
     if (allowedAudioMime.includes(mime)) {
       if (!ext || ext === 'jpg' || ext === 'jpeg') {
@@ -5981,20 +6049,21 @@ async function seedVehicles(): Promise<VehicleType[]> {
     'Chennai': 'TN', 'Hyderabad': 'TS'
   };
   
+  const pick = <T>(arr: T[]): T => arr[randomInt(0, arr.length)]!;
   for (let i = 1; i <= vehicleCount; i++) {
-    const make = makes[Math.floor(Math.random() * makes.length)];
+    const make = pick(makes);
     const models = modelsByMake[make] || ['Model'];
-    const model = models[Math.floor(Math.random() * models.length)];
-    const variant = variants[Math.floor(Math.random() * variants.length)];
-    const year = 2015 + Math.floor(Math.random() * 10);
-    const city = cities[Math.floor(Math.random() * cities.length)];
+    const model = pick(models);
+    const variant = pick(variants);
+    const year = 2015 + randomInt(0, 10);
+    const city = pick(cities);
     const state = statesByCity[city] || 'MH';
-    const price = Math.round((300000 + Math.floor(Math.random() * 2000000)) / 5000) * 5000;
-    const mileage = Math.floor(Math.random() * 100000);
-    const fuelType = fuelTypes[Math.floor(Math.random() * fuelTypes.length)];
-    const transmission = transmissions[Math.floor(Math.random() * transmissions.length)];
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    const engineSize = 1000 + Math.floor(Math.random() * 1500);
+    const price = Math.round((300000 + randomInt(0, 2_000_000)) / 5000) * 5000;
+    const mileage = randomInt(0, 100_000);
+    const fuelType = pick(fuelTypes);
+    const transmission = pick(transmissions);
+    const color = pick(colors);
+    const engineSize = 1000 + randomInt(0, 1500);
     
     sampleVehicles.push({
       make,
@@ -6006,9 +6075,9 @@ async function seedVehicles(): Promise<VehicleType[]> {
       category: VehicleCategory.FOUR_WHEELER,
       sellerEmail: sellers[0],
       status: 'published' as const,
-      isFeatured: Math.random() > 0.7,
-      views: Math.floor(Math.random() * 1000),
-      inquiriesCount: Math.floor(Math.random() * 50),
+      isFeatured: randomInt(0, 10) > 6,
+      views: randomInt(0, 1000),
+      inquiriesCount: randomInt(0, 50),
       images: [
         `https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=800&auto=format&q=80&sig=${i}`,
         `https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&auto=format&q=80&sig=${i + 1000}`
@@ -6018,20 +6087,20 @@ async function seedVehicles(): Promise<VehicleType[]> {
       engine: `${engineSize} cc`,
       transmission,
       fuelType,
-      fuelEfficiency: `${12 + Math.floor(Math.random() * 13)} km/l`,
+      fuelEfficiency: `${12 + randomInt(0, 13)} km/l`,
       color,
       location: `${city}, ${state}`,
       city,
       state,
       registrationYear: year,
-      insuranceValidity: new Date(Date.now() + Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000).toISOString(),
-      insuranceType: Math.random() > 0.5 ? 'Comprehensive' : 'Third Party',
-      rto: `${state}-${String(Math.floor(Math.random() * 50) + 1).padStart(2, '0')}`,
-      noOfOwners: 1 + Math.floor(Math.random() * 3),
+      insuranceValidity: new Date(Date.now() + randomInt(0, 365) * 24 * 60 * 60 * 1000).toISOString(),
+      insuranceType: randomInt(0, 2) === 0 ? 'Comprehensive' : 'Third Party',
+      rto: `${state}-${String(randomInt(1, 51)).padStart(2, '0')}`,
+      noOfOwners: 1 + randomInt(0, 3),
       displacement: `${engineSize} cc`,
-      groundClearance: `${150 + Math.floor(Math.random() * 70)} mm`,
-      bootSpace: `${250 + Math.floor(Math.random() * 250)} litres`,
-      createdAt: new Date(Date.now() - Math.floor(Math.random() * 90) * 24 * 60 * 60 * 1000).toISOString()
+      groundClearance: `${150 + randomInt(0, 70)} mm`,
+      bootSpace: `${250 + randomInt(0, 250)} litres`,
+      createdAt: new Date(Date.now() - randomInt(0, 90) * 24 * 60 * 60 * 1000).toISOString()
     });
   }
 
@@ -8214,7 +8283,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
             messageText.length > 50
               ? `New message from ${senderName}: ${messageText.substring(0, 50)}...`
               : `New message from ${senderName}: ${messageText}`;
-          const notificationId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+          const notificationId = Date.now() * 1000 + randomInt(0, 1000);
           try {
             const supabase = getSupabaseAdminClient();
             const record: Record<string, unknown> = {
@@ -8285,7 +8354,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         const notificationMessage = messageText.length > 50
           ? `New message from ${senderName}: ${messageText.substring(0, 50)}...`
           : `New message from ${senderName}: ${messageText}`;
-        const notificationId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+        const notificationId = Date.now() * 1000 + randomInt(0, 1000);
         try {
           const supabase = getSupabaseAdminClient();
           const record: Record<string, unknown> = {

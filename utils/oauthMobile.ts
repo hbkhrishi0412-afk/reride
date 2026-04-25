@@ -6,6 +6,7 @@
 import { Capacitor } from '@capacitor/core';
 import { getSupabaseClient } from '../lib/supabase.js';
 import { OAuthExternalBrowser } from './oauthExternalBrowser';
+import { isAndroidAppAssetsHost } from './apiConfig';
 
 /** Must match Android intent-filter + Supabase Dashboard → Redirect URLs. */
 export const NATIVE_OAUTH_REDIRECT = 'com.reride.app://oauth-callback';
@@ -22,10 +23,8 @@ export function shouldUseNativeGoogleOAuthFlow(): boolean {
   } catch {
     /* ignore */
   }
-  const h = (window.location.hostname || '').toLowerCase();
-  return (
-    h === 'appassets.androidplatform.net' || h.includes('appassets.androidplatform.net')
-  );
+  const h = window.location.hostname || '';
+  return isAndroidAppAssetsHost(h);
 }
 
 export function getNativeOAuthRedirectUrl(): string | undefined {

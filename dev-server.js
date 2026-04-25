@@ -1,5 +1,6 @@
 // Development server that handles API routes
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -18,6 +19,14 @@ import vehiclesHandler from './api/vehicles.js';
 
 // Middleware
 app.use(express.json());
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api', apiLimiter);
 
 // API routes
 app.use('/api/auth', authHandler);

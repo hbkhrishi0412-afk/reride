@@ -7,6 +7,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import { realtimeChatService } from '../services/realtimeChatService';
 import type { Conversation, ChatMessage } from '../types';
+import { randomIntBelow } from '../utils/secureRandom';
 
 interface UseRealtimeChatOptions {
   conversationId?: string;
@@ -119,7 +120,7 @@ export function useRealtimeChat(options: UseRealtimeChatOptions): UseRealtimeCha
       return { success: false, error: 'Missing required parameters' };
     }
 
-    const messageId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    const messageId = Date.now() * 1000 + randomIntBelow(1000);
     const chatMessage: ChatMessage = {
       id: messageId,
       sender: userRole === 'seller' ? 'seller' : 'user',

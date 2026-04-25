@@ -6,9 +6,15 @@ import { isCapacitorNative } from '../utils/apiConfig';
 import {
   authenticatedFetch,
   handleApiResponse,
+  postLogoutClearCookies,
   resetAuthFetchStateAfterLogout,
 } from '../utils/authenticatedFetch';
-import { clearSupabaseAuthStorage } from '../utils/authStorage';
+import {
+  clearSupabaseAuthStorage,
+  clearSessionStoredAccessToken,
+  getBrowserAccessTokenForApi,
+  useHttpOnlyRefreshCookie,
+} from '../utils/authStorage';
 
 // Fallback mock users for development only (no credentials stored in source)
 // In production, all users come from Supabase — these are never used.
@@ -54,26 +60,41 @@ const pendingRequests = new Map<string, Promise<any>>();
 // --- API Helpers ---
 const getAuthHeader = (): Record<string, string> => {
   try {
-    // Get JWT token from localStorage (client-side only)
-    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    if (typeof window === 'undefined') {
       return { 'Content-Type': 'application/json' };
     }
-    const token = localStorage.getItem('reRideAccessToken');
+    const token = getBrowserAccessTokenForApi();
     if (!token) return { 'Content-Type': 'application/json' };
-    return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
   } catch {
     return { 'Content-Type': 'application/json' };
   }
 };
 
-const storeTokens = (accessToken: string, refreshToken: string) => {
-  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+const storeTokens = (accessToken: string, refreshToken?: string) => {
+  if (typeof window === 'undefined') {
     return;
   }
   try {
-    localStorage.setItem('reRideAccessToken', accessToken);
-    localStorage.setItem('reRideRefreshToken', refreshToken);
-    
+    if (useHttpOnlyRefreshCookie()) {
+      try {
+        sessionStorage.setItem('reRideAccessToken', accessToken);
+      } catch {
+        /* ignore */
+      }
+      try {
+        localStorage.removeItem('reRideAccessToken');
+        localStorage.removeItem('reRideRefreshToken');
+      } catch {
+        /* ignore */
+      }
+    } else if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('reRideAccessToken', accessToken);
+      if (refreshToken) {
+        localStorage.setItem('reRideRefreshToken', refreshToken);
+      }
+    }
+
     // Reset refresh token invalid flag when new tokens are stored (fire-and-forget)
     // This ensures that after successful login/register, we can refresh tokens again
     // Use dynamic import to avoid circular dependencies
@@ -105,13 +126,19 @@ export const establishSessionFromOtpAuth = (payload: {
 };
 
 const clearTokens = () => {
-  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+  if (typeof window === 'undefined') {
     return;
   }
   try {
-    localStorage.removeItem('reRideAccessToken');
-    localStorage.removeItem('reRideRefreshToken');
-    localStorage.removeItem('reRideCurrentUser');
+    if (useHttpOnlyRefreshCookie()) {
+      void postLogoutClearCookies();
+    }
+    clearSessionStoredAccessToken();
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('reRideAccessToken');
+      localStorage.removeItem('reRideRefreshToken');
+      localStorage.removeItem('reRideCurrentUser');
+    }
     clearSupabaseAuthStorage();
     resetAuthFetchStateAfterLogout();
   } catch (error) {
@@ -121,10 +148,13 @@ const clearTokens = () => {
 
 /** Remove only custom JWT pair (keeps `reRideCurrentUser` until handleLogin rewrites it). */
 const clearStaleJwtTokensOnly = (): void => {
-  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  if (typeof window === 'undefined') return;
   try {
-    localStorage.removeItem('reRideAccessToken');
-    localStorage.removeItem('reRideRefreshToken');
+    clearSessionStoredAccessToken();
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('reRideAccessToken');
+      localStorage.removeItem('reRideRefreshToken');
+    }
   } catch {
     /* ignore */
   }
@@ -198,12 +228,17 @@ const handleResponse = async (response: Response): Promise<any> => {
             
             // Try to refresh token before giving up
             try {
-                const refreshToken = localStorage.getItem('reRideRefreshToken');
-                if (refreshToken) {
+                const legacyRefresh = localStorage.getItem('reRideRefreshToken');
+                const canCookieRefresh = useHttpOnlyRefreshCookie();
+                if (legacyRefresh || canCookieRefresh) {
+                    const refreshBody =
+                        legacyRefresh
+                            ? JSON.stringify({ action: 'refresh-token', refreshToken: legacyRefresh })
+                            : JSON.stringify({ action: 'refresh-token' });
                     const refreshResponse = await authenticatedFetch('/api/users', {
                         method: 'POST',
                         skipAuth: true,
-                        body: JSON.stringify({ action: 'refresh-token', refreshToken }),
+                        body: refreshBody,
                     });
                     
                     // Don't retry if we get rate limited or service unavailable
@@ -216,7 +251,7 @@ const handleResponse = async (response: Response): Promise<any> => {
                     if (refreshResponse.ok) {
                         const refreshData = await refreshResponse.json();
                         if (refreshData.success && refreshData.accessToken) {
-                            storeTokens(refreshData.accessToken, refreshData.refreshToken || refreshToken);
+                            storeTokens(refreshData.accessToken, refreshData.refreshToken || legacyRefresh || undefined);
                             console.log('✅ Token refreshed successfully, retrying original request');
                             // Return a special indicator that token was refreshed
                             // The caller should retry the original request
@@ -610,7 +645,15 @@ const isDevelopment = (() => {
   if (port && ['5173', '3000', '3001', '8080', '5174', '4173'].includes(port)) return true;
   
   // Check for Vercel preview URLs - these should use API (production mode)
-  if (hostname.includes('vercel.app') || hostname.includes('vercel.com')) return false;
+  const hl = hostname.toLowerCase();
+  if (
+    hl === 'vercel.app' ||
+    hl.endsWith('.vercel.app') ||
+    hl === 'vercel.com' ||
+    hl.endsWith('.vercel.com')
+  ) {
+    return false;
+  }
   
   // Check for other production domains (not localhost)
   if (hostname && !hostname.includes('localhost') && !hostname.includes('127.0.0.1') && !port) {
@@ -840,15 +883,20 @@ export const refreshAccessToken = async (): Promise<{ success: boolean; accessTo
     }
     lastTokenRefreshTime = now;
 
-    const refreshToken = localStorage.getItem('reRideRefreshToken');
-    if (!refreshToken) {
+    const legacyRefresh = localStorage.getItem('reRideRefreshToken');
+    const cookieRefresh = useHttpOnlyRefreshCookie();
+    if (!legacyRefresh && !cookieRefresh) {
       return { success: false, reason: 'No refresh token available' };
     }
+
+    const refreshBody = legacyRefresh
+      ? JSON.stringify({ action: 'refresh-token', refreshToken: legacyRefresh })
+      : JSON.stringify({ action: 'refresh-token' });
 
     const response = await authenticatedFetch('/api/users', {
       method: 'POST',
       skipAuth: true,
-      body: JSON.stringify({ action: 'refresh-token', refreshToken }),
+      body: refreshBody,
     });
 
     // FIX: Immediately clear bad tokens to stop the infinite loop
@@ -882,7 +930,7 @@ export const refreshAccessToken = async (): Promise<{ success: boolean; accessTo
     const result = parsed.data || {};
     
     if (result.success && result.accessToken) {
-      localStorage.setItem('reRideAccessToken', result.accessToken);
+      storeTokens(result.accessToken, result.refreshToken || legacyRefresh || undefined);
       return { success: true, accessToken: result.accessToken };
     }
 

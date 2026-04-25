@@ -1,3 +1,5 @@
+import { randomAlphanumeric } from './secureRandom';
+
 /**
  * Request Queue Utility
  * Staggers API requests to prevent rate limiting
@@ -34,7 +36,7 @@ class RequestQueue {
     const {
       priority = 0,
       maxRetries = 3,
-      id = `req_${Date.now()}_${Math.random()}`
+      id = `req_${Date.now()}_${randomAlphanumeric(12)}`
     } = options;
 
     return new Promise<T>((resolve, reject) => {

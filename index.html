@@ -77,7 +77,7 @@
         var devPorts = ['5173', '4173', '3000', '8080'];
         window.__RERIDE_SKIP_REMOTE_FONTS__ =
           h === 'appassets.androidplatform.net' ||
-          h.indexOf('appassets.androidplatform.net') !== -1 ||
+          (typeof h === 'string' && h.endsWith('.appassets.androidplatform.net')) ||
           (h === 'localhost' && (p === 'capacitor:' || p === 'ionic:')) ||
           (h === 'localhost' && p === 'https:' && devPorts.indexOf(port) === -1);
       })();
@@ -87,7 +87,8 @@
       (function () {
         try {
           var h = (location.hostname || '').toLowerCase();
-          if (h !== 'appassets.androidplatform.net' && h.indexOf('appassets.androidplatform.net') === -1) {
+          var isAppAssets = h === 'appassets.androidplatform.net' || h.endsWith('.appassets.androidplatform.net');
+          if (!isAppAssets) {
             return;
           }
           var base = 'https://www.reride.co.in';
@@ -214,7 +215,7 @@
                            h.includes('localhost');
         const isPackagedWebView =
           hl === 'appassets.androidplatform.net' ||
-          hl.indexOf('appassets.androidplatform.net') !== -1 ||
+          hl.endsWith('.appassets.androidplatform.net') ||
           (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
         
         // Skip prefetch in development to avoid 404 errors when API server isn't running
@@ -376,15 +377,36 @@
         window.__RERIDE_ERRORS__.push('Promise: ' + msg);
       });
 
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
       function showLoadError(detail) {
         if (window.__APP_SCRIPT_LOAD_FAILED__) return;
         window.__APP_SCRIPT_LOAD_FAILED__ = true;
         var root = document.getElementById('root');
         if (!root) return;
-        var errors = (window.__RERIDE_ERRORS__ || []).join('<br><br>');
-        var extra = detail ? '<p style="color:#c00;font-size:12px;margin-top:16px;text-align:left;word-break:break-all;">' + detail + '</p>' : '';
-        var errBlock = errors ? '<details style="margin-top:16px;text-align:left;"><summary style="cursor:pointer;color:#666;font-size:13px;">Error details</summary><pre style="background:#f5f5f5;padding:12px;border-radius:8px;font-size:11px;overflow-x:auto;margin-top:8px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;">' + errors + '</pre></details>' : '';
-        root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to Load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The app could not start.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh Page</button>' + extra + errBlock + '</div></div>';
+        var rawErrors = window.__RERIDE_ERRORS__ || [];
+        var errors = rawErrors.map(escapeHtml).join('<br><br>');
+        var extra = detail
+          ? '<p style="color:#c00;font-size:12px;margin-top:16px;text-align:left;word-break:break-all;">' +
+            escapeHtml(detail) +
+            '</p>'
+          : '';
+        var errBlock = errors
+          ? '<details style="margin-top:16px;text-align:left;"><summary style="cursor:pointer;color:#666;font-size:13px;">Error details</summary><pre style="background:#f5f5f5;padding:12px;border-radius:8px;font-size:11px;overflow-x:auto;margin-top:8px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;">' +
+            errors +
+            '</pre></details>'
+          : '';
+        root.innerHTML =
+          '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to Load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The app could not start.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh Page</button>' +
+          extra +
+          errBlock +
+          '</div></div>';
       }
 
       // Detect if the app script failed to load (e.g. 404 in production)
@@ -408,7 +430,7 @@
         var isCapacitorLike =
           (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ||
           h === 'appassets.androidplatform.net' ||
-          h.indexOf('appassets.androidplatform.net') !== -1 ||
+          (typeof h === 'string' && h.endsWith('.appassets.androidplatform.net')) ||
           (h === 'localhost' && (p === 'capacitor:' || p === 'ionic:' || (p === 'https:' && devPorts.indexOf(port) === -1)));
         // Allow slower devices to finish JS hydration before showing a fatal error.
         var TIMEOUT_MS = isCapacitorLike ? 60000 : 30000;

@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import validator from 'validator';
 import type { User } from '../types.js';
 import { getSecurityConfig } from './security-config.js';
@@ -139,7 +140,11 @@ const generateJti = (): string => {
   } catch {
     /* fall through */
   }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+  try {
+    return randomBytes(16).toString('hex');
+  } catch {
+    return `${Date.now().toString(36)}-${performance.now?.() ?? 0}`;
+  }
 };
 
 export const generateRefreshToken = (user: User): string => {

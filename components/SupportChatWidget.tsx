@@ -100,7 +100,10 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
             }),
           );
         } else {
-          const anonSessionId = `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const rand = new Uint8Array(9);
+          globalThis.crypto.getRandomValues(rand);
+          const randHex = Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('');
+          const anonSessionId = `anon_${Date.now()}_${randHex}`;
           setSessionId(anonSessionId);
           sock.send(
             JSON.stringify({

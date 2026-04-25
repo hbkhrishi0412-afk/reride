@@ -15,8 +15,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { User } from '../types';
 import { View } from '../types';
 import { logInfo, logWarn } from '../utils/logger';
-import { clearSupabaseAuthStorage } from '../utils/authStorage';
-import { resetAuthFetchStateAfterLogout } from '../utils/authenticatedFetch';
+import { logout as clearRerideJwtSession } from '../services/userService';
 
 // ── Context type ────────────────────────────────────────────────────────────
 
@@ -101,9 +100,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   const handleLogout = useCallback(() => {
     setCurrentUser(null);
     try {
-      localStorage.removeItem('reRideCurrentUser');
-      localStorage.removeItem('reRideAccessToken');
-      localStorage.removeItem('reRideRefreshToken');
+      clearRerideJwtSession();
       localStorage.removeItem('reRideActiveChat');
       localStorage.removeItem('reRideServiceProvider');
       localStorage.removeItem('reride_oauth_role');
@@ -112,8 +109,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       sessionStorage.removeItem('accessToken');
       sessionStorage.removeItem('reride_oauth_role');
       sessionStorage.removeItem('reride_last_role');
-      clearSupabaseAuthStorage();
-      resetAuthFetchStateAfterLogout();
     } catch {
       // ignore storage errors
     }

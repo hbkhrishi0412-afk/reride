@@ -3,7 +3,23 @@
  * actually persists auth (custom reRide tokens + Supabase JS localStorage keys).
  *
  * Supabase v2 stores sessions under keys like `sb-<project-ref>-auth-token`, not `sb-access-token`.
+ *
+ * On first-party web, refresh tokens are HttpOnly cookies (not readable from JS); access JWTs
+ * for the custom app flow live in sessionStorage when that mode is active.
  */
+
+import { resolveApiUrl, isCapacitorNative, isApiRequestCrossOrigin } from './apiConfig';
+
+/** First-party web: refresh token is HttpOnly; Capacitor / cross-API-origin still use JSON + localStorage. */
+export function useHttpOnlyRefreshCookie(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (isCapacitorNative()) return false;
+  try {
+    return !isApiRequestCrossOrigin(resolveApiUrl('/api/users'));
+  } catch {
+    return false;
+  }
+}
 
 /** Standard JWT: three base64url segments (header.payload.sig). */
 function looksLikeJwt(s: string): boolean {
@@ -92,6 +108,43 @@ export function clearSupabaseAuthStorage(): void {
   }
 }
 
+function getCustomJwtFromBrowserStorage(): string | null {
+  if (typeof window === 'undefined') return null;
+  let custom: string | null = null;
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      custom = sessionStorage.getItem('reRideAccessToken');
+    }
+    if (!custom && typeof localStorage !== 'undefined') {
+      custom = localStorage.getItem('reRideAccessToken');
+    }
+  } catch {
+    return null;
+  }
+  if (!custom || custom.trim().length <= 10) return null;
+  const t = custom.trim();
+  if (!looksLikeJwt(t)) return null;
+  const exp = jwtExpSeconds(t);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const bufferSec = 60;
+  if (exp != null && exp > nowSec + bufferSec) {
+    return t;
+  }
+  const supa = getSupabaseAccessTokenFromStorage();
+  if (supa) return supa;
+  return t;
+}
+
+export function clearSessionStoredAccessToken(): void {
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('reRideAccessToken');
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Prefer custom app JWT, then Supabase session token (website + mobile WebView).
  * If reRideAccessToken is present but not JWT-shaped (corrupt/legacy), fall back to Supabase
@@ -99,22 +152,9 @@ export function clearSupabaseAuthStorage(): void {
  */
 export function getBrowserAccessTokenForApi(): string | null {
   try {
-    if (typeof localStorage === 'undefined') return null;
-    const custom = localStorage.getItem('reRideAccessToken');
-    if (custom && custom.trim().length > 10) {
-      const t = custom.trim();
-      if (looksLikeJwt(t)) {
-        const exp = jwtExpSeconds(t);
-        const nowSec = Math.floor(Date.now() / 1000);
-        const bufferSec = 60;
-        if (exp != null && exp > nowSec + bufferSec) {
-          return t;
-        }
-        const supa = getSupabaseAccessTokenFromStorage();
-        if (supa) return supa;
-        return t;
-      }
-    }
+    if (typeof localStorage === 'undefined' && typeof sessionStorage === 'undefined') return null;
+    const customJwt = getCustomJwtFromBrowserStorage();
+    if (customJwt) return customJwt;
     return getSupabaseAccessTokenFromStorage();
   } catch {
     return null;

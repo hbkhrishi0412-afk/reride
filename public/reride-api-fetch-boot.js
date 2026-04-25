@@ -8,13 +8,19 @@
 
   const API_ORIGIN = 'https://www.reride.co.in';
 
+  function isAndroidAppAssetsHost(hostname) {
+    if (!hostname) return false;
+    var h = String(hostname).toLowerCase();
+    return h === 'appassets.androidplatform.net' || h.endsWith('.appassets.androidplatform.net');
+  }
+
   function isPackagedWebShell() {
     try {
       const h = (location.hostname || '').toLowerCase();
       const p = location.protocol;
       const port = location.port || '';
       const devPorts = { '5173': 1, '4173': 1, '3000': 1, '8080': 1 };
-      if (h === 'appassets.androidplatform.net' || h.indexOf('appassets.androidplatform.net') !== -1) {
+      if (isAndroidAppAssetsHost(h)) {
         return true;
       }
       try {

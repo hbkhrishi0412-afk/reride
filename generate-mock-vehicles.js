@@ -1,6 +1,19 @@
 // Script to generate mock vehicles for development
 // Run this in the browser console or as a simple script
 
+function cryptoRandomInt(min, maxExclusive) {
+  if (typeof crypto === 'undefined' || !crypto.getRandomValues) {
+    throw new Error('crypto.getRandomValues is required');
+  }
+  const span = maxExclusive - min;
+  if (span <= 0) return min;
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return min + (buf[0] % span);
+}
+
+const pick = (arr) => arr[cryptoRandomInt(0, arr.length)];
+
 const generateMockVehicles = (count = 20) => {
   const makes = ['Maruti Suzuki', 'Hyundai', 'Tata', 'Honda', 'Toyota', 'Mahindra', 'Kia', 'Nissan'];
   const models = {
@@ -22,12 +35,12 @@ const generateMockVehicles = (count = 20) => {
   const vehicles = [];
   
   for (let i = 1; i <= count; i++) {
-    const make = makes[Math.floor(Math.random() * makes.length)];
-    const model = models[make][Math.floor(Math.random() * models[make].length)];
-    const year = 2018 + Math.floor(Math.random() * 6);
-    const price = 300000 + Math.floor(Math.random() * 2000000);
-    const mileage = 10000 + Math.floor(Math.random() * 100000);
-    
+    const make = pick(makes);
+    const model = pick(models[make]);
+    const year = 2018 + cryptoRandomInt(0, 6);
+    const price = 300000 + cryptoRandomInt(0, 2_000_000);
+    const mileage = 10000 + cryptoRandomInt(0, 100_000);
+
     vehicles.push({
       id: i,
       make,
@@ -35,32 +48,32 @@ const generateMockVehicles = (count = 20) => {
       year,
       price,
       mileage,
-      fuelType: fuelTypes[Math.floor(Math.random() * fuelTypes.length)],
-      transmission: transmissions[Math.floor(Math.random() * transmissions.length)],
-      location: cities[Math.floor(Math.random() * cities.length)],
-      sellerEmail: `seller${Math.floor(Math.random() * 5) + 1}@test.com`,
+      fuelType: pick(fuelTypes),
+      transmission: pick(transmissions),
+      location: pick(cities),
+      sellerEmail: `seller${cryptoRandomInt(1, 6)}@test.com`,
       images: [`https://picsum.photos/seed/${make}${model}${i}/800/600`],
       description: `Well maintained ${make} ${model} in excellent condition. Single owner, no accidents.`,
       status: 'published',
-      isFeatured: Math.random() > 0.7,
-      views: Math.floor(Math.random() * 200),
-      inquiriesCount: Math.floor(Math.random() * 20),
-      certificationStatus: Math.random() > 0.5 ? 'certified' : 'none',
+      isFeatured: cryptoRandomInt(0, 10) > 6,
+      views: cryptoRandomInt(0, 200),
+      inquiriesCount: cryptoRandomInt(0, 20),
+      certificationStatus: cryptoRandomInt(0, 2) === 0 ? 'certified' : 'none',
       category: 'four-wheeler', // Using string instead of enum
       features: ['Power Steering', 'Air Conditioning', 'Power Windows', 'Central Locking'],
-      engine: `${(1.0 + Math.random() * 2.0).toFixed(1)}L ${fuelTypes[Math.floor(Math.random() * fuelTypes.length)]}`,
-      fuelEfficiency: `${15 + Math.floor(Math.random() * 10)} KMPL`,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      noOfOwners: Math.floor(Math.random() * 3) + 1,
+      engine: `${(1.0 + cryptoRandomInt(0, 2000) / 1000).toFixed(1)}L ${pick(fuelTypes)}`,
+      fuelEfficiency: `${15 + cryptoRandomInt(0, 10)} KMPL`,
+      color: pick(colors),
+      noOfOwners: cryptoRandomInt(0, 3) + 1,
       registrationYear: year,
-      insuranceValidity: `${new Date().getFullYear() + 1}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}`,
+      insuranceValidity: `${new Date().getFullYear() + 1}-${String(cryptoRandomInt(1, 13)).padStart(2, '0')}`,
       insuranceType: 'Comprehensive',
-      rto: `${cities[Math.floor(Math.random() * cities.length)].substring(0, 2).toUpperCase()}${Math.floor(Math.random() * 99) + 1}`,
-      city: cities[Math.floor(Math.random() * cities.length)],
+      rto: `${pick(cities).substring(0, 2).toUpperCase()}${cryptoRandomInt(1, 100)}`,
+      city: pick(cities),
       state: 'MH',
-      displacement: `${1000 + Math.floor(Math.random() * 2000)} cc`,
-      groundClearance: `${150 + Math.floor(Math.random() * 50)} mm`,
-      bootSpace: `${300 + Math.floor(Math.random() * 200)} litres`
+      displacement: `${1000 + cryptoRandomInt(0, 2000)} cc`,
+      groundClearance: `${150 + cryptoRandomInt(0, 50)} mm`,
+      bootSpace: `${300 + cryptoRandomInt(0, 200)} litres`
     });
   }
   
