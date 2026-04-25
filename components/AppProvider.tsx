@@ -38,7 +38,7 @@ import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
-import { randomAlphanumeric, randomIntBelow } from '../utils/secureRandom';
+import { randomAlphanumeric, randomIntBelow } from '../utils/secureRandom.js';
 import { clearRememberMeState } from '../utils/rememberMe';
 import { deduplicateRequest } from '../utils/requestDeduplication';
 import { enrichVehicleWithSellerInfo } from '../utils/vehicleEnrichment';

@@ -552,8 +552,34 @@ const authApi = async (body: any): Promise<any> => {
                 // For rate limiting, don't retry - use fallback immediately
                 throw new Error('Too many requests. Please wait a moment and try again.');
             }
+
+            // 503: handle before generic 5xx so we never show "Server error (503)..." and callers can use error.status
+            if (response.status === 503) {
+                const errorText = await response.text();
+                let errorMessage = 'Service temporarily unavailable. Please try again in a moment.';
+                let errorData: Record<string, unknown> = {};
+                try {
+                    errorData = JSON.parse(errorText) as Record<string, unknown>;
+                    errorMessage =
+                        (typeof errorData.reason === 'string' && errorData.reason) ||
+                        (typeof errorData.error === 'string' && errorData.error) ||
+                        (typeof errorData.diagnostic === 'string' && errorData.diagnostic) ||
+                        errorMessage;
+                } catch {
+                    /* use default */
+                }
+                const err: Error & { status?: number; code?: number; errorData?: unknown; fallback?: boolean } = new Error(
+                    errorMessage,
+                );
+                err.status = 503;
+                err.code = 503;
+                err.errorData = errorData;
+                if (errorData.fallback === true) err.fallback = true;
+                console.warn('⚠️ Server 503:', errorMessage);
+                throw err;
+            }
             
-            // For 5xx, parse body and surface server reason/error so user sees the real message
+            // For other 5xx, parse body and surface server reason/error so user sees the real message
             if (response.status >= 500 && response.status < 600) {
                 let errorMessage = `Server error (${response.status}). Please try again later.`;
                 try {

@@ -278,11 +278,19 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
         return res.status(401).json({ error: 'Authentication required to fetch your profile' });
       }
 
-      const provider = await resolveProviderForActor();
-      if (!provider) {
-        return res.status(404).json({ error: 'Service provider profile not found' });
+      try {
+        const provider = await resolveProviderForActor();
+        if (!provider) {
+          return res.status(404).json({ error: 'Service provider profile not found' });
+        }
+        return res.status(200).json({ ...provider, uid: provider.id });
+      } catch (readErr) {
+        console.error('GET /service-providers (mine) failed:', readErr);
+        return res.status(503).json({
+          error: 'Could not load service provider profile. Please try again.',
+          fallback: true,
+        });
       }
-      return res.status(200).json({ ...provider, uid: provider.id });
     }
 
     if (req.method === 'POST') {

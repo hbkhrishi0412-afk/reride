@@ -5,7 +5,7 @@
  */
 
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
-import { randomAlphanumeric } from '../utils/secureRandom';
+import { randomAlphanumeric } from '../utils/secureRandom.js';
 
 interface UploadResult {
   success: boolean;

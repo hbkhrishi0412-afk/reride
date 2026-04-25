@@ -3,7 +3,7 @@
  * Provides hooks and utilities for native mobile features
  */
 
-import { randomAlphanumeric } from './secureRandom';
+import { randomAlphanumeric } from './secureRandom.js';
 
 // ============================================
 // PUSH NOTIFICATIONS

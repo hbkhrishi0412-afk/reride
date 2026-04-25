@@ -42,7 +42,7 @@ import { saveConversationWithSync } from './services/syncService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
 import { matchesCity } from './utils/cityMapping';
-import { randomAlphanumeric, randomIntBelow } from './utils/secureRandom';
+import { randomAlphanumeric, randomIntBelow } from './utils/secureRandom.js';
 import { resolveChatCallPhone, resolveChatOtherPartyName } from './utils/chatContact';
 import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
 import { logWarn, logDebug, logError, logInfo } from './utils/logger';
@@ -718,6 +718,11 @@ const AppContent: React.FC = () => {
 
     const delayMs = userLooksLikeProvider ? 2500 : 0;
     const timer = window.setTimeout(() => {
+      try {
+        sessionStorage.setItem('reride_car_service_auth_mode', 'login');
+      } catch {
+        /* ignore storage errors */
+      }
       navigate(ViewEnum.CAR_SERVICE_LOGIN);
     }, delayMs);
     return () => window.clearTimeout(timer);

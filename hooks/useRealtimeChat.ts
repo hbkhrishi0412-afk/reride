@@ -7,7 +7,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import { realtimeChatService } from '../services/realtimeChatService';
 import type { Conversation, ChatMessage } from '../types';
-import { randomIntBelow } from '../utils/secureRandom';
+import { randomIntBelow } from '../utils/secureRandom.js';
 
 interface UseRealtimeChatOptions {
   conversationId?: string;
