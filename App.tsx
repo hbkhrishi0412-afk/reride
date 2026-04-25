@@ -46,6 +46,7 @@ import { randomAlphanumeric, randomIntBelow } from './utils/secureRandom';
 import { resolveChatCallPhone, resolveChatOtherPartyName } from './utils/chatContact';
 import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
 import { logWarn, logDebug, logError, logInfo } from './utils/logger';
+import { currentUserForLocalSessionJson } from './utils/userLocalStorageSnapshot';
 import { authenticatedFetch } from './utils/authenticatedFetch';
 import { computePageSeoMeta } from './utils/pageSeoMeta.js';
 import { RERIDE_PRICE_DROP_EVENT, type ReridePriceDropDetail } from './services/buyerService';
@@ -3385,7 +3386,7 @@ const AppContent: React.FC = () => {
             const savedUser = await userService.updateUser(updatedUser);
             setUsers((prev) => prev.map((u) => (u.email === currentUser.email ? savedUser : u)));
             setCurrentUser(savedUser);
-            const userJson = JSON.stringify(savedUser);
+            const userJson = currentUserForLocalSessionJson(savedUser);
             sessionStorage.setItem('currentUser', userJson);
             localStorage.setItem('reRideCurrentUser', userJson);
             addToast(

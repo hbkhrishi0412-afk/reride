@@ -22,11 +22,18 @@ app.use(express.json());
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 600,
+  limit: 600,
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use('/api', apiLimiter);
+
+const spaFallbackLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // API routes
 app.use('/api/auth', authHandler);
@@ -42,8 +49,8 @@ app.get('/api/health', (req, res) => {
 // Serve static files from dist directory
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Fallback for SPA
-app.get('*', (req, res) => {
+// Fallback for SPA (rate-limited; API routes are covered by /api limiter above)
+app.get('*', spaFallbackLimiter, (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 

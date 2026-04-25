@@ -1362,6 +1362,27 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         logWarn('⚠️ Password validation error (treating as invalid):', pwErr);
       }
 
+      // Legacy: some rows still store plain-text passwords (early seeds / imports). Bcrypt check
+      // always fails for those — migrate to bcrypt on successful match so production login works.
+      if (!isPasswordValid && user.password && typeof user.password === 'string') {
+        const stored = user.password;
+        const looksBcrypt = /^\$2[abxy]\$/.test(stored);
+        if (!looksBcrypt && stored === sanitizedData.password) {
+          try {
+            const hashedPassword = await hashPassword(sanitizedData.password);
+            await supabaseUserService.update(normalizedEmail, {
+              password: hashedPassword,
+              updatedAt: new Date().toISOString(),
+            });
+            user.password = hashedPassword;
+            isPasswordValid = true;
+            logInfo('✅ Migrated legacy plain-text password to bcrypt:', { email: normalizedEmail });
+          } catch (migErr) {
+            logError('❌ Failed to migrate legacy password hash:', migErr);
+          }
+        }
+      }
+
       if (!isPasswordValid) {
         // SECURITY: Log minimal details - don't expose password hash prefixes
         if (process.env.NODE_ENV !== 'production') {
@@ -9310,8 +9331,16 @@ export default async function handler(
           });
         }
 
-        if (pathname.includes('/users')) {
+        // Only safe for public GET /users lists — never return [] for POST /api/users (login/register).
+        if (pathname.includes('/users') && req.method === 'GET') {
           return res.status(200).json([]);
+        }
+        if (pathname.includes('/users') && (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE')) {
+          return res.status(503).json({
+            success: false,
+            reason: 'Authentication service is temporarily unavailable. Please try again in a moment.',
+            fallback: true,
+          });
         }
 
         if (pathname.includes('/vehicles')) {

@@ -16,6 +16,7 @@ import { saveSupportTickets } from './services/supportTicketService';
 import { loadingManager, LOADING_OPERATIONS, withLoadingTimeout } from './utils/loadingManager';
 import { stringifyVehicleForSession } from './utils/vehicleSessionCache';
 import { persistReRideNotifications } from './utils/notificationLocalStorage';
+import { currentUserForLocalSessionJson } from './utils/userLocalStorageSnapshot';
 import { randomIntBelow } from './utils/secureRandom';
 
 // Lazy-loaded components
@@ -801,7 +802,12 @@ const AppContent: React.FC = () => {
       setCurrentUser(user);
       
       if (!localUserJson && sessionUserJson) {
-        localStorage.setItem('reRideCurrentUser', sessionUserJson);
+        try {
+          const u = JSON.parse(sessionUserJson) as import('./types').User;
+          localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(u));
+        } catch {
+          localStorage.setItem('reRideCurrentUser', sessionUserJson);
+        }
         console.log('🔄 Migrated session to localStorage');
       }
     } else {
@@ -916,14 +922,14 @@ const AppContent: React.FC = () => {
         case View.CUSTOMER_LOGIN: 
           return <AuthWrapper><CustomerLogin onLogin={(user) => { 
             setCurrentUser(user); 
-            const userJson = JSON.stringify(user);
+            const userJson = currentUserForLocalSessionJson(user);
             localStorage.setItem('reRideCurrentUser', userJson);
             sessionStorage.setItem('currentUser', userJson);
             navigate(View.HOME); 
           }} onRegister={(user) => { 
             setUsers(prev => [...prev, user]); 
             setCurrentUser(user); 
-            const userJson = JSON.stringify(user);
+            const userJson = currentUserForLocalSessionJson(user);
             localStorage.setItem('reRideCurrentUser', userJson);
             sessionStorage.setItem('currentUser', userJson);
             navigate(View.HOME); 
@@ -932,14 +938,14 @@ const AppContent: React.FC = () => {
         case View.SELLER_LOGIN: 
           return <AuthWrapper><Login onLogin={(user) => { 
             setCurrentUser(user); 
-            const userJson = JSON.stringify(user);
+            const userJson = currentUserForLocalSessionJson(user);
             localStorage.setItem('reRideCurrentUser', userJson);
             sessionStorage.setItem('currentUser', userJson);
             navigate(View.SELLER_DASHBOARD); 
           }} onRegister={(user) => { 
             setUsers(prev => [...prev, user]); 
             setCurrentUser(user); 
-            const userJson = JSON.stringify(user);
+            const userJson = currentUserForLocalSessionJson(user);
             localStorage.setItem('reRideCurrentUser', userJson);
             sessionStorage.setItem('currentUser', userJson);
             navigate(View.SELLER_DASHBOARD); 
@@ -948,7 +954,7 @@ const AppContent: React.FC = () => {
         case View.ADMIN_LOGIN: 
           return <AuthWrapper><AdminLogin onLogin={(user) => { 
             setCurrentUser(user); 
-            const userJson = JSON.stringify(user);
+            const userJson = currentUserForLocalSessionJson(user);
             localStorage.setItem('reRideCurrentUser', userJson);
             sessionStorage.setItem('currentUser', userJson);
             navigate(View.ADMIN_PANEL); 
@@ -980,7 +986,7 @@ const AppContent: React.FC = () => {
           const savedUser = await userService.updateUser(updatedUser);
             setUsers(prev => prev.map(u => u.email === currentUser.email ? savedUser : u));
           setCurrentUser(savedUser);
-          const userJson = JSON.stringify(savedUser);
+          const userJson = currentUserForLocalSessionJson(savedUser);
           sessionStorage.setItem('currentUser', userJson);
           localStorage.setItem('reRideCurrentUser', userJson);
           addToast(`Successfully switched to the ${planDetails.name} plan!`, 'success');

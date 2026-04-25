@@ -9,7 +9,177 @@ import {
   SERVICE_TEMPLATE_PRESETS,
   type ServiceCategory,
 } from '../constants/serviceProviderCatalog';
+import {
+  getSubServicesFor,
+  subServiceIdFromName,
+  type SubServiceTemplate,
+} from '../constants/carServiceSubServices.js';
+import { nextPrimaryStatus, primaryAdvanceButtonLabel } from '../utils/serviceRequestStatusFlow';
 import { View as ViewEnum } from '../types';
+
+type IncludedServicePrice = {
+  id: string;
+  name: string;
+  price?: number;
+  etaMinutes?: number;
+  active?: boolean;
+};
+
+// --- ETA + sub-service draft helpers (aligned with `CarServiceDashboard`) ---
+type EtaUnit = 'min' | 'hr' | 'day';
+
+const pickEtaUnit = (minutes: number | undefined | null): EtaUnit => {
+  if (minutes == null || !Number.isFinite(minutes) || minutes <= 0) return 'min';
+  if (minutes >= 1440 && minutes % 1440 === 0) return 'day';
+  if (minutes >= 60 && minutes % 60 === 0) return 'hr';
+  return 'min';
+};
+
+const etaValueInUnit = (minutes: number, unit: EtaUnit): number => {
+  if (unit === 'day') return minutes / 1440;
+  if (unit === 'hr') return minutes / 60;
+  return minutes;
+};
+
+const etaToMinutes = (value: number, unit: EtaUnit): number => {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  if (unit === 'day') return Math.round(value * 1440);
+  if (unit === 'hr') return Math.round(value * 60);
+  return Math.round(value);
+};
+
+type IncludedServiceDraft = {
+  id: string;
+  name: string;
+  priceText: string;
+  etaText: string;
+  etaUnit: EtaUnit;
+  active: boolean;
+};
+
+const draftFromIncluded = (item: IncludedServicePrice, fallbackIdx: number): IncludedServiceDraft => {
+  const unit = pickEtaUnit(item.etaMinutes);
+  return {
+    id:
+      (item.id && String(item.id).trim()) ||
+      subServiceIdFromName(item.name) ||
+      `line-${fallbackIdx + 1}`,
+    name: item.name || '',
+    priceText: item.price != null && Number.isFinite(item.price) ? String(item.price) : '',
+    etaText:
+      item.etaMinutes != null && Number.isFinite(item.etaMinutes)
+        ? String(etaValueInUnit(item.etaMinutes, unit))
+        : '',
+    etaUnit: unit,
+    active: item.active !== false,
+  };
+};
+
+const draftFromTemplate = (tmpl: SubServiceTemplate, fallbackIdx: number): IncludedServiceDraft => {
+  const unit = pickEtaUnit(tmpl.suggestedEtaMinutes);
+  return {
+    id: tmpl.id || subServiceIdFromName(tmpl.name) || `line-${fallbackIdx + 1}`,
+    name: tmpl.name,
+    priceText:
+      tmpl.suggestedPrice != null && Number.isFinite(tmpl.suggestedPrice) && tmpl.suggestedPrice > 0
+        ? String(tmpl.suggestedPrice)
+        : '',
+    etaText:
+      tmpl.suggestedEtaMinutes != null && Number.isFinite(tmpl.suggestedEtaMinutes)
+        ? String(etaValueInUnit(tmpl.suggestedEtaMinutes, unit))
+        : '',
+    etaUnit: unit,
+    active: true,
+  };
+};
+
+const buildDraftsForServiceType = (
+  serviceType: string,
+  existing?: IncludedServicePrice[],
+): IncludedServiceDraft[] => {
+  const canonical = getSubServicesFor(serviceType);
+  const existingByKey = new Map<string, IncludedServicePrice>();
+  (existing || []).forEach((item) => {
+    const key = subServiceIdFromName(item.name) || String(item.id || '').trim();
+    if (key) existingByKey.set(key, item);
+  });
+
+  const drafts: IncludedServiceDraft[] = [];
+  const used = new Set<string>();
+
+  canonical.forEach((tmpl, idx) => {
+    const key = subServiceIdFromName(tmpl.name);
+    const match = existingByKey.get(key);
+    if (match) {
+      drafts.push(draftFromIncluded(match, idx));
+      used.add(key);
+    } else {
+      drafts.push({
+        ...draftFromTemplate(tmpl, idx),
+        active: existing && existing.length > 0 ? false : true,
+      });
+    }
+  });
+
+  (existing || []).forEach((item, idx) => {
+    const key = subServiceIdFromName(item.name) || String(item.id || '').trim();
+    if (!key || used.has(key)) return;
+    drafts.push(draftFromIncluded(item, canonical.length + idx));
+    used.add(key);
+  });
+
+  return drafts;
+};
+
+const includedDraftsToPayload = (drafts: IncludedServiceDraft[]): IncludedServicePrice[] =>
+  drafts
+    .map((draft, idx) => {
+      const name = (draft.name || '').trim();
+      if (!name) return null;
+      const priceNum = draft.priceText.trim() ? Number(draft.priceText) : undefined;
+      const etaRaw = draft.etaText.trim() ? Number(draft.etaText) : undefined;
+      const etaMin =
+        etaRaw != null && Number.isFinite(etaRaw) && etaRaw >= 0
+          ? etaToMinutes(etaRaw, draft.etaUnit || 'min')
+          : undefined;
+      const entry: IncludedServicePrice = {
+        id: draft.id || subServiceIdFromName(name) || `line-${idx + 1}`,
+        name,
+        active: draft.active,
+      };
+      if (priceNum != null && Number.isFinite(priceNum) && priceNum >= 0) entry.price = priceNum;
+      if (etaMin != null) entry.etaMinutes = etaMin;
+      return entry;
+    })
+    .filter((entry): entry is IncludedServicePrice => entry !== null);
+
+const rebuildSubServicesForNewType = (
+  nextType: string,
+  previousDrafts: IncludedServiceDraft[],
+): IncludedServiceDraft[] => {
+  const canonicalForNext = getSubServicesFor(nextType);
+  const canonicalKeys = new Set(canonicalForNext.map((t) => subServiceIdFromName(t.name)));
+  const prevByKey = new Map<string, IncludedServiceDraft>();
+  previousDrafts.forEach((d) => {
+    const key = subServiceIdFromName(d.name);
+    if (key && canonicalKeys.has(key)) prevByKey.set(key, d);
+  });
+  return canonicalForNext.map((tmpl, idx) => {
+    const key = subServiceIdFromName(tmpl.name);
+    const preserved = prevByKey.get(key);
+    const base = draftFromTemplate(tmpl, idx);
+    if (preserved) {
+      return {
+        ...base,
+        priceText: preserved.priceText || base.priceText,
+        etaText: preserved.etaText || base.etaText,
+        etaUnit: preserved.etaText ? preserved.etaUnit : base.etaUnit,
+        active: true,
+      };
+    }
+    return { ...base, active: true };
+  });
+};
 
 /**
  * Mobile-first dashboard for service providers.
@@ -22,14 +192,6 @@ import { View as ViewEnum } from '../types';
 type RequestStatus = 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
 
 type ServiceLineItem = { id: string; name: string; quantity?: number; price?: number };
-
-type IncludedServicePrice = {
-  id: string;
-  name: string;
-  price?: number;
-  etaMinutes?: number;
-  active?: boolean;
-};
 
 type ProviderServiceRow = {
   serviceType: string;
@@ -100,8 +262,6 @@ const STATUS_LABELS: Record<RequestStatus, string> = {
   completed: 'Completed',
   cancelled: 'Cancelled',
 };
-
-const STATUS_PROGRESSION: RequestStatus[] = ['accepted', 'in_progress', 'completed'];
 
 const statusBadgeClasses = (status: RequestStatus): string => {
   switch (status) {
@@ -193,6 +353,13 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
   const [editorOpen, setEditorOpen] = useState<null | { mode: 'create' | 'edit'; row?: ProviderServiceRow }>(
     null,
   );
+  /** Remount service sheet so form state resets every time it opens. */
+  const [serviceEditorKey, setServiceEditorKey] = useState(0);
+  const openServiceEditor = useCallback((config: { mode: 'create' | 'edit'; row?: ProviderServiceRow }) => {
+    setServiceEditorKey((k) => k + 1);
+    setEditorOpen(config);
+  }, []);
+  const closeServiceEditor = useCallback(() => setEditorOpen(null), []);
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [profileForm, setProfileForm] = useState({
     name: provider?.name || '',
@@ -553,6 +720,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       etaMinutes?: number;
       description?: string;
       active: boolean;
+      includedServices: IncludedServicePrice[];
     }) => {
       setSavingService(true);
       setError(null);
@@ -569,7 +737,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
         }
         const data = await resp.json();
         setProviderServices(Array.isArray(data) ? (data as ProviderServiceRow[]) : []);
-        setEditorOpen(null);
+        closeServiceEditor();
         flashInfo('Service saved');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to save service');
@@ -577,7 +745,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
         setSavingService(false);
       }
     },
-    [getAuthHeaders, flashInfo],
+    [getAuthHeaders, flashInfo, closeServiceEditor],
   );
 
   const saveProfile = useCallback(async () => {
@@ -684,11 +852,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
     }, 0);
     const finalAmount = totalAmount > 0 ? totalAmount : req.total && req.total > 0 ? req.total : null;
     const phoneHref = req.customerPhone ? `tel:${req.customerPhone.replace(/\s+/g, '')}` : null;
-    const nextStatusIdx = STATUS_PROGRESSION.indexOf(req.status as RequestStatus);
-    const nextStatus =
-      nextStatusIdx >= 0 && nextStatusIdx < STATUS_PROGRESSION.length - 1
-        ? STATUS_PROGRESSION[nextStatusIdx + 1]
-        : null;
+    const nextPrimary = nextPrimaryStatus(req.status as RequestStatus);
     const isLocked = req.status === 'completed' || req.status === 'cancelled';
 
     return (
@@ -794,14 +958,16 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
             </button>
           ) : (
             <>
-              {!isLocked && nextStatus && (
+              {!isLocked && nextPrimary && (
                 <button
                   type="button"
-                  onClick={() => updateStatus(req.id, nextStatus)}
+                  onClick={() => updateStatus(req.id, nextPrimary)}
                   disabled={updatingId === req.id}
                   className="flex-1 min-w-[110px] rounded-xl bg-blue-600 text-white text-sm font-semibold py-2.5 disabled:opacity-60 active:scale-[0.98]"
                 >
-                  {updatingId === req.id ? 'Updating…' : `Mark ${STATUS_LABELS[nextStatus]}`}
+                  {updatingId === req.id
+                    ? 'Updating…'
+                    : primaryAdvanceButtonLabel(req.status as RequestStatus) ?? 'Continue'}
                 </button>
               )}
               {!isLocked && (
@@ -903,7 +1069,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
             type="button"
             onClick={() => {
               setActiveTab('services');
-              setEditorOpen({ mode: 'create' });
+              openServiceEditor({ mode: 'create' });
             }}
             className="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-semibold py-3"
           >
@@ -1062,7 +1228,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
         <h3 className="text-base font-bold text-gray-900">My services ({providerServices.length})</h3>
         <button
           type="button"
-          onClick={() => setEditorOpen({ mode: 'create' })}
+          onClick={() => openServiceEditor({ mode: 'create' })}
           className="rounded-xl bg-blue-600 text-white text-sm font-semibold px-3 py-2"
         >
           + Add
@@ -1081,7 +1247,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
           </p>
           <button
             type="button"
-            onClick={() => setEditorOpen({ mode: 'create' })}
+            onClick={() => openServiceEditor({ mode: 'create' })}
             className="mt-3 inline-flex justify-center rounded-xl bg-blue-600 text-white text-sm font-semibold px-4 py-2"
           >
             Add a service
@@ -1122,10 +1288,29 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
                   : 'ETA not set'}
               </span>
             </div>
+            <p className="mt-1.5 text-[11px] text-gray-600">
+              {svc.includedServices && svc.includedServices.length > 0 ? (
+                (() => {
+                  const actives = svc.includedServices.filter((line) => line.active !== false);
+                  const priced = actives.filter(
+                    (line) =>
+                      line.price != null && Number.isFinite(line.price) && (line.price as number) > 0,
+                  ).length;
+                  return (
+                    <>
+                      Sub-services: <span className="font-medium text-gray-800">{actives.length}</span> active ·{' '}
+                      <span className="font-medium text-gray-800">{priced}</span> priced
+                    </>
+                  );
+                })()
+              ) : (
+                <span className="text-gray-500">Sub-services: not configured (tap Edit to add)</span>
+              )}
+            </p>
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
-                onClick={() => setEditorOpen({ mode: 'edit', row: svc })}
+                onClick={() => openServiceEditor({ mode: 'edit', row: svc })}
                 className="flex-1 rounded-xl border border-gray-200 bg-white text-gray-800 text-sm font-semibold py-2"
               >
                 Edit
@@ -1299,10 +1484,11 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       {/* Service editor sheet */}
       {editorOpen && (
         <ServiceEditorSheet
+          key={serviceEditorKey}
           mode={editorOpen.mode}
           row={editorOpen.row}
           saving={savingService}
-          onClose={() => setEditorOpen(null)}
+          onClose={closeServiceEditor}
           onSubmit={upsertService}
         />
       )}
@@ -1334,61 +1520,135 @@ interface ServiceEditorProps {
     etaMinutes?: number;
     description?: string;
     active: boolean;
+    includedServices: IncludedServicePrice[];
   }) => void;
 }
 
-const ServiceEditorSheet: React.FC<ServiceEditorProps> = ({
-  mode,
-  row,
-  saving,
-  onClose,
-  onSubmit,
-}) => {
-  const [serviceType, setServiceType] = useState<string>(row?.serviceType || CAR_SERVICE_OPTIONS[0]);
+const ServiceEditorSheet: React.FC<ServiceEditorProps> = ({ mode, row, saving, onClose, onSubmit }) => {
+  const initialType = row?.serviceType || CAR_SERVICE_OPTIONS[0];
+  const initialUnit = pickEtaUnit(row?.etaMinutes);
+
+  const [serviceType, setServiceType] = useState<string>(initialType);
   const [price, setPrice] = useState<string>(row?.price != null ? String(row.price) : '');
   const [etaMinutes, setEtaMinutes] = useState<string>(
-    row?.etaMinutes != null ? String(row.etaMinutes) : '',
+    row?.etaMinutes != null ? String(etaValueInUnit(row.etaMinutes, initialUnit)) : '',
   );
+  const [etaUnit, setEtaUnit] = useState<EtaUnit>(initialUnit);
   const [description, setDescription] = useState<string>(row?.description || '');
   const [active, setActive] = useState<boolean>(row?.active !== false);
+  const [includedDrafts, setIncludedDrafts] = useState<IncludedServiceDraft[]>(() =>
+    buildDraftsForServiceType(initialType, row?.includedServices),
+  );
 
-  const applyTemplate = (name: string) => {
+  const subServiceTotal = useMemo(
+    () =>
+      includedDrafts.reduce((sum, d) => {
+        if (!d.active) return sum;
+        const n = Number(d.priceText);
+        return Number.isFinite(n) && n > 0 ? sum + n : sum;
+      }, 0),
+    [includedDrafts],
+  );
+
+  const updateSub = (idx: number, patch: Partial<IncludedServiceDraft>) => {
+    setIncludedDrafts((prev) => {
+      const next = prev.slice();
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  };
+  const removeSub = (idx: number) => {
+    setIncludedDrafts((prev) => {
+      const next = prev.slice();
+      next.splice(idx, 1);
+      return next;
+    });
+  };
+  const addCustom = () => {
+    setIncludedDrafts((prev) => [
+      ...prev,
+      {
+        id: `custom-${Date.now()}`,
+        name: '',
+        priceText: '',
+        etaText: '',
+        etaUnit: 'min',
+        active: true,
+      },
+    ]);
+  };
+  const toggleAll = (v: boolean) => {
+    setIncludedDrafts((prev) => prev.map((d) => ({ ...d, active: v })));
+  };
+
+  const onServiceTypeChange = (name: string) => {
     setServiceType(name);
     const tmpl = SERVICE_TEMPLATE_PRESETS[name];
     if (tmpl) {
       if (!price) setPrice(tmpl.price);
-      if (!etaMinutes) setEtaMinutes(tmpl.etaMinutes);
+      if (!etaMinutes && tmpl.etaMinutes) {
+        const etaMin = Number(tmpl.etaMinutes);
+        if (Number.isFinite(etaMin)) {
+          const u = pickEtaUnit(etaMin);
+          setEtaUnit(u);
+          setEtaMinutes(String(etaValueInUnit(etaMin, u)));
+        }
+      }
       if (!description) setDescription(tmpl.description);
+    }
+    if (mode === 'create') {
+      setIncludedDrafts((prev) => rebuildSubServicesForNewType(name, prev));
     }
   };
 
+  const applySubTotalAsBase = () => {
+    if (subServiceTotal <= 0) return;
+    setPrice(String(subServiceTotal));
+  };
+
+  const handleSubmit = () => {
+    const etaRaw = etaMinutes ? Number(etaMinutes) : undefined;
+    const etaM =
+      etaRaw != null && Number.isFinite(etaRaw) && etaRaw >= 0
+        ? etaToMinutes(etaRaw, etaUnit)
+        : undefined;
+    onSubmit({
+      serviceType,
+      price: price ? Number(price) : undefined,
+      etaMinutes: etaM,
+      description: description.trim(),
+      active,
+      includedServices: includedDraftsToPayload(includedDrafts),
+    });
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
       <button
         type="button"
         aria-label="Close"
         onClick={onClose}
         className="absolute inset-0 bg-black/40"
       />
-      <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+      <div className="relative w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[min(92vh,900px)] flex flex-col">
+        <div className="shrink-0 border-b border-gray-100 px-4 py-3 flex items-center justify-between bg-white rounded-t-2xl">
           <h3 className="text-base font-bold text-gray-900">
             {mode === 'edit' ? 'Edit service' : 'Add service'}
           </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-500 text-sm font-semibold"
-          >
+          <button type="button" onClick={onClose} className="text-gray-500 text-sm font-semibold">
             Cancel
           </button>
         </div>
-        <div className="p-4 space-y-3">
+
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3">
           <div>
-            <label className="block text-[12px] font-semibold text-gray-700 mb-1">Service type</label>
+            <label className="block text-[12px] font-semibold text-gray-700 mb-1">Service</label>
             <select
               value={serviceType}
-              onChange={(e) => applyTemplate(e.target.value)}
+              onChange={(e) => onServiceTypeChange(e.target.value)}
               disabled={mode === 'edit'}
               className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-50"
             >
@@ -1399,42 +1659,193 @@ const ServiceEditorSheet: React.FC<ServiceEditorProps> = ({
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[12px] font-semibold text-gray-700 mb-1">Price (₹)</label>
+
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-700 mb-1">Full service price (₹)</label>
+            <div className="flex items-center gap-2">
               <input
                 type="number"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 inputMode="decimal"
+                min={0}
                 placeholder="0"
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full min-w-0 px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none tabular-nums"
               />
+              {subServiceTotal > 0 && (
+                <button
+                  type="button"
+                  onClick={applySubTotalAsBase}
+                  className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-[11px] font-semibold text-blue-700 whitespace-nowrap"
+                >
+                  Use ₹{subServiceTotal.toLocaleString('en-IN')}
+                </button>
+              )}
             </div>
-            <div>
-              <label className="block text-[12px] font-semibold text-gray-700 mb-1">ETA (min)</label>
+            <p className="mt-0.5 text-[11px] text-gray-500">Charged when a customer books the full bundle.</p>
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-700 mb-1">ETA</label>
+            <div className="flex gap-2">
               <input
                 type="number"
                 value={etaMinutes}
                 onChange={(e) => setEtaMinutes(e.target.value)}
-                inputMode="numeric"
-                placeholder="60"
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                min={0}
+                step="any"
+                inputMode="decimal"
+                placeholder={etaUnit === 'day' ? '1' : etaUnit === 'hr' ? '2' : '120'}
+                className="flex-1 min-w-0 px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none tabular-nums"
               />
+              <select
+                value={etaUnit}
+                onChange={(e) => setEtaUnit(e.target.value as EtaUnit)}
+                className="shrink-0 px-2 py-2 rounded-lg border border-gray-200 text-sm bg-white"
+                aria-label="ETA unit"
+              >
+                <option value="min">min</option>
+                <option value="hr">hr</option>
+                <option value="day">days</option>
+              </select>
             </div>
           </div>
+
           <div>
             <label className="block text-[12px] font-semibold text-gray-700 mb-1">Description</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              rows={3}
+              rows={2}
               placeholder="What's included, how you work, etc."
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
             />
           </div>
-          <label className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5">
-            <span className="text-sm font-semibold text-gray-800">Active</span>
+
+          <div className="border border-gray-200 rounded-xl p-3 bg-gray-50/80">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[12px] font-semibold text-gray-800">Sub-services &amp; per-item pricing</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Set a price for each sub-task. Customers can book the full service or only what they need.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1.5 justify-end">
+                <button
+                  type="button"
+                  onClick={() => toggleAll(true)}
+                  className="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-800"
+                >
+                  Enable all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleAll(false)}
+                  className="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-medium text-gray-800"
+                >
+                  Disable all
+                </button>
+                <button
+                  type="button"
+                  onClick={addCustom}
+                  className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-[11px] font-semibold text-blue-700"
+                >
+                  + Add custom
+                </button>
+              </div>
+            </div>
+
+            {includedDrafts.length === 0 ? (
+              <p className="mt-3 text-center text-xs text-gray-500 py-4 border border-dashed border-gray-300 rounded-lg bg-white">
+                No sub-services. Tap &ldquo;+ Add custom&rdquo; to add one.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {includedDrafts.map((draft, idx) => (
+                  <li
+                    key={draft.id || `sub-${idx}`}
+                    className={`rounded-xl border p-2.5 bg-white ${draft.active ? '' : 'opacity-60'}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={draft.active}
+                        onChange={(e) => updateSub(idx, { active: e.target.checked })}
+                        className="h-5 w-5 mt-0.5 rounded border-gray-300 text-blue-600"
+                        style={{ accentColor: '#2563EB' }}
+                        title={draft.active ? 'On — visible' : 'Off — hidden'}
+                      />
+                      <input
+                        type="text"
+                        value={draft.name}
+                        onChange={(e) => updateSub(idx, { name: e.target.value })}
+                        placeholder="Sub-service name"
+                        className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-gray-200 text-sm"
+                      />
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase">Price (₹)</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={draft.priceText}
+                          onChange={(e) => updateSub(idx, { priceText: e.target.value })}
+                          inputMode="decimal"
+                          placeholder="0"
+                          className="mt-0.5 w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-sm tabular-nums"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase">ETA</span>
+                        <div className="mt-0.5 flex gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            step="any"
+                            value={draft.etaText}
+                            onChange={(e) => updateSub(idx, { etaText: e.target.value })}
+                            inputMode="decimal"
+                            placeholder={draft.etaUnit === 'day' ? '1' : draft.etaUnit === 'hr' ? '2' : '30'}
+                            className="min-w-0 flex-1 px-2 py-1.5 rounded-lg border border-gray-200 text-sm tabular-nums"
+                          />
+                          <select
+                            value={draft.etaUnit || 'min'}
+                            onChange={(e) => updateSub(idx, { etaUnit: e.target.value as EtaUnit })}
+                            className="shrink-0 max-w-[4.5rem] px-1 py-1.5 rounded-lg border border-gray-200 text-xs bg-white"
+                            aria-label="Sub-service ETA unit"
+                          >
+                            <option value="min">min</option>
+                            <option value="hr">hr</option>
+                            <option value="day">day</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => removeSub(idx)}
+                        className="text-xs font-semibold text-red-600 py-1 px-2 -mr-2"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {subServiceTotal > 0 && (
+              <div className="mt-3 flex items-center justify-between rounded-lg bg-gray-100 px-2.5 py-2 text-xs text-gray-800">
+                <span>Sum of active sub-service prices</span>
+                <span className="font-semibold tabular-nums">₹{subServiceTotal.toLocaleString('en-IN')}</span>
+              </div>
+            )}
+          </div>
+
+          <label className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5 bg-white">
+            <span className="text-sm font-semibold text-gray-800">Active (visible to customers)</span>
             <input
               type="checkbox"
               checked={active}
@@ -1444,22 +1855,15 @@ const ServiceEditorSheet: React.FC<ServiceEditorProps> = ({
             />
           </label>
         </div>
-        <div className="sticky bottom-0 bg-white border-t border-gray-100 p-3">
+
+        <div className="shrink-0 border-t border-gray-100 p-3 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
-            onClick={() =>
-              onSubmit({
-                serviceType,
-                price: price ? Number(price) : undefined,
-                etaMinutes: etaMinutes ? Number(etaMinutes) : undefined,
-                description: description.trim(),
-                active,
-              })
-            }
+            onClick={handleSubmit}
             disabled={saving || !serviceType}
             className="w-full rounded-xl bg-blue-600 text-white text-sm font-bold py-3 disabled:opacity-60 active:scale-[0.98]"
           >
-            {saving ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Add service'}
+            {saving ? 'Saving…' : mode === 'edit' ? 'Update service' : 'Save service'}
           </button>
         </div>
       </div>

@@ -100,13 +100,22 @@ function supabaseRowToServiceRequest(row: any): ServiceRequestPayload {
 
 // Helper to convert ServiceRequestPayload to Supabase row
 function serviceRequestToSupabaseRow(request: Partial<ServiceRequestPayload>): any {
-  // Fields that go directly to columns
-  const directFields: any = {
-    id: request.id,
-    provider_id: request.providerId || null,
-    service_type: request.serviceType || 'General',
-    status: request.status || 'open',
-  };
+  // Only set columns that are present on the payload. Partial PATCH updates (e.g. status only)
+  // must not write `provider_id: null` or reset `service_type`, or assignments vanish from
+  // provider dashboards and customers lose the workshop link.
+  const directFields: any = {};
+  if (request.id !== undefined) {
+    directFields.id = request.id;
+  }
+  if (request.providerId !== undefined) {
+    directFields.provider_id = request.providerId;
+  }
+  if (request.serviceType !== undefined) {
+    directFields.service_type = request.serviceType;
+  }
+  if (request.status !== undefined) {
+    directFields.status = request.status;
+  }
   if (request.customerId !== undefined && request.customerId !== null && String(request.customerId).trim() !== '') {
     directFields.user_id = request.customerId;
   }
@@ -162,9 +171,30 @@ export const supabaseServiceRequestService = {
     // Generate ID if not provided
     const id = requestData.id || `sr_${Date.now()}_${randomAlphanumeric(9)}`;
     
+    const serviceType =
+      typeof requestData.serviceType === 'string' && requestData.serviceType.trim() !== ''
+        ? requestData.serviceType
+        : 'General';
+    const statusRaw = requestData.status;
+    const status: ServiceRequestPayload['status'] =
+      statusRaw === 'open' ||
+      statusRaw === 'accepted' ||
+      statusRaw === 'in_progress' ||
+      statusRaw === 'completed' ||
+      statusRaw === 'cancelled'
+        ? statusRaw
+        : 'open';
+    const providerId =
+      requestData.providerId === null || typeof requestData.providerId === 'string'
+        ? requestData.providerId
+        : null;
+
     const row = serviceRequestToSupabaseRow({
       ...requestData,
       id,
+      serviceType,
+      status,
+      providerId,
       createdAt: (requestData.createdAt && typeof requestData.createdAt === 'string') ? requestData.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });

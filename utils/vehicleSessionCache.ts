@@ -1,25 +1,31 @@
 import type { Vehicle } from '../types';
 
+/** Dropped from session JSON (bulky or high-sensitivity). */
+const DROP_FROM_SESSION: (keyof Vehicle)[] = [
+  'documents',
+  'serviceRecords',
+  'accidentHistory',
+  'sellerPhone',
+  'sellerWhatsApp',
+  'exactLocation',
+  'qualityReport',
+  'certifiedInspection',
+];
+
 /**
- * Fields excluded from sessionStorage: bulky base64 docs, direct phone channels, precise
- * lat/lng, listing email, description, and service/accident text (CodeQL: clear-text storage).
- * The app can merge from catalog/API for full fields after refresh.
+ * Build a JSON-safe listing snapshot without a full `...vehicle` spread (CodeQL: clear-text storage).
  */
 export function toVehicleSessionSnapshot(vehicle: Vehicle): Vehicle {
   if (!vehicle || typeof vehicle !== 'object') {
     return vehicle;
   }
-  return {
-    ...vehicle,
-    documents: undefined,
-    sellerPhone: undefined,
-    sellerWhatsApp: undefined,
-    exactLocation: undefined,
-    sellerEmail: '',
-    description: '',
-    serviceRecords: undefined,
-    accidentHistory: undefined,
-  };
+  const o = { ...vehicle };
+  for (const k of DROP_FROM_SESSION) {
+    delete (o as Record<string, unknown>)[k as string];
+  }
+  o.sellerEmail = '';
+  o.description = '';
+  return o;
 }
 
 export function stringifyVehicleForSession(vehicle: Vehicle): string {

@@ -9,9 +9,105 @@ import { vehicleMatchesSearchFilters } from './savedSearchMatch';
 
 // ============================================
 // SAVED SEARCHES
+// Per-user key; each row serializes without `userId` (rehydrate on read).
 // ============================================
 
-const SAVED_SEARCHES_KEY = 'reride_saved_searches';
+const LEGACY_SAVED_SEARCHES_KEY = 'reride_saved_searches';
+const BUCKET_PREFIX = 'reride_ssb_';
+
+type StoredSearchRow = Omit<SavedSearch, 'userId'>;
+
+function buildBucketKey(userId: string): string {
+  return BUCKET_PREFIX + btoa(encodeURIComponent(userId)).replace(/=+$/, '');
+}
+
+function userIdFromBucketKey(key: string): string {
+  if (!key.startsWith(BUCKET_PREFIX)) return '';
+  const b = key.slice(BUCKET_PREFIX.length);
+  try {
+    // eslint-disable-next-line deprecation/deprecation
+    return decodeURIComponent(escape(atob(b)));
+  } catch {
+    return '';
+  }
+}
+
+function rehydrate(rows: StoredSearchRow[], userId: string): SavedSearch[] {
+  return rows.map((r) => ({ ...r, userId }));
+}
+
+function dehydrate(list: SavedSearch[]): StoredSearchRow[] {
+  return list.map(({ userId: _u, ...rest }) => rest as StoredSearchRow);
+}
+
+function writeUserBucket(userId: string, list: SavedSearch[]): void {
+  if (typeof localStorage === 'undefined') return;
+  const key = buildBucketKey(userId);
+  if (list.length === 0) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  localStorage.setItem(key, JSON.stringify(dehydrate(list)));
+}
+
+let legacySavedSearchesMigrated = false;
+
+function migrateSavedSearchesFromLegacy(): void {
+  if (typeof localStorage === 'undefined' || legacySavedSearchesMigrated) {
+    return;
+  }
+  const raw = localStorage.getItem(LEGACY_SAVED_SEARCHES_KEY);
+  if (!raw) {
+    legacySavedSearchesMigrated = true;
+    return;
+  }
+  try {
+    const all: SavedSearch[] = JSON.parse(raw);
+    if (!Array.isArray(all) || all.length === 0) {
+      localStorage.removeItem(LEGACY_SAVED_SEARCHES_KEY);
+      legacySavedSearchesMigrated = true;
+      return;
+    }
+    const byUser = new Map<string, SavedSearch[]>();
+    for (const s of all) {
+      const uid = s.userId ? String(s.userId) : '';
+      if (!uid) continue;
+      if (!byUser.has(uid)) byUser.set(uid, []);
+      byUser.get(uid)!.push(s);
+    }
+    for (const [uid, fromLegacy] of byUser) {
+      const bucket = buildBucketKey(uid);
+      const rawB = localStorage.getItem(bucket);
+      const existingList: SavedSearch[] = rawB
+        ? rehydrate(JSON.parse(rawB) as StoredSearchRow[], uid)
+        : [];
+      const merged = new Map<string, SavedSearch>();
+      for (const x of existingList) merged.set(x.id, x);
+      for (const x of fromLegacy) merged.set(x.id, { ...x, userId: uid });
+      writeUserBucket(uid, Array.from(merged.values()));
+    }
+    localStorage.removeItem(LEGACY_SAVED_SEARCHES_KEY);
+  } catch {
+    /* leave legacy for next attempt */
+  }
+  legacySavedSearchesMigrated = true;
+}
+
+export function importSavedSearchIfNewForUser(userId: string, search: SavedSearch): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return;
+  }
+  migrateSavedSearchesFromLegacy();
+  const cur = getSavedSearches(userId);
+  if (cur.some((x) => x.id === search.id)) {
+    return;
+  }
+  writeUserBucket(userId, [...cur, { ...search, userId }]);
+}
 
 // Helper to check if localStorage is available
 const isLocalStorageAvailable = (): boolean => {
@@ -37,9 +133,7 @@ export function saveSearch(userId: string, name: string, filters: SearchFilters,
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
       throw new Error('localStorage is not available');
     }
-    const stored = localStorage.getItem(SAVED_SEARCHES_KEY);
-    const searches: SavedSearch[] = stored ? JSON.parse(stored) : [];
-    
+    migrateSavedSearchesFromLegacy();
     const newSearch: SavedSearch = {
       id: `search_${Date.now()}`,
       userId,
@@ -50,10 +144,8 @@ export function saveSearch(userId: string, name: string, filters: SearchFilters,
       notificationFrequency: 'instant',
       createdAt: new Date().toISOString(),
     };
-    
-    searches.push(newSearch);
-    localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(searches));
-    
+    const cur = getSavedSearches(userId);
+    writeUserBucket(userId, [...cur, newSearch]);
     return newSearch;
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {
@@ -69,11 +161,13 @@ export function getSavedSearches(userId: string): SavedSearch[] {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
       return [];
     }
-    const stored = localStorage.getItem(SAVED_SEARCHES_KEY);
-    if (!stored) return [];
-    
-    const searches: SavedSearch[] = JSON.parse(stored);
-    return searches.filter(s => s.userId === userId);
+    migrateSavedSearchesFromLegacy();
+    const raw = localStorage.getItem(buildBucketKey(userId));
+    if (!raw) {
+      return [];
+    }
+    const rows: StoredSearchRow[] = JSON.parse(raw);
+    return rehydrate(rows, userId);
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {
       console.error('Error getting saved searches:', error);
@@ -88,13 +182,20 @@ export function deleteSavedSearch(searchId: string): void {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
       return;
     }
-    const stored = localStorage.getItem(SAVED_SEARCHES_KEY);
-    if (!stored) return;
-    
-    const searches: SavedSearch[] = JSON.parse(stored);
-    const filtered = searches.filter(s => s.id !== searchId);
-    
-    localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(filtered));
+    migrateSavedSearchesFromLegacy();
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(BUCKET_PREFIX)) continue;
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      const uid = userIdFromBucketKey(k);
+      if (!uid) continue;
+      const rows: StoredSearchRow[] = JSON.parse(raw);
+      if (!rows.some((r) => r.id === searchId)) continue;
+      const list = rehydrate(rows, uid).filter((s) => s.id !== searchId);
+      writeUserBucket(uid, list);
+      return;
+    }
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {
       console.error('Error deleting saved search:', error);
@@ -109,15 +210,21 @@ export function updateSavedSearch(searchId: string, updates: Partial<SavedSearch
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
       return;
     }
-    const stored = localStorage.getItem(SAVED_SEARCHES_KEY);
-    if (!stored) return;
-    
-    const searches: SavedSearch[] = JSON.parse(stored);
-    const index = searches.findIndex(s => s.id === searchId);
-    
-    if (index !== -1) {
-      searches[index] = { ...searches[index], ...updates };
-      localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(searches));
+    migrateSavedSearchesFromLegacy();
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(BUCKET_PREFIX)) continue;
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      const userIdB = userIdFromBucketKey(k);
+      if (!userIdB) continue;
+      const rows: StoredSearchRow[] = JSON.parse(raw);
+      const index = rows.findIndex((r) => r.id === searchId);
+      if (index === -1) continue;
+      const list = rehydrate(rows, userIdB);
+      list[index] = { ...list[index], ...updates, id: searchId, userId: userIdB };
+      writeUserBucket(userIdB, list);
+      return;
     }
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {

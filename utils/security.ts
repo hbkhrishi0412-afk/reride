@@ -305,6 +305,11 @@ export const sanitizeObject = async <T>(obj: T): Promise<T> => {
     for (const [key, value] of Object.entries(obj)) {
       // Sanitize both key and value
       const sanitizedKey = await sanitizeString(key);
+      // Never HTML-escape passwords: bcrypt/legacy checks must see the exact bytes the user typed.
+      if (key === 'password' && typeof value === 'string') {
+        sanitized[sanitizedKey] = value.trim();
+        continue;
+      }
       sanitized[sanitizedKey] = await sanitizeObject(value);
     }
     return sanitized as T;

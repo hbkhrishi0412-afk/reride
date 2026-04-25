@@ -1,5 +1,6 @@
 
 import type { User } from '../types';
+import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
 import { userRolesEqual } from '../utils/user-role';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { isCapacitorNative } from '../utils/apiConfig';
@@ -118,7 +119,7 @@ export const establishSessionFromOtpAuth = (payload: {
   storeTokens(payload.accessToken, payload.refreshToken);
   try {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('reRideCurrentUser', JSON.stringify(payload.user));
+      localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(payload.user));
     }
   } catch {
     /* ignore */
@@ -559,7 +560,11 @@ const authApi = async (body: any): Promise<any> => {
                     const contentType = response.headers.get('content-type');
                     if (contentType && contentType.includes('application/json')) {
                         const errorData = await response.json();
-                        errorMessage = errorData.reason || errorData.error || errorMessage;
+                        errorMessage =
+                            errorData.reason ||
+                            errorData.error ||
+                            (typeof errorData.message === 'string' ? errorData.message : '') ||
+                            errorMessage;
                     }
                 } catch (_) { /* use fallback message */ }
                 console.warn(`⚠️ Server ${response.status}:`, errorMessage);
@@ -787,7 +792,7 @@ export const login = async (credentials: { email?: string; password?: string; ro
       // Store JWT tokens if provided
       if (result.accessToken && result.refreshToken) {
         storeTokens(result.accessToken, result.refreshToken);
-        localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
+        localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
         void bridgeSupabasePasswordSession(
           String(credentials.email),
           String(credentials.password),
@@ -846,7 +851,7 @@ export const register = async (credentials: { email?: string; password?: string;
       
       if (result.success && result.accessToken && result.refreshToken) {
         storeTokens(result.accessToken, result.refreshToken);
-        localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
+        localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
         void bridgeSupabasePasswordSession(
           String(credentials.email),
           String(credentials.password),

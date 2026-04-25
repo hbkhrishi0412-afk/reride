@@ -42,11 +42,54 @@ export function notificationsForLocalStorage(list: Notification[]): Notification
   }));
 }
 
+const NOTIFICATIONS_KEY_V2 = 'reRideNotificationsV2';
+const NOTIFICATIONS_KEY_LEGACY = 'reRideNotifications';
+
+/**
+ * Sanitized list only in sessionStorage (shorter lived than localStorage; avoids long-lived clear-text PII on disk).
+ */
 export function persistReRideNotifications(list: Notification[]): void {
   try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem('reRideNotifications', JSON.stringify(notificationsForLocalStorage(list)));
+    if (typeof sessionStorage === 'undefined') return;
+    const safe = notificationsForLocalStorage(list);
+    sessionStorage.setItem(NOTIFICATIONS_KEY_V2, JSON.stringify(safe));
+    try {
+      localStorage.removeItem(NOTIFICATIONS_KEY_LEGACY);
+    } catch {
+      /* ignore */
+    }
   } catch {
     /* ignore quota / private mode */
   }
+}
+
+export function readPersistedReRideNotifications(): string | null {
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      const s = sessionStorage.getItem(NOTIFICATIONS_KEY_V2);
+      if (s) return s;
+    }
+    if (typeof localStorage !== 'undefined') {
+      const l = localStorage.getItem(NOTIFICATIONS_KEY_LEGACY);
+      if (l) {
+        try {
+          if (typeof sessionStorage !== 'undefined') {
+            const n = JSON.parse(l) as Notification[];
+            sessionStorage.setItem(
+              NOTIFICATIONS_KEY_V2,
+              JSON.stringify(notificationsForLocalStorage(n))
+            );
+            localStorage.removeItem(NOTIFICATIONS_KEY_LEGACY);
+            return sessionStorage.getItem(NOTIFICATIONS_KEY_V2);
+          }
+        } catch {
+          return l;
+        }
+        return l;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
 }

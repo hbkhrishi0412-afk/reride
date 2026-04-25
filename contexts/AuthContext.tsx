@@ -15,6 +15,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { User } from '../types';
 import { View } from '../types';
 import { logInfo, logWarn } from '../utils/logger';
+import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
 import { logout as clearRerideJwtSession } from '../services/userService';
 
 // ── Context type ────────────────────────────────────────────────────────────
@@ -79,8 +80,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     (user: User) => {
       setCurrentUser(user);
       try {
-        localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
-        sessionStorage.setItem('currentUser', JSON.stringify(user));
+        localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(user));
+        sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(user));
       } catch {
         logWarn('Failed to persist user session');
       }
