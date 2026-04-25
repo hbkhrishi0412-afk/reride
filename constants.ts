@@ -2,6 +2,7 @@
 import type { Vehicle, User, PlanDetails, FAQItem, SupportTicket } from './types.js';
 import { VehicleCategory, type SubscriptionPlan } from './types.js';
 import { VEHICLE_DATA, getPlaceholderImage } from './components/vehicleData.js';
+import { randomIntBelow } from './utils/secureRandom';
 
 // Helper to generate past dates
 const daysAgo = (days: number): string => {
@@ -111,7 +112,10 @@ export async function getMockUsers(): Promise<User[]> {
     try {
         // Check if user is authenticated before making request
         let token: string | null = null;
-        try { token = localStorage.getItem('reRideAccessToken'); } catch { /* WebView may block storage */ }
+        try {
+            const { getBrowserAccessTokenForApi } = await import('./utils/authStorage');
+            token = getBrowserAccessTokenForApi();
+        } catch { /* WebView may block storage */ }
         if (!token) {
             // No token available, return fallback users
             return getFallbackUsers();
@@ -448,8 +452,8 @@ const FEATURES = ['Sunroof', 'Touchscreen Infotainment', 'Automatic Climate Cont
 const TRANSMISSIONS = ['Automatic', 'Manual', 'CVT', 'DCT'];
 export const FUEL_TYPES = ['Petrol', 'Diesel', 'Electric', 'CNG', 'Hybrid'];
 
-const randomItem = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
-const randomNumber = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+const randomItem = <T,>(arr: T[]): T => arr[randomIntBelow(arr.length)]!;
+const randomNumber = (min: number, max: number) => min + randomIntBelow(max - min + 1);
 
 const generateMockVehicles = (count: number): Vehicle[] => {
     const vehicles: Vehicle[] = [];
@@ -486,12 +490,12 @@ const generateMockVehicles = (count: number): Vehicle[] => {
             mileage,
             location: `${city}, ${state}`,
             images: [getPlaceholderImage(make, model), getPlaceholderImage(make, `${model}${i}`)],
-            videoUrl: Math.random() > 0.7 ? 'https://cdn.coverr.co/videos/coverr-a-porsche-911-on-a-bridge-638/1080p.mp4' : undefined,
+            videoUrl: randomIntBelow(10) > 6 ? 'https://cdn.coverr.co/videos/coverr-a-porsche-911-on-a-bridge-638/1080p.mp4' : undefined,
             features: Array.from(new Set(Array.from({ length: randomNumber(3, 7) }, () => randomItem(FEATURES)))),
             description: `A well-maintained ${year} ${make} ${model} ${variant || ''}. Comes with features like ${randomItem(FEATURES)} and ${randomItem(FEATURES)}. Available in ${city}.`,
             sellerEmail: seller.email,
             status: 'published',
-            isFeatured: Math.random() < 0.1,
+            isFeatured: randomIntBelow(10) < 1,
             views: randomNumber(0, 500),
             inquiriesCount: randomNumber(0, 50),
             certificationStatus: randomItem(['none', 'requested', 'approved', 'rejected', 'certified']),

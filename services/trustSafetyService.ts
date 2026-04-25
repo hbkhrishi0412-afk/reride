@@ -230,7 +230,8 @@ export function getResponseTimeBadge(stats: ResponseTimeStats): {
 // SAFETY REPORTS
 // ============================================
 
-const SAFETY_REPORTS_KEY = 'reride_safety_reports';
+// In-memory only: avoids persisting report text (PII / abuse content) in localStorage.
+let safetyReportsMemory: SafetyReport[] = [];
 
 // Create safety report
 export function createSafetyReport(
@@ -241,9 +242,6 @@ export function createSafetyReport(
   description: string
 ): SafetyReport {
   try {
-    const stored = localStorage.getItem(SAFETY_REPORTS_KEY);
-    const reports: SafetyReport[] = stored ? JSON.parse(stored) : [];
-    
     const newReport: SafetyReport = {
       id: `report_${Date.now()}`,
       reportedBy,
@@ -254,10 +252,7 @@ export function createSafetyReport(
       status: 'pending',
       createdAt: new Date().toISOString(),
     };
-    
-    reports.push(newReport);
-    localStorage.setItem(SAFETY_REPORTS_KEY, JSON.stringify(reports));
-    
+    safetyReportsMemory = [...safetyReportsMemory, newReport];
     return newReport;
   } catch (error) {
     console.error('Error creating safety report:', error);
@@ -268,16 +263,10 @@ export function createSafetyReport(
 // Get safety reports
 export function getSafetyReports(status?: string): SafetyReport[] {
   try {
-    const stored = localStorage.getItem(SAFETY_REPORTS_KEY);
-    if (!stored) return [];
-    
-    const reports: SafetyReport[] = JSON.parse(stored);
-    
     if (status) {
-      return reports.filter(r => r.status === status);
+      return safetyReportsMemory.filter((r) => r.status === status);
     }
-    
-    return reports;
+    return [...safetyReportsMemory];
   } catch (error) {
     console.error('Error getting safety reports:', error);
     return [];
@@ -291,21 +280,16 @@ export function updateSafetyReportStatus(
   action?: string
 ): void {
   try {
-    const stored = localStorage.getItem(SAFETY_REPORTS_KEY);
-    if (!stored) return;
-    
-    const reports: SafetyReport[] = JSON.parse(stored);
-    const index = reports.findIndex(r => r.id === reportId);
-    
-    if (index !== -1) {
-      reports[index].status = status;
-      if (action) reports[index].action = action;
-      if (status === 'resolved') {
-        reports[index].resolvedAt = new Date().toISOString();
-      }
-      
-      localStorage.setItem(SAFETY_REPORTS_KEY, JSON.stringify(reports));
-    }
+    const index = safetyReportsMemory.findIndex((r) => r.id === reportId);
+    if (index === -1) return;
+    const cur = safetyReportsMemory[index];
+    const updated: SafetyReport = {
+      ...cur,
+      status,
+      ...(action !== undefined ? { action } : {}),
+      ...(status === 'resolved' ? { resolvedAt: new Date().toISOString() } : {}),
+    };
+    safetyReportsMemory = safetyReportsMemory.map((r) => (r.id === reportId ? updated : r));
   } catch (error) {
     console.error('Error updating safety report:', error);
     throw error;
@@ -318,11 +302,9 @@ export function getReportsForTarget(
   targetId: string | number
 ): SafetyReport[] {
   try {
-    const stored = localStorage.getItem(SAFETY_REPORTS_KEY);
-    if (!stored) return [];
-    
-    const reports: SafetyReport[] = JSON.parse(stored);
-    return reports.filter(r => r.targetType === targetType && r.targetId === targetId);
+    return safetyReportsMemory.filter(
+      (r) => r.targetType === targetType && r.targetId === targetId
+    );
   } catch (error) {
     console.error('Error getting reports for target:', error);
     return [];

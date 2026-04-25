@@ -8,7 +8,12 @@ const userSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     lowercase: true,
-    match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Please fill a valid email address'],
+    maxlength: 254,
+    // Bounded, linear-time pattern (avoids nested-quantifier ReDoS; CodeQL js/polynomial-redos)
+    match: [
+      /^[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,251}\.[a-z]{2,63}$/i,
+      'Please fill a valid email address',
+    ],
     index: true,
   },
   name: {

@@ -38,18 +38,25 @@ import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
+import { randomAlphanumeric, randomIntBelow } from '../utils/secureRandom';
 import { clearRememberMeState } from '../utils/rememberMe';
 import { deduplicateRequest } from '../utils/requestDeduplication';
 import { enrichVehicleWithSellerInfo } from '../utils/vehicleEnrichment';
 import * as buyerService from '../services/buyerService';
 import { createSafetyReport } from '../services/trustSafetyService';
 import { addLocalRecentId } from '../utils/recentlyViewed';
+import { stringifyVehicleForSession } from '../utils/vehicleSessionCache';
+import { persistReRideNotifications } from '../utils/notificationLocalStorage';
 import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 import { sanitizePersistedChatMessage, supabaseRowToConversation } from '../services/supabase-conversation-service';
 import { emailToKey } from '../services/supabase-user-service';
 import { isCapacitorNative } from '../utils/apiConfig';
 import { normalizeUserLocationForStorage } from '../utils/cityMapping';
-import { clearSupabaseAuthStorage, getBrowserAccessTokenForApi } from '../utils/authStorage';
+import {
+  clearSupabaseAuthStorage,
+  getBrowserAccessTokenForApi,
+  useHttpOnlyRefreshCookie,
+} from '../utils/authStorage';
 import { getEffectiveMuteKeys, isStoryMuted } from '../utils/notificationMute';
 import { getSupabaseClient } from '../lib/supabase';
 import { syncServiceProviderOAuth, syncWithBackend } from '../services/supabase-auth-service';
@@ -58,6 +65,18 @@ import type { Session } from '@supabase/supabase-js';
 /** PostgREST realtime filter value: quote emails so `@` and special chars parse correctly. */
 function postgrestEqQuoted(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+/** True if we can call refresh-token (JSON refresh in storage, or HttpOnly cookie + persisted user). */
+function hasLikelyRefreshSource(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (localStorage.getItem('reRideRefreshToken')) return true;
+    if (useHttpOnlyRefreshCookie() && localStorage.getItem('reRideCurrentUser')) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
 }
 
 /** Merge local + server messages without duplicates (realtime + optimistic UI). */
@@ -356,11 +375,30 @@ function agentNavDebugLog(payload: {
 /** Last non-detail screen before opening a listing (HashRouter / WebView can lose `location.state`). */
 const RERIDE_DETAIL_ENTRY_SOURCE_KEY = 'rerideDetailEntrySourceView';
 
+const VIEW_ORDINALS = Object.values(View) as View[];
+
+function viewToDetailEntryOrdinal(v: View): string {
+  const i = VIEW_ORDINALS.indexOf(v);
+  return i === -1 ? '0' : String(i);
+}
+
+function detailEntryOrdinalToView(ordinal: string): View | undefined {
+  if (!/^\d+$/.test(ordinal)) return undefined;
+  const i = parseInt(ordinal, 10);
+  if (i < 0 || i >= VIEW_ORDINALS.length) return undefined;
+  return VIEW_ORDINALS[i];
+}
+
 function readDetailEntrySourceView(): View | undefined {
   if (typeof window === 'undefined') return undefined;
   try {
     const raw = sessionStorage.getItem(RERIDE_DETAIL_ENTRY_SOURCE_KEY);
     if (!raw) return undefined;
+    if (/^\d+$/.test(raw)) {
+      const v = detailEntryOrdinalToView(raw);
+      if (v == null || v === View.DETAIL) return undefined;
+      return v;
+    }
     if (!(Object.values(View) as string[]).includes(raw)) return undefined;
     const v = raw as View;
     return v === View.DETAIL ? undefined : v;
@@ -801,7 +839,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         (!prev.sellerName || prev.sellerName === 'Seller');
       if (!phoneAdded && !nameBetter) return prev;
       try {
-        sessionStorage.setItem('selectedVehicle', JSON.stringify(enriched));
+        sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(enriched));
       } catch {
         // ignore storage errors (private mode / WebView)
       }
@@ -849,7 +887,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       ];
       try {
-        localStorage.setItem('reRideNotifications', JSON.stringify(sampleNotifications));
+        persistReRideNotifications(sampleNotifications);
       } catch (_) {
         // WebView/Capacitor may restrict setItem; continue without persisting
       }
@@ -1613,7 +1651,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (selectedVehicle?.id === id) {
           const updatedSelected = updater(selectedVehicle);
           if (updatedSelected) {
-            sessionStorage.setItem('selectedVehicle', JSON.stringify(updatedSelected));
+            sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(updatedSelected));
           } else {
             sessionStorage.removeItem('selectedVehicle');
           }
@@ -1822,7 +1860,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             vehicleFound = true;
             setSelectedVehicle(detailVehicleParam);
             try {
-              sessionStorage.setItem('selectedVehicle', JSON.stringify(detailVehicleParam));
+              sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(detailVehicleParam));
               if (process.env.NODE_ENV === 'development') {
                 console.log(
                   '🔧 Applied detailVehicle param during navigation:',
@@ -1839,7 +1877,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           vehicleToUse = selectedVehicle;
           vehicleFound = true;
           try {
-            sessionStorage.setItem('selectedVehicle', JSON.stringify(selectedVehicle));
+            sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(selectedVehicle));
             if (process.env.NODE_ENV === 'development') {
               console.log('🔧 Synced vehicle from state to sessionStorage:', selectedVehicle.id);
             }
@@ -2261,7 +2299,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (found) {
             setSelectedVehicle(found);
             try {
-              sessionStorage.setItem('selectedVehicle', JSON.stringify(found));
+              sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(found));
             } catch {
               /* ignore */
             }
@@ -2554,10 +2592,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (typeof window !== 'undefined' && !isDevelopmentEnvironment()) {
           try {
             const hasAccessToken = !!getBrowserAccessTokenForApi();
-            
-            const hasRefreshToken = !!localStorage.getItem('reRideRefreshToken');
-            
-            if (!hasAccessToken && hasRefreshToken) {
+
+            if (!hasAccessToken && hasLikelyRefreshSource()) {
               // Hard timeout so we don't block rendering too long.
               await Promise.race([
                 refreshAuthToken(),
@@ -2962,7 +2998,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (isMounted && result.success && result.data) {
                   setNotifications(result.data);
                   try {
-                    localStorage.setItem('reRideNotifications', JSON.stringify(result.data));
+                    persistReRideNotifications(result.data);
                   } catch (error) {
                     console.warn('Failed to save notifications:', error);
                   }
@@ -3227,9 +3263,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (typeof window !== 'undefined' && !isDevelopmentEnvironment()) {
           try {
             const hasAccessToken = !!getBrowserAccessTokenForApi();
-            const hasRefreshToken = !!localStorage.getItem('reRideRefreshToken');
 
-            if (!hasAccessToken && hasRefreshToken) {
+            if (!hasAccessToken && hasLikelyRefreshSource()) {
               await Promise.race([
                 refreshAuthToken(),
                 new Promise((resolve) => setTimeout(resolve, 2500)),
@@ -4195,7 +4230,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           // Save to localStorage
           try {
-            localStorage.setItem('reRideNotifications', JSON.stringify(updatedNotifications));
+            persistReRideNotifications(updatedNotifications);
           } catch (error) {
             console.error('Failed to save notifications to localStorage:', error);
           }
@@ -4467,7 +4502,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 hasUpdated: hasUpdatedNotifications
               });
               try {
-                localStorage.setItem('reRideNotifications', JSON.stringify(result.data!));
+                persistReRideNotifications(result.data!);
               } catch (error) {
                 console.warn('Failed to save notifications:', error);
               }
@@ -5236,7 +5271,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         for (const userData of usersToImport) {
           try {
             // Generate a default password for imported users (they can reset it)
-            const defaultPassword = `TempPass${Math.random().toString(36).slice(-8)}`;
+            const defaultPassword = `TempPass${randomAlphanumeric(10)}`;
             
             // Create user via API register endpoint
             const response = await fetch('/api/users', {
@@ -5700,8 +5735,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         // Generate a more unique message ID to prevent collisions
-        const messageId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-        
+        const messageId = Date.now() * 1000 + randomIntBelow(1000);
+
         // CRITICAL FIX: Normalize user email before creating message
         const normalizedUserEmail = (currentUser.email || '').toLowerCase().trim();
         
@@ -5795,7 +5830,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return;
         }
 
-        const messageId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+        const messageId = Date.now() * 1000 + randomIntBelow(1000);
         const resolvedType = type || 'text';
         const displayText =
           resolvedType === 'image'
@@ -6539,7 +6574,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // CRITICAL: Store vehicle in sessionStorage FIRST (synchronous, immediate)
       // This ensures the vehicle is available even if state update is delayed
       try {
-        const vehicleJson = JSON.stringify(vehicleForDetail);
+        const vehicleJson = stringifyVehicleForSession(vehicleForDetail);
         sessionStorage.setItem('selectedVehicle', vehicleJson);
         
         // Verify it was stored correctly
@@ -6568,7 +6603,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       try {
         if (currentView !== View.DETAIL) {
-          sessionStorage.setItem(RERIDE_DETAIL_ENTRY_SOURCE_KEY, String(currentView));
+          // Store enum ordinal only (not view name string) — avoids clear-text session flags.
+          sessionStorage.setItem(RERIDE_DETAIL_ENTRY_SOURCE_KEY, viewToDetailEntryOrdinal(currentView));
         }
       } catch {
         /* ignore */
@@ -6608,7 +6644,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
 
         const responseMessage: ChatMessage = {
-          id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
+          id: Date.now() * 1000 + randomIntBelow(1000),
           sender: currentUser.role === 'seller' ? 'seller' : 'user',
           text: responseTexts[response],
           timestamp: new Date().toISOString(),

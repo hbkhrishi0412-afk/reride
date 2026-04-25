@@ -119,6 +119,11 @@ export function enforceRememberMePolicyOnBoot(): void {
       /* ignore */
     }
   });
+  try {
+    ss.removeItem('reRideAccessToken');
+  } catch {
+    /* ignore */
+  }
   clearSupabaseAuthTokens();
 
   try {
@@ -155,6 +160,11 @@ export function clearRememberMeState(): void {
   }
   try {
     ss?.removeItem(ALIVE_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    ss?.removeItem('reRideAccessToken');
   } catch {
     /* ignore */
   }

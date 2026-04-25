@@ -1000,7 +1000,9 @@ class DataService {
 
     try {
       // Check if we have an access token before making the request
-      let accessToken = localStorage.getItem('reRideAccessToken') || sessionStorage.getItem('accessToken');
+      let accessToken =
+        getBrowserAccessTokenForApi() ||
+        (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('accessToken') : null);
       if (!accessToken) {
         // Try refresh-token flow before giving up.
         // This is critical in production where currentUser may be restored from storage
@@ -1010,9 +1012,6 @@ class DataService {
           const refreshResult = await refreshAccessToken();
           if (refreshResult.success && refreshResult.accessToken) {
             accessToken = refreshResult.accessToken;
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('reRideAccessToken', accessToken);
-            }
             console.log('✅ getUsers: Refreshed missing access token successfully');
           }
         } catch (refreshError) {

@@ -16,7 +16,11 @@ import {
 function resolvedApiUrl(pathOrUrl: string): string {
   return normalizeRerideApiHostToWww(resolveApiUrl(pathOrUrl));
 }
-import { getBrowserAccessTokenForApi } from './authStorage';
+import {
+  getBrowserAccessTokenForApi,
+  useHttpOnlyRefreshCookie,
+  clearSessionStoredAccessToken,
+} from './authStorage';
 
 interface FetchOptions extends RequestInit {
   skipAuth?: boolean; // Skip authentication for public endpoints
@@ -125,8 +129,11 @@ const refreshToken = async (): Promise<string | null> => {
   isRefreshing = true;
   refreshPromise = (async (): Promise<string | null> => {
     try {
-      const refreshTokenValue = localStorage.getItem('reRideRefreshToken');
-      if (!refreshTokenValue) {
+      const refreshTokenValue =
+        typeof localStorage !== 'undefined' ? localStorage.getItem('reRideRefreshToken') : null;
+      const cookieRefresh = useHttpOnlyRefreshCookie() && !refreshTokenValue;
+
+      if (!refreshTokenValue && !cookieRefresh) {
         logWarn('⚠️ No refresh token available');
         refreshTokenKnownInvalid = true;
         // Clear all tokens to prevent inconsistent state with stale access tokens
@@ -148,11 +155,15 @@ const refreshToken = async (): Promise<string | null> => {
         refreshHeaders['X-App-Client'] = 'capacitor';
       }
 
+      const refreshBody = refreshTokenValue
+        ? { action: 'refresh-token', refreshToken: refreshTokenValue }
+        : { action: 'refresh-token' };
+
       const response = await fetch(refreshUrl, {
         method: 'POST',
         headers: refreshHeaders,
         credentials: omitCreds ? 'omit' : 'include',
-        body: JSON.stringify({ action: 'refresh-token', refreshToken: refreshTokenValue }),
+        body: JSON.stringify(refreshBody),
       });
 
       if (response.status === 401 || response.status === 400) {
@@ -182,9 +193,19 @@ const refreshToken = async (): Promise<string | null> => {
       const result = await response.json();
       
       if (result.success && result.accessToken) {
-        localStorage.setItem('reRideAccessToken', result.accessToken);
-        if (result.refreshToken) {
-          localStorage.setItem('reRideRefreshToken', result.refreshToken);
+        if (useHttpOnlyRefreshCookie()) {
+          try {
+            sessionStorage.setItem('reRideAccessToken', result.accessToken);
+            localStorage.removeItem('reRideAccessToken');
+            localStorage.removeItem('reRideRefreshToken');
+          } catch {
+            /* ignore */
+          }
+        } else {
+          localStorage.setItem('reRideAccessToken', result.accessToken);
+          if (result.refreshToken) {
+            localStorage.setItem('reRideRefreshToken', result.refreshToken);
+          }
         }
         // Reset invalid flag on successful refresh
         refreshTokenKnownInvalid = false;
@@ -259,6 +280,25 @@ export const refreshAuthToken = async (): Promise<string | null> => {
   return refreshToken();
 };
 
+/** Clears HttpOnly refresh cookie on the API origin (first-party web only). */
+export async function postLogoutClearCookies(): Promise<void> {
+  if (!useHttpOnlyRefreshCookie()) return;
+  try {
+    await ensureCsrfToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+    const url = resolvedApiUrl('/api/users');
+    await fetch(url, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify({ action: 'logout' }),
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Clear all authentication tokens
  * @param resetInvalidFlag - If true, reset the refreshTokenKnownInvalid flag (default: false)
@@ -266,6 +306,10 @@ export const refreshAuthToken = async (): Promise<string | null> => {
  */
 const clearAuthTokens = (resetInvalidFlag: boolean = false) => {
   try {
+    if (useHttpOnlyRefreshCookie()) {
+      void postLogoutClearCookies();
+    }
+    clearSessionStoredAccessToken();
     localStorage.removeItem('reRideAccessToken');
     localStorage.removeItem('reRideRefreshToken');
     localStorage.removeItem('reRideCurrentUser');
@@ -288,7 +332,7 @@ const clearAuthTokens = (resetInvalidFlag: boolean = false) => {
  */
 export const isTokenLikelyValid = (): boolean => {
   try {
-    const token = localStorage.getItem('reRideAccessToken');
+    const token = getBrowserAccessTokenForApi();
     if (!token) return false;
     
     // Try to decode token to check expiration (without verification)

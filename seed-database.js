@@ -2,6 +2,9 @@
 // Run this with: node seed-database.js
 
 import mongoose from 'mongoose';
+import { randomInt } from 'crypto';
+
+const pick = (arr) => arr[randomInt(0, arr.length)];
 
 // MongoDB connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/reride';
@@ -101,22 +104,24 @@ const generateMockVehicles = (count) => {
     const sellers = ['seller@test.com', 'john.smith@seller.com'];
     const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Chennai', 'Hyderabad'];
     
+    const variantSuffixes = ['ZX', 'VX', 'SX', 'LX'];
+    const stateCodes = ['MH', 'DL', 'KA', 'TN', 'TS'];
     for (let i = 1; i <= count; i++) {
-        const make = makes[Math.floor(Math.random() * makes.length)];
+        const make = pick(makes);
         const models = modelsByMake[make];
-        const model = models[Math.floor(Math.random() * models.length)];
-        const year = 2015 + Math.floor(Math.random() * 10);
-        const city = cities[Math.floor(Math.random() * cities.length)];
-        
+        const model = pick(models);
+        const year = 2015 + randomInt(0, 10);
+        const city = pick(cities);
+
         vehicles.push({
             id: i,
             category: 'four-wheeler',
             make,
             model,
-            variant: `${model} ${['ZX', 'VX', 'SX', 'LX'][Math.floor(Math.random() * 4)]}`,
+            variant: `${model} ${pick(variantSuffixes)}`,
             year,
-            price: 300000 + Math.floor(Math.random() * 2000000),
-            mileage: Math.floor(Math.random() * 100000),
+            price: 300000 + randomInt(0, 2_000_000),
+            mileage: randomInt(0, 100_000),
             images: [
                 `https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=800&auto=format&q=80`,
                 `https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&auto=format&q=80`,
@@ -124,27 +129,27 @@ const generateMockVehicles = (count) => {
             ],
             features: ['Power Steering', 'Air Conditioning', 'Alloy Wheels', 'ABS', 'Airbags', 'Music System'],
             description: `Well maintained ${year} ${make} ${model} in excellent condition. Single owner, full service history.`,
-            sellerEmail: sellers[Math.floor(Math.random() * sellers.length)],
+            sellerEmail: pick(sellers),
             sellerName: sellers[0] === 'seller@test.com' ? 'Prestige Motors' : 'Reliable Rides',
-            engine: `${1000 + Math.floor(Math.random() * 1500)} cc`,
-            transmission: transmissions[Math.floor(Math.random() * transmissions.length)],
-            fuelType: fuelTypes[Math.floor(Math.random() * fuelTypes.length)],
-            fuelEfficiency: `${12 + Math.floor(Math.random() * 13)} km/l`,
-            color: colors[Math.floor(Math.random() * colors.length)],
+            engine: `${1000 + randomInt(0, 1500)} cc`,
+            transmission: pick(transmissions),
+            fuelType: pick(fuelTypes),
+            fuelEfficiency: `${12 + randomInt(0, 13)} km/l`,
+            color: pick(colors),
             status: 'published',
-            isFeatured: Math.random() > 0.7,
-            views: Math.floor(Math.random() * 1000),
-            inquiriesCount: Math.floor(Math.random() * 50),
+            isFeatured: randomInt(0, 10) > 6,
+            views: randomInt(0, 1000),
+            inquiriesCount: randomInt(0, 50),
             registrationYear: year,
             insuranceValidity: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            insuranceType: Math.random() > 0.5 ? 'Comprehensive' : 'Third Party',
-            rto: `${['MH', 'DL', 'KA', 'TN', 'TS'][Math.floor(Math.random() * 5)]}-${String(Math.floor(Math.random() * 50) + 1).padStart(2, '0')}`,
+            insuranceType: randomInt(0, 2) === 0 ? 'Comprehensive' : 'Third Party',
+            rto: `${pick(stateCodes)}-${String(randomInt(1, 51)).padStart(2, '0')}`,
             city,
             state: city === 'Mumbai' || city === 'Pune' ? 'MH' : city === 'Delhi' ? 'DL' : city === 'Bangalore' ? 'KA' : city === 'Chennai' ? 'TN' : 'TS',
-            noOfOwners: 1 + Math.floor(Math.random() * 3),
-            displacement: `${1000 + Math.floor(Math.random() * 1500)} cc`,
-            groundClearance: `${150 + Math.floor(Math.random() * 70)} mm`,
-            bootSpace: `${250 + Math.floor(Math.random() * 250)} litres`
+            noOfOwners: 1 + randomInt(0, 3),
+            displacement: `${1000 + randomInt(0, 1500)} cc`,
+            groundClearance: `${150 + randomInt(0, 70)} mm`,
+            bootSpace: `${250 + randomInt(0, 250)} litres`
         });
     }
     return vehicles;

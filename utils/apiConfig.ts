@@ -17,6 +17,16 @@ const DEFAULT_PRODUCTION_ORIGIN = 'https://www.reride.co.in';
 /** Same-project Vercel host (see `security-config` CORS list). Used as last-resort API origin on mobile WebView. */
 const VERCEL_APP_FALLBACK_ORIGIN = 'https://reride-app.vercel.app';
 
+function isRerideSiteHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h === 'reride.co.in' || h.endsWith('.reride.co.in');
+}
+
+export function isAndroidAppAssetsHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h === 'appassets.androidplatform.net' || h.endsWith('.appassets.androidplatform.net');
+}
+
 /**
  * `https://reride.co.in` redirects to www; CORS preflight (OPTIONS) cannot follow redirects.
  * Normalize apex → `www` for any env override or absolute URL so Android WebView / Capacitor
@@ -229,8 +239,8 @@ export function isLocalSocketIoEnvironment(): boolean {
 
   const h = window.location.hostname.toLowerCase();
   if (
-    h.includes('appassets.androidplatform.net') ||
-    h.includes('reride.co.in') ||
+    isAndroidAppAssetsHost(h) ||
+    isRerideSiteHost(h) ||
     /\.vercel\.app$/i.test(h) ||
     /\.netlify\.app$/i.test(h)
   ) {
@@ -351,9 +361,7 @@ export function isCapacitorNative(): boolean {
       (window as any).Capacitor?.isNativePlatform?.() === true;
 
     // Support custom Android WebView wrappers using WebViewAssetLoader host.
-    const isAndroidAssetLoaderHost =
-      window.location.hostname.toLowerCase() === 'appassets.androidplatform.net' ||
-      window.location.hostname.toLowerCase().includes('appassets.androidplatform.net');
+    const isAndroidAssetLoaderHost = isAndroidAppAssetsHost(window.location.hostname);
 
     // Capacitor bridge can appear after the first JS tick. Rely on the WebView
     // origin so /api/* is rewritten immediately (otherwise requests hit
@@ -423,10 +431,7 @@ export function getAlternateApiOriginForFallback(): string | null {
   if (typeof window === 'undefined') return null;
 
   const hl = window.location.hostname.toLowerCase();
-  const mobileShell =
-    isCapacitorNative() ||
-    hl === 'appassets.androidplatform.net' ||
-    hl.includes('appassets.androidplatform.net');
+  const mobileShell = isCapacitorNative() || isAndroidAppAssetsHost(hl);
   if (!mobileShell) return null;
 
   if (
@@ -478,10 +483,7 @@ export function getApiBaseUrl(): string {
   // Capacitor detection — empty base makes `/api/*` relative to this origin and breaks login + data.
   if (typeof window !== 'undefined') {
     const hl = window.location.hostname.toLowerCase();
-    if (
-      hl === 'appassets.androidplatform.net' ||
-      hl.includes('appassets.androidplatform.net')
-    ) {
+    if (isAndroidAppAssetsHost(hl)) {
       if (shouldUseBundledMobileLocalApi()) {
         return rewriteLocalhostForAndroidEmulator(getMobileLocalApiOrigin());
       }
@@ -522,8 +524,7 @@ export function resolveApiUrl(path: string): string {
     const loopback = h === 'localhost' || h === '127.0.0.1';
     const hl = h.toLowerCase();
     const looksPackagedShell =
-      hl === 'appassets.androidplatform.net' ||
-      hl.includes('appassets.androidplatform.net') ||
+      isAndroidAppAssetsHost(hl) ||
       (loopback &&
         (proto === 'https:' || proto === 'http:') &&
         !devServerPorts.includes(port));

@@ -9,6 +9,13 @@ import {
   updateSavedSearch as engagementUpdateSavedSearch,
 } from './buyerEngagementService';
 
+function savedSearchesForLocalStorage(searches: SavedSearch[]): SavedSearch[] {
+  return searches.map((s) => ({
+    ...s,
+    filters: { ...s.filters, location: undefined },
+  }));
+}
+
 const LEGACY_SAVED_KEY_PREFIX = 'savedSearches_';
 
 function migrateLegacySavedSearchesIfNeeded(userId: string): void {
@@ -32,7 +39,7 @@ function migrateLegacySavedSearchesIfNeeded(userId: string): void {
       all.push(merged);
       existingIds.add(s.id);
     }
-    localStorage.setItem('reride_saved_searches', JSON.stringify(all));
+    localStorage.setItem('reride_saved_searches', JSON.stringify(savedSearchesForLocalStorage(all)));
     localStorage.removeItem(legacyKey);
   } catch {
     /* ignore corrupt legacy */

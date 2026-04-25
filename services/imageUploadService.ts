@@ -5,6 +5,7 @@
  */
 
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
+import { randomAlphanumeric } from '../utils/secureRandom';
 
 interface UploadResult {
   success: boolean;
@@ -237,7 +238,7 @@ async function uploadToSupabaseStorage(file: File, folder: string, _userEmail?: 
     
     // Generate unique file name
     const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(2, 9);
+    const randomStr = randomAlphanumeric(10);
     const fileExt = resizedFile.name.split('.').pop() || 'jpg';
     const fileName = `${timestamp}_${randomStr}.${fileExt}`;
     const filePath = `${folder}/${fileName}`;

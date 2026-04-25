@@ -14,6 +14,7 @@
  * Run with: npm test -- registration-production.test.ts
  */
 
+import { randomBytes } from 'crypto';
 import axios, { AxiosInstance } from 'axios';
 import * as admin from 'firebase-admin';
 import { getDatabase, ref, onValue, off, get } from 'firebase/database';
@@ -31,7 +32,7 @@ const TEST_TIMEOUT = 30000;
 // Helper to generate unique test email
 const generateTestEmail = (): string => {
   const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2, 8);
+  const random = randomBytes(4).toString('hex');
   return `test-${timestamp}-${random}@test-reride.com`;
 };
 

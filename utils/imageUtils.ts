@@ -18,6 +18,50 @@ export const isInlineImagePlaceholder = (url: string | undefined | null): boolea
 
 const DEFAULT_PLACEHOLDER = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
 
+function parseHttpImageUrl(url: string): URL | null {
+  try {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) return null;
+    return new URL(url);
+  } catch {
+    return null;
+  }
+}
+
+function isCloudinaryHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h === 'cloudinary.com' || h.endsWith('.cloudinary.com');
+}
+
+function isImageKitHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h === 'ik.imagekit.io' || h.endsWith('.ik.imagekit.io');
+}
+
+function isSupabaseProjectHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h === 'supabase.co' || h.endsWith('.supabase.co');
+}
+
+function isGoogleOrFirebaseImageHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h.endsWith('.googleapis.com') || h === 'googleapis.com') return true;
+  if (h.endsWith('.googleusercontent.com') || h === 'googleusercontent.com') return true;
+  if (h === 'firebasestorage.googleapis.com') return true;
+  if (h.endsWith('.firebaseapp.com')) return true;
+  if (h.endsWith('.firebasestorage.app')) return true;
+  return false;
+}
+
+/**
+ * True when `url` is a Supabase render transform URL (hostname + path), for safe fallback logic.
+ */
+export function isSupabaseRenderTransformPublicUrl(urlStr: string): boolean {
+  const parsed = parseHttpImageUrl(urlStr);
+  if (!parsed) return false;
+  if (!isSupabaseProjectHost(parsed.hostname)) return false;
+  return parsed.pathname.includes('/storage/v1/render/image/public/');
+}
+
 /**
  * Rewrites image URLs for known CDNs (Cloudinary, ImageKit) and returns safe URLs for storage hosts.
  * Avoids client-side AVIF/WebP forcing — Android WebViews often mis-report or fail to decode.
@@ -31,9 +75,12 @@ export const getOptimizedImageUrl = (url: string, width?: number, quality: numbe
     return url;
   }
 
+  const parsedHttp = parseHttpImageUrl(url);
+  const hostLower = parsedHttp?.hostname.toLowerCase() ?? '';
+
   // Cloudinary optimization — use f_auto only. Canvas-based AVIF/WebP detection often mismatches
   // Android WebView <img> decode support and breaks list images while detail (raw URL) still works.
-  if (url.includes('cloudinary.com')) {
+  if (parsedHttp && isCloudinaryHost(hostLower)) {
     const parts = url.split('/upload/');
     if (parts.length === 2) {
       const transformations: string[] = [];
@@ -52,7 +99,7 @@ export const getOptimizedImageUrl = (url: string, width?: number, quality: numbe
   }
 
   // ImageKit — resize/quality only; do not force AVIF/WebP (WebView decode issues). Append with & if URL already has ?.
-  if (url.includes('ik.imagekit.io')) {
+  if (parsedHttp && isImageKitHost(hostLower)) {
     const params: string[] = [];
     if (width) params.push(`tr=w-${width}`);
     if (quality) params.push(`q-${quality}`);
@@ -69,7 +116,11 @@ export const getOptimizedImageUrl = (url: string, width?: number, quality: numbe
   // stall/fail on slower connections and render as a blank gray tile while
   // lighter WebP siblings load fine. LazyImage falls back to the raw object
   // URL on error if transforms are not enabled for the project.
-  if (url.includes('supabase.co') && url.includes('/storage/v1/object/public/')) {
+  if (
+    parsedHttp &&
+    isSupabaseProjectHost(hostLower) &&
+    parsedHttp.pathname.includes('/storage/v1/object/public/')
+  ) {
     const raw = url.split('?')[0];
     if (!width) return raw;
     const rendered = raw.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
@@ -79,13 +130,17 @@ export const getOptimizedImageUrl = (url: string, width?: number, quality: numbe
     return `${rendered}?${params.join('&')}`;
   }
   // Already a render/transform URL — avoid double-appending params
-  if (url.includes('supabase.co') && url.includes('/storage/v1/render/image/public/')) {
+  if (
+    parsedHttp &&
+    isSupabaseProjectHost(hostLower) &&
+    parsedHttp.pathname.includes('/storage/v1/render/image/public/')
+  ) {
     return url;
   }
 
   // Firebase Storage / Google Cloud Storage — do not append w=/q=; those are not supported, and using
   // `?` breaks URLs that already have a query string (e.g. ?alt=media&token=...).
-  if (url.includes('firebase') || url.includes('googleapis.com') || url.includes('googleusercontent.com')) {
+  if (parsedHttp && isGoogleOrFirebaseImageHost(hostLower)) {
     return url;
   }
 
@@ -114,6 +169,47 @@ export const optimizeImageUrl = (url: string, width?: number, quality: number = 
   return getOptimizedImageUrl(url, width, quality);
 };
 
+const DATA_IMAGE_ALLOW_RE = /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml|bmp|ico);/i;
+
+function isDomSafeImageUrl(src: string): boolean {
+  const t = src.trim();
+  if (t.startsWith('/')) {
+    return true;
+  }
+  if (t.startsWith('blob:')) {
+    return true;
+  }
+  if (t.startsWith('data:')) {
+    return DATA_IMAGE_ALLOW_RE.test(t);
+  }
+  try {
+    const u = new URL(t);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hostname-based check for known placeholder / random image hosts (avoids insecure substring tests on full URL strings).
+ */
+function placeholderServiceHostname(host: string): boolean {
+  const h = host.toLowerCase();
+  if (h === 'via.placeholder.com' || h.endsWith('.via.placeholder.com')) {
+    return true;
+  }
+  if (h === 'placeholder.com' || h === 'www.placeholder.com') {
+    return true;
+  }
+  if (h === 'loremflickr.com' || h.endsWith('.loremflickr.com')) {
+    return true;
+  }
+  if (h === 'source.unsplash.com') {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Validates and returns a safe image source
  * @param src - The image source to validate
@@ -121,23 +217,14 @@ export const optimizeImageUrl = (url: string, width?: number, quality: number = 
  * @returns A valid image source or fallback
  */
 export const getSafeImageSrc = (src: string | undefined | null, fallback?: string): string => {
-  // Check if src is empty, null, or undefined
   if (!src || src.trim() === '') {
     return fallback || DEFAULT_PLACEHOLDER;
   }
-  
-  // Check if src is a valid URL or data URI
-  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
-    return src;
+  const trimmed = src.trim();
+  if (!isDomSafeImageUrl(trimmed)) {
+    return fallback || DEFAULT_PLACEHOLDER;
   }
-  
-  // If it's a relative path, make it absolute
-  if (src.startsWith('/')) {
-    return src;
-  }
-  
-  // Default fallback for invalid sources
-  return fallback || DEFAULT_PLACEHOLDER;
+  return trimmed;
 };
 
 /**
@@ -162,7 +249,7 @@ export function rewriteRootRelativeMediaUrlForPackagedApp(url: string): string {
   const packagedHttpsLoopback =
     loopback && window.location.protocol === 'https:' && !devPorts.includes(port);
   const androidAssetLoader =
-    h === 'appassets.androidplatform.net' || h.includes('appassets.androidplatform.net');
+    h === 'appassets.androidplatform.net' || h.endsWith('.appassets.androidplatform.net');
   if (!androidAssetLoader && !packagedHttpsLoopback) {
     return url;
   }
@@ -185,13 +272,14 @@ export function rewriteRootRelativeMediaUrlForPackagedApp(url: string): string {
  * @param url - The image URL to check
  * @returns true if the URL is from a placeholder service
  */
-const isPlaceholderService = (url: string): boolean => {
+export const isPlaceholderService = (url: string): boolean => {
   if (!url || typeof url !== 'string') return false;
-  const lowerUrl = url.toLowerCase();
-  return lowerUrl.includes('via.placeholder.com') ||
-         lowerUrl.includes('placeholder.com') ||
-         lowerUrl.includes('loremflickr.com') ||
-         lowerUrl.includes('source.unsplash.com');
+  try {
+    const host = new URL(url.trim(), 'https://example.invalid/').hostname;
+    return placeholderServiceHostname(host);
+  } catch {
+    return false;
+  }
 };
 
 /**
@@ -233,7 +321,13 @@ const buildSupabasePublicUrl = (path: string): string | null => {
     typeof import.meta !== 'undefined' && import.meta.env && typeof (import.meta.env as Record<string, string>).VITE_SUPABASE_URL === 'string'
       ? (import.meta.env as Record<string, string>).VITE_SUPABASE_URL.replace(/\/$/, '')
       : typeof process !== 'undefined' && process.env && (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL)?.replace?.(/\/$/, '');
-  if (!baseUrl || !baseUrl.startsWith('https://') || !baseUrl.includes('.supabase.co')) return null;
+  if (!baseUrl || !baseUrl.startsWith('https://')) return null;
+  try {
+    const hn = new URL(baseUrl).hostname.toLowerCase();
+    if (!hn.endsWith('.supabase.co') && hn !== 'supabase.co') return null;
+  } catch {
+    return null;
+  }
   const normalizedPath = path.trim().replace(/^\//, '');
   return `${baseUrl}/storage/v1/object/public/${SUPABASE_IMAGES_BUCKET}/${normalizedPath}`;
 };

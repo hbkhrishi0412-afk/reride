@@ -12,6 +12,9 @@ on:
       - 'api/**'
       - 'vercel.json'
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest

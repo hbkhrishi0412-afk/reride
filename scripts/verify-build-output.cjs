@@ -51,13 +51,25 @@ console.log('✅ Build output verified: dist/index.html and dist/assets/*.js are
 const capBuild = process.env.CAPACITOR_BUILD === '1' || process.env.CAPACITOR_BUILD === 'true';
 if (capBuild) {
   let foundGoogleClient = false;
+  const oauthClientHostRe = /\b(\d+-[a-z0-9_]+\.apps\.googleusercontent\.com)\b/gi;
   for (const f of jsFiles) {
+    oauthClientHostRe.lastIndex = 0;
     const p = path.join(assetsDir, f);
     const c = fs.readFileSync(p, 'utf8');
-    if (c.includes('apps.googleusercontent.com')) {
-      foundGoogleClient = true;
-      break;
+    let m;
+    while ((m = oauthClientHostRe.exec(c)) !== null) {
+      const host = m[1].toLowerCase();
+      try {
+        const u = new URL('https://' + host);
+        if (u.hostname === host && u.hostname.endsWith('.apps.googleusercontent.com')) {
+          foundGoogleClient = true;
+          break;
+        }
+      } catch {
+        /* continue */
+      }
     }
+    if (foundGoogleClient) break;
   }
   if (!foundGoogleClient) {
     console.warn(

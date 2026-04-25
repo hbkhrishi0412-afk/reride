@@ -14,6 +14,9 @@ import { saveAuditLog } from './services/auditLogService';
 import { saveFaqs } from './services/faqService';
 import { saveSupportTickets } from './services/supportTicketService';
 import { loadingManager, LOADING_OPERATIONS, withLoadingTimeout } from './utils/loadingManager';
+import { stringifyVehicleForSession } from './utils/vehicleSessionCache';
+import { persistReRideNotifications } from './utils/notificationLocalStorage';
+import { randomIntBelow } from './utils/secureRandom';
 
 // Lazy-loaded components
 const Home = React.lazy(() => import('./components/Home'));
@@ -216,7 +219,7 @@ const AppContent: React.FC = () => {
         vehiclesData.map(async (vehicleData) => {
           return await addVehicle({
             ...vehicleData,
-            id: Date.now() + Math.random(),
+            id: Date.now() * 1000 + randomIntBelow(1000),
             averageRating: 0,
             ratingCount: 0,
             status: 'published'
@@ -716,7 +719,7 @@ const AppContent: React.FC = () => {
     
     // Store vehicle in sessionStorage for persistence and recovery
     try {
-      sessionStorage.setItem('selectedVehicle', JSON.stringify(vehicle));
+      sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(vehicle));
       console.log('🚗 Vehicle stored in sessionStorage for persistence');
     } catch (error) {
       console.warn('🚗 Failed to store vehicle in sessionStorage:', error);
@@ -862,7 +865,7 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     try {
-      localStorage.setItem('reRideNotifications', JSON.stringify(notifications));
+      persistReRideNotifications(notifications);
     } catch (error) {
       console.error("Failed to save notifications", error); 
     }

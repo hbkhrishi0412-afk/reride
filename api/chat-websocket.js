@@ -1,5 +1,6 @@
 // WebSocket handler for real-time chat
 // Supports both Socket.io and native WebSocket
+import { randomBytes, randomInt } from 'node:crypto';
 import { ensureConnection } from '../lib/db.js';
 import { ChatMessage } from '../lib/models/ChatMessage.js';
 import { ChatSession } from '../lib/models/ChatSession.js';
@@ -56,7 +57,7 @@ export function setupChatWebSocket(io) {
         } else if (currentUserId) {
           currentSessionId = `user_${currentUserId}_${Date.now()}`;
         } else {
-          currentSessionId = `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          currentSessionId = `anon_${Date.now()}_${randomBytes(9).toString('hex')}`;
         }
 
         // Create or update session
@@ -147,7 +148,7 @@ export function setupChatWebSocket(io) {
         socket.emit('typing', { isTyping: true });
 
         // Simulate bot thinking time (1-2 seconds)
-        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000 + randomInt(0, 1000)));
 
         // Generate bot response
         const botResponseText = await generateBotResponse(text, currentUserName);

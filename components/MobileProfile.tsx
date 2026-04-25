@@ -2,6 +2,8 @@ import React, { useState, useRef } from 'react';
 import type { User } from '../types';
 import PasswordInput from './PasswordInput';
 import { isTokenLikelyValid, refreshAuthToken } from '../utils/authenticatedFetch.js';
+import { getBrowserAccessTokenForApi } from '../utils/authStorage';
+import { logout as rerideLogout } from '../services/userService';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
 import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
 import { downloadProfileExport, requestAccountDataAnonymization } from '../services/accountPrivacyService';
@@ -218,13 +220,10 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
       if (isAuthError) {
         // Only clear tokens if we're certain it's an auth issue
         // Check if we still have a token - if not, it was already cleared
-        const hasToken = localStorage.getItem('reRideAccessToken');
+        const hasToken = !!getBrowserAccessTokenForApi();
         if (hasToken) {
-          // Clear all authentication tokens and user data
           try {
-            localStorage.removeItem('reRideAccessToken');
-            localStorage.removeItem('reRideRefreshToken');
-            localStorage.removeItem('reRideCurrentUser');
+            rerideLogout();
             if (typeof sessionStorage !== 'undefined') {
               sessionStorage.removeItem('currentUser');
               sessionStorage.removeItem('accessToken');

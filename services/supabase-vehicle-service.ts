@@ -7,6 +7,8 @@ import { HOME_DISCOVERY_CITY_ORDER } from '../constants/homeDiscovery.js';
 // Detect if we're in a server context (serverless function)
 const isServerSide = typeof window === 'undefined';
 
+let vehicleNumericIdFallbackSeq = 0;
+
 // Helper to validate and convert category string to VehicleCategory enum
 function validateCategory(category: unknown): VehicleCategory {
   if (typeof category !== 'string') {
@@ -280,7 +282,7 @@ export const supabaseVehicleService = {
       const randomSuffix = ((buf[0] << 8) | buf[1]) % 10000;
       id = Date.now() * 10000 + randomSuffix;
     } catch {
-      id = Date.now() * 10000 + Math.floor(Math.random() * 10000);
+      id = Date.now() * 10000 + (vehicleNumericIdFallbackSeq++ % 10000);
     }
 
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();

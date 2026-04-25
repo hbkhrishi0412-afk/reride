@@ -29,6 +29,7 @@ import MobilePushNotificationManager from './components/MobilePushNotificationMa
 import NativePushRegistration from './components/NativePushRegistration';
 import AppRatingPrompt from './components/AppRatingPrompt';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates, type SearchFilters } from './types';
+import { persistReRideNotifications } from './utils/notificationLocalStorage';
 import { countUnreadMessageThreads } from './utils/unreadCounts';
 import {
   conversationBelongsToCustomer,
@@ -41,6 +42,7 @@ import { saveConversationWithSync } from './services/syncService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
 import { matchesCity } from './utils/cityMapping';
+import { randomAlphanumeric, randomIntBelow } from './utils/secureRandom';
 import { resolveChatCallPhone, resolveChatOtherPartyName } from './utils/chatContact';
 import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
 import { logWarn, logDebug, logError, logInfo } from './utils/logger';
@@ -1164,7 +1166,7 @@ const AppContent: React.FC = () => {
         const updatedNotifications = [...generatedNotifications, ...notificationsRef.current];
         setNotifications(updatedNotifications);
         try {
-          localStorage.setItem('reRideNotifications', JSON.stringify(updatedNotifications));
+          persistReRideNotifications(updatedNotifications);
         } catch {
           // ignore localStorage failures
         }
@@ -1301,7 +1303,7 @@ const AppContent: React.FC = () => {
         : `A wishlist vehicle’s price dropped from ${oldStr} to ${newStr}.`;
 
       const notif: Notification = {
-        id: Date.now() + Math.floor(Math.random() * 1000),
+        id: Date.now() + randomIntBelow(1000),
         recipientEmail: currentUser.email,
         title: 'Price drop',
         message,
@@ -1316,7 +1318,7 @@ const AppContent: React.FC = () => {
       setNotifications((prev) => {
         const next = [notif, ...prev];
         try {
-          localStorage.setItem('reRideNotifications', JSON.stringify(next));
+          persistReRideNotifications(next);
         } catch {
           /* ignore */
         }
@@ -1868,7 +1870,7 @@ const AppContent: React.FC = () => {
                   }
                   
                   const newConversation = {
-                    id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    id: `conv_${Date.now()}_${randomAlphanumeric(9)}`,
                     customerId: currentUser.email,
                     customerName: currentUser.name || 'Customer',
                     sellerId: normalizedSellerId, // Use normalized (already validated above)
@@ -2026,7 +2028,7 @@ const AppContent: React.FC = () => {
                 }
                 
                 const newConversation = {
-                  id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  id: `conv_${Date.now()}_${randomAlphanumeric(9)}`,
                   customerId: currentUser.email,
                   customerName: currentUser.name || 'Customer',
                   sellerId: normalizedSellerId, // Use normalized (already validated above)
@@ -2408,7 +2410,7 @@ const AppContent: React.FC = () => {
                       const { addVehicle, getVehicles } = await import('./services/vehicleService');
                       const vehicleToAdd = {
                         ...vehicleData,
-                        id: Date.now() + Math.floor(Math.random() * 1000),
+                        id: Date.now() + randomIntBelow(1000),
                         sellerEmail: currentUser.email,
                         averageRating: 0,
                         ratingCount: 0,
@@ -2496,7 +2498,7 @@ const AppContent: React.FC = () => {
                   
                   const newVehicle = {
                     ...vehicleData,
-                    id: Date.now() + Math.floor(Math.random() * 1000),
+                    id: Date.now() + randomIntBelow(1000),
                     sellerEmail: currentUser.email,
                     averageRating: 0,
                     ratingCount: 0,
@@ -2557,7 +2559,7 @@ const AppContent: React.FC = () => {
                   
                   const newVehicles = vehiclesData.map(vehicle => ({
                     ...vehicle,
-                    id: Date.now() + Math.floor(Math.random() * 1000),
+                    id: Date.now() + randomIntBelow(1000),
                     sellerEmail: currentUser.email,
                     averageRating: 0,
                     ratingCount: 0,
@@ -3825,7 +3827,7 @@ const AppContent: React.FC = () => {
 
   const persistNotifications = React.useCallback((updated: Notification[]) => {
     try {
-      localStorage.setItem('reRideNotifications', JSON.stringify(updated));
+      persistReRideNotifications(updated);
     } catch (error) {
       logWarn('Failed to persist notifications:', error);
     }
@@ -4099,7 +4101,7 @@ const AppContent: React.FC = () => {
                 const { addVehicle } = await import('./services/vehicleService');
                 const vehicleToAdd = {
                   ...vehicleData,
-                  id: Date.now() + Math.floor(Math.random() * 1000),
+                  id: Date.now() + randomIntBelow(1000),
                   sellerEmail: currentUser.email,
                   averageRating: 0,
                   ratingCount: 0,

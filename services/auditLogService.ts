@@ -18,7 +18,9 @@ export const getAuditLog = (): AuditLogEntry[] => {
 export const saveAuditLog = (log: AuditLogEntry[]) => {
   try {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
-    localStorage.setItem(AUDIT_LOG_STORAGE_KEY, JSON.stringify(log.slice(0, MAX_LOCAL_ENTRIES)));
+    // Do not persist free-text `details` locally (may contain PII); API mirror still gets full entry via persistAuditEntry.
+    const withoutDetails = log.slice(0, MAX_LOCAL_ENTRIES).map(({ details: _d, ...rest }) => rest);
+    localStorage.setItem(AUDIT_LOG_STORAGE_KEY, JSON.stringify(withoutDetails));
   } catch (error) {
     console.error('Failed to save audit log to localStorage', error);
   }

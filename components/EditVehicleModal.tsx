@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Vehicle } from '../types';
 import { getSupabaseClient } from '../lib/supabase.js';
-import { VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI } from '../utils/imageUtils';
+import {
+  VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI,
+  getSafeImageSrc,
+} from '../utils/imageUtils';
 
 interface EditVehicleModalProps {
     vehicle: Vehicle;
@@ -430,7 +433,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                                     return (
                                                         <div key={index} className="relative group">
                                                             <img 
-                                                                src={displayUrl} 
+                                                                src={getSafeImageSrc(displayUrl, VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI)} 
                                                                 className="w-full h-20 object-cover rounded-lg shadow-sm" 
                                                                 alt={`Vehicle image ${index + 1}`}
                                                                 onError={(e) => {

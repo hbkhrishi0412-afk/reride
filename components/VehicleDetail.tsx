@@ -2,7 +2,8 @@ import React, { useState, useMemo, memo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle, ProsAndCons, User, CertifiedInspection, VehicleDocument } from '../types';
 import { generateProsAndCons } from '../services/geminiService';
-import { getFirstValidImage, getValidImages, getSafeImageSrc, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, VEHICLE_THUMB_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder } from '../utils/imageUtils';
+import { getFirstValidImage, getValidImages, getSafeImageSrc, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, VEHICLE_THUMB_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder, isPlaceholderService } from '../utils/imageUtils';
+import { stringifyVehicleForSession } from '../utils/vehicleSessionCache';
 import StarRating from './StarRating';
 import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
@@ -448,7 +449,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
               const parsed = JSON.parse(stored);
               if (parsed?.id === vehicleId) {
                 parsed.views = data.views;
-                sessionStorage.setItem('selectedVehicle', JSON.stringify(parsed));
+                sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(parsed as Vehicle));
               }
             }
           } catch (error) {
@@ -547,12 +548,22 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 <img 
                                   key={currentIndex} 
                                   className="w-full h-[500px] object-contain rounded-xl shadow-lg animate-fade-in bg-white" 
-                                  src={validImages[currentIndex] || getFirstValidImage(safeVehicle.images, safeVehicle.id)} 
+                                  src={getSafeImageSrc(
+                                    validImages[currentIndex] || getFirstValidImage(safeVehicle.images, safeVehicle.id),
+                                    VEHICLE_IMAGE_PLACEHOLDER_DATA_URI
+                                  )} 
                                   alt={`${safeVehicle.make} ${safeVehicle.model} - Image ${currentIndex + 1}`}
                                   onError={(e) => {
                                     const target = e.target as HTMLImageElement;
                                     // Only set placeholder if not already a placeholder to avoid infinite loops
-                                    if (!isInlineImagePlaceholder(target.src) && !target.src.includes('placeholder.com') && !target.src.includes('text=Car')) {
+                                    const textCarParam = (() => {
+                                      try {
+                                        return new URL(target.src, 'https://invalid.invalid/').searchParams.get('text') === 'Car';
+                                      } catch {
+                                        return false;
+                                      }
+                                    })();
+                                    if (!isInlineImagePlaceholder(target.src) && !isPlaceholderService(target.src) && !textCarParam) {
                                       target.src = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
                                     }
                                   }}
