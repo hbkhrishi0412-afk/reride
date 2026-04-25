@@ -7,16 +7,57 @@ import {
   getSavedSearches as engagementGetSavedSearches,
   deleteSavedSearch as engagementDeleteSavedSearch,
   updateSavedSearch as engagementUpdateSavedSearch,
+  importSavedSearchIfNewForUser,
 } from './buyerEngagementService';
 
-function savedSearchesForLocalStorage(searches: SavedSearch[]): SavedSearch[] {
-  return searches.map((s) => ({
-    ...s,
-    filters: { ...s.filters, location: undefined },
-  }));
+const LEGACY_SAVED_KEY_PREFIX = 'savedSearches_';
+
+function buyerActivityKey(userId: string): string {
+  return `buyerActivity_${userId}`;
 }
 
-const LEGACY_SAVED_KEY_PREFIX = 'savedSearches_';
+/** Session-scoped cache (avoids long-lived PII in localStorage; CodeQL). Migrates legacy localStorage once. */
+function readBuyerActivityJson(userId: string): string | null {
+  if (typeof window === 'undefined') return null;
+  const key = buyerActivityKey(userId);
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      const s = sessionStorage.getItem(key);
+      if (s) return s;
+    }
+    if (typeof localStorage !== 'undefined') {
+      const l = localStorage.getItem(key);
+      if (l) {
+        try {
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem(key, l);
+            localStorage.removeItem(key);
+          }
+        } catch {
+          /* ignore */
+        }
+        return l;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function writeBuyerActivityJson(userId: string, json: string): void {
+  if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
+  try {
+    sessionStorage.setItem(buyerActivityKey(userId), json);
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(buyerActivityKey(userId));
+    } catch {
+      /* ignore */
+    }
+  } catch (e) {
+    console.error('Failed to save buyer activity to sessionStorage:', e);
+  }
+}
 
 function migrateLegacySavedSearchesIfNeeded(userId: string): void {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
@@ -31,15 +72,13 @@ function migrateLegacySavedSearchesIfNeeded(userId: string): void {
     }
     const existing = engagementGetSavedSearches(userId);
     const existingIds = new Set(existing.map((s) => s.id));
-    const stored = localStorage.getItem('reride_saved_searches');
-    const all: SavedSearch[] = stored ? JSON.parse(stored) : [];
     for (const s of legacy) {
       if (!s?.id || existingIds.has(s.id)) continue;
       const merged: SavedSearch = { ...s, userId: s.userId || userId };
-      all.push(merged);
+      merged.filters = { ...merged.filters, location: undefined };
+      importSavedSearchIfNewForUser(merged.userId, merged);
       existingIds.add(s.id);
     }
-    localStorage.setItem('reride_saved_searches', JSON.stringify(savedSearchesForLocalStorage(all)));
     localStorage.removeItem(legacyKey);
   } catch {
     /* ignore corrupt legacy */
@@ -96,24 +135,20 @@ export const getBuyerActivity = async (userId: string): Promise<BuyerActivity> =
     // Try to load from database first
     const dbResult = await getBuyerActivityFromSupabase(userId);
     if (dbResult.success && dbResult.data) {
-      // Save to localStorage for offline access
-      const key = `buyerActivity_${userId}`;
-      localStorage.setItem(key, JSON.stringify(dbResult.data));
+      writeBuyerActivityJson(userId, JSON.stringify(dbResult.data));
       return dbResult.data;
     }
   } catch (error) {
     console.warn('Failed to load buyer activity from database, using localStorage:', error);
   }
 
-  // Fallback to localStorage
   try {
-    const key = `buyerActivity_${userId}`;
-    const activityJson = localStorage.getItem(key);
+    const activityJson = readBuyerActivityJson(userId);
     if (activityJson) {
       return JSON.parse(activityJson);
     }
   } catch (error) {
-    console.error('Failed to parse buyer activity from localStorage:', error);
+    console.error('Failed to parse buyer activity from session storage:', error);
   }
 
   // Create default activity
@@ -132,13 +167,12 @@ export const getBuyerActivity = async (userId: string): Promise<BuyerActivity> =
 // Synchronous version for immediate access (uses localStorage only)
 export const getBuyerActivitySync = (userId: string): BuyerActivity => {
   try {
-    const key = `buyerActivity_${userId}`;
-    const activityJson = localStorage.getItem(key);
+    const activityJson = readBuyerActivityJson(userId);
     if (activityJson) {
       return JSON.parse(activityJson);
     }
   } catch (error) {
-    console.error('Failed to get buyer activity from localStorage:', error);
+    console.error('Failed to get buyer activity from session storage:', error);
   }
 
   // Create default activity
@@ -157,11 +191,9 @@ export const getBuyerActivitySync = (userId: string): BuyerActivity => {
 // Save buyer activity - saves to localStorage immediately, syncs to database
 export const saveBuyerActivity = async (activity: BuyerActivity): Promise<void> => {
   try {
-    // Save to localStorage immediately for instant UI update
-    const key = `buyerActivity_${activity.userId}`;
-    localStorage.setItem(key, JSON.stringify(activity));
+    writeBuyerActivityJson(activity.userId, JSON.stringify(activity));
   } catch (error) {
-    console.error('Failed to save buyer activity to localStorage:', error);
+    console.error('Failed to save buyer activity to session storage:', error);
   }
 
   // Sync to database (async, non-blocking)

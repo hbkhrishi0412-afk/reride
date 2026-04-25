@@ -46,7 +46,8 @@ import * as buyerService from '../services/buyerService';
 import { createSafetyReport } from '../services/trustSafetyService';
 import { addLocalRecentId } from '../utils/recentlyViewed';
 import { stringifyVehicleForSession } from '../utils/vehicleSessionCache';
-import { persistReRideNotifications } from '../utils/notificationLocalStorage';
+import { persistReRideNotifications, readPersistedReRideNotifications } from '../utils/notificationLocalStorage';
+import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
 import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 import { sanitizePersistedChatMessage, supabaseRowToConversation } from '../services/supabase-conversation-service';
 import { emailToKey } from '../services/supabase-user-service';
@@ -656,7 +657,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           user.role = 'customer'; // Safe default instead of clearing
           // Save corrected user back
           try {
-            localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
+            localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(user));
           } catch (e) {
             logWarn('Failed to save corrected user:', e);
           }
@@ -688,7 +689,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             source: 'sessionStorage'
           });
           // Also restore to localStorage for consistency
-          localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
+          localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(user));
           return user;
         }
       }
@@ -864,7 +865,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [notifications, setNotifications] = useState<Notification[]>(() => {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
     try {
-      const notificationsJson = localStorage.getItem('reRideNotifications');
+      const notificationsJson = readPersistedReRideNotifications();
       if (notificationsJson) return JSON.parse(notificationsJson);
       const sampleNotifications: Notification[] = [
         {
@@ -1158,8 +1159,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Set user first (this is critical - navigate checks currentUser)
     setCurrentUser(userForSession);
-    sessionStorage.setItem('currentUser', JSON.stringify(userForSession));
-    localStorage.setItem('reRideCurrentUser', JSON.stringify(userForSession));
+    sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(userForSession));
+    localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(userForSession));
     try {
       if (
         userForSession.role === 'customer' ||
@@ -1519,8 +1520,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Set user first (this is critical - navigate checks currentUser)
     setCurrentUser(user);
-    sessionStorage.setItem('currentUser', JSON.stringify(user));
-    localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
+    sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(user));
+    localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(user));
     
     // Verify user storage (for debugging production issues)
     const storedInSession = sessionStorage.getItem('currentUser');
@@ -3008,7 +3009,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               console.warn('Failed to load notifications:', error);
               if (isMounted) {
                 try {
-                  const notificationsJson = localStorage.getItem('reRideNotifications');
+                  const notificationsJson = readPersistedReRideNotifications();
                   setNotifications(notificationsJson ? JSON.parse(notificationsJson) : []);
                 } catch {
                   setNotifications([]);
@@ -6299,8 +6300,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setCurrentUser(mergedUser);
               // Update localStorage after Supabase success
               try {
-                localStorage.setItem('reRideCurrentUser', JSON.stringify(mergedUser));
-                sessionStorage.setItem('currentUser', JSON.stringify(mergedUser));
+                localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(mergedUser));
+                sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(mergedUser));
               } catch (error) {
                 console.warn('Failed to update localStorage with API response:', error);
               }
@@ -6333,8 +6334,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               };
               setCurrentUser(mergedUser);
               try {
-                localStorage.setItem('reRideCurrentUser', JSON.stringify(mergedUser));
-                sessionStorage.setItem('currentUser', JSON.stringify(mergedUser));
+                localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(mergedUser));
+                sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(mergedUser));
               } catch (error) {
                 console.warn('Failed to update localStorage with fallback update:', error);
               }

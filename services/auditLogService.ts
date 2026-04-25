@@ -6,23 +6,24 @@ const MAX_LOCAL_ENTRIES = 200;
 
 export const getAuditLog = (): AuditLogEntry[] => {
   try {
-    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
-    const logJson = localStorage.getItem(AUDIT_LOG_STORAGE_KEY);
+    if (typeof window === 'undefined') return [];
+    const logJson =
+      typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(AUDIT_LOG_STORAGE_KEY) : null;
     return logJson ? JSON.parse(logJson) : [];
   } catch (error) {
-    console.error('Failed to parse audit log from localStorage', error);
+    console.error('Failed to parse audit log from sessionStorage', error);
     return [];
   }
 };
 
 export const saveAuditLog = (log: AuditLogEntry[]) => {
   try {
-    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
-    // Do not persist free-text `details` locally (may contain PII); API mirror still gets full entry via persistAuditEntry.
+    if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
+    // Do not persist free-text `details` locally; API mirror still gets full entry via persistAuditEntry.
     const withoutDetails = log.slice(0, MAX_LOCAL_ENTRIES).map(({ details: _d, ...rest }) => rest);
-    localStorage.setItem(AUDIT_LOG_STORAGE_KEY, JSON.stringify(withoutDetails));
+    sessionStorage.setItem(AUDIT_LOG_STORAGE_KEY, JSON.stringify(withoutDetails));
   } catch (error) {
-    console.error('Failed to save audit log to localStorage', error);
+    console.error('Failed to save audit log to sessionStorage', error);
   }
 };
 

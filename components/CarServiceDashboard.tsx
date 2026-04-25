@@ -15,6 +15,11 @@ import {
   subServiceIdFromName,
   type SubServiceTemplate,
 } from '../constants/carServiceSubServices.js';
+import {
+  allowedManualStatusOptions,
+  nextPrimaryStatus,
+  primaryAdvanceButtonLabel,
+} from '../utils/serviceRequestStatusFlow';
 
 interface Provider {
   name: string;
@@ -945,6 +950,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     city: typeof req.city === 'string' ? req.city : '',
   });
 
+  const vehicleDisplay = (req: ServiceRequest) =>
+    normalizeVehicleText(req.vehicle) || normalizeVehicleText(req.carDetails);
+
   const formatRelative = (value?: string) => {
     if (!value) return 'just now';
     const date = new Date(value);
@@ -1497,7 +1505,20 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
         throw new Error(data.error || 'Failed to update status');
       }
       const updated = normalizeServiceRequest(await resp.json());
-      setRequests(prev => prev.map(r => (r.id === id ? { ...r, ...updated } : r)));
+      setRequests((prev) =>
+        prev.map((r) => {
+          if (r.id !== id) return r;
+          const merged: ServiceRequest = { ...r, ...updated };
+          if (!merged.providerId && r.providerId) merged.providerId = r.providerId;
+          const vMerged =
+            normalizeVehicleText(merged.vehicle) || normalizeVehicleText(merged.carDetails);
+          if (!vMerged) {
+            merged.vehicle = r.vehicle;
+            merged.carDetails = r.carDetails;
+          }
+          return merged;
+        }),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update status');
     }
@@ -3503,12 +3524,12 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
                         {req.city}
                       </span>
                     )}
-                    {normalizeVehicleText(req.vehicle) && (
+                    {vehicleDisplay(req) && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
                         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                        {normalizeVehicleText(req.vehicle)}
+                        {vehicleDisplay(req)}
                       </span>
                     )}
                   </div>
@@ -3552,8 +3573,8 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
                             <span>{req.addressLine}{req.pincode ? `, ${req.pincode}` : ''}</span>
                           </p>
                         )}
-                        {normalizeVehicleText(req.carDetails) && (
-                          <p className="text-xs text-gray-600">Vehicle: {normalizeVehicleText(req.carDetails)}</p>
+                        {vehicleDisplay(req) && (
+                          <p className="text-xs text-gray-600">Vehicle: {vehicleDisplay(req)}</p>
                         )}
                         {req.scheduledAt && (
                           <p className="text-xs text-gray-600">Scheduled: {formatDateTime(req.scheduledAt)}</p>
@@ -3709,22 +3730,13 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {req.status !== 'cancelled' && req.status !== 'completed' && (
+                      {req.status !== 'cancelled' && req.status !== 'completed' && nextPrimaryStatus(req.status) && (
                         <button
                           type="button"
-                          onClick={() =>
-                            updateStatus(
-                              req.id,
-                              req.status === 'accepted'
-                                ? 'in_progress'
-                                : req.status === 'in_progress'
-                                ? 'completed'
-                                : req.status
-                            )
-                          }
+                          onClick={() => updateStatus(req.id, nextPrimaryStatus(req.status)!)}
                           className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
                         >
-                          {req.status === 'accepted' ? 'Start job' : 'Mark complete'}
+                          {primaryAdvanceButtonLabel(req.status)}
                         </button>
                       )}
                       {req.status === 'cancelled' && (
@@ -3743,15 +3755,16 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
                           onChange={(e) => updateStatus(req.id, e.target.value as RequestStatus)}
                           disabled={deletingId === req.id}
                           className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+                          aria-label="Set request status"
                         >
-                          {(req.status === 'accepted'
-                            ? statusOptions.filter((opt) => ['accepted', 'in_progress'].includes(opt.value))
-                            : statusOptions.filter((opt) => ['in_progress', 'completed'].includes(opt.value))
-                          ).map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
+                          {allowedManualStatusOptions(req.status).map((value) => {
+                            const opt = statusOptions.find((o) => o.value === value);
+                            return (
+                              <option key={value} value={value}>
+                                {opt?.label ?? value}
+                              </option>
+                            );
+                          })}
                         </select>
                       )}
                     </div>
@@ -3770,12 +3783,12 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
                         {req.city}
                       </span>
                     )}
-                    {normalizeVehicleText(req.vehicle) && (
+                    {vehicleDisplay(req) && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
                         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                        {normalizeVehicleText(req.vehicle)}
+                        {vehicleDisplay(req)}
                       </span>
                     )}
                     {req.scheduledAt && (
@@ -3818,8 +3831,8 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
                             {req.pincode ? `, ${req.pincode}` : ''}
                           </p>
                         )}
-                        {normalizeVehicleText(req.carDetails) && (
-                          <p className="text-xs text-gray-600">Vehicle: {normalizeVehicleText(req.carDetails)}</p>
+                        {vehicleDisplay(req) && (
+                          <p className="text-xs text-gray-600">Vehicle: {vehicleDisplay(req)}</p>
                         )}
                       </div>
                     </div>

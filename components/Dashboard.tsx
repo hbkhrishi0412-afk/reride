@@ -4,6 +4,7 @@ import type { Vehicle, User, Conversation, VehicleData, ChatMessage, VehicleDocu
 import { View, VehicleCategory } from '../types';
 import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService';
 import { getSafeImageSrc } from '../utils/imageUtils';
+import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
 import { formatSalesValue } from '../utils/numberUtils';
 import { findUserByParticipantId } from '../utils/chatContact';
 import VehicleCard from './VehicleCard';
@@ -2745,7 +2746,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   // Update localStorage with fresh user data
                   // FIXED: Removed window.location.reload() - localStorage update is sufficient
                   // The App component will pick up the change through its own refresh mechanism
-                  localStorage.setItem('reRideCurrentUser', JSON.stringify(updatedSeller));
+                  localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(updatedSeller));
                   
                   // Dispatch a custom event to notify other components of the update
                   // This allows the app to update without a full page reload

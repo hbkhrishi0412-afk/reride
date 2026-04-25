@@ -9,6 +9,7 @@ import {
 import { ensureCsrfToken } from '../utils/authenticatedFetch';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 import { userRolesEqual } from '../utils/user-role';
+import { currentUserForLocalSession, currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
 
 // Unified data service that handles both local and API data consistently
 class DataService {
@@ -1211,7 +1212,9 @@ class DataService {
       });
       
       if (result.success && result.user) {
-        try { localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user)); } catch { /* storage unavailable */ }
+        try {
+          localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
+        } catch { /* storage unavailable */ }
       }
       
       return result;
@@ -1237,8 +1240,10 @@ class DataService {
       return { success: false, reason: 'Your account has been deactivated.' };
     }
     
-    const { password: _, ...userWithoutPassword } = user;
-    try { localStorage.setItem('reRideCurrentUser', JSON.stringify(userWithoutPassword)); } catch { /* storage unavailable */ }
+    const userWithoutPassword = currentUserForLocalSession(user);
+    try {
+      localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(user));
+    } catch { /* storage unavailable */ }
     return { success: true, user: userWithoutPassword };
   }
 
@@ -1265,7 +1270,9 @@ class DataService {
           this.setLocalStorageData('reRideUsers_prod', cachedUsers);
         }
         
-        try { localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user)); } catch { /* storage unavailable */ }
+        try {
+          localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
+        } catch { /* storage unavailable */ }
       }
       
       return result;
@@ -1297,8 +1304,8 @@ class DataService {
     users.push(newUser);
     this.setLocalStorageData('reRideUsers', users);
     
-    const { password: _, ...userWithoutPassword } = newUser;
-    localStorage.setItem('reRideCurrentUser', JSON.stringify(userWithoutPassword));
+    const userWithoutPassword = currentUserForLocalSession(newUser);
+    localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(newUser));
     return { success: true, user: userWithoutPassword };
   }
 

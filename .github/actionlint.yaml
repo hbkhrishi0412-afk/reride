@@ -1,0 +1,7 @@
+# Declares repository variable names so actionlint (CLI) accepts vars.* usage.
+# IDE GitHub Actions extension may still warn on secrets.* until you sign in / refresh.
+config-variables:
+  - VITE_SUPABASE_URL
+  - VITE_SUPABASE_ANON_KEY
+  - VERCEL_ORG_ID
+  - VERCEL_PROJECT_ID
