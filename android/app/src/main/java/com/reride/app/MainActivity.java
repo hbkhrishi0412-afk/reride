@@ -96,9 +96,11 @@ public class MainActivity extends BridgeActivity {
             firebaseOptionsBuilderClass
                 .getMethod("setApplicationId", String.class)
                 .invoke(builder, "1:000000000000:android:0000000000000000");
+            // Do not embed a real Google Web API key literal here (secret scanning + repo hygiene).
+            // This value is only used when google-services.json is absent; it is not a real key.
             firebaseOptionsBuilderClass
                 .getMethod("setApiKey", String.class)
-                .invoke(builder, "AIzaSyDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUM");
+                .invoke(builder, "RERIDE_FIREBASE_STUB_NOT_A_GOOGLE_API_KEY____");
             firebaseOptionsBuilderClass
                 .getMethod("setProjectId", String.class)
                 .invoke(builder, "reride-stub");
