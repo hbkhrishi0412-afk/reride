@@ -1,5 +1,5 @@
 import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
-import { randomAlphanumeric } from '../utils/secureRandom';
+import { randomAlphanumeric } from '../utils/secureRandom.js';
 
 // Detect if we're in a server context (serverless function)
 const isServerSide = typeof window === 'undefined';

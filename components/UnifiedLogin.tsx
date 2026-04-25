@@ -71,16 +71,17 @@ async function loginServiceProviderWithEmail(
     return { ok: false, message: 'Unable to reach service provider API. Start local API server or try again.' };
   }
 
-  if (resp.status === 404) {
+  if (!resp.ok) {
+    // If the API errors (4xx/5xx) but Supabase client can read service_providers, still complete login.
     const provider = await loadProviderDirectly();
     if (provider) return { ok: true, provider };
-    return {
-      ok: false,
-      message: 'No service provider profile found for this account. Contact admin.',
-    };
-  }
-  if (!resp.ok) {
     const data = (await resp.json().catch(() => ({}))) as { error?: string };
+    if (resp.status === 404) {
+      return {
+        ok: false,
+        message: 'No service provider profile found for this account. Contact admin.',
+      };
+    }
     return { ok: false, message: data.error || 'Failed to load provider profile' };
   }
   const provider = (await resp.json()) as Record<string, unknown>;
@@ -349,6 +350,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         if (!name || !mobile || !email || !password) throw new Error(t('auth.error.registerFieldsRequired'));
         // Service provider signup uses extended fields on the car-services page
         if (selectedRole === 'service_provider') {
+          try {
+            sessionStorage.setItem('reride_car_service_auth_mode', 'signup');
+          } catch {
+            /* ignore storage errors */
+          }
           onNavigate(View.CAR_SERVICE_LOGIN);
           return;
         }
@@ -479,6 +485,19 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
   const handleRoleChange = (role: UserRole) => {
     if (forcedRole) return;
+
+    // Service providers should use the dedicated car-services auth page.
+    // In register mode, redirect immediately to avoid showing two signup pages.
+    if (mode === 'register' && role === 'service_provider') {
+      try {
+        sessionStorage.setItem('reride_car_service_auth_mode', 'signup');
+      } catch {
+        /* ignore storage errors */
+      }
+      onNavigate(View.CAR_SERVICE_LOGIN);
+      return;
+    }
+
     setSelectedRole(role);
     setError('');
     // Only clear form fields if we're in login mode

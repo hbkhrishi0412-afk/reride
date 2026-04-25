@@ -17,7 +17,7 @@ import { loadingManager, LOADING_OPERATIONS, withLoadingTimeout } from './utils/
 import { stringifyVehicleForSession } from './utils/vehicleSessionCache';
 import { persistReRideNotifications } from './utils/notificationLocalStorage';
 import { currentUserForLocalSessionJson } from './utils/userLocalStorageSnapshot';
-import { randomIntBelow } from './utils/secureRandom';
+import { randomIntBelow } from './utils/secureRandom.js';
 
 // Lazy-loaded components
 const Home = React.lazy(() => import('./components/Home'));

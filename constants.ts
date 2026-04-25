@@ -2,7 +2,7 @@
 import type { Vehicle, User, PlanDetails, FAQItem, SupportTicket } from './types.js';
 import { VehicleCategory, type SubscriptionPlan } from './types.js';
 import { VEHICLE_DATA, getPlaceholderImage } from './components/vehicleData.js';
-import { randomIntBelow } from './utils/secureRandom';
+import { randomIntBelow } from './utils/secureRandom.js';
 
 // Helper to generate past dates
 const daysAgo = (days: number): string => {

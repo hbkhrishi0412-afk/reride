@@ -1220,8 +1220,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       let user: UserType | null = null;
       
       try {
-        // CRITICAL: Use normalized email for lookup
-        user = await userService.findByEmail(normalizedEmail);
+        // CRITICAL: Use normalized email for lookup (one retry for transient serverless/DB hiccups)
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            user = await userService.findByEmail(normalizedEmail);
+            break;
+          } catch (lookupErr) {
+            if (attempt === 0) {
+              logWarn('⚠️ Login user lookup failed (will retry once):', lookupErr);
+              await new Promise((r) => setTimeout(r, 120));
+              continue;
+            }
+            throw lookupErr;
+          }
+        }
         // If user not found, log for debugging (but don't reveal to user for security)
         if (!user) {
           logWarn('⚠️ Login attempt - user not found:', {
@@ -1232,7 +1244,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         }
       } catch (error) {
         logError('❌ Supabase user lookup error:', error);
-        return res.status(500).json({ success: false, reason: 'Database error. Please try again.' });
+        return res.status(503).json({
+          success: false,
+          reason: 'Account lookup is temporarily unavailable. Please try again in a moment.',
+          fallback: true,
+        });
       }
 
       if (!user) {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { signInWithEmail, resetPassword } from '../services/supabase-auth-service';
 import { setRememberMePreference } from '../utils/rememberMe';
 import { View as ViewEnum } from '../types';
+import PasswordInput from './PasswordInput';
 
 const REMEMBER_EMAIL_KEY = 'rememberedService_providerEmail';
 
@@ -33,6 +34,18 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
         setEmail(remembered);
         setRememberMe(true);
       }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const requestedMode = sessionStorage.getItem('reride_car_service_auth_mode');
+      if (requestedMode === 'signup' || requestedMode === 'login') {
+        setMode(requestedMode);
+      }
+      sessionStorage.removeItem('reride_car_service_auth_mode');
     } catch {
       /* ignore */
     }
@@ -119,22 +132,21 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
         return;
       }
 
-      if (resp.status === 404) {
+      if (!resp.ok) {
         const provider = await loadProviderDirectly();
-        if (!provider) {
+        if (provider) {
+          persistRememberedEmail();
+          setRememberMePreference(rememberMe);
+          onLoginSuccess(provider);
+          onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
+          return;
+        }
+        const data = (await resp.json().catch(() => ({}))) as { error?: string };
+        if (resp.status === 404) {
           setError('No service provider profile found for this account. Contact admin.');
           setLoading(false);
           return;
         }
-        persistRememberedEmail();
-        setRememberMePreference(rememberMe);
-        onLoginSuccess(provider);
-        onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
-        return;
-      }
-
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to load provider profile');
       }
 
@@ -243,6 +255,7 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
             onClick={() => {
               setMode(mode === 'login' ? 'signup' : 'login');
               setError(null);
+              setResetMessage(null);
             }}
             className="text-sm text-blue-600 hover:underline"
           >
@@ -334,11 +347,13 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
+            <PasswordInput
+              id="car-service-password"
+              name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              showLabel={false}
               className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

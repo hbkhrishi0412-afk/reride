@@ -1,4 +1,4 @@
-import { randomAlphanumeric } from './secureRandom';
+import { randomAlphanumeric } from './secureRandom.js';
 
 /**
  * Request Queue Utility
