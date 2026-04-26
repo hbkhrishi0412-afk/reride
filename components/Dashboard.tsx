@@ -383,12 +383,18 @@ const PlanStatusCard: React.FC<{
     }, []);
     
     useEffect(() => {
-        const loadPlan = async () => {
+        let active = true;
+        let intervalId: ReturnType<typeof setInterval> | null = null;
+
+        const loadPlan = async (silent = false) => {
+            if (!silent) setLoading(true);
             try {
                 const planDetails = await planService.getPlanDetails(seller.subscriptionPlan || 'free');
+                if (!active) return;
                 setPlan(planDetails);
             } catch (error) {
                 console.error('Failed to load plan details:', error);
+                if (!active) return;
                 // Fallback to basic plan info
                 setPlan({
                     name: t('sellerDashboard.freePlanName'),
@@ -396,10 +402,41 @@ const PlanStatusCard: React.FC<{
                     price: 0
                 });
             } finally {
-                setLoading(false);
+                if (active) setLoading(false);
             }
         };
-        loadPlan();
+
+        const reloadOnVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                void loadPlan(true);
+            }
+        };
+        const reloadOnPlanConfigUpdate = () => {
+            void loadPlan(true);
+        };
+        const reloadOnStoragePlanUpdate = (event: StorageEvent) => {
+            if (event.key === 'reRidePlanConfigUpdatedAt') {
+                void loadPlan(true);
+            }
+        };
+
+        void loadPlan(false);
+        intervalId = setInterval(() => {
+            void loadPlan(true);
+        }, 30000);
+        window.addEventListener('focus', reloadOnVisibility);
+        document.addEventListener('visibilitychange', reloadOnVisibility);
+        window.addEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);
+        window.addEventListener('storage', reloadOnStoragePlanUpdate);
+
+        return () => {
+            active = false;
+            if (intervalId) clearInterval(intervalId);
+            window.removeEventListener('focus', reloadOnVisibility);
+            document.removeEventListener('visibilitychange', reloadOnVisibility);
+            window.removeEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);
+            window.removeEventListener('storage', reloadOnStoragePlanUpdate);
+        };
     }, [seller.subscriptionPlan, t]);
     
     if (loading || !plan) {
@@ -532,14 +569,22 @@ const PlanStatusCard: React.FC<{
                     </ul>
                 </div>
             </div>
-            {(planIsExpired || plan.id !== 'premium') && (
+            <div className="mt-6 space-y-2">
+                {(planIsExpired || plan.id !== 'premium') && (
+                    <button
+                        onClick={() => onNavigate(View.PRICING)}
+                        className="w-full bg-white text-reride-orange font-bold py-2 px-4 rounded-lg hover:bg-white transition-colors"
+                    >
+                        {planIsExpired ? t('sellerDashboard.renewPlan') : t('sellerDashboard.upgradePlan')}
+                    </button>
+                )}
                 <button
                     onClick={() => onNavigate(View.PRICING)}
-                    className="mt-6 w-full bg-white text-reride-orange font-bold py-2 px-4 rounded-lg hover:bg-white transition-colors"
+                    className="w-full border border-white/40 text-white font-semibold py-2 px-4 rounded-lg hover:bg-white/10 transition-colors"
                 >
-                    {planIsExpired ? t('sellerDashboard.renewPlan') : t('sellerDashboard.upgradePlan')}
+                    View all plans
                 </button>
-            )}
+            </div>
         </div>
     );
 });
@@ -2665,7 +2710,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           // Include token if available (user is logged in, so token should exist)
           // This prevents 401 errors from middleware/proxy layers in production
           // GET /api/users doesn't validate the token, but including it prevents proxy rejection
-          response = await authenticatedFetch('/api/users');
+          response = await authenticatedFetch(`/api/users?email=${encodeURIComponent(seller.email)}`);
           
           // Handle 401 gracefully - don't show error, just skip refresh
           if (response.status === 401) {
@@ -2706,9 +2751,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             return;
           }
           
-          let users;
+          let users: User[];
           try {
-            users = await response.json();
+            const payload = await response.json();
+            users = Array.isArray(payload) ? payload : (payload && payload.email ? [payload as User] : []);
           } catch (jsonError) {
             if (process.env.NODE_ENV === 'development') {
               console.warn('⚠️ Failed to parse JSON response:', jsonError);
@@ -2722,11 +2768,11 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           }
           
           // Store users in state for use in JSX
-          if (Array.isArray(users)) {
+          if (users.length > 0) {
             setAllUsers(users);
           }
           
-          if (Array.isArray(users) && seller?.email) {
+          if (users.length > 0 && seller?.email) {
             // Normalize emails for comparison (critical for production)
             const normalizedSellerEmail = seller.email.toLowerCase().trim();
             const updatedSeller = users.find((u: User) => {

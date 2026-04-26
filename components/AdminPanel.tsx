@@ -158,7 +158,7 @@ interface AdminPanelProps {
     onToggleUserStatus: (email: string) => void;
     onDeleteUser: (email: string) => void;
     onAdminUpdateUser: (email: string, details: Partial<User>) => void;
-    onUpdateUserPlan: (email: string, plan: SubscriptionPlan) => void;
+    onUpdateUserPlan: (email: string, plan: SubscriptionPlan) => Promise<void>;
     onUpdateVehicle: (vehicle: Vehicle) => void;
     onDeleteVehicle: (vehicleId: number) => void;
     onToggleVehicleStatus: (vehicleId: number) => void;
@@ -3074,7 +3074,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         const [planFilter, setPlanFilter] = useState<'all' | SubscriptionPlan>('all');
         const [planStats, setPlanStats] = useState<Record<SubscriptionPlan, number>>({
             free: 0,
-            basic: 0,
             pro: 0,
             premium: 0
         });
@@ -3363,7 +3362,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         useEffect(() => {
             // Only count sellers for plan statistics
             const sellerUsers = users.filter(user => user.role === 'seller');
-            const initial: Record<SubscriptionPlan, number> = { free: 0, basic: 0, pro: 0, premium: 0 };
+            const initial: Record<SubscriptionPlan, number> = { free: 0, pro: 0, premium: 0 };
             const stats = sellerUsers.reduce((acc, user) => {
                 const plan = user.subscriptionPlan || 'free';
                 acc[plan] = (acc[plan] ?? 0) + 1;
@@ -3386,6 +3385,20 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             setShowPlanModal(true);
         };
 
+        const notifyPlanConfigUpdated = () => {
+            const payload = {
+                updatedAt: new Date().toISOString(),
+            };
+            try {
+                localStorage.setItem('reRidePlanConfigUpdatedAt', payload.updatedAt);
+            } catch {
+                /* ignore storage errors */
+            }
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('planConfigUpdated', { detail: payload }));
+            }
+        };
+
         const handleAddNewPlan = async () => {
             if (!(await planService.canAddNewPlan())) {
                 alert('Maximum of 4 plans allowed. Please delete an existing custom plan first.');
@@ -3395,34 +3408,34 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         };
 
         const handleSavePlan = async (updatedPlan: PlanDetails) => {
-            // Update the plan using the plan service
-            planService.updatePlan(updatedPlan.id, updatedPlan);
-            
-            // Refresh the plans list
-            const allPlans = await planService.getAllPlans();
-            setPlans(allPlans);
-            
-            // Close modal
-            setShowPlanModal(false);
-            setEditingPlan(null);
-            
-            // Show success message
-            alert(`Plan "${updatedPlan.name}" has been updated successfully!`);
+            try {
+                // Persist first, then refresh so Admin + seller views read the latest values.
+                await planService.updatePlan(updatedPlan.id, updatedPlan);
+
+                const allPlans = await planService.getAllPlans();
+                setPlans(allPlans);
+                setShowPlanModal(false);
+                setEditingPlan(null);
+                notifyPlanConfigUpdated();
+                alert(`Plan "${updatedPlan.name}" has been updated successfully!`);
+            } catch (error) {
+                console.error('Failed to update plan:', error);
+                alert(error instanceof Error ? error.message : 'Failed to update plan. Please try again.');
+            }
         };
 
         const handleCreatePlan = async (newPlanData: Omit<PlanDetails, 'id'>) => {
-            // Create new plan using the plan service
-            planService.createPlan(newPlanData);
-            
-            // Refresh the plans list
-            const allPlans = await planService.getAllPlans();
-            setPlans(allPlans);
-            
-            // Close modal
-            setShowAddPlanModal(false);
-            
-            // Show success message
-            alert(`Plan "${newPlanData.name}" has been created successfully!`);
+            try {
+                await planService.createPlan(newPlanData);
+                const allPlans = await planService.getAllPlans();
+                setPlans(allPlans);
+                setShowAddPlanModal(false);
+                notifyPlanConfigUpdated();
+                alert(`Plan "${newPlanData.name}" has been created successfully!`);
+            } catch (error) {
+                console.error('Failed to create plan:', error);
+                alert(error instanceof Error ? error.message : 'Failed to create plan. Please try again.');
+            }
         };
 
         const handleDeletePlan = async (plan: PlanDetails) => {
@@ -3440,6 +3453,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             if (window.confirm(`Are you sure you want to delete the "${plan.name}" plan? This action cannot be undone.`)) {
                 if (await planService.deletePlan(plan.id)) {
                     setPlans(await planService.getAllPlans());
+                    notifyPlanConfigUpdated();
                     alert(`Plan "${plan.name}" has been deleted successfully!`);
                 }
             }
@@ -3458,20 +3472,13 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     title="Plan management"
                     description="Monitor seller distribution by tier, edit plan definitions, and assign subscriptions."
                 />
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <AdminStatTile
                         accent="violet"
                         title="Free sellers"
                         value={planStats.free}
                         icon={<span className="text-xl">🆓</span>}
                         onClick={() => setPlanFilter('free')}
-                    />
-                    <AdminStatTile
-                        accent="sky"
-                        title="Basic sellers"
-                        value={planStats.basic}
-                        icon={<span className="text-xl">📋</span>}
-                        onClick={() => setPlanFilter('basic')}
                     />
                     <AdminStatTile
                         accent="emerald"
@@ -3551,7 +3558,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         >
                             <option value="all">All plans</option>
                             <option value="free">Free</option>
-                            <option value="basic">Basic</option>
                             <option value="pro">Pro</option>
                             <option value="premium">Premium</option>
                         </select>
@@ -3682,7 +3688,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         onAssign={async (activatedDate: string, expiryDate: string | null) => {
                             try {
                                 // Update plan
-                                onUpdateUserPlan(assigningUser.email, assigningPlan);
+                                await onUpdateUserPlan(assigningUser.email, assigningPlan);
                                 
                                 // Update user with dates via API
                                 const { updateUser } = await import('../services/userService');

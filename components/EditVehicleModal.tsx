@@ -20,6 +20,16 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const getStrictPreviewImageSrc = (src: string): string => {
+        const safe = getSafeImageSrc(src, VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI);
+        if (!safe) return VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI;
+        if (safe === VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI) return safe;
+        if (safe.startsWith('blob:')) return safe;
+        if (safe.startsWith('http://') || safe.startsWith('https://')) return safe;
+        // Disallow arbitrary data URLs in editor previews; only our fixed placeholder is permitted.
+        return VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI;
+    };
+
     useEffect(() => {
         if (vehicle) {
             setFormData({
@@ -432,8 +442,8 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                                     const displayUrl = displayImages[index] || url;
                                                     return (
                                                         <div key={index} className="relative group">
-                                                            <img 
-                                                                src={getSafeImageSrc(displayUrl, VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI)} 
+                                                            <img
+                                                                src={getStrictPreviewImageSrc(displayUrl)}
                                                                 className="w-full h-20 object-cover rounded-lg shadow-sm" 
                                                                 alt={`Vehicle image ${index + 1}`}
                                                                 onError={(e) => {

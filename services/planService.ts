@@ -6,6 +6,9 @@ import { randomAlphanumeric } from '../utils/secureRandom.js';
 // Lazy-load Plan model only when needed (server-side only)
 let PlanModel: any = null;
 let planModelPromise: Promise<any> | null = null;
+let browserPlansCache: { plans: PlanDetails[]; fetchedAt: number } | null = null;
+let browserPlansPromise: Promise<PlanDetails[]> | null = null;
+const BROWSER_PLANS_CACHE_TTL_MS = 15000;
 
 const getPlanModel = async () => {
   // Return null immediately if in browser
@@ -57,6 +60,7 @@ function parseListingLimit(
 const normalizePlan = (raw: any): PlanDetails => {
     const id = String(raw?.id || raw?.planId || 'free') as SubscriptionPlan;
     const base = PLAN_DETAILS[id];
+    const isBasePlan = Boolean(base);
     const fallbackLimit = base?.listingLimit ?? 1;
     const rawPrice = Number(raw?.price ?? base?.price ?? 0);
     const safePrice = Number.isFinite(rawPrice) ? rawPrice : 0;
@@ -64,9 +68,10 @@ const normalizePlan = (raw: any): PlanDetails => {
         id,
         name: String(raw?.name || base?.name || 'Custom Plan'),
         price: safePrice,
-        features: Array.isArray(raw?.features)
-            ? raw.features.map(String)
-            : base?.features ?? [],
+        // Keep base plans aligned with canonical constants, regardless of stale API payload.
+        features: isBasePlan
+            ? (base?.features ?? [])
+            : (Array.isArray(raw?.features) ? raw.features.map(String) : []),
         listingLimit: parseListingLimit(raw?.listingLimit, fallbackLimit),
         featuredCredits: Number(
             raw?.featuredCredits ?? base?.featuredCredits ?? 0
@@ -180,20 +185,44 @@ export const planService = {
     // Get all plan details with updates applied (max 4 plans)
     getAllPlans: async (): Promise<PlanDetails[]> => {
         if (typeof window !== 'undefined') {
+            const now = Date.now();
+            if (
+                browserPlansCache &&
+                now - browserPlansCache.fetchedAt < BROWSER_PLANS_CACHE_TTL_MS
+            ) {
+                return browserPlansCache.plans;
+            }
+            if (browserPlansPromise) {
+                return browserPlansPromise;
+            }
+
             try {
-                const response = await authenticatedFetch(`/api/plans?type=plans`);
-                const parsed = await handleApiResponse<unknown>(response);
-                if (!parsed.success) {
-                    throw new Error(parsed.reason || parsed.error || `Failed to fetch plans: ${response.status}`);
-                }
-                const data = parsed.data;
-                if (!Array.isArray(data)) {
-                    return [];
-                }
-                return data.map(normalizePlan).slice(0, 4);
+                browserPlansPromise = (async () => {
+                    const response = await authenticatedFetch(`/api/plans?type=plans`);
+                    const parsed = await handleApiResponse<unknown>(response);
+                    if (!parsed.success) {
+                        throw new Error(parsed.reason || parsed.error || `Failed to fetch plans: ${response.status}`);
+                    }
+                    const data = parsed.data;
+                    const normalizedPlans = Array.isArray(data)
+                        ? data.map(normalizePlan).slice(0, 4)
+                        : [];
+                    browserPlansCache = {
+                        plans: normalizedPlans,
+                        fetchedAt: Date.now(),
+                    };
+                    return normalizedPlans;
+                })();
+
+                return await browserPlansPromise;
             } catch (error) {
                 console.warn('Failed to fetch plans from API:', error);
+                if (browserPlansCache) {
+                    return browserPlansCache.plans;
+                }
                 return Object.keys(PLAN_DETAILS).map((planId) => PLAN_DETAILS[planId as SubscriptionPlan]).slice(0, 4);
+            } finally {
+                browserPlansPromise = null;
             }
         }
 
@@ -236,6 +265,7 @@ export const planService = {
             const parsed = await handleApiResponse<{ success?: boolean; reason?: string; error?: string }>(response);
             if (!parsed.success) throw new Error(parsed.reason || parsed.error || `Failed to update plan (${response.status})`);
             if (parsed.data?.success === false) throw new Error(parsed.data.reason || parsed.data.error || `Failed to update plan (${response.status})`);
+            browserPlansCache = null;
             return;
         }
 
@@ -283,6 +313,7 @@ export const planService = {
             const parsed = await handleApiResponse<{ id?: string; success?: boolean; reason?: string; error?: string }>(response);
             if (!parsed.success) throw new Error(parsed.reason || parsed.error || `Failed to create plan (${response.status})`);
             if (parsed.data?.success === false) throw new Error(parsed.data.reason || parsed.data.error || `Failed to create plan (${response.status})`);
+            browserPlansCache = null;
             return String(parsed.data?.id || `custom_${Date.now()}`);
         }
 
@@ -322,6 +353,9 @@ export const planService = {
             const response = await authenticatedFetch(`/api/plans?type=plans&planId=${encodeURIComponent(planId)}`, {
                 method: 'DELETE',
             });
+            if (response.ok) {
+                browserPlansCache = null;
+            }
             return response.ok;
         }
 

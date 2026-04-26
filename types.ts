@@ -168,7 +168,7 @@ export interface Vehicle {
   offerDisclaimer?: string;
 }
 
-export type SubscriptionPlan = 'free' | 'pro' | 'premium' | 'basic';
+export type SubscriptionPlan = 'free' | 'pro' | 'premium';
 
 export interface PlanDetails {
     id: SubscriptionPlan;

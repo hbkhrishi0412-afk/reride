@@ -271,22 +271,59 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const isSeller = currentUser?.role === 'seller';
   const isAdmin = currentUser.role === 'admin';
 
-  // Load plan details
+  // Load plan details and keep in sync with admin plan edits.
   useEffect(() => {
-    if (isSeller) {
-      const loadPlan = async () => {
-        try {
-          const planDetails = await planService.getPlanDetails(currentUser.subscriptionPlan || 'free');
-          setPlan(planDetails);
-        } catch (error) {
-          console.error('Failed to load plan details:', error);
-          setPlan({ name: t('sellerDashboard.freePlanName'), listingLimit: 1, price: 0 });
-        } finally {
-          setPlanLoading(false);
-        }
-      };
-      loadPlan();
-    }
+    if (!isSeller) return;
+
+    let active = true;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const loadPlan = async (silent = false) => {
+      if (!silent) setPlanLoading(true);
+      try {
+        const planDetails = await planService.getPlanDetails(currentUser.subscriptionPlan || 'free');
+        if (!active) return;
+        setPlan(planDetails);
+      } catch (error) {
+        console.error('Failed to load plan details:', error);
+        if (!active) return;
+        setPlan({ name: t('sellerDashboard.freePlanName'), listingLimit: 1, price: 0 });
+      } finally {
+        if (active) setPlanLoading(false);
+      }
+    };
+
+    const reloadOnVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void loadPlan(true);
+      }
+    };
+    const reloadOnPlanConfigUpdate = () => {
+      void loadPlan(true);
+    };
+    const reloadOnStoragePlanUpdate = (event: StorageEvent) => {
+      if (event.key === 'reRidePlanConfigUpdatedAt') {
+        void loadPlan(true);
+      }
+    };
+
+    void loadPlan(false);
+    intervalId = setInterval(() => {
+      void loadPlan(true);
+    }, 30000);
+    window.addEventListener('focus', reloadOnVisibility);
+    document.addEventListener('visibilitychange', reloadOnVisibility);
+    window.addEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);
+    window.addEventListener('storage', reloadOnStoragePlanUpdate);
+
+    return () => {
+      active = false;
+      if (intervalId) clearInterval(intervalId);
+      window.removeEventListener('focus', reloadOnVisibility);
+      document.removeEventListener('visibilitychange', reloadOnVisibility);
+      window.removeEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);
+      window.removeEventListener('storage', reloadOnStoragePlanUpdate);
+    };
   }, [isSeller, currentUser.subscriptionPlan, t]);
 
   // Initialize bank partners
@@ -634,21 +671,21 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     {plan.name}
                   </h3>
                 </div>
-                {(plan.id !== 'premium' || (currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date())) && (
-                  <button
-                    type="button"
-                    onClick={() => onNavigate(ViewEnum.PRICING)}
-                    className="shrink-0 rounded-full px-4 py-2 text-[12.5px] font-semibold text-slate-900 active:scale-95 transition-transform"
-                    style={{
-                      background: 'linear-gradient(180deg, #FFFFFF, #F2F2F2)',
-                      boxShadow: '0 8px 18px -8px rgba(255,255,255,0.35)'
-                    }}
-                  >
-                    {currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date()
+                <button
+                  type="button"
+                  onClick={() => onNavigate(ViewEnum.PRICING)}
+                  className="shrink-0 rounded-full px-4 py-2 text-[12.5px] font-semibold text-slate-900 active:scale-95 transition-transform"
+                  style={{
+                    background: 'linear-gradient(180deg, #FFFFFF, #F2F2F2)',
+                    boxShadow: '0 8px 18px -8px rgba(255,255,255,0.35)'
+                  }}
+                >
+                  {(plan.id !== 'premium' || (currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date()))
+                    ? (currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date()
                       ? t('sellerDashboard.renewPlan')
-                      : t('sellerDashboard.upgradePlan')}
-                  </button>
-                )}
+                      : t('sellerDashboard.upgradePlan'))
+                    : 'View all plans'}
+                </button>
               </div>
 
               {/* Listings usage */}
@@ -3742,19 +3779,15 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       )}
 
       {boostVehicle && onBoostListing && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <BoostListingModal
-              vehicle={boostVehicle}
-              onClose={() => setBoostVehicle(null)}
-              onBoost={async (vehicleId, packageId) => {
-                await onBoostListing(vehicleId, packageId);
-                setBoostVehicle(null);
-                addToast?.('Listing boosted successfully!', 'success');
-              }}
-            />
-          </div>
-        </div>
+        <BoostListingModal
+          vehicle={boostVehicle}
+          onClose={() => setBoostVehicle(null)}
+          onBoost={async (vehicleId, packageId) => {
+            await onBoostListing(vehicleId, packageId);
+            setBoostVehicle(null);
+            addToast?.('Listing boosted successfully!', 'success');
+          }}
+        />
       )}
     </div>
   );

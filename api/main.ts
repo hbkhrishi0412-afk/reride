@@ -2699,6 +2699,35 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
     }
     
+    if (email) {
+      try {
+        const normalizedEmail = String(email).toLowerCase().trim();
+        const normalizedAuthEmail = authUser?.email ? String(authUser.email).toLowerCase().trim() : '';
+
+        // Non-admin users can only fetch their own profile.
+        if (authUser?.role !== 'admin' && normalizedAuthEmail !== normalizedEmail) {
+          return res.status(403).json({ success: false, reason: 'Forbidden. You can only access your own user record.' });
+        }
+
+        const one = await userService.findByEmail(normalizedEmail);
+        if (!one) {
+          return res.status(404).json({ success: false, reason: 'User not found.' });
+        }
+        const normalized = normalizeUser(one);
+        if (!normalized) {
+          return res.status(404).json({ success: false, reason: 'User not found.' });
+        }
+        return res.status(200).json(normalized);
+      } catch (error) {
+        logError('❌ Error fetching single user by email:', error);
+        return res.status(500).json({
+          success: false,
+          reason: 'Failed to fetch user profile.',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
     if (authUser?.role !== 'admin') {
       return res.status(403).json({ success: false, reason: 'Forbidden. Admin access required.' });
     }
@@ -7840,16 +7869,17 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
         // (/api/vehicles?action=boost). If we ever receive one here, just record the payment.
         let updatedUser: Record<string, unknown> | null = null;
         const planLowerCandidate = planStr.toLowerCase();
+        const normalizedPlanCandidate = planLowerCandidate === 'basic' ? 'free' : planLowerCandidate;
         const isBoostPlan = planLowerCandidate.startsWith('boost');
-        // Only allow the four known subscription tiers to land in the user row.
-        const ALLOWED_SUBSCRIPTION_PLANS = new Set(['free', 'pro', 'premium', 'basic']);
-        const isKnownPlan = ALLOWED_SUBSCRIPTION_PLANS.has(planLowerCandidate);
+        // Only allow supported subscription tiers to land in the user row.
+        const ALLOWED_SUBSCRIPTION_PLANS = new Set(['free', 'pro', 'premium']);
+        const isKnownPlan = ALLOWED_SUBSCRIPTION_PLANS.has(normalizedPlanCandidate);
         try {
           const existingUser = (!isBoostPlan && isKnownPlan)
             ? await userService.findByEmail(String(sellerEmail))
             : null;
           if (existingUser) {
-            const planLower = planLowerCandidate;
+            const planLower = normalizedPlanCandidate;
             // Resolve plan duration – default to 30 days. Callers can override with `durationDays`.
             const requestedDays = Number((b as Record<string, unknown>).durationDays);
             const planDurationDays = Number.isFinite(requestedDays) && requestedDays > 0
@@ -9111,11 +9141,16 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
     const toPlanDetails = (id: string, row: Record<string, unknown>) => {
       const basePlan = PLAN_DETAILS[id as keyof typeof PLAN_DETAILS];
       const metadata = (row.metadata as Record<string, unknown> | undefined) || {};
+      const isBasePlan = Boolean(basePlan);
       return {
         id,
         name: String(row.name || basePlan?.name || 'Custom Plan'),
         price: toNumber(row.price, basePlan?.price ?? 0),
-        features: Array.isArray(row.features) ? row.features.map(String) : (basePlan?.features || []),
+        // Keep base plan marketing/features canonical from code constants.
+        // This prevents stale DB-edited feature text from drifting across pages.
+        features: isBasePlan
+          ? (basePlan?.features || [])
+          : (Array.isArray(row.features) ? row.features.map(String) : []),
         listingLimit: toListingLimit(row.listingLimit ?? metadata.listingLimit, basePlan?.listingLimit ?? 0),
         featuredCredits: toNumber(row.featuredCredits ?? metadata.featuredCredits, basePlan?.featuredCredits ?? 0),
         freeCertifications: toNumber(row.freeCertifications ?? metadata.freeCertifications, basePlan?.freeCertifications ?? 0),
@@ -9199,9 +9234,11 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
           id: updatePlanId,
           name: String(updateData.name ?? existing?.name ?? basePlan?.name ?? 'Plan'),
           price: toNumber(updateData.price ?? existing?.price, basePlan?.price ?? 0),
-          features: Array.isArray(updateData.features)
-            ? updateData.features
-            : (Array.isArray(existing?.features) ? existing?.features : (basePlan?.features || [])),
+          features: basePlan
+            ? (basePlan.features || [])
+            : (Array.isArray(updateData.features)
+              ? updateData.features
+              : (Array.isArray(existing?.features) ? existing?.features : [])),
           listingLimit: toListingLimit(updateData.listingLimit ?? existing?.listingLimit, basePlan?.listingLimit ?? 0),
           featuredCredits: toNumber(updateData.featuredCredits ?? existing?.featuredCredits, basePlan?.featuredCredits ?? 0),
           freeCertifications: toNumber(updateData.freeCertifications ?? existing?.freeCertifications, basePlan?.freeCertifications ?? 0),
