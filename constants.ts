@@ -23,21 +23,8 @@ export const PLAN_DETAILS: Record<SubscriptionPlan, PlanDetails> = {
         freeCertifications: 0,
         features: [
             '1 Active Listing',
-            'Basic Seller Profile',
-            'Standard Support',
-        ],
-    },
-    basic: {
-        id: 'basic',
-        name: 'Basic',
-        price: 0,
-        listingLimit: 1,
-        featuredCredits: 0,
-        freeCertifications: 0,
-        features: [
-            '1 Active Listing',
-            'Basic Seller Profile',
-            'Standard Support',
+            '0 Featured Credits/month',
+            '0 Free Certified Inspections/month',
         ],
     },
     pro: {
@@ -52,9 +39,6 @@ export const PLAN_DETAILS: Record<SubscriptionPlan, PlanDetails> = {
             '10 Active Listings',
             '2 Featured Credits/month',
             '1 Free Certified Inspection/month',
-            'Enhanced Seller Profile',
-            'Performance Analytics',
-            'Priority Support',
         ],
     },
     premium: {
@@ -65,12 +49,9 @@ export const PLAN_DETAILS: Record<SubscriptionPlan, PlanDetails> = {
         featuredCredits: 5,
         freeCertifications: 3,
         features: [
-            'Unlimited Active Listings',
+            'No listing cap',
             '5 Featured Credits/month',
             '3 Free Certified Inspections/month',
-            'AI Listing Assistant',
-            'Advanced Analytics',
-            'Dedicated Support',
         ],
     },
 };

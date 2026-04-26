@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { Vehicle, BoostPackage } from '../types';
 
 interface BoostListingModalProps {
@@ -91,15 +92,21 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
 
   const formatPrice = (n: number) => (n >= 10000000 ? `${(n / 10000000).toFixed(2)} Cr` : n >= 100000 ? `${(n / 100000).toFixed(2)} L` : n.toLocaleString('en-IN'));
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" style={{ background: 'rgba(8,8,12,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[2147483002] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
+      style={{ background: 'rgba(8,8,12,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="boost-listing-title"
+    >
       <div
-        className="w-full sm:max-w-3xl rounded-t-3xl sm:rounded-3xl max-h-[92vh] overflow-hidden flex flex-col animate-slide-in-up"
+        className="w-full sm:max-w-3xl min-h-0 max-h-[92vh] sm:max-h-[min(92vh,100dvh)] overflow-hidden flex flex-col rounded-t-3xl sm:rounded-3xl animate-slide-in-up"
         style={{ background: '#FFFFFF', border: '1px solid rgba(15,23,42,0.06)', boxShadow: '0 30px 60px -20px rgba(0,0,0,0.40)' }}
       >
         {/* Premium obsidian header */}
         <div
-          className="relative overflow-hidden px-5 pt-5 pb-5 sm:px-6 sm:pt-6 text-white"
+          className="relative shrink-0 overflow-hidden px-5 pt-5 pb-5 sm:px-6 sm:pt-6 text-white"
           style={{ background: 'linear-gradient(180deg, #0B0B0F 0%, #16161D 70%, #1C1C24 100%)' }}
         >
           <div aria-hidden className="pointer-events-none absolute inset-0">
@@ -123,7 +130,7 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
               </span>
               <div className="min-w-0">
                 <p className="text-[10.5px] uppercase tracking-[0.22em] text-white/45 font-semibold">Boost</p>
-                <h2 className="text-white font-semibold tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, letterSpacing: '-0.02em' }}>
+                <h2 id="boost-listing-title" className="text-white font-semibold tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, letterSpacing: '-0.02em' }}>
                   Promote your listing
                 </h2>
                 <p className="mt-1.5 text-[12px] text-white/55 font-medium truncate">
@@ -143,8 +150,8 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
           </div>
         </div>
 
-        {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-5 pt-5 pb-4 sm:px-6 sm:pt-6 space-y-5">
+        {/* Scrollable body — min-h-0 is required so flex-1 can shrink and the footer stays inside max-h */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-5 pb-4 sm:px-6 sm:pt-6 space-y-5">
           {/* Why boost */}
           <div className="grid grid-cols-3 gap-2.5">
             {[
@@ -282,7 +289,7 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
 
         {/* Footer */}
         <div
-          className="px-5 sm:px-6 py-3.5 flex gap-2.5"
+          className="shrink-0 px-5 sm:px-6 py-3.5 flex gap-2.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]"
           style={{ background: 'rgba(248,250,252,0.85)', borderTop: '1px solid rgba(15,23,42,0.06)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}
         >
           <button
@@ -328,6 +335,12 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') {
+    return modalContent;
+  }
+
+  return createPortal(modalContent, document.body);
 };
 
 export default BoostListingModal;

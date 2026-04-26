@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getAuthHeaders as getSharedAuthHeaders } from '../utils/authenticatedFetch';
+import { authenticatedFetch } from '../utils/authenticatedFetch';
 
 interface Service {
   id: string;
@@ -23,25 +23,12 @@ const ServiceManagement: React.FC = () => {
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const getAuthHeaders = (): Record<string, string> => {
-    const headers = getSharedAuthHeaders() as Record<string, string>;
-    return headers;
-  };
-
-  const hasAuthorizationHeader = (headers: Record<string, string>): boolean => {
-    return typeof headers.Authorization === 'string' && headers.Authorization.trim().length > 0;
-  };
-
   const loadServices = async () => {
     setLoading(true);
     setError(null);
     try {
-      // GET requests are public, but include auth header if available
-      const headers = getAuthHeaders();
-
-      const response = await fetch('/api/services', {
+      const response = await authenticatedFetch('/api/services', {
         method: 'GET',
-        headers,
       });
 
       if (!response.ok) {
@@ -88,15 +75,8 @@ const ServiceManagement: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      const headers = getAuthHeaders();
-      if (!hasAuthorizationHeader(headers)) {
-        setError('Authentication required. Please log in again to save changes.');
-        return;
-      }
-
-      const response = await fetch('/api/services', {
+      const response = await authenticatedFetch('/api/services', {
         method: 'PATCH',
-        headers,
         body: JSON.stringify(editingService),
       });
 
@@ -140,15 +120,8 @@ const ServiceManagement: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      const headers = getAuthHeaders();
-      if (!hasAuthorizationHeader(headers)) {
-        setError('Authentication required. Please log in again to update service status.');
-        return;
-      }
-
-      const response = await fetch('/api/services', {
+      const response = await authenticatedFetch('/api/services', {
         method: 'PATCH',
-        headers,
         body: JSON.stringify({
           id: service.id,
           active: !service.active,

@@ -3,8 +3,6 @@ import type { User, PlanDetails, SubscriptionPlan } from '../types';
 // Removed blocking import - will lazy load PLAN_DETAILS when needed
 import { planService } from '../services/planService';
 import PaymentRequestModal from './PaymentRequestModal';
-import EMICalculator from './EMICalculator';
-import CarValuation from './CarValuation';
 
 interface PricingPageProps {
     currentUser: User | null;
@@ -113,10 +111,6 @@ const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onSelectPlan, ad
                     ))}
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-4xl mx-auto mt-16">
-                    <EMICalculator />
-                    <CarValuation />
-                </div>
             </div>
 
             {/* Payment Request Modal */}
