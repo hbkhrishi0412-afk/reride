@@ -3,9 +3,9 @@
 -- new user", a trigger or function on auth.users is failing (e.g. inserting into
 -- public.users or public.profiles). Run diagnostics in Supabase SQL Editor.
 --
--- Common ReRide fix: a legacy public.users row exists for the same email (different
--- id) and inserts only had ON CONFLICT (id) DO NOTHING, so UNIQUE (email) failed.
--- Apply: scripts/migrations/fix_handle_new_user_oauth_email_conflict.sql
+-- Fix (ReRide): run the full script in
+--   scripts/migrations/fix_handle_new_user_oauth_email_conflict.sql
+-- in Supabase -> SQL -> New query -> Run, then retry Google / OAuth sign-in.
 -- ============================================================================
 
 -- List triggers on auth.users (Supabase / Postgres)
