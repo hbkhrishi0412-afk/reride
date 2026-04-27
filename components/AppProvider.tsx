@@ -867,36 +867,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const notificationsJson = readPersistedReRideNotifications();
       if (notificationsJson) return JSON.parse(notificationsJson);
-      const sampleNotifications: Notification[] = [
-        {
-          id: 1,
-          recipientEmail: 'seller@test.com',
-          message: 'New message from Mock Customer: Offer: 600000',
-          targetId: 'conv_1703123456789',
-          targetType: 'conversation',
-          isRead: false,
-          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-        },
-        {
-          id: 2,
-          recipientEmail: 'seller@test.com',
-          message: 'New message from Mock Customer: Offer: 123444',
-          targetId: 'conv_1703123456789',
-          targetType: 'conversation',
-          isRead: false,
-          timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString()
+      // Do not seed demo notifications in production — guests would get push/toast noise.
+      if (import.meta.env.DEV) {
+        const sampleNotifications: Notification[] = [
+          {
+            id: 1,
+            recipientEmail: 'seller@test.com',
+            message: 'New message from Mock Customer: Offer: 600000',
+            targetId: 'conv_1703123456789',
+            targetType: 'conversation',
+            isRead: false,
+            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+          },
+          {
+            id: 2,
+            recipientEmail: 'seller@test.com',
+            message: 'New message from Mock Customer: Offer: 123444',
+            targetId: 'conv_1703123456789',
+            targetType: 'conversation',
+            isRead: false,
+            timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+          },
+        ];
+        try {
+          persistReRideNotifications(sampleNotifications);
+        } catch (_) {
+          /* WebView may restrict setItem */
         }
-      ];
-      try {
-        persistReRideNotifications(sampleNotifications);
-      } catch (_) {
-        // WebView/Capacitor may restrict setItem; continue without persisting
+        return sampleNotifications;
       }
-      return sampleNotifications;
+      return [];
     } catch {
       return [];
     }
   });
+
+  // Guest sessions must not use persisted/in-app notifications (avoids after-logout or empty-recipient matches).
+  useEffect(() => {
+    if (currentUser?.email) return;
+    if (import.meta.env.DEV) return;
+    setNotifications([]);
+    try {
+      persistReRideNotifications([]);
+    } catch {
+      /* ignore */
+    }
+  }, [currentUser?.email, setNotifications]);
 
   const addToast = useCallback((message: string, type: ToastType['type']) => {
     try {
@@ -1051,8 +1067,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Clear user-specific data
       setActiveChat(null);
+      setConversations([]);
+      try {
+        saveConversations([]);
+      } catch {
+        /* ignore */
+      }
+      setTypingStatus(null);
+      setChatPeerOnlineByConversationId({});
       setComparisonList([]);
       setWishlist([]);
+      setNotifications([]);
+      try {
+        persistReRideNotifications([]);
+      } catch {
+        /* ignore */
+      }
       try {
         localStorage.removeItem('reride_wishlist');
         localStorage.removeItem('reride_comparison_list');
@@ -1093,6 +1123,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       resetAuthFetchStateAfterLogout();
       clearRememberMeState();
+      setConversations([]);
+      try {
+        saveConversations([]);
+      } catch {
+        /* ignore */
+      }
+      setTypingStatus(null);
+      setChatPeerOnlineByConversationId({});
+      setNotifications([]);
+      try {
+        persistReRideNotifications([]);
+      } catch {
+        /* ignore */
+      }
       setCurrentView(View.HOME);
       setActiveChat(null);
       setComparisonList([]);
@@ -3138,8 +3182,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const userEmailForNotif = currentUser?.email?.toLowerCase().trim() ?? '';
   const onNotificationRealtimeInsert = useCallback(
     (row: any) => {
+      if (!userEmailForNotif) return;
       const recipient = (row.recipient_email || row.user_id || '').toString().toLowerCase().trim();
-      if (recipient !== userEmailForNotif) return;
+      if (!recipient || recipient !== userEmailForNotif) return;
       const notif: Notification = {
         id: row.id,
         recipientEmail: recipient,
@@ -3418,8 +3463,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Get notifications for current user
-    const userNotifications = notifications.filter(n => 
-      n.recipientEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim()
+    const userNotifications = notifications.filter(
+      n =>
+        n.recipientEmail &&
+        n.recipientEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim(),
     );
 
     if (userNotifications.length === 0) {
@@ -4211,7 +4258,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // CRITICAL FIX: Normalize recipient email for comparison
       const normalizedNotificationRecipient = (notification.recipientEmail || '').toLowerCase().trim();
       const normalizedCurrentUserEmail = (currentUser?.email || '').toLowerCase().trim();
-      
+
+      // Not signed in: never accept (empty === empty would wrongly match missing recipientEmail)
+      if (!normalizedCurrentUserEmail) {
+        return;
+      }
+
       // Only add notification if it's for the current user
       if (normalizedNotificationRecipient === normalizedCurrentUserEmail) {
         console.log('📬 AppProvider: Received real-time notification:', { 

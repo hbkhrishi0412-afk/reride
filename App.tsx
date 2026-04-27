@@ -416,6 +416,14 @@ const AppContent: React.FC = () => {
     onOfferResponse,
     refreshVehicles,
   } = useApp();
+
+  const pushNotificationsForCurrentUser = useMemo(() => {
+    if (!currentUser?.email) return [];
+    const e = currentUser.email.toLowerCase().trim();
+    return notifications.filter(
+      n => n.recipientEmail && n.recipientEmail.toLowerCase().trim() === e,
+    );
+  }, [notifications, currentUser?.email]);
   
   // Handle service worker update notifications
   useEffect(() => {
@@ -4379,7 +4387,7 @@ const AppContent: React.FC = () => {
         <AppRatingPrompt />
         {/* Mobile Feature Managers */}
         <MobilePushNotificationManager
-          notifications={notifications}
+          notifications={pushNotificationsForCurrentUser}
           onNotificationClick={handleNotificationClick}
           profileMuteKeys={currentUser?.notificationMuteKeys}
         />
@@ -4492,7 +4500,7 @@ const AppContent: React.FC = () => {
       <AppRatingPrompt />
       {/* Mobile Feature Managers (also work on desktop) */}
       <MobilePushNotificationManager
-        notifications={notifications}
+        notifications={pushNotificationsForCurrentUser}
         onNotificationClick={handleNotificationClick}
         profileMuteKeys={currentUser?.notificationMuteKeys}
       />

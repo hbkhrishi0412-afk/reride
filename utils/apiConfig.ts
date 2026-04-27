@@ -57,42 +57,19 @@ export function normalizeRerideApiHostToWww(urlOrOrigin: string): string {
 }
 
 /**
- * True when the URL is (or may be) a Supabase / OAuth return we must not rewrite away from
- * the current origin — PKCE code_verifier is stored in localStorage per host.
- * Checks query string and hash (some runtimes or proxies put `code` in the fragment).
- */
-function isOAuthOrSupabaseCallbackUrl(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const params = new URLSearchParams(window.location.search);
-    if (params.has('code') || params.has('error')) {
-      return true;
-    }
-    const hash = window.location.hash || '';
-    if (!hash) return false;
-    if (/[?&](code|error|error_description|state)\s*=/i.test(hash)) {
-      return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
-}
-
-/**
  * Prefer `www` for normal browsing. Do NOT redirect when the URL is a Supabase OAuth
- * return (`?code=` / `?error=`, or the same in `#...`) on apex — PKCE verifier lives on
- * that origin; bouncing to www would break session exchange.
+ * return (`?code=` / `?error=`) on apex — PKCE verifier lives on that origin; bouncing
+ * to www would break session exchange.
  */
 export function ensureRerideWebCanonicalHost(): void {
   if (typeof window === 'undefined') return;
   try {
     const h = window.location.hostname.toLowerCase();
     if (h !== 'reride.co.in') return;
-    if (isOAuthOrSupabaseCallbackUrl()) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('code') || params.has('error')) {
       return;
     }
-    const params = new URLSearchParams(window.location.search);
     const { pathname, hash } = window.location;
     const oauthRole =
       sessionStorage.getItem('reride_oauth_role') ||

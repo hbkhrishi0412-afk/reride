@@ -521,7 +521,7 @@ const en = {
   'auth.getStarted': 'Get started with ReRide',
   'auth.getStartedToday': 'Get started with ReRide today',
   'auth.accountType': 'Account Type',
-  'auth.selectAccountTypePlaceholder': 'Select how you use ReRide',
+  'auth.selectAccountTypePlaceholder': 'Choose how you use ReRide',
   'auth.error.selectAccountType': 'Please choose your account type first.',
   'auth.googleRequiresCustomerOrSeller':
     'Choose your account type above before signing in with Google.',
@@ -537,7 +537,7 @@ const en = {
   'auth.oauthPickRoleBody':
     'You signed in with Google. Select how you use ReRide to finish signing in.',
   'auth.oauthPickRoleSignOut': 'Cancel and sign out',
-  'auth.iWantTo': 'I want to',
+  'auth.iWantTo': 'Sign up as',
   'auth.roleRegister.customer': 'Buy vehicles',
   'auth.roleRegister.seller': 'Sell vehicles',
   'auth.roleRegister.service': 'Provide services',
