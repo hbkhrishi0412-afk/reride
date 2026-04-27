@@ -1378,12 +1378,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [handleLogin, addToast, t]);
 
   useEffect(() => {
-    const onNativeOAuthFailed = (e: Event) => {
+    const onOAuthFailed = (e: Event) => {
       const msg = (e as CustomEvent<{ message?: string }>).detail?.message;
       addToast(msg || t('toast.googleSignInFailed'), 'error');
     };
-    window.addEventListener('reride:native-oauth-failed', onNativeOAuthFailed);
-    return () => window.removeEventListener('reride:native-oauth-failed', onNativeOAuthFailed);
+    window.addEventListener('reride:oauth-failed', onOAuthFailed);
+    return () => window.removeEventListener('reride:oauth-failed', onOAuthFailed);
   }, [addToast, t]);
 
   // Supabase session exists but ReRide profile not in memory — resync (cold start, or PKCE finished after first paint).
