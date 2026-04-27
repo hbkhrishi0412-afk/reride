@@ -43,6 +43,8 @@ interface MobileInboxProps {
   onConsumedInitialConversation?: () => void;
   /** Clear message history for this thread (conversation row kept). */
   onClearChat?: (conversationId: string) => void | Promise<void>;
+  /** Permanently delete the conversation (API + state). Swipe left to reveal. */
+  onDeleteConversation?: (conversationId: string) => void | Promise<void>;
   /** Counterpart online per conversation id (Supabase presence / Socket.io). */
   chatPeerOnlineByConversationId?: Record<string, boolean>;
   /** Optional manual read/unread toggle for thread rows. */
@@ -58,7 +60,7 @@ interface MobileInboxProps {
 /**
  * Mobile-Optimized Inbox Component
  * Features:
- * - Swipe actions (delete, archive)
+ * - Swipe actions: right → report (left panel), left → delete (right panel)
  * - Pull-to-refresh
  * - Mobile-friendly message bubbles
  * - Full-screen chat view
@@ -81,6 +83,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   initialOpenConversationId = null,
   onConsumedInitialConversation,
   onClearChat,
+  onDeleteConversation,
   chatPeerOnlineByConversationId,
   onSetConversationReadState,
   onMarkAllAsRead,
@@ -90,7 +93,8 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read'>('all');
-  const [swipedId, setSwipedId] = useState<string | null>(null);
+  /** Swipe right → report (left panel); swipe left → delete (right panel). */
+  const [swipeOpen, setSwipeOpen] = useState<{ id: string; side: 'report' | 'delete' } | null>(null);
   const [messageText, setMessageText] = useState('');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
@@ -179,8 +183,10 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
     [inboxRole, onMarkAsRead, onMarkMessagesAsRead, openThreadInFloatingChat]
   );
 
-  const handleSwipeStart = (e: React.TouchEvent, convId: string) => {
-    touchStartX.current = e.touches[0].clientX;
+  const handleSwipeStart = (e: React.TouchEvent) => {
+    const x = e.touches[0].clientX;
+    touchStartX.current = x;
+    touchEndX.current = x;
   };
 
   const handleSwipeMove = (e: React.TouchEvent) => {
@@ -189,16 +195,17 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
 
   const handleSwipeEnd = (convId: string) => {
     const distance = touchStartX.current - touchEndX.current;
-    const minSwipeDistance = 100;
+    const minSwipeDistance = 56;
 
-    if (Math.abs(distance) > minSwipeDistance) {
-      if (distance > 0) {
-        // Swipe left - show actions
-        setSwipedId(convId);
-      } else {
-        // Swipe right - hide actions
-        setSwipedId(null);
-      }
+    if (Math.abs(distance) < minSwipeDistance) {
+      return;
+    }
+    if (distance > 0) {
+      // Finger moved left → reveal delete on the right
+      setSwipeOpen({ id: convId, side: 'delete' });
+    } else {
+      // Finger moved right → reveal report on the left
+      setSwipeOpen({ id: convId, side: 'report' });
     }
   };
 
@@ -306,6 +313,12 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   useEffect(() => {
     setThreadMenuOpen(false);
   }, [selectedConv?.id]);
+
+  useEffect(() => {
+    if (!selectedConv) return;
+    const still = conversations.some((c) => c && String(c.id) === String(selectedConv.id));
+    if (!still) setSelectedConv(null);
+  }, [conversations, selectedConv]);
 
   const prevOpenConvIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -887,7 +900,8 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
             });
             const isUnread =
               inboxRole === 'customer' ? !conv.isReadByCustomer : !conv.isReadBySeller;
-            const isSwiped = swipedId === conv.id;
+            const isOpen = swipeOpen?.id === conv.id;
+            const openSide = isOpen ? swipeOpen.side : null;
             const initials = (counterpart || 'C').split(' ').map(s => s.charAt(0)).slice(0, 2).join('').toUpperCase();
             const peerOnline = chatPeerOnlineByConversationId?.[conv.id];
 
@@ -896,21 +910,51 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                 key={conv.id}
                 className="relative overflow-hidden"
                 style={{ background: '#FFFFFF', borderBottom: '1px solid rgba(15,23,42,0.05)' }}
-                onTouchStart={(e) => handleSwipeStart(e, conv.id)}
+                onTouchStart={handleSwipeStart}
                 onTouchMove={handleSwipeMove}
                 onTouchEnd={() => handleSwipeEnd(conv.id)}
-                onClick={() => !isSwiped && handleSelectConversation(conv)}
+                onClick={() => {
+                  if (isOpen) {
+                    setSwipeOpen(null);
+                    return;
+                  }
+                  handleSelectConversation(conv);
+                }}
               >
+                {/* Swipe right → report (panel on the left) */}
+                <div
+                  className={`absolute left-0 top-0 bottom-0 z-0 flex w-28 items-stretch transition-transform duration-200 ease-out ${
+                    openSide === 'report' ? 'translate-x-0' : '-translate-x-full'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFlagContent('conversation', conv.id, 'User reported from inbox swipe');
+                      setSwipeOpen(null);
+                    }}
+                    className="h-full w-28 flex-1 text-white flex items-center justify-center gap-1.5 text-[12px] font-semibold px-1"
+                    style={{ background: 'linear-gradient(135deg, #EA580C 0%, #C2410C 100%)' }}
+                    aria-label="Report conversation"
+                  >
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M4 21V4M4 14h12l-2-3 2-3H4" />
+                    </svg>
+                    Report
+                  </button>
+                </div>
+
                 {isUnread && (
                   <span
                     aria-hidden
-                    className="absolute left-0 top-3.5 bottom-3.5 w-[3px] rounded-r-full"
+                    className="absolute left-0 top-3.5 bottom-3.5 w-[3px] rounded-r-full z-20 pointer-events-none"
                     style={{ background: 'linear-gradient(180deg, #FF8456, #FF6B35)' }}
                   />
                 )}
                 <div
-                  className={`flex items-start gap-3 px-4 py-3.5 transition-transform ${
-                    isSwiped ? '-translate-x-24' : 'translate-x-0'
+                  className={`relative z-10 flex items-start gap-3 px-4 py-3.5 bg-white transition-transform duration-200 ease-out ${
+                    openSide === 'delete' ? '-translate-x-28' : openSide === 'report' ? 'translate-x-28' : 'translate-x-0'
                   }`}
                 >
                   <div className="relative shrink-0">
@@ -979,27 +1023,36 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                   </span>
                 </div>
 
-                {/* Swipe Actions */}
+                {/* Swipe left → delete (panel on the right) */}
                 <div
-                  className={`absolute right-0 top-0 bottom-0 flex items-center transition-transform ${
-                    isSwiped ? 'translate-x-0' : 'translate-x-full'
+                  className={`absolute right-0 top-0 bottom-0 z-0 flex w-28 items-stretch transition-transform duration-200 ease-out ${
+                    openSide === 'delete' ? 'translate-x-0' : 'translate-x-full'
                   }`}
                 >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onFlagContent('conversation', conv.id, 'User reported');
-                      setSwipedId(null);
-                    }}
-                    className="h-full px-5 text-white flex items-center gap-1.5 text-[12px] font-semibold"
-                    style={{ background: 'linear-gradient(135deg, #F43F5E 0%, #DC2626 100%)' }}
-                    aria-label="Report conversation"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="M4 21V4M4 14h12l-2-3 2-3H4" />
-                    </svg>
-                    Report
-                  </button>
+                  {onDeleteConversation ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (typeof window !== 'undefined' && !window.confirm('Delete this conversation? This cannot be undone.')) {
+                          return;
+                        }
+                        void Promise.resolve(onDeleteConversation(conv.id)).then(() => {
+                          setSwipeOpen(null);
+                        });
+                      }}
+                      className="h-full w-28 flex-1 text-white flex items-center justify-center gap-1.5 text-[12px] font-semibold px-1"
+                      style={{ background: 'linear-gradient(135deg, #64748B 0%, #1E293B 100%)' }}
+                      aria-label="Delete conversation"
+                    >
+                      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      </svg>
+                      Delete
+                    </button>
+                  ) : (
+                    <div className="h-full w-28 bg-slate-200" aria-hidden />
+                  )}
                 </div>
               </div>
             );

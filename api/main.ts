@@ -61,6 +61,8 @@ import {
   validatePassword, 
   generateAccessToken, 
   generateRefreshToken, 
+  generatePasswordResetToken,
+  verifyPasswordResetToken,
   validateUserInput,
   sanitizeObject,
   sanitizeString,
@@ -75,6 +77,7 @@ import { attachApiCors } from '../utils/attach-api-cors.js';
 import { isAndroidWebViewAssetLoaderOrigin } from '../utils/cors-origin.js';
 import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
 import { generateCsrfToken, validateCsrfToken, getCsrfCookieName, getCsrfHeaderName } from '../utils/csrf.js';
+import { getPublicAppOriginForPasswordReset, sendPasswordResetEmail } from './lib/send-password-reset-email.js';
 import { checkUpstashRateLimit } from '../lib/rate-limit-upstash.js';
 import {
   appendRefreshTokenCookie,
@@ -1188,13 +1191,132 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       logWarn('⚠️ POST /api/users: Missing or invalid action field', { body: req.body });
       return res.status(400).json({ 
         success: false, 
-        reason: 'Invalid action. Please provide a valid action: login, register, oauth-login, oauth-service-provider, refresh-token, or logout.' 
+        reason: 'Invalid action. Please provide a valid action: login, register, request-password-reset, complete-password-reset, oauth-login, oauth-service-provider, refresh-token, or logout.' 
       });
     }
 
     if (action === 'logout') {
       clearRefreshTokenCookie(res);
       return res.status(200).json({ success: true });
+    }
+
+    // USERS-TABLE PASSWORD RESET (public.users bcrypt + optional Resend)
+    if (action === 'request-password-reset') {
+      try {
+        if (!email || !validateEmail(String(email).toLowerCase().trim())) {
+          return res.status(400).json({ success: false, reason: 'Valid email is required.' });
+        }
+        const normalizedEmail = String(email).toLowerCase().trim();
+        // Same response whether or not the account exists (avoid email enumeration)
+        const genericOk = {
+          success: true,
+          message: 'If an account exists for this email, a reset link was sent.',
+        } as const;
+
+        let userRow: Awaited<ReturnType<typeof userService.findByEmail>> = null;
+        try {
+          userRow = await userService.findByEmail(normalizedEmail);
+        } catch {
+          return res.status(200).json(genericOk);
+        }
+        if (!userRow) {
+          return res.status(200).json(genericOk);
+        }
+
+        let token: string;
+        try {
+          token = generatePasswordResetToken(normalizedEmail);
+        } catch (tokErr) {
+          logError('Password reset token generation failed:', tokErr);
+          return res.status(503).json({
+            success: false,
+            reason: 'Password reset is temporarily unavailable. Please try again later.',
+          });
+        }
+
+        const origin = getPublicAppOriginForPasswordReset();
+        const resetUrl = `${origin}/forgot-password?token=${encodeURIComponent(token)}`;
+
+        try {
+          await sendPasswordResetEmail(normalizedEmail, resetUrl);
+        } catch (sendErr) {
+          logError('Failed to send password reset email:', sendErr);
+          return res.status(503).json({
+            success: false,
+            reason:
+              sendErr instanceof Error
+                ? sendErr.message
+                : 'Could not send reset email. Try again or contact support.',
+          });
+        }
+
+        return res.status(200).json(genericOk);
+      } catch (pwdResetReqErr) {
+        logError('request-password-reset error:', pwdResetReqErr);
+        return res.status(500).json({ success: false, reason: 'An unexpected error occurred.' });
+      }
+    }
+
+    if (action === 'complete-password-reset') {
+      try {
+        const { token: resetToken, password: newPassword } = req.body as {
+          token?: string;
+          password?: string;
+        };
+        if (!resetToken || typeof resetToken !== 'string' || !newPassword || typeof newPassword !== 'string') {
+          return res.status(400).json({ success: false, reason: 'Token and new password are required.' });
+        }
+        if (String(newPassword).length < 8) {
+          return res.status(400).json({ success: false, reason: 'Password must be at least 8 characters.' });
+        }
+        let emailFromToken: string;
+        try {
+          emailFromToken = verifyPasswordResetToken(resetToken.trim()).email;
+        } catch {
+          return res.status(400).json({
+            success: false,
+            reason: 'This reset link is invalid or has expired. Request a new one.',
+          });
+        }
+        const userRow = await userService.findByEmail(emailFromToken);
+        if (!userRow) {
+          return res.status(400).json({ success: false, reason: 'No account found for this reset link.' });
+        }
+        const hashed = await hashPassword(newPassword);
+        try {
+          await supabaseUserService.update(emailFromToken, {
+            password: hashed,
+            updatedAt: new Date().toISOString(),
+          });
+        } catch (upErr) {
+          logError('complete-password-reset: DB update failed:', upErr);
+          return res.status(500).json({ success: false, reason: 'Could not update password. Try again later.' });
+        }
+        // Sync Supabase Auth when an auth user exists (same as PUT /users)
+        try {
+          const supabaseAdmin = getSupabaseAdminClient();
+          const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+          if (!listError && authUsers?.users?.length) {
+            const authUser = authUsers.users.find(
+              (u) => (u.email || '').toLowerCase().trim() === emailFromToken,
+            );
+            if (authUser) {
+              const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+                password: newPassword,
+              });
+              if (authUpdateError) {
+                logWarn('Supabase Auth password sync after table reset failed:', authUpdateError.message);
+              }
+            }
+          }
+        } catch (syncErr) {
+          logWarn('Supabase Auth sync after table password reset failed:', syncErr);
+        }
+        return res.status(200).json({ success: true, message: 'Password updated. You can sign in now.' });
+      } catch (completeErr) {
+        logError('complete-password-reset error:', completeErr);
+        return res.status(500).json({ success: false, reason: 'An unexpected error occurred.' });
+      }
     }
 
     // LOGIN
@@ -2615,7 +2737,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     logWarn('⚠️ POST /api/users: Invalid action received', { action, bodyKeys: Object.keys(req.body || {}) });
     return res.status(400).json({ 
       success: false, 
-      reason: `Invalid action: "${action}". Please use one of: login, register, oauth-login, oauth-service-provider, or refresh-token.` 
+      reason: `Invalid action: "${action}". Please use one of: login, register, request-password-reset, complete-password-reset, oauth-login, oauth-service-provider, or refresh-token.` 
     });
   }
 

@@ -6,6 +6,8 @@ import { emailToKey, supabaseUserService } from '../services/supabase-user-servi
 import type { ServiceProviderPayload } from '../services/supabase-service-provider-service.js';
 import { applyCors } from '../lib/api-route-cors.js';
 import { sanitizeServiceCategories } from '../constants/serviceProviderCatalog.js';
+import { authenticateRequest } from './auth.js';
+import { hashPassword } from '../utils/security.js';
 
 function parseStringList(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -99,6 +101,7 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
     }
 
     const supabase = getSupabaseAdminClient();
+    const hashedPassword = await hashPassword(password);
     const authUserExists = await doesAuthUserExistByEmail(supabase, email);
 
     const existingProvider = await supabaseServiceProviderService.findByEmail(email);
@@ -185,6 +188,7 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
           name,
           email,
           mobile: phone,
+          password: hashedPassword,
           role: 'service_provider',
           location: city,
           status: 'active',
@@ -196,6 +200,7 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
         await supabaseUserService.update(email, {
           name,
           mobile: phone,
+          password: hashedPassword,
           role: 'service_provider',
           location: city,
           status: 'active',
@@ -221,60 +226,52 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
 export async function handleServiceProviders(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   try {
-    // CRITICAL FIX: Handle missing/invalid auth token gracefully
-    // Some requests might not have auth (e.g., public endpoints, initial page loads)
-    let decoded: { uid: string; email: string; user: any } | null = null;
-    let uid: string | null = null;
-    let email: string = '';
-    
-    try {
-      decoded = await verifyIdTokenFromHeader(req);
-      uid = decoded.uid;
-      email = decoded.email || '';
-    } catch (authError) {
-      // If auth fails, check if this is a public endpoint that doesn't require auth
-      const scope = (req.query.scope as string) || 'mine';
-      
-      // Public endpoints that don't require auth
-      if (req.method === 'GET' && scope === 'all') {
-        const all = await supabaseServiceProviderService.findAll();
-        return res.status(200).json(all);
-      }
-      
-      // All other endpoints require authentication
-      const errorMessage = authError instanceof Error ? authError.message : 'Authentication failed';
-      if (errorMessage.includes('Missing bearer token')) {
-        return res.status(401).json({ 
-          error: 'Authentication required. Please sign up or log in first.',
-          details: 'Missing or invalid authorization token'
-        });
-      }
-      
-      // Re-throw other auth errors
-      throw authError;
-    }
-    
     const scope = (req.query.scope as string) || 'mine';
 
+    if (req.method === 'GET' && scope === 'all') {
+      const all = await supabaseServiceProviderService.findAll();
+      return res.status(200).json(all);
+    }
+
+    /** Supabase Auth JWT and/or reRide app JWT (POST /api/users login — `users` table bcrypt). */
+    let uid: string | null = null;
+    let email = '';
+
+    try {
+      const decoded = await verifyIdTokenFromHeader(req);
+      uid = decoded.uid;
+      email = (decoded.email || '').toLowerCase().trim();
+    } catch {
+      const legacy = authenticateRequest(req);
+      if (legacy.isValid && legacy.user?.email) {
+        if (legacy.user.role && legacy.user.role !== 'service_provider') {
+          return res.status(403).json({ error: 'Service provider sign-in only for this resource.' });
+        }
+        uid = legacy.user.userId || null;
+        email = legacy.user.email.toLowerCase().trim();
+      } else {
+        return res.status(401).json({
+          error: 'Authentication required. Please sign up or log in first.',
+          details: 'Missing or invalid authorization token',
+        });
+      }
+    }
+
     const resolveProviderForActor = async (): Promise<{ id: string } & ServiceProviderPayload | null> => {
-      if (!uid) return null;
-      const byId = await supabaseServiceProviderService.findById(uid);
-      if (byId) return byId;
+      if (uid) {
+        const byId = await supabaseServiceProviderService.findById(uid);
+        if (byId) return byId;
+      }
       if (email) {
-        const byEmail = await supabaseServiceProviderService.findByEmail(email);
-        if (byEmail) return byEmail;
+        return (await supabaseServiceProviderService.findByEmail(email)) as
+          | ({ id: string } & ServiceProviderPayload)
+          | null;
       }
       return null;
     };
 
     if (req.method === 'GET') {
-      if (scope === 'all') {
-        const all = await supabaseServiceProviderService.findAll();
-        return res.status(200).json(all);
-      }
-
-      // GET 'mine' requires authentication (already verified above)
-      if (!uid) {
+      if (!email && !uid) {
         return res.status(401).json({ error: 'Authentication required to fetch your profile' });
       }
 
@@ -294,11 +291,15 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
     }
 
     if (req.method === 'POST') {
-      // POST requires authentication
-      if (!uid || !email) {
+      if (!email) {
         return res.status(401).json({ error: 'Authentication required to create service provider profile' });
       }
-      
+      if (!uid) {
+        return res.status(400).json({
+          error: 'Cannot create profile without a stable user id. Sign in with email/password first.',
+        });
+      }
+
       const body = req.body as Partial<ServiceProviderPayload>;
       if (!body.name || !body.email || !body.phone || !body.city) {
         return res.status(400).json({ error: 'Missing required fields: name, email, phone, city' });
@@ -370,8 +371,7 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
     }
 
     if (req.method === 'PATCH') {
-      // PATCH requires authentication
-      if (!uid) {
+      if (!email && !uid) {
         return res.status(401).json({ error: 'Authentication required to update service provider profile' });
       }
       

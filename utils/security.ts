@@ -180,6 +180,45 @@ export interface TokenPayload {
   aud?: string;
 }
 
+/** Distinct audience so password-reset tokens cannot be used as session JWTs. */
+export const PASSWORD_RESET_JWT_AUDIENCE = 'reride-password-reset';
+
+/**
+ * State-signed token for one-hour password reset; updates `public.users.password` (bcrypt).
+ */
+export const generatePasswordResetToken = (email: string): string => {
+  const secret = config.JWT.SECRET;
+  if (!secret) {
+    throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
+  }
+  return jwt.sign(
+    { email: email.toLowerCase().trim(), typ: 'pwd_reset' },
+    secret,
+    {
+      expiresIn: '1h',
+      issuer: config.JWT.ISSUER,
+      audience: PASSWORD_RESET_JWT_AUDIENCE,
+    },
+  );
+};
+
+export const verifyPasswordResetToken = (token: string): { email: string } => {
+  const secret = config.JWT.SECRET;
+  if (!secret) {
+    throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
+  }
+  const toleranceSeconds = Math.max(0, Number((config.JWT as { CLOCK_TOLERANCE_SECONDS?: number }).CLOCK_TOLERANCE_SECONDS ?? 0) || 0);
+  const decoded = jwt.verify(token, secret, {
+    issuer: config.JWT.ISSUER,
+    audience: PASSWORD_RESET_JWT_AUDIENCE,
+    clockTolerance: toleranceSeconds,
+  }) as { email?: string; typ?: string };
+  if (decoded.typ !== 'pwd_reset' || !decoded.email || typeof decoded.email !== 'string') {
+    throw new Error('Invalid reset token');
+  }
+  return { email: decoded.email.toLowerCase().trim() };
+};
+
 export const verifyToken = (token: string): TokenPayload => {
   try {
     const secret = config.JWT.SECRET;

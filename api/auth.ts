@@ -5,7 +5,7 @@ import { getSecurityConfig } from '../utils/security-config.js';
 // Authentication middleware
 export interface AuthResult {
   isValid: boolean;
-  user?: { userId: string; email: string; role: string; type?: string };
+  user?: { userId: string; email: string; role: string; type?: string }; // role includes service_provider from JWT
   error?: string;
 }
 

@@ -72,6 +72,33 @@ export async function patchConversationClearMessages(
   }
 }
 
+/** Permanently delete a conversation (participant or admin, via API). */
+export async function deleteConversationById(
+  conversationId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const id = String(conversationId || '').trim();
+  if (!id) {
+    return { success: false, error: 'conversationId required' };
+  }
+  try {
+    const response = await authenticatedFetch(
+      `/api/conversations?conversationId=${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    );
+    const result = await handleApiResponse<{ success?: boolean; reason?: string; error?: string }>(response);
+    if (!response.ok || result.success === false) {
+      return {
+        success: false,
+        error: result.reason || result.error || `Failed to delete (HTTP ${response.status})`,
+      };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('deleteConversationById error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 /**
  * Save conversation to Supabase
  */

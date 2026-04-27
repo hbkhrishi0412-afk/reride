@@ -538,6 +538,8 @@ interface AppContextType {
     isRead: boolean,
   ) => void;
   clearConversationMessages: (conversationId: string) => Promise<void>;
+  /** Remove conversation for current user (API DELETE + local state). */
+  deleteConversation: (conversationId: string) => Promise<void>;
   toggleTyping: (conversationId: string, isTyping: boolean) => void;
   flagContent: (type: 'vehicle' | 'conversation', id: number | string, reason?: string) => void;
   updateUser: (email: string, updates: Partial<User>) => Promise<void>;
@@ -6149,6 +6151,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
       } catch (error) {
         console.error('clearConversationMessages:', error);
+        addToast(t('toast.failedSendMessageGeneric'), 'error');
+      }
+    },
+    deleteConversation: async (conversationId: string) => {
+      if (!currentUser) return;
+      try {
+        const { deleteConversationById } = await import('../services/conversationService');
+        const res = await deleteConversationById(String(conversationId));
+        if (!res.success) {
+          addToast(res.error || t('toast.failedSendMessageGeneric'), 'error');
+          return;
+        }
+        setConversations((prev) => {
+          const next = Array.isArray(prev)
+            ? prev.filter((c) => c && String(c.id) !== String(conversationId))
+            : [];
+          try {
+            saveConversations(next);
+          } catch {
+            /* ignore */
+          }
+          return next;
+        });
+        setActiveChat((prev) => (prev && String(prev.id) === String(conversationId) ? null : prev));
+        addToast('Conversation deleted.', 'success');
+      } catch (error) {
+        console.error('deleteConversation:', error);
         addToast(t('toast.failedSendMessageGeneric'), 'error');
       }
     },

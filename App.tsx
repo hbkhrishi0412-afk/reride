@@ -381,6 +381,7 @@ const AppContent: React.FC = () => {
     markAsRead,
     setConversationReadState,
     clearConversationMessages,
+    deleteConversation,
     toggleTyping,
     flagContent,
     updateUser,
@@ -1848,6 +1849,10 @@ const AppContent: React.FC = () => {
               currentUser={currentUser}
               users={users}
               onViewSellerProfile={openSellerProfileByEmail}
+              onRequestLogin={() => {
+                addToast('Please login to call the seller', 'info');
+                navigate(ViewEnum.LOGIN_PORTAL);
+              }}
               onStartChat={async (vehicle) => {
                 if (process.env.NODE_ENV === 'development') {
                   logInfo('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
@@ -2461,6 +2466,11 @@ const AppContent: React.FC = () => {
                     if (currentUser) {
                       await updateUser(currentUser.email, profileData);
                       setCurrentUser({ ...currentUser, ...profileData } as User);
+                    }
+                  }}
+                  onUpdateSellerProfile={async (details) => {
+                    if (currentUser?.email) {
+                      await updateUser(currentUser.email, details);
                     }
                   }}
                   notifications={notifications.filter(n => n.recipientEmail === currentUser.email)}
@@ -3164,6 +3174,7 @@ const AppContent: React.FC = () => {
               currentUser={currentUser}
               onNavigate={navigate}
               onClearChat={clearConversationMessages}
+              onDeleteConversation={deleteConversation}
             />
           );
         }
@@ -4066,20 +4077,91 @@ const AppContent: React.FC = () => {
                   )}
               onNavigate={navigate}
               onEditVehicle={(vehicle) => {
-                // Handle edit vehicle
-                logInfo('Edit vehicle:', vehicle);
+                if (process.env.NODE_ENV === 'development') {
+                  logInfo('Edit vehicle:', vehicle);
+                }
               }}
-              onDeleteVehicle={(vehicleId) => {
-                // Handle delete vehicle
-                logInfo('Delete vehicle:', vehicleId);
+              onDeleteVehicle={async (vehicleId) => {
+                await deleteVehicle(vehicleId);
               }}
-              onMarkAsSold={(vehicleId) => {
-                // Handle mark as sold
-                logInfo('Mark as sold:', vehicleId);
+              onMarkAsSold={async (vehicleId) => {
+                const vehicle = vehicles.find((v) => v.id === vehicleId);
+                if (vehicle) {
+                  await updateVehicle(vehicleId, {
+                    status: 'sold',
+                    soldAt: new Date().toISOString(),
+                    listingStatus: 'sold',
+                  });
+                } else {
+                  addToast(t('toast.vehicleNotFound', { defaultValue: 'Vehicle not found.' }), 'error');
+                }
               }}
-              onFeatureListing={(vehicleId) => {
-                // Handle feature listing
-                logInfo('Feature listing:', vehicleId);
+              onMarkAsUnsold={async (vehicleId) => {
+                await updateVehicle(vehicleId, {
+                  status: 'published',
+                  soldAt: undefined,
+                  listingStatus: 'active',
+                });
+              }}
+              onFeatureListing={async (vehicleId) => {
+                try {
+                  const response = await authenticatedFetch('/api/vehicles?action=feature', {
+                    method: 'POST',
+                    body: JSON.stringify({ vehicleId }),
+                  });
+
+                  const responseText = await response.text();
+                  let result: ApiResponse<Vehicle> = {};
+                  if (responseText) {
+                    try {
+                      result = JSON.parse(responseText) as ApiResponse<Vehicle>;
+                    } catch (parseError) {
+                      logWarn('Failed to parse feature response JSON:', parseError);
+                      result = {};
+                    }
+                  }
+
+                  if (!response.ok) {
+                    const errorMessage =
+                      result?.reason || result?.error || `Failed to feature vehicle (HTTP ${response.status})`;
+                    addToast(errorMessage, response.status === 403 ? 'warning' : 'error');
+                    return;
+                  }
+
+                  if (result?.alreadyFeatured) {
+                    addToast('This vehicle is already featured.', 'info');
+                    return;
+                  }
+
+                  if (result?.success && result.vehicle) {
+                    await updateVehicle(vehicleId, result.vehicle);
+
+                    if (typeof result.remainingCredits === 'number') {
+                      const sellerEmail = result.vehicle?.sellerEmail || currentUser?.email;
+                      const remainingCredits = result.remainingCredits;
+
+                      if (sellerEmail) {
+                        if (
+                          currentUser?.email &&
+                          currentUser.email.toLowerCase().trim() === sellerEmail.toLowerCase().trim()
+                        ) {
+                          setCurrentUser({
+                            ...currentUser,
+                            featuredCredits: remainingCredits,
+                          });
+                        }
+                        await updateUser(sellerEmail, { featuredCredits: remainingCredits });
+                      }
+
+                      addToast(`Featured credits remaining: ${remainingCredits}`, 'info');
+                    }
+                  } else {
+                    addToast('Failed to feature vehicle. Please try again.', 'error');
+                  }
+                } catch (error) {
+                  logError('Failed to feature vehicle:', error);
+                  addToast('Failed to feature vehicle. Please try again.', 'error');
+                }
               }}
               onSendMessage={sendMessage}
               onMarkConversationAsRead={markAsRead}
@@ -4172,9 +4254,15 @@ const AppContent: React.FC = () => {
                 throw error;
               }
             }}
+            onUpdateSellerProfile={async (details) => {
+              if (currentUser?.email) {
+                await updateUser(currentUser.email, details);
+              }
+            }}
             notifications={notifications.filter(n => n.recipientEmail === currentUser.email)}
             onNotificationClick={handleNotificationClick}
             onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
+            addToast={addToast}
             onSetConversationReadState={(conversationId, isRead) =>
               setConversationReadState(conversationId, 'seller', isRead)
             }

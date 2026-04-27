@@ -1,8 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { resetPassword, updatePassword } from '../services/supabase-auth-service';
+import { updatePassword } from '../services/supabase-auth-service';
 import { getSupabaseClient } from '../lib/supabase';
 import { clearSupabaseAuthStorage } from '../utils/authStorage';
+import { getPasswordResetTokenFromBrowser, parseRecoverySignalsFromBrowser } from '../utils/passwordResetUrl';
+import {
+  completeUsersTablePasswordReset,
+  requestUsersTablePasswordReset,
+} from '../services/passwordResetFromApi';
 import PasswordInput from './PasswordInput';
 
 interface ForgotPasswordProps {
@@ -13,46 +19,32 @@ interface ForgotPasswordProps {
 
 type Stage = 'request' | 'recovery' | 'requestSent' | 'recoveryComplete';
 
-/**
- * Detect whether the current URL looks like a password-reset callback from Supabase.
- * Supabase PKCE flow puts a `code` query param on the configured redirect; legacy
- * implicit flow puts `type=recovery` in the URL hash. We accept either so users
- * landing here from an old email link still get the "set new password" form.
- */
-function detectRecoveryFromUrl(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const search = new URLSearchParams(window.location.search);
-    if (search.get('type') === 'recovery') return true;
-    if (search.get('code')) return true;
-
-    const hash = window.location.hash || '';
-    const qIdx = hash.indexOf('?');
-    if (qIdx >= 0) {
-      const hashParams = new URLSearchParams(hash.slice(qIdx + 1));
-      if (hashParams.get('type') === 'recovery') return true;
-      if (hashParams.get('code')) return true;
-    }
-
-    // Implicit flow leaves `#access_token=...&type=recovery`
-    if (hash.includes('type=recovery')) return true;
-  } catch {
-    /* ignore */
-  }
-  return false;
-}
-
 const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onResetSent }) => {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
 
-  const initialStage: Stage = detectRecoveryFromUrl() ? 'recovery' : 'request';
-  const [stage, setStage] = useState<Stage>(initialStage);
+  const [stage, setStage] = useState<Stage>(() => {
+    if (typeof window === 'undefined') return 'request';
+    const s = parseRecoverySignalsFromBrowser();
+    return s.hasUsersTableToken || s.hasSupabaseRecovery ? 'recovery' : 'request';
+  });
 
   const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const usersTableResetToken =
+    (searchParams.get('token') || getPasswordResetTokenFromBrowser() || '').trim() || null;
+
+  useEffect(() => {
+    const urlToken =
+      (searchParams.get('token') || getPasswordResetTokenFromBrowser() || '').trim() || null;
+    if (urlToken) {
+      setStage('recovery');
+    }
+  }, [searchParams]);
 
   const autoRedirectRef = useRef<number | null>(null);
 
@@ -99,7 +91,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onResetSent }) 
     setError(null);
     setIsLoading(true);
     try {
-      const result = await resetPassword(email.trim());
+      const result = await requestUsersTablePasswordReset(email.trim());
       if (!result.success) {
         setError(result.reason || t('auth.forgotError'));
         return;
@@ -128,15 +120,32 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onResetSent }) 
 
     setIsLoading(true);
     try {
+      const tableToken = usersTableResetToken;
+      if (tableToken) {
+        const result = await completeUsersTablePasswordReset(tableToken, newPassword);
+        if (!result.success) {
+          setError(result.reason || 'Failed to update password. The link may have expired.');
+          return;
+        }
+        try {
+          const clean = `${window.location.origin}${window.location.pathname}`;
+          window.history.replaceState({}, document.title, clean);
+        } catch {
+          /* ignore */
+        }
+        setStage('recoveryComplete');
+        autoRedirectRef.current = window.setTimeout(() => {
+          onBack();
+        }, 2000);
+        return;
+      }
+
       const result = await updatePassword(newPassword);
       if (!result.success) {
         setError(result.reason || 'Failed to update password. The reset link may have expired.');
         return;
       }
 
-      // Sign the recovery session out so the user has to log in with the new
-      // password; also strip recovery params from the URL so a refresh doesn't
-      // drop them back into recovery mode.
       try {
         await getSupabaseClient().auth.signOut({ scope: 'local' });
       } catch {
@@ -175,7 +184,9 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onResetSent }) 
     ? 'Set a New Password'
     : t('auth.forgotTitle');
   const intro = showRecovery
-    ? 'Choose a new password for your account. You will be signed in after updating.'
+    ? usersTableResetToken
+      ? 'Choose a new password for your ReRide account (stored in our secure database).'
+      : 'Choose a new password for your account. You will be signed in after updating.'
     : t('auth.forgotIntro');
 
   return (

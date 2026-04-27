@@ -166,6 +166,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const [planLoading, setPlanLoading] = useState(true);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [boostVehicle, setBoostVehicle] = useState<Vehicle | null>(null);
+  /** Seller analytics tab: which rolling window to use for views / inquiries. */
+  const [analyticsRangeDays, setAnalyticsRangeDays] = useState<7 | 30 | 90>(30);
   const [selectedBanks, setSelectedBanks] = useState<string[]>([]);
   const [isSavingBanks, setIsSavingBanks] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -326,13 +328,18 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     };
   }, [isSeller, currentUser.subscriptionPlan, t]);
 
-  // Initialize bank partners
+  // Keep bank checkboxes in sync with server when `partnerBanks` actually changes.
+  // Do NOT depend on the whole `currentUser` object — it gets a new reference often and
+  // was resetting local selections on every re-render, so toggles looked "broken".
+  const partnerBanksServerKey = useMemo(
+    () => JSON.stringify(currentUser?.partnerBanks ?? null),
+    [currentUser?.partnerBanks]
+  );
   useEffect(() => {
+    if (!isSeller) return;
     const banks = currentUser?.partnerBanks;
-    if (isSeller && banks != null && Array.isArray(banks)) {
-      setSelectedBanks([...banks]);
-    }
-  }, [isSeller, currentUser]);
+    setSelectedBanks(Array.isArray(banks) ? [...banks] : []);
+  }, [isSeller, partnerBanksServerKey]);
 
   // Calculate stats
   const safeUserVehicles = userVehicles || [];
@@ -1347,39 +1354,86 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   };
 
   const renderAnalytics = () => {
-    // Calculate additional metrics
-    const averageViewsPerListing = activeListings > 0 ? Math.round(totalViews / activeListings) : 0;
-    const conversionRate = totalViews > 0 ? ((totalInquiries / totalViews) * 100).toFixed(1) : '0.0';
+    const rangeMs = analyticsRangeDays * 24 * 60 * 60 * 1000;
+    const rangeStartTime = Date.now() - rangeMs;
+
+    const isIsoInWindow = (iso?: string) => {
+      if (!iso) return false;
+      const t = new Date(iso).getTime();
+      return Number.isFinite(t) && t >= rangeStartTime;
+    };
+
+    /** Best-effort views in the selected window (uses `viewsLast7Days` / `viewsLast30Days` when present). */
+    const viewScoreForWindow = (v: Vehicle, days: 7 | 30 | 90): number => {
+      const total = v.views ?? 0;
+      const w7 = v.viewsLast7Days ?? 0;
+      const w30 = v.viewsLast30Days ?? 0;
+      if (days === 7) {
+        if (w7 > 0) return w7;
+        if (w30 > 0) return Math.max(0, Math.round((w30 * 7) / 30));
+        if (total > 0) return Math.max(0, Math.round((total * 7) / 30));
+        return 0;
+      }
+      if (days === 30) {
+        if (w30 > 0) return w30;
+        if (w7 > 0) return Math.round((w7 * 30) / 7);
+        return total;
+      }
+      if (total > 0) return total;
+      if (w30 > 0) return Math.round((w30 * 90) / 30);
+      if (w7 > 0) return Math.round((w7 * 90) / 7);
+      return 0;
+    };
+
+    const periodConversations = safeConversations.filter((c) => c && isIsoInWindow(c.lastMessageAt));
+    const periodTotalViews = safeUserVehicles.reduce(
+      (sum, v) => sum + viewScoreForWindow(v, analyticsRangeDays),
+      0
+    );
+    const periodInquiries = periodConversations.length;
+    const newListingsInRange = safeUserVehicles.filter(
+      (v) => v && v.createdAt && new Date(v.createdAt).getTime() >= rangeStartTime
+    ).length;
+
+    const averageViewsPerListing = activeListings > 0 ? Math.round(periodTotalViews / activeListings) : 0;
+    const conversionRate =
+      periodTotalViews > 0 ? ((periodInquiries / periodTotalViews) * 100).toFixed(1) : '0.0';
     const responseRate =
-      totalInquiries > 0
+      periodInquiries > 0
         ? (
-            (safeConversations.filter((c) => filterMessagesForViewer(c, 'seller').length > 0).length /
-              totalInquiries) *
+            (periodConversations.filter((c) => filterMessagesForViewer(c, 'seller').length > 0).length /
+              periodInquiries) *
             100
           ).toFixed(0)
         : '0';
-    const avgPrice = safeUserVehicles.length > 0 
-      ? safeUserVehicles.reduce((sum, v) => sum + (v?.price || 0), 0) / safeUserVehicles.length 
-      : 0;
+    const avgPrice =
+      safeUserVehicles.length > 0
+        ? safeUserVehicles.reduce((sum, v) => sum + (v?.price || 0), 0) / safeUserVehicles.length
+        : 0;
 
-    // Get top performing vehicles
+    // Get top performing vehicles by estimated views in the selected window
     const topVehicles = [...safeUserVehicles]
-      .sort((a, b) => (b?.views || 0) - (a?.views || 0))
+      .sort(
+        (a, b) =>
+          viewScoreForWindow(b, analyticsRangeDays) - viewScoreForWindow(a, analyticsRangeDays)
+      )
       .slice(0, 5);
 
-    const formatPrice = (n: number) => (n >= 10000000
-      ? `${(n / 10000000).toFixed(1)}Cr`
-      : n >= 100000
-        ? `${(n / 100000).toFixed(1)}L`
-        : n.toLocaleString('en-IN'));
+    const formatPrice = (n: number) =>
+      n >= 10000000
+        ? `${(n / 10000000).toFixed(1)}Cr`
+        : n >= 100000
+          ? `${(n / 100000).toFixed(1)}L`
+          : n.toLocaleString('en-IN');
     const successRate = totalListings > 0 ? Math.round((soldListings / totalListings) * 100) : 0;
+    const periodLabel = `${analyticsRangeDays}d`;
 
     const metrics = [
       {
         key: 'views',
         label: 'Total views',
-        value: totalViews.toLocaleString('en-IN'),
-        hint: averageViewsPerListing > 0 ? `${averageViewsPerListing} avg / listing` : 'Awaiting traffic',
+        value: periodTotalViews.toLocaleString('en-IN'),
+        hint: averageViewsPerListing > 0 ? `${averageViewsPerListing} avg / listing · ${periodLabel}` : 'Awaiting traffic',
         icon: <IconEye size={16} stroke={1.9} />,
         accent: '#2563EB',
         tint: 'rgba(37,99,235,0.10)'
@@ -1387,8 +1441,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       {
         key: 'inquiries',
         label: t('sellerDashboard.mobile.analyticsMessageThreads'),
-        value: totalInquiries,
-        hint: totalViews > 0 ? `${conversionRate}% conversion` : 'No views yet',
+        value: periodInquiries,
+        hint: periodTotalViews > 0 ? `${conversionRate}% conversion` : 'No views in period',
         icon: <IconChat size={16} stroke={1.9} />,
         accent: '#10B981',
         tint: 'rgba(16,185,129,0.10)'
@@ -1414,9 +1468,21 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     ];
 
     const trends: { key: string; label: string; value: number; max: number; color: string }[] = [
-      { key: 'views', label: 'Views', value: totalViews, max: Math.max(totalViews, 1000), color: '#2563EB' },
-      { key: 'inq', label: t('sellerDashboard.mobile.analyticsMessageThreads'), value: totalInquiries, max: Math.max(totalInquiries, 100), color: '#10B981' },
-      { key: 'active', label: t('vehicle.detail.activeListings'), value: activeListings, max: Math.max(activeListings, 20), color: '#FF6B35' }
+      { key: 'views', label: 'Views', value: periodTotalViews, max: Math.max(periodTotalViews, 1000), color: '#2563EB' },
+      {
+        key: 'inq',
+        label: t('sellerDashboard.mobile.analyticsMessageThreads'),
+        value: periodInquiries,
+        max: Math.max(periodInquiries, 100),
+        color: '#10B981'
+      },
+      {
+        key: 'newListings',
+        label: t('vehicle.detail.newListings', { defaultValue: 'New listings' }),
+        value: newListingsInRange,
+        max: Math.max(newListingsInRange, 20),
+        color: '#FF6B35'
+      }
     ];
 
     return (
@@ -1431,20 +1497,33 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           <div
             className="inline-flex items-center gap-1 rounded-full p-1"
             style={{ background: 'rgba(15,23,42,0.05)', border: '1px solid rgba(15,23,42,0.06)' }}
+            role="group"
+            aria-label={t('sellerDashboard.mobile.analyticsRange', { defaultValue: 'Analytics time range' })}
           >
-            {['7D', '30D', '90D'].map((p, i) => (
-              <button
-                key={p}
-                type="button"
-                className="px-2.5 py-1 rounded-full text-[10.5px] font-semibold transition-colors"
-                style={{
-                  background: i === 1 ? '#0B0B0F' : 'transparent',
-                  color: i === 1 ? '#FFFFFF' : '#475569'
-                }}
-              >
-                {p}
-              </button>
-            ))}
+            {(
+              [
+                { label: '7D', days: 7 as const },
+                { label: '30D', days: 30 as const },
+                { label: '90D', days: 90 as const }
+              ] as const
+            ).map(({ label, days }) => {
+              const selected = analyticsRangeDays === days;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setAnalyticsRangeDays(days)}
+                  className="px-2.5 py-1 rounded-full text-[10.5px] font-semibold transition-colors"
+                  style={{
+                    background: selected ? '#0B0B0F' : 'transparent',
+                    color: selected ? '#FFFFFF' : '#475569'
+                  }}
+                  aria-pressed={selected}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -1566,7 +1645,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     </p>
                     <div className="mt-0.5 flex items-center gap-3 text-[11px] text-slate-500 font-medium">
                       <span className="inline-flex items-center gap-1">
-                        <IconEye size={11} stroke={2} /> {vehicle.views || 0}
+                        <IconEye size={11} stroke={2} />{' '}
+                        {viewScoreForWindow(vehicle, analyticsRangeDays).toLocaleString('en-IN')}
+                        <span className="text-slate-400">({periodLabel})</span>
                       </span>
                       {(vehicle.inquiriesCount ?? 0) > 0 && (
                         <span className="inline-flex items-center gap-1">
@@ -3471,6 +3552,19 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 return (
                   <label
                     key={bank}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleBankToggle(bank);
+                      }
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleBankToggle(bank);
+                    }}
                     className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer transition-colors active:scale-[0.99]"
                     style={{
                       background: isSelected ? 'rgba(139,92,246,0.08)' : 'rgba(15,23,42,0.025)',
@@ -3479,9 +3573,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   >
                     <input
                       type="checkbox"
+                      readOnly
+                      tabIndex={-1}
                       checked={isSelected}
-                      onChange={() => handleBankToggle(bank)}
-                      className="sr-only"
+                      aria-hidden
+                      className="sr-only pointer-events-none"
                     />
                     <span
                       className="shrink-0 w-4.5 h-4.5 rounded-md grid place-items-center"

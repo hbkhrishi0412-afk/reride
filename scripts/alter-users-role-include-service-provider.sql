@@ -1,0 +1,13 @@
+-- If public.users was created with CHECK (role IN ('customer', 'seller', 'admin')) only,
+-- app login for car-service providers (role = 'service_provider') will fail to INSERT/UPDATE.
+-- Run once in Supabase SQL editor if service_provider is rejected.
+--
+-- 1) Drop the old check if it exists (name may differ — inspect in pg_constraint):
+--    SELECT conname FROM pg_constraint WHERE conrelid = 'public.users'::regclass;
+--
+-- Example (adjust constraint name to match your DB):
+-- ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_check;
+--
+-- 2) Add inclusive check:
+-- ALTER TABLE public.users ADD CONSTRAINT users_role_check
+--   CHECK (role IN ('customer', 'seller', 'admin', 'service_provider', 'finance_partner'));
