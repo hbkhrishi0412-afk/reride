@@ -10,8 +10,16 @@
           if (h !== 'reride.co.in') return;
           var sp = new URLSearchParams(location.search || '');
           if (sp.has('code') || sp.has('error')) return;
+          // Match ensureRerideWebCanonicalHost: pass role across apex → www (storage is per-origin).
+          var role = null;
+          try {
+            role = sessionStorage.getItem('reride_oauth_role') || localStorage.getItem('reride_oauth_role');
+          } catch (e) {}
+          var roleOk = { customer: 1, seller: 1, service_provider: 1, admin: 1 };
+          if (role && roleOk[role] && !sp.has('_oa_role')) sp.set('_oa_role', role);
+          var q = sp.toString();
           location.replace(
-            'https://www.reride.co.in' + location.pathname + (location.search || '') + (location.hash || ''),
+            'https://www.reride.co.in' + location.pathname + (q ? '?' + q : '') + (location.hash || ''),
           );
         } catch (e) {}
       })();
