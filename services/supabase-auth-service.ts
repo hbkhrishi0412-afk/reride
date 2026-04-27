@@ -168,13 +168,14 @@ export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
 
     const redirectTo = getOAuthRedirectUrl();
 
+    // Do not set `scopes` here. Supabase + GoTrue already send the right Google OpenID
+    // scopes; an extra `scopes` string can be merged into a duplicate/invalid `scope=`
+    // param and cause accounts.google.com to return 400 "The request is malformed".
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo,
         skipBrowserRedirect: useExternalBrowser,
-        // Explicit scope avoids provider defaults drifting; matches native Google sign-in.
-        scopes: 'openid email profile',
       },
     });
 
