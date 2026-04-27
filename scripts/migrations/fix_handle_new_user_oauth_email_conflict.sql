@@ -1,10 +1,18 @@
--- Fix "Database error saving new user" on Google (and other) OAuth when a row in
--- public.users already exists for the same email (legacy / Firebase id) but a different
--- primary key. The old handle_new_user() only had ON CONFLICT (id) DO NOTHING, so a new
--- auth.users UUID insert failed the UNIQUE (email) constraint and aborted signup.
+-- Fix "Database error saving new user" on Google (and other) OAuth.
 --
--- Apply in Supabase Dashboard → SQL Editor (or: supabase db push / migration pipeline).
--- Safe to re-run: CREATE OR REPLACE FUNCTION is idempotent.
+-- Causes in production:
+-- 1) public.users has UNIQUE (email). A legacy row (email_key / old Firebase id) with the
+--    same email but a different id than the new auth.users row → INSERT failed before a
+--    plain ON CONFLICT (id) only.
+-- 2) public.users CHECK (auth_provider) allows only email | google | phone. OAuth
+--    metadata can produce values outside that set; we normalize.
+-- 3) public.service_providers / buyer_activity may still reference a legacy id when
+--    users.id is migrated to the new auth id — we realign by email (service_providers) or
+--    old id (buyer_activity).
+--
+-- Apply in Supabase → SQL Editor (or: MCP apply_migration). Idempotent: REPLACE FUNCTION.
+--
+-- After deploy, try Google sign-in again with the same test account.
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
@@ -15,26 +23,44 @@ AS $function$
 DECLARE
   v_name text;
   v_auth_provider text;
+  v_raw text;
   v_email text;
+  v_old_id text;
 BEGIN
-  v_email := NULLIF(btrim(NEW.email), '');
+  v_email := NULLIF(LOWER(btrim(COALESCE(NEW.email, ''))), '');
   IF v_email IS NULL THEN
     RAISE LOG 'handle_new_user: skipped public.users (no email) for auth user %', NEW.id;
     RETURN NEW;
   END IF;
 
-  v_auth_provider := COALESCE(NULLIF(btrim(NEW.raw_app_meta_data->>'provider'), ''), 'email');
+  v_raw := LOWER(btrim(COALESCE(NEW.raw_app_meta_data->>'provider', '')));
+  IF v_raw IN ('email', 'google', 'phone') THEN
+    v_auth_provider := v_raw;
+  ELSIF COALESCE(NEW.raw_app_meta_data->'providers', '[]'::jsonb) @> '["google"]'::jsonb THEN
+    v_auth_provider := 'google';
+  ELSIF v_raw = '' AND NEW.phone IS NOT NULL AND btrim(COALESCE(NEW.phone, '')) <> '' THEN
+    v_auth_provider := 'phone';
+  ELSE
+    v_auth_provider := 'email';
+  END IF;
 
   v_name := COALESCE(
     NULLIF(btrim(NEW.raw_user_meta_data->>'name'), ''),
     NULLIF(btrim(NEW.raw_user_meta_data->>'full_name'), ''),
     NULLIF(btrim(NEW.raw_user_meta_data->>'display_name'), ''),
+    NULLIF(btrim(NEW.raw_user_meta_data->>'user_name'), ''),
     split_part(v_email, '@', 1),
     'User'
   );
   IF v_name IS NULL OR btrim(v_name) = '' THEN
     v_name := 'User';
   END IF;
+
+  SELECT u.id
+  INTO v_old_id
+  FROM public.users u
+  WHERE u.email = v_email
+  LIMIT 1;
 
   INSERT INTO public.users AS u (
     id,
@@ -64,9 +90,31 @@ BEGIN
     firebase_uid = EXCLUDED.firebase_uid,
     updated_at = now();
 
+  IF to_regclass('public.service_providers') IS NOT NULL THEN
+    UPDATE public.service_providers sp
+    SET
+      id = NEW.id::text,
+      updated_at = now()
+    WHERE LOWER(btrim(COALESCE(sp.email, ''))) = v_email
+      AND sp.id IS DISTINCT FROM NEW.id::text;
+  END IF;
+
+  IF v_old_id IS NOT NULL
+     AND v_old_id IS DISTINCT FROM NEW.id::text
+     AND to_regclass('public.buyer_activity') IS NOT NULL THEN
+    UPDATE public.buyer_activity ba
+    SET
+      user_id = NEW.id::text,
+      updated_at = now()
+    WHERE ba.user_id = v_old_id;
+  END IF;
+
   RETURN NEW;
 END;
 $function$;
 
 COMMENT ON FUNCTION public.handle_new_user() IS
-  'On auth.users insert: upsert public.users by email, migrating PK to new auth id when needed (child FKs use ON UPDATE CASCADE).';
+  'On auth.users insert: upsert public.users by email, migrate id to new auth id, re-link service_provider + buyer_activity when needed.';
+
+-- Trigger on_auth_user_created already calls public.handle_new_user() in this project
+-- (CREATE OR REPLACE above is enough; do not drop/recreate the trigger here).
