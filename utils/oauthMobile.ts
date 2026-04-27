@@ -1,6 +1,7 @@
 /**
- * Google OAuth in Android WebView hits Error 403 disallowed_useragent — Google blocks embedded WebViews.
- * We open the Supabase OAuth URL in Chrome Custom Tabs / system browser and complete PKCE via deep link.
+ * Google OAuth in a plain WebView hits 403 (disallowed user agent) or endless loading. Android uses
+ * Chrome Custom Tabs in OAuthExternalBrowserPlugin; iOS may use the Capacitor Browser (Safari VC).
+ * PKCE return: com.reride.app://oauth-callback (see handleOAuthReturnUrl).
  */
 
 import { Capacitor } from '@capacitor/core';
@@ -32,15 +33,36 @@ export function getNativeOAuthRedirectUrl(): string | undefined {
   return shouldUseNativeGoogleOAuthFlow() ? NATIVE_OAUTH_REDIRECT : undefined;
 }
 
+/**
+ * Supabase custom-scheme returns usually look like
+ * `com.reride.app://oauth-callback?code=...&state=...` (code in search).
+ * Some stacks put params in the fragment; mirror `consumeWebSupabaseOAuthCallback` heuristics.
+ */
 function parsePkceCodeFromCallbackUrl(urlString: string): string | null {
   try {
-    const url = new URL(urlString);
-    const code = url.searchParams.get('code');
-    if (code) return code;
-    const hash = url.hash?.replace(/^#/, '') || '';
-    if (hash) {
+    const u = new URL(urlString);
+    const fromQuery = u.searchParams.get('code');
+    if (fromQuery) {
+      return fromQuery;
+    }
+    const hash = u.hash?.replace(/^#/, '') || '';
+    if (!hash) {
+      return null;
+    }
+    const qIdx = hash.indexOf('?');
+    if (qIdx >= 0) {
+      const hp = new URLSearchParams(hash.slice(qIdx + 1));
+      const c = hp.get('code');
+      if (c) {
+        return c;
+      }
+    }
+    if (!hash.startsWith('/')) {
       const hp = new URLSearchParams(hash);
-      return hp.get('code');
+      const c = hp.get('code');
+      if (c) {
+        return c;
+      }
     }
   } catch {
     return null;
@@ -49,20 +71,46 @@ function parsePkceCodeFromCallbackUrl(urlString: string): string | null {
 }
 
 function parseOAuthErrorFromCallbackUrl(urlString: string): string | null {
-  try {
-    const url = new URL(urlString);
-    const desc = url.searchParams.get('error_description');
-    const err = url.searchParams.get('error');
-    const raw = desc || err;
-    if (!raw) return null;
+  const decode = (raw: string): string => {
     try {
       return decodeURIComponent(raw.replace(/\+/g, ' '));
     } catch {
       return raw;
     }
+  };
+  const pick = (err: string | null, desc: string | null): string | null => {
+    const raw = desc || err;
+    if (!raw) {
+      return null;
+    }
+    return decode(raw);
+  };
+  try {
+    const u = new URL(urlString);
+    const fromQuery = pick(u.searchParams.get('error'), u.searchParams.get('error_description'));
+    if (fromQuery) {
+      return fromQuery;
+    }
+    const hash = u.hash?.replace(/^#/, '') || '';
+    if (!hash) {
+      return null;
+    }
+    const qIdx = hash.indexOf('?');
+    if (qIdx >= 0) {
+      const hp = new URLSearchParams(hash.slice(qIdx + 1));
+      const p = pick(hp.get('error'), hp.get('error_description'));
+      if (p) {
+        return p;
+      }
+    }
+    if (!hash.startsWith('/')) {
+      const hp = new URLSearchParams(hash);
+      return pick(hp.get('error'), hp.get('error_description'));
+    }
   } catch {
     return null;
   }
+  return null;
 }
 
 function dispatchNativeOAuthFailed(message: string): void {
@@ -75,6 +123,23 @@ function dispatchNativeOAuthFailed(message: string): void {
   }
 }
 
+/** Supabase authorize / Google account pages must not be opened in Capacitor’s in-app Browser (WebView). */
+function isSupabaseOrGoogleOAuthUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const h = u.hostname.toLowerCase();
+    if (h === 'accounts.google.com' || h.endsWith('.google.com')) {
+      return true;
+    }
+    if (h.endsWith('.supabase.co') && u.pathname.includes('/auth/')) {
+      return true;
+    }
+  } catch {
+    return true;
+  }
+  return false;
+}
+
 async function closeOAuthBrowser(): Promise<void> {
   try {
     const { Browser } = await import('@capacitor/browser');
@@ -85,8 +150,12 @@ async function closeOAuthBrowser(): Promise<void> {
 }
 
 async function handleOAuthReturnUrl(url: string): Promise<void> {
-  if (!url || url.indexOf('oauth-callback') === -1) return;
-  if (url === lastHandledOAuthUrl) return;
+  if (!url || !/oauth-callback/i.test(url)) {
+    return;
+  }
+  if (url === lastHandledOAuthUrl) {
+    return;
+  }
 
   const oauthErr = parseOAuthErrorFromCallbackUrl(url);
   if (oauthErr) {
@@ -115,9 +184,33 @@ async function handleOAuthReturnUrl(url: string): Promise<void> {
 
   try {
     const supabase = getSupabaseClient();
+    if (typeof supabase.auth.exchangeCodeForSession !== 'function') {
+      console.error(
+        '[ReRide OAuth] exchangeCodeForSession missing — check VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.',
+      );
+      dispatchNativeOAuthFailed('Could not complete sign-in. Reinstall the app or contact support.');
+      lastHandledOAuthUrl = '';
+      return;
+    }
+
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
-      console.warn('[ReRide OAuth] exchangeCodeForSession:', error.message);
+      const m = (error.message || '').toLowerCase();
+      const isBenignRace =
+        m.includes('already') ||
+        m.includes('invalid_grant') ||
+        m.includes('bad request') ||
+        m.includes('code verifier') ||
+        m.includes('expired');
+      if (!isBenignRace) {
+        console.warn('[ReRide OAuth] exchangeCodeForSession:', error.message);
+      }
+      const {
+        data: { session: after },
+      } = await supabase.auth.getSession();
+      if (after) {
+        return;
+      }
       dispatchNativeOAuthFailed(
         error.message || 'Could not finish Google sign-in. Try again or use email sign-in.',
       );
@@ -125,6 +218,17 @@ async function handleOAuthReturnUrl(url: string): Promise<void> {
     }
   } catch (e) {
     console.warn('[ReRide OAuth] exchangeCodeForSession failed:', e);
+    try {
+      const supabase = getSupabaseClient();
+      const {
+        data: { session: after },
+      } = await supabase.auth.getSession();
+      if (after) {
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
     dispatchNativeOAuthFailed(
       e instanceof Error ? e.message : 'Could not finish Google sign-in. Try again.',
     );
@@ -184,7 +288,7 @@ export function initNativeGoogleOAuthReturnHandler(): void {
   });
 }
 
-/** Opens Supabase Google OAuth URL in Custom Tab (Capacitor) or Android bridge; never in embedded WebView. */
+/** Opens Supabase Google OAuth in Chrome Custom Tabs (Android) or SFSafariViewController; never WebView. */
 export async function openGoogleOAuthUrl(oauthUrl: string): Promise<void> {
   if (!oauthUrl) return;
 
@@ -194,11 +298,29 @@ export async function openGoogleOAuthUrl(oauthUrl: string): Promise<void> {
         await OAuthExternalBrowser.openUrl({ url: oauthUrl });
         return;
       } catch (e) {
-        console.warn('[ReRide OAuth] System browser open failed; falling back to in-app browser.', e);
+        console.warn('[ReRide OAuth] Custom Tabs / system open failed.', e);
+        if (isSupabaseOrGoogleOAuthUrl(oauthUrl)) {
+          dispatchNativeOAuthFailed(
+            'Sign-in could not open in the browser. Add VITE_GOOGLE_WEB_CLIENT_ID to use built-in Google sign-in, or ensure Chrome is installed and try again.',
+          );
+          return;
+        }
+      }
+    } else {
+      try {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: oauthUrl });
+        return;
+      } catch (e) {
+        console.warn('[ReRide OAuth] Browser.open failed (iOS).', e);
+        if (isSupabaseOrGoogleOAuthUrl(oauthUrl)) {
+          dispatchNativeOAuthFailed(
+            'Sign-in could not open. Set VITE_GOOGLE_WEB_CLIENT_ID for native Google sign-in or try again.',
+          );
+        }
+        return;
       }
     }
-    const { Browser } = await import('@capacitor/browser');
-    await Browser.open({ url: oauthUrl });
     return;
   }
 
