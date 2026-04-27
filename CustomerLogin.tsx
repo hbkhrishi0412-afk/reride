@@ -102,7 +102,7 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
       }
 
       if (redirectUrl) {
-        window.location.assign(redirectUrl);
+        window.location.replace(redirectUrl);
         return;
       }
 

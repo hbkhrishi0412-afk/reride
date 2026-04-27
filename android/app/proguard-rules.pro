@@ -11,8 +11,10 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# Local Capacitor plugin (Google OAuth opens in system browser)
+# Local Capacitor plugin (Google OAuth: Chrome Custom Tabs)
 -keep class com.reride.app.OAuthExternalBrowserPlugin { *; }
+-keep class androidx.browser.customtabs.** { *; }
+-dontwarn androidx.browser.**
 
 # Capacitor core + Cordova shim
 -keep class com.getcapacitor.** { *; }

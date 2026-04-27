@@ -10,6 +10,7 @@ Set in `.env.production` (or CI/Vercel build env) so Vite embeds them in the app
 |----------|---------|
 | `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | Project **anon** key (Dashboard → Project Settings → API) |
+| `VITE_GOOGLE_WEB_CLIENT_ID` | **Required for Android** Google sign-in: Web OAuth client ID (same family as [§3b](#3b-native-google-sign-in-android--ios)). Without it, Google is disabled in the app (browser OAuth is not supported on Android). |
 
 After changing these:
 
@@ -78,9 +79,9 @@ The app resolves `/api/*` to **`https://www.reride.co.in`** in native WebView (s
 |------|----------|
 | **UnifiedLogin** email/password | ReRide API login → JWT. **`signInWithPassword` bridge is opt-in** (`VITE_SUPABASE_PASSWORD_BRIDGE=true`); only enable if API users exist in Supabase Auth with the same password. |
 | **Seller `Login.tsx`** | Supabase email/password → `syncWithBackend` |
-| **Google (web)** | `signInWithOAuth` → redirect in the same tab → `AppProvider` finishes with `syncWithBackend` |
-| **Google (Android / iOS, recommended)** | If `VITE_GOOGLE_WEB_CLIENT_ID` is set: **native** Google Sign-In (`@capawesome/capacitor-google-sign-in`) → `signInWithIdToken` → no full-site Chrome tab. Requires Web + Android OAuth clients in Google Cloud and both IDs in Supabase Google provider. |
-| **Google (Android fallback)** | If the env var is empty or native sign-in errors: `signInWithOAuth` opens **Chrome Custom Tab** → redirect `com.reride.app://oauth-callback` → `exchangeCodeForSession` |
+| **Google (web)** | `signInWithOAuth` → redirect in the same tab → `AppProvider` + `syncWithBackend` |
+| **Google (Android)** | **Native only** (Google Play Services / Credential Manager): `VITE_GOOGLE_WEB_CLIENT_ID` + Android OAuth client (SHA-1) + both client IDs in Supabase → `signInWithIdToken`. Same pattern as high-traffic Android apps: no Chrome account Web flow. If the env var is missing or native fails, the app shows a clear error instead of opening Chrome. |
+| **Google (iOS)** | Native when the env var is set; if unavailable, `signInWithOAuth` + **SFSafariViewController** (not embedded WebView). |
 | **Session restore** | If ReRide user is missing but Supabase session exists → `syncWithBackend` once (see `AppProvider`) |
 
 Logout clears ReRide tokens, `reride_oauth_role`, `reride_last_role`, and calls `supabase.auth.signOut()`.

@@ -5,6 +5,7 @@
  * are handled through Supabase Auth.
  */
 
+import { Capacitor } from '@capacitor/core';
 import { getSupabaseClient } from '../lib/supabase.js';
 import type { User as SupabaseAuthUser, Session } from '@supabase/supabase-js';
 import type { User } from '../types.js';
@@ -69,6 +70,9 @@ function wrapError(error: unknown, fallbackMessage: string): string {
  * code_verifier in localStorage per-origin. If the user is on `https://reride.co.in` but
  * `redirectTo` is `https://www.reride.co.in`, the callback runs on www without the verifier
  * and no session is created (user stays "Guest").
+ *
+ * `http://localhost:5173` and `https://localhost` are different origins — whitelist each dev URL
+ * in Supabase Redirect URLs and open the app using the same origin you registered.
  */
 export function getOAuthRedirectUrl(): string | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -106,13 +110,53 @@ function mapGoogleProviderError(message: string): string | undefined {
       'from Google Cloud Console (OAuth 2.0). Also add this app URL under Redirect URLs.'
     );
   }
+  if (m.includes('redirect_uri_mismatch') || m.includes('redirect url')) {
+    return (
+      'Google rejected the sign-in redirect. In Google Cloud Console, add this site URL to ' +
+      "OAuth 2.0 → Web client's Authorized redirect URIs, and the same under Supabase " +
+      '→ Authentication → URL Configuration → Redirect URLs (including exact origin and path).'
+    );
+  }
+  if (m.includes('nonce') && (m.includes('id_token') || m.includes('token'))) {
+    return (
+      'Google token did not pass validation. In Supabase Dashboard open Authentication ' +
+      '→ Providers → Google, enable "Skip nonce check" for native / mobile sign-in, or ' +
+      'see Supabase Google provider docs for nonce configuration.'
+    );
+  }
   return undefined;
+}
+
+function formatNativeGoogleSignInFailure(nativeErr: unknown): string {
+  const msg = nativeErr instanceof Error ? nativeErr.message : String(nativeErr);
+  const m = msg.toLowerCase();
+  if (m.includes('10:') || m.includes('developer_error') || m.includes('12500')) {
+    return (
+      'Google sign-in is misconfigured for this app build. In Google Cloud Console add an ' +
+      'Android OAuth client: package com.reride.app and SHA-1 from `cd android && gradlew signingReport` ' +
+      '(debug and release). Add that Android client ID with the Web client ID in Supabase → Google → Client IDs, then rebuild.'
+    );
+  }
+  return formatSupabaseError(msg) || msg || 'Google sign-in failed. Check Android OAuth + Supabase Google provider.';
 }
 
 export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
   try {
     const supabase = getSupabaseClient();
     const useExternalBrowser = shouldUseNativeGoogleOAuthFlow();
+    const isAndroidApp = useExternalBrowser && Capacitor.getPlatform() === 'android';
+
+    // Production Android apps (same pattern as major commerce apps) use Google Play Services
+    // (native ID token) — not a Chrome OAuth tab. Browser OAuth on WebView+Chrome is unreliable
+    // (infinite load, disallowed user agent) unless fully configured; require native path.
+    if (isAndroidApp && !shouldTryNativeGoogleSignIn()) {
+      return {
+        success: false,
+        reason:
+          'Google on Android needs VITE_GOOGLE_WEB_CLIENT_ID in your build (.env + npm run build:android). ' +
+          'Add a Web client ID, an Android OAuth client (com.reride.app + your keystore SHA-1), and both IDs in Supabase → Authentication → Google. Then reinstall the app.',
+      };
+    }
 
     if (useExternalBrowser && shouldTryNativeGoogleSignIn()) {
       try {
@@ -137,16 +181,30 @@ export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
         if (name === 'AbortError') {
           return { success: false, reason: 'Sign in was canceled' };
         }
-        console.warn(
-          '[ReRide] Native Google Sign-In failed; falling back to browser OAuth. Client ID set:',
-          !!getNativeGoogleWebClientId(),
-          nativeErr,
-        );
+        console.warn('[ReRide] Native Google Sign-In failed:', nativeErr);
+        if (isAndroidApp) {
+          return {
+            success: false,
+            reason: formatNativeGoogleSignInFailure(nativeErr),
+          };
+        }
+        // iOS: fall through to in-app / Safari browser OAuth
       }
     }
 
     const redirectTo = getOAuthRedirectUrl();
 
+    if (import.meta.env.DEV && typeof redirectTo === 'string' && redirectTo) {
+      const base = redirectTo.split('?')[0];
+      console.info(
+        '[ReRide OAuth] Add to Supabase → Authentication → URL → Redirect URLs:',
+        `${base.split('/').slice(0, 3).join('/')}/**`,
+        '(or the exact return URL) so Google can redirect back; PKCE requires the same origin you use in the browser.',
+      );
+    }
+
+    // Do not pass extra Google queryParams (e.g. prompt=select_account) — can leave accounts.google.com
+    // stuck loading on some browsers; Supabase + Google set the right consent flow by default.
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {

@@ -97,6 +97,10 @@ function createStubClient(): SupabaseClient {
       signOut: async () => ({ error: null }),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: noop } } }),
       signInWithPassword: async () => ({ data: null, error: new Error('Supabase not configured') }),
+      exchangeCodeForSession: async () => ({
+        data: { session: null, user: null },
+        error: new Error('Supabase not configured (missing VITE env in build)'),
+      }),
       setSession: async () => ({ data: null, error: null }),
       getUser: async () => ({ data: { user: null }, error: null }),
       persistSession: true,

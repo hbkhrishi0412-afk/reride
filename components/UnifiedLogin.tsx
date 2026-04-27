@@ -463,7 +463,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       }
 
       if (redirectUrl) {
-        window.location.assign(redirectUrl);
+        // replace avoids a poisoned bfcache entry when returning from Google with ?code=
+        window.location.replace(redirectUrl);
         return;
       }
 
@@ -514,11 +515,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
   const accountTypeButtonGroup = (layout: 'mobile' | 'desktop') => {
     if (hideRolePicker || forcedRole || allowedRoles.length <= 1) return null;
-    // Same 2-col grid on mobile and desktop: login card is max-w-md, so a single-column
-    // stack wastes space on desktop; three columns was too tight. Odd last role spans 2.
+    // Mobile: one column (equal full-width rows). sm+: 2 or 3 equal columns so the last
+    // role is never a lone full-width row.
     const isMobileLayout = layout === 'mobile';
-    const containerClass =
-      'grid grid-cols-2 gap-2 [grid-template-columns:repeat(2,minmax(0,1fr))]';
+    const smGridCols = allowedRoles.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3';
+    const containerClass = `grid grid-cols-1 gap-2 ${smGridCols}`;
     const roleBtnBase =
       'flex w-full min-w-0 items-center border-2 text-left font-semibold transition-all duration-200 active:scale-[0.98]';
     const roleBtnSizing = isMobileLayout
@@ -542,20 +543,17 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           {isLogin ? t('auth.accountType') : t('auth.iWantTo')} <span className="text-orange-600">*</span>
         </legend>
         <div className={containerClass} role="presentation">
-          {allowedRoles.map((role, index) => {
+          {allowedRoles.map((role) => {
             const rc = roleConfig[role];
             const label = isLogin ? rc.title : registerRoleLabel(role);
             const selected = selectedRole === role;
-            const oddLast =
-              allowedRoles.length % 2 === 1 && index === allowedRoles.length - 1;
-            const oddLastColSpan = oddLast ? 'col-span-2' : '';
             return (
               <button
                 key={role}
                 type="button"
                 aria-pressed={selected}
                 onClick={() => handleRoleChange(role)}
-                className={`${roleBtnBase} ${roleBtnSizing} ${selected ? roleBtnSelected : roleBtnIdle} ${oddLastColSpan}`}
+                className={`${roleBtnBase} ${roleBtnSizing} ${selected ? roleBtnSelected : roleBtnIdle}`}
               >
                 <span
                   className={isMobileLayout ? mobileIconWrap(selected) : roleBtnIcon}
