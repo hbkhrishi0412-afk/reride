@@ -27,6 +27,56 @@ interface UnifiedLoginProps {
 type UserRole = 'customer' | 'seller' | 'admin' | 'service_provider';
 type AuthMode = 'login' | 'register' | 'otp';
 
+/** Inline outline icons for role cards — consistent size & stroke (replaces mixed emoji). */
+const RoleCardIcon: React.FC<{ role: UserRole; className?: string }> = ({ role, className }) => {
+  const base = 'h-5 w-5';
+  const cn = [base, className].filter(Boolean).join(' ');
+  switch (role) {
+    case 'customer':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218a1.5 1.5 0 0 0 1.464-1.175l.728-3.27A1.5 1.5 0 0 0 16.178 8.25H5.25M4.5 3h15l-1.5 7.5H7.5L6 3Z"
+          />
+        </svg>
+      );
+    case 'seller':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M13.5 21v-4.5a.75.75 0 0 0-.75-.75H8.25A2.25 2.25 0 0 0 6 18v3m3-3h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-7.5a2.25 2.25 0 0 0-2.25 2.25V9m-3-3.75A2.25 2.25 0 0 0 3 6v1.5c0 1.242 1.007 2.25 2.25h.75m-3 0h.75A2.25 2.25 0 0 0 6 6v-1.5A2.25 2.25 0 0 0 3.75 2.5h-.5a.75.75 0 0 0-.75.75V4.5Z"
+          />
+        </svg>
+      );
+    case 'service_provider':
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M11.42 15.17 17.25 9.33l-1.42-1.42-3.16 3.16-2.1-2.1 3.16-3.16-1.42-1.42-5.84 5.84a2.5 2.5 0 0 0 0 3.54l1.4 1.4a2.5 2.5 0 0 0 3.55 0ZM19 2l-2.5 2.5M20.5 3.5 18 6"
+          />
+        </svg>
+      );
+    case 'admin':
+    default:
+      return (
+        <svg className={cn} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.65.87.332.18.72.24 1.09.18l1.26-.21a1.13 1.13 0 0 1 1.25.6l.78 1.35c.3.51.1 1.17-.4 1.5l-1.08.8c-.3.24-.5.6-.5.98v1.2c0 .38.2.74.5.98l1.08.8c.5.33.7.99.4 1.5l-.78 1.35a1.13 1.13 0 0 1-1.25.6l-1.26-.21a1.1 1.1 0 0 0-1.09.18c-.337.184-.587.496-.65.87l-.213 1.28c-.09.543-.56.94-1.11.94h-2.593c-.55 0-1.02-.397-1.11-.94l-.213-1.28a1.12 1.12 0 0 0-.65-.87c-.332-.18-.72-.24-1.09-.18l-1.26.21a1.13 1.13 0 0 1-1.25-.6l-.78-1.35a1.12 1.12 0 0 1 .4-1.5l1.08-.8a1.1 1.1 0 0 0 .5-.98v-1.2c0-.38-.2-.74-.5-.98l-1.08-.8a1.12 1.12 0 0 1-.4-1.5l.78-1.35a1.13 1.13 0 0 1 1.25-.6l1.26.21c.37.06.75-.001 1.09-.18.337-.184.587-.496.65-.87l.213-1.28Z"
+          />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+        </svg>
+      );
+  }
+};
+
 async function loginServiceProviderWithEmail(
   email: string,
   password: string,
@@ -120,7 +170,6 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       customer: {
         title: t('auth.role.customer.title'),
         description: t('auth.role.customer.description'),
-        icon: '🛒',
         color: 'bg-blue-500',
         loginTitle: t('auth.role.customer.loginTitle'),
         registerTitle: t('auth.role.customer.registerTitle'),
@@ -128,7 +177,6 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       seller: {
         title: t('auth.role.seller.title'),
         description: t('auth.role.seller.description'),
-        icon: '🏪',
         color: 'bg-green-500',
         loginTitle: t('auth.role.seller.loginTitle'),
         registerTitle: t('auth.role.seller.registerTitle'),
@@ -136,7 +184,6 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       admin: {
         title: t('auth.role.admin.title'),
         description: t('auth.role.admin.description'),
-        icon: '⚙️',
         color: 'bg-purple-500',
         loginTitle: t('auth.role.admin.loginTitle'),
         registerTitle: t('auth.role.admin.registerTitle'),
@@ -144,7 +191,6 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       service_provider: {
         title: t('auth.role.service_provider.title'),
         description: t('auth.role.service_provider.description'),
-        icon: '🛠️',
         color: 'bg-blue-500',
         loginTitle: t('auth.role.service_provider.loginTitle'),
         registerTitle: t('auth.role.service_provider.registerTitle'),
@@ -515,32 +561,49 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
   const accountTypeButtonGroup = (layout: 'mobile' | 'desktop') => {
     if (hideRolePicker || forcedRole || allowedRoles.length <= 1) return null;
-    // Mobile: one column (equal full-width rows). sm+: 2 or 3 equal columns so the last
-    // role is never a lone full-width row.
     const isMobileLayout = layout === 'mobile';
     const smGridCols = allowedRoles.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3';
-    const containerClass = `grid grid-cols-1 gap-2 ${smGridCols}`;
-    const roleBtnBase =
-      'flex w-full min-w-0 items-center border-2 text-left font-semibold transition-all duration-200 active:scale-[0.98]';
+    // Mobile: previous compact horizontal rows (icon | label | optional check). Desktop: 2–3 col grid + column cards.
+    const containerClass = isMobileLayout
+      ? 'grid grid-cols-1 gap-2'
+      : `grid grid-cols-1 gap-2.5 ${smGridCols}`;
+
+    const roleBtnBase = isMobileLayout
+      ? 'group flex w-full min-w-0 items-center border-2 text-left font-semibold transition-all duration-200 active:scale-[0.98]'
+      : 'relative group flex w-full min-w-0 flex-col items-center justify-center text-center font-semibold transition-all duration-200 active:scale-[0.99]';
     const roleBtnSizing = isMobileLayout
       ? 'gap-2 rounded-xl px-2.5 py-2 text-[13px] leading-tight min-h-[48px] h-auto'
-      : 'gap-2.5 rounded-xl px-3 py-3 text-sm min-h-[44px] h-auto';
-    const roleBtnIcon = 'text-lg leading-none shrink-0';
+      : 'gap-2 rounded-2xl px-2.5 py-3.5 min-h-[100px]';
+
+    // Mobile: original orange highlight. Desktop: indigo premium.
     const roleBtnSelected = isMobileLayout
       ? 'border-orange-500 bg-orange-50 text-gray-900 ring-2 ring-orange-400/60 shadow-sm'
-      : 'border-orange-500 bg-orange-50 text-gray-900 shadow-md ring-2 ring-orange-500/30';
-    const roleBtnIdle =
-      'border-gray-200 bg-white/80 text-gray-700 hover:border-orange-300 hover:bg-white';
+      : 'border border-indigo-600/90 bg-gradient-to-b from-slate-50/98 to-indigo-50/95 text-slate-900 shadow-lg shadow-indigo-950/10 ring-2 ring-indigo-500/20';
+    const roleBtnIdle = isMobileLayout
+      ? 'border-gray-200 bg-white/80 text-gray-700 hover:border-orange-300 hover:bg-white'
+      : 'border border-slate-200/90 bg-white/90 text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50/90 hover:shadow';
 
     const mobileIconWrap = (selected: boolean) =>
-      `flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg leading-none ${
-        selected ? 'bg-orange-100 ring-2 ring-orange-200/80' : 'bg-gray-100'
+      `flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+        selected ? 'bg-orange-100 text-orange-900 ring-2 ring-orange-200/80' : 'bg-gray-100 text-slate-600'
+      }`;
+
+    const desktopIconWrap = (selected: boolean) =>
+      `flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+        selected
+          ? 'bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200/80'
+          : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200/80 group-hover:text-slate-800'
       }`;
 
     return (
       <fieldset className={`border-0 p-0 m-0 min-w-0 ${isMobileLayout ? 'space-y-1.5' : 'space-y-2'}`}>
-        <legend className="block text-sm font-semibold text-gray-700 mb-1.5 w-full">
-          {isLogin ? t('auth.accountType') : t('auth.iWantTo')} <span className="text-orange-600">*</span>
+        <legend
+          className={`block text-sm font-semibold mb-1.5 w-full ${
+            isMobileLayout ? 'text-gray-700' : 'text-slate-800'
+          }`}
+        >
+          {isLogin ? t('auth.accountType') : t('auth.iWantTo')}{' '}
+          <span className={isMobileLayout ? 'text-orange-600' : 'text-indigo-600'}>*</span>
         </legend>
         <div className={containerClass} role="presentation">
           {allowedRoles.map((role) => {
@@ -555,35 +618,59 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 onClick={() => handleRoleChange(role)}
                 className={`${roleBtnBase} ${roleBtnSizing} ${selected ? roleBtnSelected : roleBtnIdle}`}
               >
-                <span
-                  className={isMobileLayout ? mobileIconWrap(selected) : roleBtnIcon}
-                  aria-hidden
-                >
-                  {rc.icon}
-                </span>
-                <span className="min-w-0 flex-1 text-left leading-snug break-words">
-                  {label}
-                </span>
-                {isMobileLayout && selected && (
-                  <svg
-                    className="h-4 w-4 shrink-0 text-orange-600 sm:h-5 sm:w-5"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                {isMobileLayout ? (
+                  <>
+                    <span className={mobileIconWrap(selected)} aria-hidden>
+                      <RoleCardIcon role={role} className="shrink-0" />
+                    </span>
+                    <span
+                      className={`min-w-0 flex-1 text-left leading-snug break-normal ${
+                        selected ? 'text-gray-900' : 'text-gray-700'
+                      }`}
+                    >
+                      {label}
+                    </span>
+                    {selected && (
+                      <svg
+                        className="h-4 w-4 shrink-0 text-orange-600 sm:h-5 sm:w-5"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className={desktopIconWrap(selected)} aria-hidden>
+                      <RoleCardIcon role={role} className="shrink-0" />
+                    </span>
+                    <span
+                      className={`text-sm max-w-full min-w-0 text-balance leading-tight ${
+                        selected ? 'text-slate-800' : 'text-slate-600'
+                      }`}
+                    >
+                      {label}
+                    </span>
+                  </>
                 )}
               </button>
             );
           })}
         </div>
         {!selectedRole && (
-          <p className="text-xs text-gray-500 mt-0.5">{t('auth.selectAccountTypePlaceholder')}</p>
+          <p
+            className={`text-xs mt-0.5 ${
+              isMobileLayout ? 'text-gray-500' : 'text-slate-500'
+            }`}
+          >
+            {t('auth.selectAccountTypePlaceholder')}
+          </p>
         )}
       </fieldset>
     );
