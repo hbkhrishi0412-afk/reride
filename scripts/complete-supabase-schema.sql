@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     mobile TEXT,
     password TEXT, -- Bcrypt hashed password for email/password auth. NULL for OAuth-only users.
-    role TEXT DEFAULT 'customer' CHECK (role IN ('customer', 'seller', 'admin')),
+    role TEXT DEFAULT 'customer' CHECK (role IN ('customer', 'seller', 'admin', 'service_provider', 'finance_partner')),
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     avatar_url TEXT,
     is_verified BOOLEAN DEFAULT false,

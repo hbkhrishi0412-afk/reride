@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { View, User } from '../types';
 import { login, register } from '../services/userService';
 import { signInWithGoogle, syncWithBackend } from '../services/authService';
-import { signInWithEmail } from '../services/supabase-auth-service';
+import { loginServiceProviderWithUsersTable } from '../services/serviceProviderLoginSupport';
 import { getSupabaseClient } from '../lib/supabase.js';
 import { setRememberMePreference } from '../utils/rememberMe';
 import OTPLogin from './OTPLogin';
@@ -76,67 +76,6 @@ const RoleCardIcon: React.FC<{ role: UserRole; className?: string }> = ({ role, 
       );
   }
 };
-
-async function loginServiceProviderWithEmail(
-  email: string,
-  password: string,
-): Promise<{ ok: true; provider: Record<string, unknown> } | { ok: false; message: string }> {
-  const result = await signInWithEmail(email, password);
-  if (!result.success || !result.session) {
-    return { ok: false, message: result.reason || 'Login failed' };
-  }
-
-  const loadProviderDirectly = async (): Promise<Record<string, unknown> | null> => {
-    try {
-      const supabase = getSupabaseClient();
-      const uid = result.session?.user?.id;
-      if (uid) {
-        const { data: byId } = await supabase
-          .from('service_providers')
-          .select('*')
-          .eq('id', uid)
-          .maybeSingle();
-        if (byId) return byId as Record<string, unknown>;
-      }
-      const { data: byEmail } = await supabase
-        .from('service_providers')
-        .select('*')
-        .eq('email', email.toLowerCase().trim())
-        .maybeSingle();
-      return (byEmail as Record<string, unknown> | null) ?? null;
-    } catch {
-      return null;
-    }
-  };
-
-  let resp: Response;
-  try {
-    resp = await fetch('/api/service-providers', {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${result.session.access_token}` },
-    });
-  } catch {
-    const provider = await loadProviderDirectly();
-    if (provider) return { ok: true, provider };
-    return { ok: false, message: 'Unable to reach service provider API. Start local API server or try again.' };
-  }
-
-  if (!resp.ok) {
-    // If the API errors (4xx/5xx) but Supabase client can read service_providers, still complete login.
-    const provider = await loadProviderDirectly();
-    if (provider) return { ok: true, provider };
-    const data = (await resp.json().catch(() => ({}))) as { error?: string };
-    if (resp.status === 404) {
-      return {
-        ok: false,
-        message: 'No service provider profile found for this account. Contact admin.',
-      };
-    }
-    return { ok: false, message: data.error || 'Failed to load provider profile' };
-  }
-  const provider = (await resp.json()) as Record<string, unknown>;
-  return { ok: true, provider };
-}
 
 const UnifiedLogin: React.FC<UnifiedLoginProps> = ({ 
   onLogin, 
@@ -373,7 +312,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           if (!onServiceProviderLogin) {
             throw new Error(t('auth.error.failedAuthenticate'));
           }
-          const sp = await loginServiceProviderWithEmail(email, password);
+          const sp = await loginServiceProviderWithUsersTable(email, password);
           if (!sp.ok) {
             throw new Error(sp.message);
           }
@@ -428,7 +367,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           email &&
           password
         ) {
-          const sp = await loginServiceProviderWithEmail(email, password);
+          const sp = await loginServiceProviderWithUsersTable(email, password);
           if (sp.ok) {
             setSelectedRole('service_provider');
             const spKey = `remembered${'service_provider'.charAt(0).toUpperCase() + 'service_provider'.slice(1)}Email`;
@@ -562,6 +501,12 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   const accountTypeButtonGroup = (layout: 'mobile' | 'desktop') => {
     if (hideRolePicker || forcedRole || allowedRoles.length <= 1) return null;
     const isMobileLayout = layout === 'mobile';
+    const isStandardThreeRole =
+      isMobileLayout &&
+      allowedRoles.length === 3 &&
+      (['customer', 'seller', 'service_provider'] as const).every((r) =>
+        allowedRoles.includes(r as UserRole),
+      );
     const smGridCols = allowedRoles.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3';
     // Mobile: previous compact horizontal rows (icon | label | optional check). Desktop: 2–3 col grid + column cards.
     const containerClass = isMobileLayout
@@ -594,6 +539,76 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           ? 'bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200/80'
           : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200/80 group-hover:text-slate-800'
       }`;
+
+    if (isStandardThreeRole) {
+      const mobileGridIconWrap = (role: UserRole, selected: boolean) => {
+        switch (role) {
+          case 'customer':
+            return `flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+              selected ? 'bg-blue-100 text-blue-700' : 'bg-blue-50 text-blue-600'
+            }`;
+          case 'seller':
+            return `flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+              selected ? 'bg-orange-100 text-orange-800' : 'bg-orange-50 text-orange-600'
+            }`;
+          case 'service_provider':
+            return `flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+              selected ? 'bg-slate-200 text-slate-800' : 'bg-slate-100 text-slate-600'
+            }`;
+          default:
+            return mobileIconWrap(selected);
+        }
+      };
+      const mobileGridBtn = (selected: boolean) =>
+        `group flex w-full min-w-0 items-center gap-3 rounded-xl border px-3 py-3 text-left font-semibold transition-all duration-200 active:scale-[0.99] min-h-[52px] ${
+          selected
+            ? 'border-2 border-reride-orange bg-reride-orange/5 text-gray-900 shadow-sm'
+            : 'border border-gray-200 bg-white text-gray-800 hover:border-gray-300'
+        }`;
+      const renderGridTile = (role: 'customer' | 'seller' | 'service_provider') => {
+        const rc = roleConfig[role];
+        const label = isLogin ? rc.title : registerRoleLabel(role);
+        const selected = selectedRole === role;
+        return (
+          <button
+            key={role}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => handleRoleChange(role)}
+            className={mobileGridBtn(selected)}
+          >
+            <span className={mobileGridIconWrap(role, selected)} aria-hidden>
+              <RoleCardIcon role={role} className="h-5 w-5 shrink-0" />
+            </span>
+            <span
+              className={`min-w-0 flex-1 text-left text-[15px] leading-snug ${
+                selected ? 'text-gray-900' : 'text-gray-800'
+              }`}
+            >
+              {label}
+            </span>
+          </button>
+        );
+      };
+      return (
+        <fieldset className="border-0 p-0 m-0 min-w-0 space-y-2">
+          <legend className="block text-sm font-medium text-gray-800 mb-1 w-full">
+            {isLogin ? t('auth.accountType') : t('auth.iWantTo')}{' '}
+            <span className="text-red-500">*</span>
+          </legend>
+          <div className="grid grid-cols-2 gap-2.5" role="presentation">
+            {renderGridTile('customer')}
+            {renderGridTile('seller')}
+          </div>
+          <div className="mt-2.5" role="presentation">
+            {renderGridTile('service_provider')}
+          </div>
+          <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+            {t('auth.selectAccountTypePlaceholder')}
+          </p>
+        </fieldset>
+      );
+    }
 
     return (
       <fieldset className={`border-0 p-0 m-0 min-w-0 ${isMobileLayout ? 'space-y-1.5' : 'space-y-2'}`}>
@@ -824,56 +839,53 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     );
   }
 
-  // Mobile App UI - Premium Design
+  // Mobile App UI - bottom sheet on dark field (matches native login reference)
   if (isMobileApp) {
     return (
       <>
         {googleRolePickerOverlay}
-      <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-6 px-4 sm:py-8 bg-[#0B1020]">
-        {/* Ambient gradient background */}
+      <div className="min-h-[100dvh] min-h-screen flex flex-col relative overflow-hidden bg-zinc-950">
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              'radial-gradient(600px 400px at 0% 0%, rgba(255,107,53,0.22) 0%, transparent 60%), radial-gradient(600px 400px at 100% 100%, rgba(124,58,237,0.25) 0%, transparent 60%), linear-gradient(160deg, #0B1020 0%, #111834 55%, #1A1240 100%)',
+              'radial-gradient(800px 500px at 50% 0%, rgba(30,30,30,0.9) 0%, transparent 55%), linear-gradient(180deg, #121212 0%, #0a0a0a 45%, #050505 100%)',
           }}
         />
-        {/* Soft floating blobs */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div
-            className="absolute -top-24 -right-16 w-64 h-64 rounded-full blur-3xl opacity-50 animate-pulse"
-            style={{ background: 'radial-gradient(circle, #FF6B35 0%, transparent 70%)' }}
-          />
-          <div
-            className="absolute -bottom-24 -left-16 w-72 h-72 rounded-full blur-3xl opacity-50 animate-pulse"
-            style={{
-              background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)',
-              animationDelay: '2s',
-            }}
-          />
-        </div>
+        <div
+          className="absolute inset-0 pointer-events-none opacity-70 mix-blend-soft-light"
+          style={{
+            background:
+              'radial-gradient(ellipse 120% 80% at 50% 20%, rgba(80,80,80,0.45) 0%, transparent 50%)',
+            filter: 'blur(2px)',
+          }}
+        />
+        <div className="absolute -top-20 left-1/2 w-[min(100vw,28rem)] h-64 -translate-x-1/2 rounded-full bg-orange-500/20 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-1/3 -right-16 w-56 h-56 rounded-full bg-violet-600/15 blur-3xl pointer-events-none" />
 
-        <div className="w-full max-w-md relative z-10">
+        <div className="flex-1 min-h-[10vh] shrink-0" aria-hidden="true" />
+
+        <div className="relative z-10 w-full max-w-lg mx-auto flex flex-col">
           <div
-            className="bg-white rounded-3xl border border-white/60 p-5 sm:p-6"
+            className="bg-white rounded-t-[1.75rem] rounded-b-none w-full border-t border-x border-gray-200/80 px-5 pt-7 min-h-[58vh] flex flex-col"
             style={{
-              boxShadow:
-                '0 24px 60px -16px rgba(8, 10, 30, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06)',
+              boxShadow: '0 -12px 48px -8px rgba(0, 0, 0, 0.45)',
+              paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 0px))',
             }}
           >
             {/* Logo and Title */}
-            <div className="text-center mb-5">
-              <div className="flex justify-center mb-3">
+            <div className="text-center mb-6">
+              <div className="flex justify-center mb-4">
                 <Logo
                   className="scale-100"
                   showText={true}
                   onClick={() => onNavigate(View.USED_CARS)}
                 />
               </div>
-              <h1 className="text-[22px] font-extrabold text-gray-900 tracking-tight">
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight text-balance">
                 {isLogin ? t('auth.welcomeBack') : t('auth.createAccount')}
               </h1>
-              <p className="mt-1 text-xs sm:text-sm font-medium text-gray-500">
+              <p className="mt-1.5 text-sm text-gray-500 font-normal">
                 {isLogin ? t('auth.signInContinue') : t('auth.getStarted')}
               </p>
             </div>

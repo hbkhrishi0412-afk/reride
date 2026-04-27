@@ -24,6 +24,8 @@ interface MobileVehicleDetailProps {
   users: User[];
   onViewSellerProfile: (sellerEmail: string) => void;
   onStartChat: (vehicle: Vehicle) => void;
+  /** Shown when user taps Call but must sign in first (hides `tel:` until logged in). */
+  onRequestLogin: () => void;
   recommendations: Vehicle[];
   onSelectVehicle: (vehicle: Vehicle) => void;
 }
@@ -48,6 +50,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   users = [],
   onViewSellerProfile,
   onStartChat,
+  onRequestLogin,
   recommendations = [],
   onSelectVehicle
 }) => {
@@ -176,21 +179,38 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
             aria-label={t('vehicle.detail.contactActions')}
           >
             {callHref ? (
-              <a
-                href={callHref}
-                className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl bg-blue-600 px-2 py-3 text-base font-semibold text-white transition-colors hover:bg-blue-700 active:scale-[0.99]"
-                style={{ minHeight: '52px' }}
-              >
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                  </svg>
-                  {t('vehicle.detail.call')}
-                </span>
-                {callPhoneLabel ? (
-                  <span className="text-xs font-medium text-white/90 tabular-nums">{callPhoneLabel}</span>
-                ) : null}
-              </a>
+              currentUser ? (
+                <a
+                  href={callHref}
+                  className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl bg-blue-600 px-2 py-3 text-base font-semibold text-white transition-colors hover:bg-blue-700 active:scale-[0.99]"
+                  style={{ minHeight: '52px' }}
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                    {t('vehicle.detail.call')}
+                  </span>
+                  {callPhoneLabel ? (
+                    <span className="text-xs font-medium text-white/90 tabular-nums">{callPhoneLabel}</span>
+                  ) : null}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onRequestLogin}
+                  className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl bg-blue-600 px-2 py-3 text-base font-semibold text-white transition-colors hover:bg-blue-700 active:scale-[0.99]"
+                  style={{ minHeight: '52px' }}
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                    {t('vehicle.detail.call')}
+                  </span>
+                  <span className="text-[10px] font-medium leading-tight text-white/90">{t('vehicle.detail.loginToCallSeller')}</span>
+                </button>
+              )
             ) : (
               <button
                 type="button"

@@ -51,7 +51,17 @@ const FALLBACK_USERS: User[] = [
     location: 'Bangalore',
     status: 'active',
     createdAt: new Date().toISOString(),
-  }
+  },
+  {
+    name: 'Demo Service Provider',
+    email: 'provider@test.com',
+    mobile: '+91-98765-00000',
+    password: 'password123',
+    role: 'service_provider' as const,
+    location: 'Mumbai',
+    status: 'active',
+    createdAt: new Date().toISOString(),
+  },
 ];
 
 // --- Request Deduplication ---

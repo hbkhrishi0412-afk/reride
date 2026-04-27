@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { signInWithEmail, resetPassword } from '../services/supabase-auth-service';
+import { requestUsersTablePasswordReset } from '../services/passwordResetFromApi';
+import { loginServiceProviderWithUsersTable } from '../services/serviceProviderLoginSupport';
 import { setRememberMePreference } from '../utils/rememberMe';
 import { View as ViewEnum } from '../types';
 import PasswordInput from './PasswordInput';
@@ -84,76 +85,13 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
     setResetMessage(null);
     setLoading(true);
     try {
-      const result = await signInWithEmail(email, password);
-      
-      if (!result.success || !result.session) {
-        throw new Error(result.reason || 'Login failed');
+      const sp = await loginServiceProviderWithUsersTable(email, password);
+      if (!sp.ok) {
+        throw new Error(sp.message);
       }
-
-      const loadProviderDirectly = async (): Promise<any | null> => {
-        try {
-          const { getSupabaseClient } = await import('../lib/supabase.js');
-          const supabase = getSupabaseClient();
-          const uid = result.session?.user?.id;
-          if (uid) {
-            const { data: byId } = await supabase
-              .from('service_providers')
-              .select('*')
-              .eq('id', uid)
-              .maybeSingle();
-            if (byId) return byId;
-          }
-          const { data: byEmail } = await supabase
-            .from('service_providers')
-            .select('*')
-            .eq('email', email.toLowerCase().trim())
-            .maybeSingle();
-          return byEmail ?? null;
-        } catch {
-          return null;
-        }
-      };
-
-      let resp: Response;
-      try {
-        resp = await fetch('/api/service-providers', {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${result.session.access_token}` },
-        });
-      } catch {
-        const provider = await loadProviderDirectly();
-        if (!provider) {
-          throw new Error('Unable to reach service provider API. Start local API server or try again.');
-        }
-        persistRememberedEmail();
-        setRememberMePreference(rememberMe);
-        onLoginSuccess(provider);
-        onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
-        return;
-      }
-
-      if (!resp.ok) {
-        const provider = await loadProviderDirectly();
-        if (provider) {
-          persistRememberedEmail();
-          setRememberMePreference(rememberMe);
-          onLoginSuccess(provider);
-          onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
-          return;
-        }
-        const data = (await resp.json().catch(() => ({}))) as { error?: string };
-        if (resp.status === 404) {
-          setError('No service provider profile found for this account. Contact admin.');
-          setLoading(false);
-          return;
-        }
-        throw new Error(data.error || 'Failed to load provider profile');
-      }
-
-      const provider = await resp.json();
       persistRememberedEmail();
       setRememberMePreference(rememberMe);
-      onLoginSuccess(provider);
+      onLoginSuccess(sp.provider);
       onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
@@ -212,28 +150,16 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
         throw new Error(data.error || 'Registration failed');
       }
 
-      const signInResult = await signInWithEmail(email, password);
-      if (!signInResult.success || !signInResult.session) {
+      const sp = await loginServiceProviderWithUsersTable(email, password);
+      if (!sp.ok) {
         throw new Error(
-          signInResult.reason ||
-            'Account was created but sign-in failed. Try logging in, or confirm your email if required.',
+          sp.message ||
+            'Account was created but sign-in failed. Try logging in with the same email and password.',
         );
       }
-
-      const providerResp = await fetch('/api/service-providers', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${signInResult.session.access_token}` },
-      });
-
-      if (!providerResp.ok) {
-        const data = await providerResp.json().catch(() => ({}));
-        throw new Error(data.error || 'Could not load your provider profile after sign-in.');
-      }
-
-      const provider = await providerResp.json();
       persistRememberedEmail();
       setRememberMePreference(true);
-      onLoginSuccess(provider);
+      onLoginSuccess(sp.provider);
       onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Signup failed';
@@ -380,11 +306,13 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
                     return;
                   }
                   try {
-                    const result = await resetPassword(email);
+                    const result = await requestUsersTablePasswordReset(email);
                     if (!result.success) {
                       throw new Error(result.reason || 'Failed to send reset email');
                     }
-                    setResetMessage('Password reset email sent. Check your inbox to set a new password.');
+                    setResetMessage(
+                      'If an account exists, we sent a link to your email. Check your inbox to set a new password.',
+                    );
                   } catch (err) {
                     const message = err instanceof Error ? err.message : 'Failed to send reset email';
                     setError(message);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, User } from './types';
-import { signInWithEmail, signUpWithEmail, syncWithBackend } from './services/supabase-auth-service';
+import { login, register } from './services/userService';
 import { signInWithGoogle } from './services/authService';
 import { setRememberMePreference } from './utils/rememberMe';
 import OTPLogin from './components/OTPLogin';
@@ -40,48 +40,30 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
     try {
         if (mode === 'login') {
             if (!email || !password) throw new Error('Please enter both email and password.');
-            
-            // Authenticate with Supabase
-            const supabaseResult = await signInWithEmail(email, password);
-            
-            if (!supabaseResult.success || !supabaseResult.user) {
-                throw new Error(supabaseResult.reason || 'Invalid credentials.');
+
+            const result = await login({ email, password, role: 'seller' });
+            if (!result.success || !result.user) {
+                throw new Error(result.reason || 'Invalid credentials.');
             }
-            
-            // Sync with backend to get full user profile
-            const backendResult = await syncWithBackend(supabaseResult.user, 'seller', 'email');
-            
-            if (backendResult.success && backendResult.user) {
-                if (rememberMe) localStorage.setItem('rememberedSellerEmail', email);
-                else localStorage.removeItem('rememberedSellerEmail');
-                setRememberMePreference(rememberMe);
-                onLogin(backendResult.user);
-            } else {
-                throw new Error(backendResult.reason || 'Failed to sync with backend.');
-            }
+            if (rememberMe) localStorage.setItem('rememberedSellerEmail', email);
+            else localStorage.removeItem('rememberedSellerEmail');
+            setRememberMePreference(rememberMe);
+            onLogin(result.user);
         } else {
             if (!name || !mobile || !email || !password) throw new Error('Please fill in all fields to register.');
-            
-            // Register with Supabase
-            const supabaseResult = await signUpWithEmail(email, password, {
+
+            const result = await register({
                 name,
+                email,
+                password,
                 mobile,
-                role: 'seller'
+                role: 'seller',
             });
-            
-            if (!supabaseResult.success || !supabaseResult.user) {
-                throw new Error(supabaseResult.reason || 'Failed to create account.');
+            if (!result.success || !result.user) {
+                throw new Error(result.reason || 'Failed to create account.');
             }
-            
-            // Sync with backend to create user profile
-            const backendResult = await syncWithBackend(supabaseResult.user, 'seller', 'email');
-            
-            if (backendResult.success && backendResult.user) {
-                setRememberMePreference(true);
-                onRegister(backendResult.user);
-            } else {
-                throw new Error(backendResult.reason || 'Failed to sync with backend.');
-            }
+            setRememberMePreference(true);
+            onRegister(result.user);
         }
     } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to authenticate.');
