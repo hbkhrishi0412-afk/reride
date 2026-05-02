@@ -384,7 +384,9 @@ const en = {
   'locationModal.toast.allIndiaSet': 'Location set to All of India',
   'locationModal.toast.setTo': 'Location set to {{place}}',
   'locationModal.error.denied':
-    'Unable to retrieve your location. Please allow location access in your browser settings.',
+    'Unable to retrieve your location. Please allow location in your browser or site settings.',
+  'locationModal.error.deniedApp':
+    'Location access was denied. On Android: Settings → Apps → ReRide → Permissions → Location → Allow. On iOS: Settings → ReRide → Location → While Using the App.',
   'locationModal.error.unavailable': 'Unable to retrieve your location. Location unavailable.',
   'locationModal.error.timeout': 'Unable to retrieve your location. Location request timed out.',
   'locationModal.error.fallback': 'Unable to retrieve your location. Please select manually.',
@@ -1295,6 +1297,8 @@ const hi: Record<string, string> = {
   'locationModal.toast.setTo': 'स्थान सेट: {{place}}',
   'locationModal.error.denied':
     'आपका स्थान नहीं मिला। कृपया ब्राउज़र सेटिंग में स्थान पहुंच की अनुमति दें।',
+  'locationModal.error.deniedApp':
+    'Location access was denied. On Android: Settings → Apps → ReRide → Permissions → Location → Allow. On iOS: Settings → ReRide → Location → While Using the App.',
   'locationModal.error.unavailable': 'आपका स्थान नहीं मिला। स्थान उपलब्ध नहीं।',
   'locationModal.error.timeout': 'आपका स्थान नहीं मिला। अनुरोध का समय समाप्त।',
   'locationModal.error.fallback': 'आपका स्थान नहीं मिला। कृपया मैन्युअल चुनें।',
@@ -2014,7 +2018,9 @@ const te: Record<string, string> = {
   'locationModal.toast.setTo': 'స్థానం సెట్: {{place}}',
   'locationModal.error.denied':
     'మీ స్థానం తిరిగి పొందలేము. బ్రౌజర్‌ సెట్టింగ్‌ల్లో లొకేషన్‌ను అనుమతించండి.',
-  'locationModal.error.unavailable': 'మీ స్థానం తిరిగి పొందలేము. స్థానం అందుబాటులో లేదు.',
+  'locationModal.error.deniedApp':
+    'Location access was denied. On Android: Settings → Apps → ReRide → Permissions → Location → Allow. On iOS: Settings → ReRide → Location → While Using the App.',
+  'locationModal.error.unavailable': 'మీ స్థానం తిరిగి పొందలేము. స్థാനం అందుబాటులో లేదు.',
   'locationModal.error.timeout': 'మీ స్థానం తిరిగి పొందలేము. అభ్యర్థన సమయం ముగిసింది.',
   'locationModal.error.fallback': 'మీ స్థానం తిరిగి పొందలేము. దయచేసి మాన్యువల్‌గా ఎంచుకోండి.',
   'role.serviceProvider': 'సేవಾ ప్రదాత',
@@ -2864,6 +2870,8 @@ const ta: Record<string, string> = {
   'locationModal.toast.setTo': 'இடம் அமை: {{place}}',
   'locationModal.error.denied':
     'இருப்பிடத்தைப் பெற முடியவில்லை. உலாவி அமைப்பில் இருப்பிட அனுமதியைக் கொடுங்கள்.',
+  'locationModal.error.deniedApp':
+    'Location access was denied. On Android: Settings → Apps → ReRide → Permissions → Location → Allow. On iOS: Settings → ReRide → Location → While Using the App.',
   'locationModal.error.unavailable': 'இருப்பிடத்தைப் பெற முடியவில்லை. இருப்பிடம் கிடைக்கவில்லை.',
   'locationModal.error.timeout': 'இருப்பிடத்தைப் பெற முடியவில்லை. கோரிக்கை நேரம் முடிந்தது.',
   'locationModal.error.fallback': 'இருப்பிடத்தைப் பெற முடியவில்லை. கைமுறையாக தேர்ந்தெடுக்கவும்.',

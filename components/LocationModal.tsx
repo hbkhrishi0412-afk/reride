@@ -4,6 +4,8 @@ import { getDisplayNameForCity, primaryLocationLabel } from '../utils/cityMappin
 import { INDIAN_STATES, CITIES_BY_STATE, CITY_COORDINATES } from '../constants/location.js';
 import { supportEmail } from '../constants/legalContact';
 import { calculateDistance } from '../services/locationService';
+import { getCurrentPositionUnified } from '../utils/getCurrentPositionUnified';
+import { isCapacitorNativeApp } from '../utils/isCapacitorNative';
 
 interface LocationModalProps {
     isOpen: boolean;
@@ -113,30 +115,6 @@ async function fetchNominatimReverse(latitude: number, longitude: number): Promi
     res = await doAttempt();
   }
   return res;
-}
-
-/** WiFi / desktop: low accuracy is faster and more reliable; retry with GPS on timeout / coarse failure. */
-function getCurrentPositionWithFallback(): Promise<GeolocationPosition> {
-  const opts: PositionOptions[] = [
-    { enableHighAccuracy: false, timeout: 22000, maximumAge: 120000 },
-    { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 },
-  ];
-  return new Promise<GeolocationPosition>((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('no-geolocation'));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(resolve, reject, opts[0]!);
-  }).catch((err: unknown) => {
-    const ge = err as Partial<GeolocationPositionError> | null;
-    const code = typeof ge?.code === 'number' ? ge.code : -1;
-    if (code === 2 || code === 3) {
-      return new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, opts[1]!);
-      });
-    }
-    return Promise.reject(err);
-  });
 }
 
 const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentLocation, onLocationChange, addToast }) => {
@@ -315,14 +293,18 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
 
     const handleDetectLocation = () => {
         if (detectingInFlightRef.current) return;
-        if (!navigator.geolocation) {
+        if (!isCapacitorNativeApp() && typeof navigator !== 'undefined' && !navigator.geolocation) {
             addToast(t('locationModal.geoNotSupported'), 'error');
             return;
         }
         detectingInFlightRef.current = true;
         setIsDetecting(true);
         const geoErrorTKey = (code: number) => {
-            if (code === 1) return 'locationModal.error.denied';
+            if (code === 1) {
+                return isCapacitorNativeApp()
+                    ? 'locationModal.error.deniedApp'
+                    : 'locationModal.error.denied';
+            }
             if (code === 2) return 'locationModal.error.unavailable';
             if (code === 3) return 'locationModal.error.timeout';
             return 'locationModal.error.fallback';
@@ -330,7 +312,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
 
         void (async () => {
             try {
-                const position = await getCurrentPositionWithFallback();
+                const position = await getCurrentPositionUnified();
                 const { latitude, longitude } = position.coords;
                 const allCitiesList = Object.values(citiesByState).flat();
                 const resolveLabel = (lat: number, lon: number) =>
@@ -412,6 +394,8 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     } else {
                         addToast(t('locationModal.error.fallback'), 'error');
                     }
+                } else if (e && typeof e === 'object' && (e as Error).message === 'no-geolocation') {
+                    addToast(t('locationModal.geoNotSupported'), 'error');
                 } else {
                     addToast(t('locationModal.error.fallback'), 'error');
                 }
