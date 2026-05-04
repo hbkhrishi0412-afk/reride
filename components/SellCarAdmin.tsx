@@ -9,6 +9,8 @@ interface SellCarSubmission {
   model: string;
   variant: string;
   year: string;
+  /** Present on new submissions; older rows may omit. */
+  state?: string;
   district: string;
   noOfOwners: string;
   kilometers: string;
@@ -280,7 +282,7 @@ const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate, embedded = fals
                         {submission.customerContact}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {submission.district}
+                        {[submission.state, submission.district].filter(Boolean).join(', ') || submission.district}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -398,6 +400,10 @@ const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate, embedded = fals
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Year</label>
                   <p className="mt-1 text-sm text-gray-900">{selectedSubmission.year}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">State / UT</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedSubmission.state || '—'}</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">District</label>

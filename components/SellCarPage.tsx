@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View as ViewEnum } from '../types';
-import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData, CarMake } from '../utils/rerideScraper';
+import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianStates, getDistrictsByState, getCarYears, getOwnershipOptions, ScrapedCarData, CarMake } from '../utils/rerideScraper';
 import { sellCarAPI } from '../services/sellCarService';
 
 interface SellCarPageProps {
@@ -105,6 +105,17 @@ const OptionTile: React.FC<{
   </button>
 );
 
+const POPULAR_METRO_LOCATIONS: readonly { label: string; state: string; district: string }[] = [
+  { label: 'Mumbai', state: 'Maharashtra', district: 'Mumbai City' },
+  { label: 'Delhi', state: 'Delhi', district: 'New Delhi' },
+  { label: 'Bengaluru', state: 'Karnataka', district: 'Bengaluru Urban' },
+  { label: 'Hyderabad', state: 'Telangana', district: 'Hyderabad' },
+  { label: 'Chennai', state: 'Tamil Nadu', district: 'Chennai' },
+  { label: 'Pune', state: 'Maharashtra', district: 'Pune' },
+  { label: 'Kolkata', state: 'West Bengal', district: 'Kolkata' },
+  { label: 'Ahmedabad', state: 'Gujarat', district: 'Ahmedabad' },
+];
+
 /* ---------------- Main component ---------------- */
 
 const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
@@ -123,6 +134,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
     model: '',
     variant: '',
     year: '',
+    state: '',
     district: '',
     noOfOwners: '',
     kilometers: '',
@@ -155,7 +167,11 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
   const [brandSearch, setBrandSearch] = useState('');
 
   const totalSteps = 12;
-  const districts = getIndianDistricts();
+  const indianStates = useMemo(() => getIndianStates(), []);
+  const districtsForState = useMemo(
+    () => (carDetails.state ? getDistrictsByState(carDetails.state) : []),
+    [carDetails.state],
+  );
   const years = getCarYears();
   const ownershipOptions = getOwnershipOptions();
 
@@ -188,7 +204,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
     'Brand',      // 2
     'Model',      // 3
     'Year',       // 4
-    'District',   // 5
+    'Location',   // 5
     'Owners',     // 6
     'Variant',    // 7
     'Fuel',       // 8
@@ -460,6 +476,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
       model: carDetails.model,
       variant: carDetails.variant,
       year: carDetails.year,
+      state: carDetails.state,
       district: carDetails.district,
       noOfOwners: carDetails.noOfOwners,
       kilometers: carDetails.kilometers,
@@ -501,7 +518,8 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
     if (carDetails.model) chips.push({ label: 'Model', value: carDetails.model });
     if (carDetails.variant) chips.push({ label: 'Variant', value: carDetails.variant });
     if (carDetails.year) chips.push({ label: 'Year', value: carDetails.year });
-    if (carDetails.district) chips.push({ label: 'City', value: carDetails.district });
+    if (carDetails.state) chips.push({ label: 'State', value: carDetails.state });
+    if (carDetails.district) chips.push({ label: 'District', value: carDetails.district });
     if (carDetails.noOfOwners) chips.push({ label: 'Owners', value: carDetails.noOfOwners });
     if (carDetails.fuelType) chips.push({ label: 'Fuel', value: carDetails.fuelType });
     if (carDetails.kilometers) chips.push({ label: 'Kms', value: carDetails.kilometers });
@@ -939,13 +957,19 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
     );
   };
 
-  // Step 5: District / City picker
+  // Step 5: State, then district (search + picks for selected state)
   const renderStep5 = () => {
-    const popular = ['Mumbai', 'Delhi', 'Bangalore', 'Hyderabad', 'Chennai', 'Pune', 'Kolkata', 'Ahmedabad'];
-    const q = carDetails.district?.toLowerCase() || '';
-    const filtered = q
-      ? districts.filter(d => d.toLowerCase().includes(q)).slice(0, 20)
-      : [];
+    const q = (carDetails.district || '').trim().toLowerCase();
+    const pool = districtsForState;
+    const suggestions = q
+      ? pool.filter((d) => d.toLowerCase().includes(q)).slice(0, 28)
+      : pool.slice(0, 28);
+
+    const pickMetro = (loc: (typeof POPULAR_METRO_LOCATIONS)[number]) => {
+      setCarDetails((prev) => ({ ...prev, state: loc.state, district: loc.district }));
+      setManualDistrict('');
+      handleNextStep();
+    };
 
     return (
       <div className="space-y-5">
@@ -953,70 +977,106 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
         <StepHeader
           eyebrow="Location"
           title="Where is your car?"
-          subtitle="We use this to find the best local buyers."
+          subtitle="Choose your state first, then district — or use a metro shortcut below."
           accent="teal"
           icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>}
         />
 
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">State / UT</label>
+          <select
+            value={carDetails.state}
+            onChange={(e) => {
+              const v = e.target.value;
+              setCarDetails((prev) => ({ ...prev, state: v, district: '' }));
+              setManualDistrict('');
+            }}
+            className="w-full px-4 py-3 text-base border-2 border-gray-200 rounded-xl bg-white focus:ring-4 focus:ring-orange-100 focus:border-orange-400 focus:outline-none"
+          >
+            <option value="">Select state</option>
+            {indianStates.map((st) => (
+              <option key={st} value={st}>{st}</option>
+            ))}
+          </select>
+        </div>
+
         <div className="relative">
-          <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           <input
             type="text"
             value={carDetails.district}
             onChange={(e) => handleCarDetailChange('district', e.target.value)}
-            placeholder="Search your city or district..."
-            className="w-full pl-10 pr-4 py-3 text-base border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-orange-100 focus:border-orange-400 focus:outline-none"
+            placeholder={carDetails.state ? 'Search districts in this state…' : 'Select state first'}
+            disabled={!carDetails.state}
+            className="w-full pl-10 pr-4 py-3 text-base border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-orange-100 focus:border-orange-400 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400"
             autoComplete="off"
           />
         </div>
 
-        {!q && (
+        {!carDetails.state && (
           <div>
-            <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">Popular cities</p>
+            <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">Popular metros</p>
             <div className="flex flex-wrap gap-2">
-              {popular.map(city => (
+              {POPULAR_METRO_LOCATIONS.map((loc) => (
                 <button
-                  key={city}
-                  onClick={() => { handleCarDetailChange('district', city); handleNextStep(); }}
+                  key={loc.label}
+                  type="button"
+                  onClick={() => pickMetro(loc)}
                   className="px-3.5 py-1.5 rounded-full border-2 border-gray-200 bg-white text-sm font-medium text-gray-700 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700 transition"
                 >
-                  {city}
+                  {loc.label}
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {q && filtered.length > 0 && (
-          <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100 max-h-64 overflow-y-auto">
-            {filtered.map(d => (
-              <button
-                key={d}
-                onClick={() => { handleCarDetailChange('district', d); handleNextStep(); }}
-                className="w-full px-4 py-3 text-left text-sm text-gray-800 hover:bg-orange-50 active:bg-orange-100 flex items-center gap-2"
-              >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"/></svg>
-                {d}
-              </button>
-            ))}
+        {carDetails.state && suggestions.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">
+              {q ? 'Matching districts' : `Districts in ${carDetails.state}`}
+            </p>
+            <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100 max-h-64 overflow-y-auto">
+              {suggestions.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => { handleCarDetailChange('district', d); handleNextStep(); }}
+                  className="w-full px-4 py-3 text-left text-sm text-gray-800 hover:bg-orange-50 active:bg-orange-100 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"/></svg>
+                  {d}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
+        {carDetails.state && q && suggestions.length === 0 && (
+          <p className="text-sm text-gray-500">No districts match your search — try another spelling or enter manually below.</p>
+        )}
+
         <div className="p-4 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/60 space-y-2.5">
-          <h3 className="text-sm font-semibold text-gray-900">Can't find your district?</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Can&apos;t find your district?</h3>
+          <p className="text-xs text-gray-600">Select state above, then type the district name as on your RC.</p>
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={manualDistrict}
               onChange={(e) => setManualDistrict(e.target.value)}
               placeholder="Enter district manually"
-              className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-orange-400 focus:outline-none text-sm"
+              disabled={!carDetails.state}
+              className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-orange-400 focus:outline-none text-sm disabled:bg-gray-100"
             />
             <button
               type="button"
-              onClick={() => { if (!manualDistrict.trim()) return; handleCarDetailChange('district', manualDistrict.trim()); handleNextStep(); }}
+              onClick={() => {
+                if (!manualDistrict.trim() || !carDetails.state) return;
+                handleCarDetailChange('district', manualDistrict.trim());
+                handleNextStep();
+              }}
               className="px-4 py-2 bg-gray-900 text-white text-sm font-semibold rounded-lg hover:bg-gray-800 disabled:opacity-50"
-              disabled={!manualDistrict.trim()}
+              disabled={!manualDistrict.trim() || !carDetails.state}
             >
               Continue
             </button>
@@ -1237,6 +1297,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
               ['Model', carDetails.model],
               ['Variant', carDetails.variant],
               ['Year', carDetails.year],
+              ['State', carDetails.state],
               ['District', carDetails.district],
               ['Owners', carDetails.noOfOwners],
               ['Fuel', carDetails.fuelType],

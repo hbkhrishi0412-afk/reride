@@ -1,11 +1,11 @@
-import React, { Suspense } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { AppProvider } from './components/AppProvider';
 import ErrorBoundary from './components/ErrorBoundary';
 import Header from './components/Header';
 import Footer from './components/Footer';
 
 // Simple loading component
-const LoadingSpinner: React.FC = () => (
+const LoadingSpinner = () => (
     <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
         <div className="flex items-center gap-4">
             <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-orange-500"></div>
@@ -15,10 +15,10 @@ const LoadingSpinner: React.FC = () => (
 );
 
 // Lazy load only the essential components
-const Home = React.lazy(() => import('./components/Home'));
+const Home = lazy(() => import('./components/Home'));
 
-const AppContent: React.FC = () => {
-  const [currentView, setCurrentView] = React.useState('home');
+const AppContent = () => {
+  const [currentView, setCurrentView] = useState('home');
 
   const renderView = () => {
     switch (currentView) {
@@ -44,7 +44,7 @@ const AppContent: React.FC = () => {
   );
 };
 
-const App: React.FC = () => {
+const App = () => {
   return (
     <ErrorBoundary>
       <AppProvider>

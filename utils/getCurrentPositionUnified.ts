@@ -6,10 +6,16 @@ import { isCapacitorNativeApp } from './isCapacitorNative';
  * permission and use GPS. The WebView geolocation API often returns PERMISSION_DENIED
  * unless AndroidManifest includes location permissions and the app uses the native API.
  */
+
+function geoTimeoutError(): GeolocationPositionError {
+  return { code: 3, message: 'Timeout', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError;
+}
+
+/** Short inner timeouts — long hangs feel broken on Android WebView / emulators; modal falls back to manual pick. */
 const webGetCurrentPositionWithFallback = (): Promise<GeolocationPosition> => {
   const opts: PositionOptions[] = [
-    { enableHighAccuracy: false, timeout: 22000, maximumAge: 120000 },
-    { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 },
+    { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 },
+    { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 },
   ];
   return new Promise<GeolocationPosition>((resolve, reject) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -34,7 +40,7 @@ const deniedError = () => {
   return err;
 };
 
-export async function getCurrentPositionUnified(): Promise<GeolocationPosition> {
+async function getCurrentPositionUnifiedInner(): Promise<GeolocationPosition> {
   if (isCapacitorNativeApp()) {
     try {
       const { Geolocation } = await import('@capacitor/geolocation');
@@ -47,7 +53,7 @@ export async function getCurrentPositionUnified(): Promise<GeolocationPosition> 
       }
       const pos = await Geolocation.getCurrentPosition({
         enableHighAccuracy: true,
-        timeout: 30000,
+        timeout: 12000,
       });
       return pos as unknown as GeolocationPosition;
     } catch (e) {
@@ -63,4 +69,25 @@ export async function getCurrentPositionUnified(): Promise<GeolocationPosition> 
     }
   }
   return webGetCurrentPositionWithFallback();
+}
+
+/** Hard upper bound so UI never waits indefinitely (permission + GPS + plugin quirks). */
+const HARD_GEO_CAP_MS = 22000;
+
+export async function getCurrentPositionUnified(): Promise<GeolocationPosition> {
+  if (typeof window === 'undefined') {
+    return getCurrentPositionUnifiedInner();
+  }
+  return new Promise((resolve, reject) => {
+    const tid = window.setTimeout(() => reject(geoTimeoutError()), HARD_GEO_CAP_MS);
+    getCurrentPositionUnifiedInner()
+      .then((pos) => {
+        window.clearTimeout(tid);
+        resolve(pos);
+      })
+      .catch((err) => {
+        window.clearTimeout(tid);
+        reject(err);
+      });
+  });
 }

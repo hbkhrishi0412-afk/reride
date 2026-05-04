@@ -16,7 +16,7 @@ export async function handleSellCar(req: VercelRequest, res: VercelResponse, _op
     switch (method) {
       case 'POST': {
         const data = { ...req.body, submittedAt: new Date().toISOString(), status: 'pending' };
-        const required = ['registration', 'make', 'model', 'variant', 'year', 'district', 'noOfOwners', 'kilometers', 'fuelType', 'transmission', 'customerContact'];
+        const required = ['registration', 'make', 'model', 'variant', 'year', 'state', 'district', 'noOfOwners', 'kilometers', 'fuelType', 'transmission', 'customerContact'];
         const missing = required.filter(f => !data[f as keyof typeof data]);
         if (missing.length) return res.status(400).json({ error: `Missing: ${missing.join(', ')}` });
 
@@ -44,7 +44,7 @@ export async function handleSellCar(req: VercelRequest, res: VercelResponse, _op
         }
         if (search && typeof search === 'string') {
           const q = (await sanitizeString(search)).toLowerCase();
-          items = items.filter((s: any) => [s.registration, s.make, s.model, s.customerContact].some(v => String(v || '').toLowerCase().includes(q)));
+          items = items.filter((s: any) => [s.registration, s.make, s.model, s.customerContact, s.state, s.district].some(v => String(v || '').toLowerCase().includes(q)));
         }
 
         items.sort((a, b) => new Date(String((b as any).submittedAt ?? 0)).getTime() - new Date(String((a as any).submittedAt ?? 0)).getTime());

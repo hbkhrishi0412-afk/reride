@@ -1,4 +1,4 @@
-import React from 'react';
+import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 /**
@@ -7,24 +7,25 @@ import { useTranslation } from 'react-i18next';
  * to avoid "Map container is already initialized" from AnimatePresence remounts.
  */
 interface PageTransitionProps {
-  children: React.ReactNode;
+  children: ReactNode;
   currentView: string | number;
 }
 
 // Views that must not be wrapped in AnimatePresence (e.g. contain Leaflet map)
 /** DETAIL: avoid transform containing-block so in-DOM fixed UI behaves; framer still breaks portaled bars if nested. */
-const VIEWS_WITHOUT_TRANSITION = ['DEALER_PROFILES', 'DETAIL', 'ADMIN_PANEL'];
+/** SELL_CAR: motion.div has no explicit height — breaks `h-full` flex footer + pinned Continue on mobile Safari */
+const VIEWS_WITHOUT_TRANSITION = ['DEALER_PROFILES', 'DETAIL', 'ADMIN_PANEL', 'SELL_CAR'];
 
-const PageTransition: React.FC<PageTransitionProps> = ({ children, currentView }) => {
+const PageTransition = ({ children, currentView }: PageTransitionProps) => {
   const { i18n } = useTranslation();
   const langKey = (i18n.resolvedLanguage || i18n.language || 'en').split('-')[0];
   const transitionKey = `${String(currentView)}-${langKey}`;
 
-  const [useAnimations, setUseAnimations] = React.useState(true);
-  const [MotionDiv, setMotionDiv] = React.useState<any>(null);
-  const [AnimatePresence, setAnimatePresence] = React.useState<any>(null);
+  const [useAnimations, setUseAnimations] = useState(true);
+  const [MotionDiv, setMotionDiv] = useState<any>(null);
+  const [AnimatePresence, setAnimatePresence] = useState<any>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     import('framer-motion')
       .then((fm) => {
         if (fm.motion && fm.AnimatePresence && React) {
@@ -45,7 +46,7 @@ const PageTransition: React.FC<PageTransitionProps> = ({ children, currentView }
 
   // No animation for map-containing views: avoids Leaflet container re-init
   if (skipTransition) {
-    return <React.Fragment key={transitionKey}>{children}</React.Fragment>;
+    return <Fragment key={transitionKey}>{children}</Fragment>;
   }
 
   if (useAnimations && MotionDiv && AnimatePresence) {
@@ -64,7 +65,7 @@ const PageTransition: React.FC<PageTransitionProps> = ({ children, currentView }
     );
   }
 
-  return <React.Fragment key={transitionKey}>{children}</React.Fragment>;
+  return <Fragment key={transitionKey}>{children}</Fragment>;
 };
 
 export default PageTransition;

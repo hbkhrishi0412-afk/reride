@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS sell_car_submissions (
   model TEXT NOT NULL,
   variant TEXT,
   year TEXT,
+  state TEXT,
   district TEXT,
   "noOfOwners" TEXT,
   kilometers TEXT,

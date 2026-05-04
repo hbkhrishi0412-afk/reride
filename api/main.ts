@@ -7308,8 +7308,8 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
         };
 
         const requiredFields = [
-          'registration', 'make', 'model', 'variant', 'year', 
-          'district', 'noOfOwners', 'kilometers', 'fuelType', 
+          'registration', 'make', 'model', 'variant', 'year',
+          'state', 'district', 'noOfOwners', 'kilometers', 'fuelType',
           'transmission', 'customerContact'
         ];
 
@@ -7371,11 +7371,13 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
         if (search && typeof search === 'string') {
           const sanitizedSearch = await sanitizeString(search);
           const searchLower = sanitizedSearch.toLowerCase();
-          submissions = submissions.filter((sub: any) => 
+          submissions = submissions.filter((sub: any) =>
             (sub.registration as string)?.toLowerCase().includes(searchLower) ||
             (sub.make as string)?.toLowerCase().includes(searchLower) ||
             (sub.model as string)?.toLowerCase().includes(searchLower) ||
-            (sub.customerContact as string)?.toLowerCase().includes(searchLower)
+            (sub.customerContact as string)?.toLowerCase().includes(searchLower) ||
+            String(sub.state || '').toLowerCase().includes(searchLower) ||
+            String(sub.district || '').toLowerCase().includes(searchLower)
           );
         }
 
