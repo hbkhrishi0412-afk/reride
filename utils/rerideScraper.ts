@@ -1,5 +1,11 @@
 // utils/rerideScraper.ts
 
+import {
+  getAllDistrictsFlattenedSorted,
+  getDistrictsForState,
+  getIndianStatesSorted,
+} from './indianLocations';
+
 export interface CarMake {
   name: string;
   logo: string;
@@ -405,23 +411,15 @@ export const getVariantsByModel = (make: string, model: string, carData: Scraped
   return modelData?.variants ?? [];
 };
 
-// Indian districts/cities for location selection
-export const getIndianDistricts = (): string[] => {
-  return [
-    'Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Kolkata', 'Hyderabad', 'Pune', 'Ahmedabad',
-    'Jaipur', 'Lucknow', 'Kanpur', 'Nagpur', 'Indore', 'Thane', 'Bhopal', 'Visakhapatnam',
-    'Pimpri-Chinchwad', 'Patna', 'Vadodara', 'Ghaziabad', 'Ludhiana', 'Agra', 'Nashik',
-    'Faridabad', 'Meerut', 'Rajkot', 'Kalyan-Dombivali', 'Vasai-Virar', 'Varanasi', 'Srinagar',
-    'Aurangabad', 'Navi Mumbai', 'Solapur', 'Vijayawada', 'Kolhapur', 'Amravati', 'Noida',
-    'Ranchi', 'Howrah', 'Coimbatore', 'Raipur', 'Gwalior', 'Chandigarh', 'Tiruchirappalli',
-    'Mysore', 'Bhubaneswar', 'Kochi', 'Bhavnagar', 'Salem', 'Warangal', 'Guntur', 'Bhiwandi',
-    'Amritsar', 'Nanded', 'Kolhapur', 'Sangli', 'Malegaon', 'Ulhasnagar', 'Jalgaon', 'Akola',
-    'Latur', 'Ahmadnagar', 'Dhule', 'Ichalkaranji', 'Parbhani', 'Jalna', 'Bhusawal', 'Satara',
-    'Beed', 'Yavatmal', 'Kamptee', 'Gondia', 'Barshi', 'Achalpur', 'Osmanabad', 'Nandurbar',
-    'Wardha', 'Udgir', 'Aurangabad', 'Amalner', 'Akot', 'Pandharpur', 'Shrirampur', 'Parli',
-    'Washim', 'Pathri', 'Sangamner', 'Shirpur', 'Malkapur', 'Amalner', 'Dhule', 'Ichalkaranji'
-  ];
-};
+/** Flattened districts across India (search / legacy flows). */
+export const getIndianDistricts = (): string[] => getAllDistrictsFlattenedSorted();
+
+/** Union sorted state & UT names. */
+export const getIndianStates = (): string[] => getIndianStatesSorted();
+
+/** Districts for a selected state or UT (empty if unknown). */
+export const getDistrictsByState = (state: string): string[] =>
+  getDistrictsForState(state);
 
 // Years from 2025 to 1990
 export const getCarYears = (): string[] => {

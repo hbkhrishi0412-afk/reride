@@ -8,6 +8,8 @@ interface SellCarSubmission {
   model: string;
   variant: string;
   year: string;
+  /** Indian state or UT name (matches sell flow picker). */
+  state: string;
   district: string;
   noOfOwners: string;
   kilometers: string;

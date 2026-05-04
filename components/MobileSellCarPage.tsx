@@ -1,11 +1,241 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { View as ViewEnum } from '../types';
-import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData } from '../utils/rerideScraper';
+import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianStates, getDistrictsByState, getCarYears, getOwnershipOptions, ScrapedCarData } from '../utils/rerideScraper';
+import { sellCarAPI } from '../services/sellCarService';
 import { useCamera } from '../hooks/useMobileFeatures';
 
 interface MobileSellCarPageProps {
   onNavigate: (view: ViewEnum) => void;
 }
+
+interface MobilePickerListProps {
+  fieldId: string;
+  label: string;
+  value: string;
+  emptyLabel: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}
+
+/** Full-screen bottom sheet (portal) — avoids WebView clipping vs fixed Continue footer + nested scroll traps. */
+const MobilePickerList: React.FC<MobilePickerListProps> = ({
+  fieldId,
+  label,
+  value,
+  emptyLabel,
+  options,
+  onChange,
+  disabled = false,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [portalReady, setPortalReady] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  const showSearch = options.length >= 10;
+
+  const filteredOptions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, query]);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (disabled) {
+      setIsOpen(false);
+    }
+  }, [disabled]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setQuery('');
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || typeof document === 'undefined') return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !listRef.current) return;
+
+    requestAnimationFrame(() => {
+      const selectedEl = listRef.current?.querySelector<HTMLElement>('[data-selected="true"]');
+      if (selectedEl) {
+        selectedEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    });
+  }, [isOpen, value, filteredOptions]);
+
+  const handleSelect = (selectedValue: string) => {
+    onChange(selectedValue);
+    setIsOpen(false);
+  };
+
+  const dimmed = disabled ? 'opacity-50 pointer-events-none' : '';
+
+  const sheet =
+    isOpen &&
+    portalReady &&
+    typeof document !== 'undefined' &&
+    createPortal(
+      <div
+        className="fixed inset-0 z-[240] flex flex-col justify-end"
+        role="presentation"
+      >
+        <button
+          type="button"
+          className="absolute inset-0 bg-black/45 touch-manipulation"
+          aria-label="Close list"
+          onClick={() => setIsOpen(false)}
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={`${fieldId}-sheet-title`}
+          className="relative flex max-h-[92vh] min-h-0 flex-col rounded-t-2xl bg-white shadow-[0_-8px_32px_rgba(0,0,0,0.18)] pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex shrink-0 items-center justify-center pt-3 pb-1">
+            <div className="h-1 w-10 rounded-full bg-gray-300" aria-hidden />
+          </div>
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
+            <h2 id={`${fieldId}-sheet-title`} className="text-lg font-semibold text-gray-900">
+              {label}
+            </h2>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="rounded-full p-2 text-gray-600 active:bg-gray-100 touch-manipulation"
+              aria-label="Close"
+              style={{ minWidth: '44px', minHeight: '44px' }}
+            >
+              <svg className="mx-auto h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {showSearch && (
+            <div className="shrink-0 border-b border-gray-100 px-4 py-3">
+              <input
+                type="search"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder={`Search ${label.toLowerCase()}…`}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-base focus:border-orange-500 focus:outline-none"
+              />
+            </div>
+          )}
+          <div
+            ref={listRef}
+            id={`${fieldId}-options`}
+            role="listbox"
+            aria-labelledby={`${fieldId}-sheet-title`}
+            className="min-h-0 flex-1 overflow-y-auto overscroll-y-auto touch-pan-y px-1 py-2"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
+            <button
+              type="button"
+              role="option"
+              aria-selected={!value}
+              data-selected={!value ? 'true' : undefined}
+              onClick={() => handleSelect('')}
+              className={`w-full rounded-lg px-4 py-3.5 text-left text-base touch-manipulation flex items-center justify-between ${
+                !value ? 'bg-orange-50 font-medium text-orange-900' : 'text-gray-500'
+              }`}
+            >
+              <span>{emptyLabel}</span>
+              {!value && (
+                <svg className="h-4 w-4 shrink-0 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+            {filteredOptions.map((opt, i) => (
+              <button
+                key={`${fieldId}-${i}-${opt.value}`}
+                type="button"
+                role="option"
+                aria-selected={value === opt.value}
+                data-selected={value === opt.value ? 'true' : undefined}
+                onClick={() => handleSelect(opt.value)}
+                className={`w-full rounded-lg px-4 py-3.5 text-left text-base touch-manipulation flex items-center justify-between active:bg-gray-50 ${
+                  value === opt.value ? 'bg-orange-50 font-semibold text-orange-900' : 'text-gray-900'
+                }`}
+              >
+                <span>{opt.label}</span>
+                {value === opt.value && (
+                  <svg className="h-4 w-4 shrink-0 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+            ))}
+            {filteredOptions.length === 0 && query.trim() !== '' && (
+              <p className="px-4 py-8 text-center text-sm text-gray-500">No matches</p>
+            )}
+          </div>
+        </div>
+      </div>,
+      document.body,
+    );
+
+  return (
+    <div className={dimmed}>
+      <p id={`${fieldId}-lbl`} className="mb-2 block text-sm font-medium text-gray-700">
+        {label}
+      </p>
+      <button
+        type="button"
+        aria-labelledby={`${fieldId}-lbl`}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-controls={`${fieldId}-options`}
+        disabled={disabled}
+        onClick={() => !disabled && setIsOpen(true)}
+        className={`flex w-full items-center justify-between rounded-xl border-2 px-4 py-3.5 text-left text-base transition-colors touch-manipulation ${
+          isOpen
+            ? 'border-orange-400 bg-orange-50/60'
+            : value
+              ? 'border-gray-300 bg-white'
+              : 'border-gray-200 bg-white'
+        }`}
+      >
+        <span className={value ? 'font-medium text-gray-900' : 'text-gray-500'}>
+          {selectedOption?.label || emptyLabel}
+        </span>
+        <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {sheet}
+    </div>
+  );
+};
 
 /**
  * Mobile-Optimized Sell Car Page
@@ -16,6 +246,133 @@ interface MobileSellCarPageProps {
  * - Mobile camera integration ready
  */
 export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate }) => {
+  /** Last full window.innerHeight before keyboard — some WebViews resize but don’t fire visualViewport. */
+  const baselineInnerHeightRef = useRef(
+    typeof window !== 'undefined' ? window.innerHeight : 0,
+  );
+  /** Manual padding when focused in a field (WebViews that report vv height = layout height). */
+  const focusInsetRef = useRef(0);
+  /** Merged bottom inset: max(visualViewport, window resize delta, focus fallback). */
+  const [keyboardBottomInset, setKeyboardBottomInset] = useState(0);
+
+  const updateKeyboardInset = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    let inset = focusInsetRef.current;
+    const vv = window.visualViewport;
+    if (vv) {
+      inset = Math.max(
+        inset,
+        Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)),
+      );
+    }
+    const resizeDelta = baselineInnerHeightRef.current - window.innerHeight;
+    if (resizeDelta > 48) {
+      inset = Math.max(inset, Math.round(resizeDelta));
+    }
+    setKeyboardBottomInset(inset);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    baselineInnerHeightRef.current = window.innerHeight;
+    const vv = window.visualViewport;
+
+    const syncBaselineIfKeyboardGone = () => {
+      const vvInset =
+        vv != null
+          ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+          : 0;
+      const resizeDelta = baselineInnerHeightRef.current - window.innerHeight;
+      if (vvInset < 16 && resizeDelta < 56 && focusInsetRef.current === 0) {
+        baselineInnerHeightRef.current = window.innerHeight;
+      }
+    };
+
+    const onLayoutChange = () => {
+      syncBaselineIfKeyboardGone();
+      updateKeyboardInset();
+    };
+
+    if (vv) {
+      vv.addEventListener('resize', onLayoutChange);
+      vv.addEventListener('scroll', onLayoutChange);
+    }
+    window.addEventListener('resize', onLayoutChange);
+    window.addEventListener('orientationchange', onLayoutChange);
+    onLayoutChange();
+
+    return () => {
+      if (vv) {
+        vv.removeEventListener('resize', onLayoutChange);
+        vv.removeEventListener('scroll', onLayoutChange);
+      }
+      window.removeEventListener('resize', onLayoutChange);
+      window.removeEventListener('orientationchange', onLayoutChange);
+    };
+  }, [updateKeyboardInset]);
+
+  const activateInputKeyboardPadding = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    focusInsetRef.current = Math.min(Math.round(window.innerHeight * 0.42), 340);
+    updateKeyboardInset();
+  }, [updateKeyboardInset]);
+
+  const deactivateInputKeyboardPadding = useCallback(() => {
+    window.setTimeout(() => {
+      const el = document.activeElement;
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        return;
+      }
+      focusInsetRef.current = 0;
+      updateKeyboardInset();
+    }, 240);
+  }, [updateKeyboardInset]);
+
+  /** Avoid layout jumps: mobile shell scrolls `#mobile-app-scroll-root`, not `window`. */
+  const prepareWizardStepChange = useCallback(() => {
+    if (typeof document !== 'undefined') {
+      const ae = document.activeElement;
+      if (ae instanceof HTMLElement) ae.blur();
+    }
+    focusInsetRef.current = 0;
+    updateKeyboardInset();
+  }, [updateKeyboardInset]);
+
+  const resetSellCarScrollPositions = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const main = document.getElementById('mobile-app-scroll-root');
+        if (main) main.scrollTop = 0;
+        const inner = document.getElementById('mobile-sell-car-step-scroll');
+        if (inner) inner.scrollTop = 0;
+        if (typeof document !== 'undefined') {
+          document.documentElement.scrollTop = 0;
+          document.body.scrollTop = 0;
+        }
+      });
+    });
+  }, []);
+
+  const scrollFieldIntoComfortableView = (el: HTMLElement) => {
+    requestAnimationFrame(() => {
+      const inner = document.getElementById('mobile-sell-car-step-scroll');
+      if (inner?.contains(el)) {
+        const pad = 80;
+        const elRect = el.getBoundingClientRect();
+        const innerRect = inner.getBoundingClientRect();
+        const deltaBottom = elRect.bottom - (innerRect.bottom - pad);
+        const deltaTop = elRect.top - (innerRect.top + pad);
+        if (deltaBottom > 0) {
+          inner.scrollTop += deltaBottom;
+        } else if (deltaTop < 0) {
+          inner.scrollTop += deltaTop;
+        }
+        return;
+      }
+      el.scrollIntoView({ block: 'nearest', behavior: 'auto', inline: 'nearest' });
+    });
+  };
+
   const [currentStep, setCurrentStep] = useState(0);
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [carDetails, setCarDetails] = useState({
@@ -24,6 +381,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
     model: '',
     variant: '',
     year: '',
+    state: '',
     district: '',
     noOfOwners: '',
     kilometers: '',
@@ -39,12 +397,15 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
   const [isVerifying, setIsVerifying] = useState(false);
   const [registrationError, setRegistrationError] = useState('');
   const [customerContact, setCustomerContact] = useState('');
+  const [contactError, setContactError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [vehicleImages, setVehicleImages] = useState<string[]>([]);
 
   const { capture, captureMultiple, compress, isCapturing } = useCamera();
 
   const totalSteps = 9;
-  const districts = getIndianDistricts();
+  const indianStates = getIndianStates();
+  const districtsForSelectedState = carDetails.state ? getDistrictsByState(carDetails.state) : [];
   const years = getCarYears();
   const ownershipOptions = getOwnershipOptions();
   const fuelTypes = ['Petrol', 'Diesel', 'CNG', 'Electric', 'Hybrid'];
@@ -91,13 +452,62 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
   }, [carDetails.model, carData]);
 
   const handleNextStep = () => {
+    prepareWizardStepChange();
     setCurrentStep(prev => Math.min(prev + 1, totalSteps - 1));
-    window.scrollTo(0, 0);
+    resetSellCarScrollPositions();
   };
 
   const handlePrevStep = () => {
+    prepareWizardStepChange();
     setCurrentStep(prev => Math.max(prev - 1, 0));
-    window.scrollTo(0, 0);
+    resetSellCarScrollPositions();
+  };
+
+  const handleContactSubmit = async () => {
+    const phoneRegex = /^[6-9]\d{9}$/;
+    const trimmed = customerContact.replace(/\D/g, '').slice(0, 10);
+    if (!trimmed) {
+      setContactError('Please enter your phone number');
+      return;
+    }
+    if (trimmed.length !== 10) {
+      setContactError('Enter all 10 digits of your mobile number');
+      return;
+    }
+    if (!phoneRegex.test(trimmed)) {
+      setContactError('Enter a valid Indian mobile number (starts with 6–9)');
+      return;
+    }
+    setContactError('');
+    setIsSubmitting(true);
+    try {
+      const result = await sellCarAPI.submitCarData({
+        registration: carDetails.registration?.trim() || 'MANUAL',
+        make: carDetails.make,
+        model: carDetails.model,
+        variant: carDetails.variant?.trim() || 'Not specified',
+        year: carDetails.year,
+        state: carDetails.state,
+        district: carDetails.district,
+        noOfOwners: carDetails.noOfOwners,
+        kilometers: carDetails.kilometers,
+        fuelType: carDetails.fuelType,
+        transmission: carDetails.transmission,
+        customerContact: trimmed,
+      });
+      if (result.success) {
+        prepareWizardStepChange();
+        setCurrentStep(8);
+        resetSellCarScrollPositions();
+      } else {
+        alert(result.error || result.message || 'Could not submit. Please try again.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : 'Could not submit. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const validateRegistration = (reg: string): boolean => {
@@ -191,6 +601,11 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
                 placeholder="e.g., MH01AB1234"
                 value={registrationNumber}
                 onChange={(e) => setRegistrationNumber(e.target.value.toUpperCase())}
+                onFocus={(e) => {
+                  activateInputKeyboardPadding();
+                  scrollFieldIntoComfortableView(e.currentTarget);
+                }}
+                onBlur={deactivateInputKeyboardPadding}
                 className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
                 style={{ minHeight: '56px' }}
                 autoCapitalize="characters"
@@ -199,21 +614,6 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
                 <p className="text-red-500 text-sm mt-2">{registrationError}</p>
               )}
             </div>
-            <button
-              onClick={handleRegistrationSubmit}
-              disabled={isVerifying || !registrationNumber.trim()}
-              className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ minHeight: '56px' }}
-            >
-              {isVerifying ? 'Fetching Details...' : 'Continue'}
-            </button>
-            <button
-              onClick={handleNextStep}
-              className="w-full py-4 bg-gray-100 text-gray-700 rounded-xl font-semibold"
-              style={{ minHeight: '56px' }}
-            >
-              Fill Details Manually
-            </button>
           </div>
         );
 
@@ -221,66 +621,42 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
         return (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Car Details</h2>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Make</label>
-              <select
-                value={carDetails.make}
-                onChange={(e) => setCarDetails(prev => ({ ...prev, make: e.target.value }))}
-                className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
-                style={{ minHeight: '56px' }}
-              >
-                <option value="">Select Make</option>
-                {(carData?.makes ?? []).map(make => (
-                  <option key={make.name} value={make.name}>{make.name}</option>
-                ))}
-              </select>
-            </div>
+            <MobilePickerList
+              fieldId="sell-make"
+              label="Make"
+              value={carDetails.make}
+              emptyLabel="Select Make"
+              options={(carData?.makes ?? []).map((m) => ({ value: m.name, label: m.name }))}
+              onChange={(v) => setCarDetails((prev) => ({ ...prev, make: v }))}
+            />
             {availableModels.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Model</label>
-                <select
-                  value={carDetails.model}
-                  onChange={(e) => setCarDetails(prev => ({ ...prev, model: e.target.value }))}
-                  className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
-                  style={{ minHeight: '56px' }}
-                >
-                  <option value="">Select Model</option>
-                  {availableModels.map(model => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </select>
-              </div>
+              <MobilePickerList
+                fieldId="sell-model"
+                label="Model"
+                value={carDetails.model}
+                emptyLabel="Select Model"
+                options={availableModels.map((m) => ({ value: m, label: m }))}
+                onChange={(v) => setCarDetails((prev) => ({ ...prev, model: v }))}
+              />
             )}
             {availableVariants.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Variant</label>
-                <select
-                  value={carDetails.variant}
-                  onChange={(e) => setCarDetails(prev => ({ ...prev, variant: e.target.value }))}
-                  className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
-                  style={{ minHeight: '56px' }}
-                >
-                  <option value="">Select Variant</option>
-                  {availableVariants.map(variant => (
-                    <option key={variant} value={variant}>{variant}</option>
-                  ))}
-                </select>
-              </div>
+              <MobilePickerList
+                fieldId="sell-variant"
+                label="Variant"
+                value={carDetails.variant}
+                emptyLabel="Select Variant"
+                options={availableVariants.map((v) => ({ value: v, label: v }))}
+                onChange={(v) => setCarDetails((prev) => ({ ...prev, variant: v }))}
+              />
             )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
-              <select
-                value={carDetails.year}
-                onChange={(e) => setCarDetails(prev => ({ ...prev, year: e.target.value }))}
-                className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
-                style={{ minHeight: '56px' }}
-              >
-                <option value="">Select Year</option>
-                {years.map(year => (
-                  <option key={year} value={year.toString()}>{year}</option>
-                ))}
-              </select>
-            </div>
+            <MobilePickerList
+              fieldId="sell-year"
+              label="Year"
+              value={carDetails.year}
+              emptyLabel="Select Year"
+              options={years.map((y) => ({ value: String(y), label: String(y) }))}
+              onChange={(v) => setCarDetails((prev) => ({ ...prev, year: v }))}
+            />
           </div>
         );
 
@@ -288,34 +664,32 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
         return (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Location & Ownership</h2>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">District/City</label>
-              <select
-                value={carDetails.district}
-                onChange={(e) => setCarDetails(prev => ({ ...prev, district: e.target.value }))}
-                className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
-                style={{ minHeight: '56px' }}
-              >
-                <option value="">Select District</option>
-                {districts.map(district => (
-                  <option key={district} value={district}>{district}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Number of Owners</label>
-              <select
-                value={carDetails.noOfOwners}
-                onChange={(e) => setCarDetails(prev => ({ ...prev, noOfOwners: e.target.value }))}
-                className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
-                style={{ minHeight: '56px' }}
-              >
-                <option value="">Select</option>
-                {ownershipOptions.map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-            </div>
+            <MobilePickerList
+              fieldId="sell-state"
+              label="State / UT"
+              value={carDetails.state}
+              emptyLabel="Select State"
+              options={indianStates.map((st) => ({ value: st, label: st }))}
+              onChange={(v) => setCarDetails((prev) => ({ ...prev, state: v, district: '' }))}
+            />
+            <MobilePickerList
+              key={carDetails.state || 'district'}
+              fieldId="sell-district"
+              label="District"
+              value={carDetails.district}
+              emptyLabel={carDetails.state ? 'Select District' : 'Select state first'}
+              options={districtsForSelectedState.map((d) => ({ value: d, label: d }))}
+              onChange={(v) => setCarDetails((prev) => ({ ...prev, district: v }))}
+              disabled={!carDetails.state}
+            />
+            <MobilePickerList
+              fieldId="sell-owners"
+              label="Number of Owners"
+              value={carDetails.noOfOwners}
+              emptyLabel="Select"
+              options={ownershipOptions.map((o) => ({ value: o, label: o }))}
+              onChange={(v) => setCarDetails((prev) => ({ ...prev, noOfOwners: v }))}
+            />
           </div>
         );
 
@@ -323,78 +697,68 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
         return (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Usage & Fuel</h2>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Kilometers Driven</label>
-              <select
-                value={carDetails.kilometers}
-                onChange={(e) => setCarDetails(prev => ({ ...prev, kilometers: e.target.value }))}
-                className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
-                style={{ minHeight: '56px' }}
-              >
-                <option value="">Select Range</option>
-                {kilometerRanges.map(range => (
-                  <option key={range} value={range}>{range}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Fuel Type</label>
-              <select
-                value={carDetails.fuelType}
-                onChange={(e) => setCarDetails(prev => ({ ...prev, fuelType: e.target.value }))}
-                className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
-                style={{ minHeight: '56px' }}
-              >
-                <option value="">Select Fuel Type</option>
-                {fuelTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Transmission</label>
-              <select
-                value={carDetails.transmission}
-                onChange={(e) => setCarDetails(prev => ({ ...prev, transmission: e.target.value }))}
-                className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
-                style={{ minHeight: '56px' }}
-              >
-                <option value="">Select Transmission</option>
-                {transmissionTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
+            <MobilePickerList
+              fieldId="sell-km"
+              label="Kilometers Driven"
+              value={carDetails.kilometers}
+              emptyLabel="Select Range"
+              options={kilometerRanges.map((r) => ({ value: r, label: r }))}
+              onChange={(v) => setCarDetails((prev) => ({ ...prev, kilometers: v }))}
+            />
+            <MobilePickerList
+              fieldId="sell-fuel"
+              label="Fuel Type"
+              value={carDetails.fuelType}
+              emptyLabel="Select Fuel Type"
+              options={fuelTypes.map((t) => ({ value: t, label: t }))}
+              onChange={(v) => setCarDetails((prev) => ({ ...prev, fuelType: v }))}
+            />
+            <MobilePickerList
+              fieldId="sell-trans"
+              label="Transmission"
+              value={carDetails.transmission}
+              emptyLabel="Select Transmission"
+              options={transmissionTypes.map((t) => ({ value: t, label: t }))}
+              onChange={(v) => setCarDetails((prev) => ({ ...prev, transmission: v }))}
+            />
           </div>
         );
 
       case 5: // Condition & Price
         return (
-          <div className="space-y-4">
+          <div className="space-y-4 pb-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Condition & Pricing</h2>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Condition</label>
-              <select
-                value={carDetails.condition}
-                onChange={(e) => setCarDetails(prev => ({ ...prev, condition: e.target.value }))}
-                className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
-                style={{ minHeight: '56px' }}
-              >
-                <option value="">Select Condition</option>
-                <option value="Excellent">Excellent</option>
-                <option value="Very Good">Very Good</option>
-                <option value="Good">Good</option>
-                <option value="Fair">Fair</option>
-                <option value="Needs Repair">Needs Repair</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Expected Price (₹)</label>
+            <MobilePickerList
+              fieldId="sell-condition"
+              label="Condition"
+              value={carDetails.condition}
+              emptyLabel="Select Condition"
+              options={[
+                { value: 'Excellent', label: 'Excellent' },
+                { value: 'Very Good', label: 'Very Good' },
+                { value: 'Good', label: 'Good' },
+                { value: 'Fair', label: 'Fair' },
+                { value: 'Needs Repair', label: 'Needs Repair' },
+              ]}
+              onChange={(v) => setCarDetails((prev) => ({ ...prev, condition: v }))}
+            />
+            <div className="scroll-mt-6 pb-8">
+              <label htmlFor="sell-expected-price" className="block text-sm font-medium text-gray-700 mb-2">
+                Expected Price (₹)
+              </label>
               <input
+                id="sell-expected-price"
                 type="number"
+                inputMode="decimal"
+                enterKeyHint="done"
                 placeholder="Enter expected price"
                 value={carDetails.expectedPrice}
                 onChange={(e) => setCarDetails(prev => ({ ...prev, expectedPrice: e.target.value }))}
+                onFocus={(e) => {
+                  activateInputKeyboardPadding();
+                  scrollFieldIntoComfortableView(e.currentTarget);
+                }}
+                onBlur={deactivateInputKeyboardPadding}
                 className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
                 style={{ minHeight: '56px' }}
               />
@@ -497,21 +861,51 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
 
       case 7: // Contact
         return (
-          <div className="space-y-4">
+          <form
+            id="mobile-sell-contact-form"
+            className="space-y-4 pb-8"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleContactSubmit();
+            }}
+          >
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Contact Information</h2>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+              <label htmlFor="sell-contact-phone" className="block text-sm font-medium text-gray-700 mb-2">
+                Phone Number
+              </label>
               <input
+                id="sell-contact-phone"
+                name="phone"
                 type="tel"
-                placeholder="Enter your phone number"
+                inputMode="numeric"
+                maxLength={10}
+                enterKeyHint="send"
+                autoComplete="tel"
+                placeholder="10-digit mobile (starts with 6–9)"
                 value={customerContact}
-                onChange={(e) => setCustomerContact(e.target.value)}
-                className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
+                onChange={(e) => {
+                  const v = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  setCustomerContact(v);
+                  setContactError('');
+                }}
+                onFocus={(e) => {
+                  activateInputKeyboardPadding();
+                  scrollFieldIntoComfortableView(e.currentTarget);
+                }}
+                onBlur={deactivateInputKeyboardPadding}
+                className={`w-full px-4 py-4 text-lg rounded-xl border-2 focus:outline-none ${
+                  contactError ? 'border-red-400' : 'border-gray-200 focus:border-orange-500'
+                }`}
                 style={{ minHeight: '56px' }}
               />
+              {contactError ? (
+                <p className="text-red-600 text-sm mt-2">{contactError}</p>
+              ) : null}
             </div>
             <p className="text-sm text-gray-600">Our team will contact you to complete the listing process.</p>
-          </div>
+          </form>
         );
 
       case 8: // Success
@@ -540,11 +934,17 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      {/* Header */}
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
+    <div
+      className="bg-gray-50 flex min-h-0 flex-1 flex-col overflow-hidden"
+      style={
+        keyboardBottomInset > 0 ? { paddingBottom: `${keyboardBottomInset}px` } : undefined
+      }
+    >
+      {/* Pinned chrome — does not scroll (fixes Continue + lists hidden behind tab bar on iOS Safari) */}
+      <div className="shrink-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
         {currentStep > 0 && (
           <button
+            type="button"
             onClick={handlePrevStep}
             className="p-2 -ml-1"
             style={{ minWidth: '44px', minHeight: '44px' }}
@@ -557,9 +957,8 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
         <h1 className="text-lg font-bold text-gray-900 flex-1">Sell Your Car</h1>
       </div>
 
-      {/* Progress Bar */}
-      {currentStep < 7 && (
-        <div className="bg-white border-b border-gray-200 px-4 py-3">
+      {currentStep < 8 && (
+        <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-600">Step {currentStep + 1} of {totalSteps - 1}</span>
             <span className="text-sm font-semibold text-gray-900">{Math.round(((currentStep + 1) / (totalSteps - 1)) * 100)}%</span>
@@ -573,21 +972,57 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
         </div>
       )}
 
-      {/* Content */}
-      <div className="px-4 py-6">
+      {/* Only the step body scrolls; Continue stays above device bottom nav */}
+      <div
+        id="mobile-sell-car-step-scroll"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-6 overscroll-y-auto touch-pan-y"
+        key={`sell-step-${currentStep}`}
+      >
         {renderStep()}
       </div>
 
-      {/* Navigation Buttons */}
-      {currentStep > 0 && currentStep < 7 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 safe-bottom z-20">
-          <button
-            onClick={handleNextStep}
-            className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold"
-            style={{ minHeight: '56px' }}
-          >
-            Continue
-          </button>
+      {currentStep > 0 && currentStep < 8 && (
+        <div className="relative z-20 shrink-0 border-t border-gray-200 bg-white px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_-4px_14px_rgba(0,0,0,0.06)]">
+          {currentStep === 1 ? (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={handleRegistrationSubmit}
+                disabled={isVerifying || !registrationNumber.trim()}
+                className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ minHeight: '56px' }}
+              >
+                {isVerifying ? 'Fetching Details...' : 'Continue'}
+              </button>
+              <button
+                type="button"
+                onClick={handleNextStep}
+                className="w-full py-3 text-center text-sm font-medium text-gray-600 underline decoration-gray-400 underline-offset-4 active:text-orange-600 active:decoration-orange-400 touch-manipulation"
+                style={{ minHeight: '44px' }}
+              >
+                Fill Details Manually
+              </button>
+            </div>
+          ) : currentStep === 7 ? (
+            <button
+              type="submit"
+              form="mobile-sell-contact-form"
+              disabled={isSubmitting}
+              className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{ minHeight: '56px' }}
+            >
+              {isSubmitting ? 'Submitting…' : 'Submit'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleNextStep}
+              className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold"
+              style={{ minHeight: '56px' }}
+            >
+              Continue
+            </button>
+          )}
         </div>
       )}
     </div>

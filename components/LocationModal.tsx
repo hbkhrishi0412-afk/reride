@@ -59,7 +59,6 @@ function labelFromNearestCatalogCoordinate(
 /** Nominatim public policy: be gentle (≈1 req/s). Spacing is enforced between outbound calls. */
 let lastNominatimRequestAt = 0;
 const NOMINATIM_MIN_INTERVAL_MS = 1100;
-const NOMINATIM_RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 
 async function waitForNominatimSlot(): Promise<void> {
   const elapsed = Date.now() - lastNominatimRequestAt;
@@ -69,10 +68,7 @@ async function waitForNominatimSlot(): Promise<void> {
   lastNominatimRequestAt = Date.now();
 }
 
-/**
- * One reverse call with client timeout, optional retry on network failure or
- * retryable HTTP status (503/429/etc.), while respecting the rate limiter.
- */
+/** Single reverse request — fast failure so we fall back to nearest catalog city (offline-friendly). */
 async function fetchNominatimReverse(latitude: number, longitude: number): Promise<Response> {
   const buildUrl = () =>
     `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(
@@ -81,40 +77,21 @@ async function fetchNominatimReverse(latitude: number, longitude: number): Promi
       supportEmail
     )}`;
 
-  const doAttempt = async (): Promise<Response> => {
-    await waitForNominatimSlot();
-    const ac = new AbortController();
-    const httpTimeout = window.setTimeout(() => ac.abort(), 12000);
-    try {
-      return await fetch(buildUrl(), {
-        signal: ac.signal,
-        headers: {
-          'User-Agent': 'ReRide-App/1.0 (https://www.reride.co.in)',
-          Accept: 'application/json',
-          'Accept-Language': 'en,en-IN,en-GB',
-        },
-      });
-    } finally {
-      clearTimeout(httpTimeout);
-    }
-  };
-
-  const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-  let res: Response;
+  await waitForNominatimSlot();
+  const ac = new AbortController();
+  const httpTimeout = window.setTimeout(() => ac.abort(), 6500);
   try {
-    res = await doAttempt();
-  } catch {
-    await delay(900);
-    res = await doAttempt();
+    return await fetch(buildUrl(), {
+      signal: ac.signal,
+      headers: {
+        'User-Agent': 'ReRide-App/1.0 (https://www.reride.co.in)',
+        Accept: 'application/json',
+        'Accept-Language': 'en,en-IN,en-GB',
+      },
+    });
+  } finally {
+    clearTimeout(httpTimeout);
   }
-
-  if (res.ok) return res;
-  if (NOMINATIM_RETRYABLE_STATUS.has(res.status)) {
-    await delay(900);
-    res = await doAttempt();
-  }
-  return res;
 }
 
 const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentLocation, onLocationChange, addToast }) => {
@@ -125,6 +102,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
     const [searchTerm, setSearchTerm] = useState('');
     const [isDetecting, setIsDetecting] = useState(false);
     const detectingInFlightRef = useRef(false);
+    const detectGenerationRef = useRef(0);
     const userEditedRef = useRef(false);
     const prevIsOpenRef = useRef(false);
 
@@ -151,6 +129,22 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
     }, [isOpen, onClose]);
+
+    /** Abort stale detection when modal closes or user switches away from auto-detect. */
+    useEffect(() => {
+        if (!isOpen) {
+            detectGenerationRef.current += 1;
+            detectingInFlightRef.current = false;
+            setIsDetecting(false);
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen || selectedOption === 'detect') return;
+        detectGenerationRef.current += 1;
+        detectingInFlightRef.current = false;
+        setIsDetecting(false);
+    }, [selectedOption, isOpen]);
 
     // Get all cities flattened
     const allCities = useMemo(
@@ -297,8 +291,11 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             addToast(t('locationModal.geoNotSupported'), 'error');
             return;
         }
+
+        const myGen = detectGenerationRef.current;
         detectingInFlightRef.current = true;
         setIsDetecting(true);
+
         const geoErrorTKey = (code: number) => {
             if (code === 1) {
                 return isCapacitorNativeApp()
@@ -310,16 +307,40 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             return 'locationModal.error.fallback';
         };
 
+        const finishSpinner = () => {
+            if (detectGenerationRef.current !== myGen) return;
+            detectingInFlightRef.current = false;
+            setIsDetecting(false);
+        };
+
+        const applyDetected = (displayLocation: string) => {
+            if (detectGenerationRef.current !== myGen) return;
+            detectingInFlightRef.current = false;
+            setIsDetecting(false);
+            onLocationChange(displayLocation);
+            addToast(t('locationModal.toast.detected', { place: displayLocation }), 'success');
+            onClose();
+        };
+
         void (async () => {
             try {
                 const position = await getCurrentPositionUnified();
+                if (detectGenerationRef.current !== myGen) return;
+
                 const { latitude, longitude } = position.coords;
                 const allCitiesList = Object.values(citiesByState).flat();
                 const resolveLabel = (lat: number, lon: number) =>
                     labelFromNearestCatalogCoordinate(lat, lon, allCities, indianStates);
+                const snap = resolveLabel(latitude, longitude);
 
+                const NOMINATIM_BUDGET_MS = 9000;
                 try {
-                    const response = await fetchNominatimReverse(latitude, longitude);
+                    const response = await Promise.race([
+                        fetchNominatimReverse(latitude, longitude),
+                        new Promise<Response>((_, rej) =>
+                            window.setTimeout(() => rej(new Error('nominatim-timeout')), NOMINATIM_BUDGET_MS)
+                        ),
+                    ]);
 
                     if (!response.ok) {
                         throw new Error('Geocoding failed');
@@ -375,18 +396,14 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                         ? formatCityAndState(row.city, row.stateCode, indianStates)
                         : matchedCity
                           ? getDisplayNameForCity(matchedCity)
-                          : resolveLabel(latitude, longitude);
+                          : snap;
 
-                    onLocationChange(displayLocation);
-                    addToast(t('locationModal.toast.detected', { place: displayLocation }), 'success');
-                    onClose();
+                    applyDetected(displayLocation);
                 } catch {
-                    const snap = resolveLabel(latitude, longitude);
-                    onLocationChange(snap);
-                    addToast(t('locationModal.toast.detected', { place: snap }), 'success');
-                    onClose();
+                    applyDetected(snap);
                 }
             } catch (e: unknown) {
+                if (detectGenerationRef.current !== myGen) return;
                 if (e && typeof e === 'object' && 'code' in e) {
                     const code = (e as GeolocationPositionError).code;
                     if (typeof code === 'number') {
@@ -400,8 +417,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     addToast(t('locationModal.error.fallback'), 'error');
                 }
             } finally {
-                detectingInFlightRef.current = false;
-                setIsDetecting(false);
+                finishSpinner();
             }
         })();
     };
@@ -582,7 +598,6 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                 markUserEdited();
                                 setSelectedOption('detect');
                                 setSearchTerm('');
-                                handleDetectLocation();
                             }}
                         >
                             <input
@@ -726,17 +741,21 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     style={{ minHeight: '68px' }}
                 >
                     <button
+                        type="button"
                         onClick={onClose}
                         className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
                     >
                         {t('locationModal.cancel')}
                     </button>
                     <button
+                        type="button"
                         onClick={handleSave}
-                        disabled={isDetecting}
+                        disabled={isDetecting && selectedOption === 'detect'}
                         className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                        {isDetecting ? t('locationModal.detecting') : t('locationModal.save')}
+                        {isDetecting && selectedOption === 'detect'
+                            ? t('locationModal.detecting')
+                            : t('locationModal.save')}
                     </button>
                 </div>
             </div>

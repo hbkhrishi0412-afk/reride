@@ -1,4 +1,5 @@
-import React, { Suspense, useCallback, useEffect, useMemo } from 'react';
+import * as React from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useSearchParams, useNavigate as useRouterNavigate } from 'react-router-dom';
 import { AppProvider, useApp } from './components/AppProvider';
@@ -553,7 +554,7 @@ const AppContent: React.FC = () => {
     setServiceProvider(null);
     handleLogout();
   }, [handleLogout, setServiceProvider]);
-  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = React.useState(false);
+  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
 
   React.useEffect(() => {
     const onServiceProviderGoogleOAuth = (e: Event) => {
@@ -1077,7 +1078,7 @@ const AppContent: React.FC = () => {
   }, [addToast, currentUser, selectedCity]);
 
   const [userCoords, setUserCoords] = React.useState<LocationCoordinates | null>(null);
-  const [isLocating, setIsLocating] = React.useState(false);
+  const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = React.useState<string | null>(null);
   const serviceRequestStatusRef = React.useRef<Record<string, string>>({});
   const hasInitializedServiceRequestTrackingRef = React.useRef(false);
