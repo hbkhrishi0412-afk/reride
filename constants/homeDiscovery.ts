@@ -1,5 +1,5 @@
 import { VehicleCategory } from '../vehicle-category.js';
-import { CITY_MAPPING } from '../utils/cityMapping';
+import { CITY_MAPPING } from '../utils/cityMapping.js';
 
 /** Cities shown on home / mobile discovery rails (order preserved). */
 export const HOME_DISCOVERY_CITY_ORDER = Object.keys(CITY_MAPPING);
