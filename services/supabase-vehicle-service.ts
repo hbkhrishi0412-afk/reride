@@ -390,6 +390,14 @@ export const supabaseVehicleService = {
     
     // Remove id from updates
     delete row.id;
+
+    // Preserve NOT NULL seller_email on partial updates.
+    // `vehicleToSupabaseRow` defaults missing sellerEmail to null for full-row inserts,
+    // but update payloads frequently omit sellerEmail entirely.
+    // If sellerEmail was not explicitly provided, never send seller_email.
+    if (!Object.prototype.hasOwnProperty.call(updates, 'sellerEmail')) {
+      delete row.seller_email;
+    }
     
     // Remove undefined values to avoid issues
     Object.keys(row).forEach(key => {
