@@ -176,6 +176,13 @@ interface AuthResult {
   error?: string;
 }
 
+const normalizeAuthActorEmail = (auth: AuthResult | null | undefined): string => {
+  const email = auth?.user?.email ? String(auth.user.email).toLowerCase().trim() : '';
+  if (email) return email;
+  const userId = auth?.user?.userId ? String(auth.user.userId).toLowerCase().trim() : '';
+  return userId.includes('@') ? userId : '';
+};
+
 const authenticateRequest = (req: VercelRequest): AuthResult => {
   const authHeader = req.headers.authorization;
   
@@ -7037,7 +7044,7 @@ async function handleGetSupportTickets(
 ) {
   try {
     const { userEmail, status } = req.query;
-    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+    const normalizedAuthEmail = normalizeAuthActorEmail(auth);
     const isAdmin = auth.user?.role === 'admin';
     
     const allTickets = await adminReadAll<Record<string, unknown>>(ticketsPath);
@@ -7052,7 +7059,13 @@ async function handleGetSupportTickets(
       }
       tickets = tickets.filter(ticket => ((ticket as Record<string, unknown>).userEmail as string)?.toLowerCase().trim() === sanitizedEmail.toLowerCase().trim());
     } else if (!isAdmin) {
-      return res.status(403).json({ success: false, error: 'Unauthorized access to support tickets' });
+      // For authenticated non-admin users, default to their own tickets when no userEmail is provided.
+      // This prevents noisy 403s from dashboard polling calls that omit userEmail.
+      tickets = tickets.filter(
+        (ticket) =>
+          ((ticket as Record<string, unknown>).userEmail as string)?.toLowerCase().trim() ===
+          normalizedAuthEmail,
+      );
     }
     
     if (status && typeof status === 'string') {
@@ -7092,7 +7105,7 @@ async function handleCreateSupportTicket(
 ) {
   try {
     const ticketData = req.body;
-    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+    const normalizedAuthEmail = normalizeAuthActorEmail(auth);
     const isAdmin = auth.user?.role === 'admin';
     
     if (!ticketData.userEmail || !ticketData.userName || !ticketData.subject || !ticketData.message) {
@@ -7213,7 +7226,7 @@ async function handleUpdateSupportTicket(
   try {
     const { id } = req.query;
     const updateData = req.body;
-    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+    const normalizedAuthEmail = normalizeAuthActorEmail(auth);
     const isAdmin = auth.user?.role === 'admin';
 
     if (!id) {
@@ -7266,7 +7279,7 @@ async function handleDeleteSupportTicket(
 ) {
   try {
     const { id } = req.query;
-    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+      const normalizedAuthEmail = normalizeAuthActorEmail(auth);
     const isAdmin = auth.user?.role === 'admin';
 
     if (!id) {
@@ -8321,7 +8334,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
     if (req.method === 'GET') {
       auth = await authenticateRequestDual(req);
       if (auth.isValid && auth.user) {
-        normalizedAuthEmail = auth.user.email ? auth.user.email.toLowerCase().trim() : '';
+        normalizedAuthEmail = normalizeAuthActorEmail(auth);
         isAdmin = auth.user.role === 'admin';
       }
     } else {
@@ -8334,7 +8347,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           error: 'Invalid or expired authentication token',
         });
       }
-      normalizedAuthEmail = auth.user.email ? auth.user.email.toLowerCase().trim() : '';
+      normalizedAuthEmail = normalizeAuthActorEmail(auth);
       isAdmin = auth.user.role === 'admin';
     }
 
@@ -8822,7 +8835,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       // but don't fail if no token (preserves existing "return empty for unauthed" UX).
       auth = await authenticateRequestDual(req);
       if (auth.isValid && auth.user) {
-        normalizedAuthEmail = auth.user.email ? auth.user.email.toLowerCase().trim() : '';
+        normalizedAuthEmail = normalizeAuthActorEmail(auth);
         isAdmin = auth.user.role === 'admin';
       }
       // If auth fails, continue with empty auth (will return empty array for non-admin)
@@ -8832,7 +8845,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       if (!auth) {
         return;
       }
-      normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+      normalizedAuthEmail = normalizeAuthActorEmail(auth);
       isAdmin = auth.user?.role === 'admin';
     }
 
