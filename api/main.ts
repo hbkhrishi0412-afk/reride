@@ -2868,7 +2868,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     }
 
     if (authUser?.role !== 'admin') {
-      return res.status(403).json({ success: false, reason: 'Forbidden. Admin access required.' });
+      // Non-admin list requests are expected from some dashboard/bootstrap flows.
+      // Return an empty list instead of 403 to avoid noisy client-side error spam.
+      return res.status(200).json([]);
     }
     
     try {
