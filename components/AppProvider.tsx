@@ -4941,7 +4941,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const { authenticatedFetch } = await import('../utils/authenticatedFetch');
           const { handleApiResponse } = await import('../utils/authenticatedFetch');
           
-          const response = await authenticatedFetch('/api/main', {
+          const response = await authenticatedFetch('/api/users', {
             method: 'POST',
             skipAuth: true, // Registration doesn't require auth
             body: JSON.stringify({

@@ -522,7 +522,7 @@ export const syncServiceProviderOAuth = async (
   try {
     const metadata = (supabaseUser.user_metadata ?? {}) as Record<string, unknown>;
 
-    const response = await authenticatedFetch('/api/main', {
+    const response = await authenticatedFetch('/api/users', {
       method: 'POST',
       body: JSON.stringify({
         action: 'oauth-service-provider',
@@ -575,7 +575,7 @@ export const syncWithBackend = async (
       (metadata.mobile as string) ||
       '';
 
-    const response = await authenticatedFetch('/api/main', {
+    const response = await authenticatedFetch('/api/users', {
       method: 'POST',
       body: JSON.stringify({
         action: 'oauth-login',
