@@ -115,43 +115,71 @@ export async function uploadChatAudio(
  */
 async function uploadViaApi(file: File, folder: string): Promise<UploadResult> {
   try {
-    const resizedFile = await resizeImage(file, 1200, 800, 0.85);
-    const dataUrl = await convertFileToBase64(resizedFile);
-    const fileBase64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
-    const { authenticatedFetch } = await import('../utils/authenticatedFetch');
-    const res = await authenticatedFetch('/api/upload-image', {
-      method: 'POST',
-      body: JSON.stringify({
-        fileBase64,
-        fileName: resizedFile.name,
-        mimeType: resizedFile.type || 'image/jpeg',
-        folder,
-      }),
-      credentials: 'include',
+    const primaryFile = await prepareImageForApiUpload(file, {
+      maxWidth: 1200,
+      maxHeight: 800,
+      quality: 0.82,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const reason = (data.reason || data.error || `Upload failed (${res.status})`).toString();
-      if (res.status === 401) {
-        return {
-          success: false,
-          error: 'Your session may have expired. Please log out and log back in, then try uploading again.',
-        };
-      }
-      return { success: false, error: reason };
+    const primaryResult = await postApiUpload(primaryFile, folder);
+    if (primaryResult.success) {
+      return primaryResult;
     }
-    if (data.success && data.url) {
-      return { success: true, url: data.url, imageId: data.imageId };
+
+    // Retry once with stronger compression when backend likely rejected large payloads.
+    const shouldRetryCompressed =
+      !!primaryResult.error &&
+      /(413|payload|entity too large|request too large|upload failed \(500\)|internal server error)/i.test(
+        primaryResult.error,
+      );
+    if (!shouldRetryCompressed) {
+      return primaryResult;
     }
-    return {
-      success: false,
-      error: (data.reason || 'Upload failed').toString(),
-    };
+
+    const fallbackFile = await prepareImageForApiUpload(file, {
+      maxWidth: 960,
+      maxHeight: 640,
+      quality: 0.68,
+    });
+    return await postApiUpload(fallbackFile, folder);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     console.error('❌ API image upload error:', err);
     return { success: false, error: msg };
   }
+}
+
+async function postApiUpload(file: File, folder: string): Promise<UploadResult> {
+  const dataUrl = await convertFileToBase64(file);
+  const fileBase64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
+  const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+  const res = await authenticatedFetch('/api/upload-image', {
+    method: 'POST',
+    body: JSON.stringify({
+      fileBase64,
+      fileName: file.name,
+      mimeType: file.type || 'image/jpeg',
+      folder,
+    }),
+    credentials: 'include',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const reason = (data.reason || data.error || `Upload failed (${res.status})`).toString();
+    if (res.status === 401) {
+      return {
+        success: false,
+        error: 'Your session may have expired. Please log out and log back in, then try uploading again.',
+      };
+    }
+    return { success: false, error: reason };
+  }
+  if (data.success && data.url) {
+    return { success: true, url: data.url, imageId: data.imageId };
+  }
+  return {
+    success: false,
+    error: (data.reason || 'Upload failed').toString(),
+  };
 }
 
 /**
@@ -410,6 +438,68 @@ async function resizeImage(
       } else {
         reject(new Error('Failed to read file'));
       }
+    };
+    reader.onerror = () => reject(new Error('File read error'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function prepareImageForApiUpload(
+  file: File,
+  options: { maxWidth: number; maxHeight: number; quality: number },
+): Promise<File> {
+  const normalized = normalizeMimeType(file.type || 'image/jpeg');
+  // PNG payloads can be very large in base64 JSON requests; force JPEG for API uploads.
+  const forceJpeg = normalized === 'image/png';
+  const resized = await resizeImage(file, options.maxWidth, options.maxHeight, options.quality);
+
+  if (!forceJpeg) {
+    return resized;
+  }
+
+  return await convertImageFileType(resized, 'image/jpeg', options.quality);
+}
+
+async function convertImageFileType(file: File, targetMimeType: string, quality: number): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Failed to convert image format'));
+              return;
+            }
+            const safeName = file.name.replace(/\.[^/.]+$/, '');
+            resolve(
+              new File([blob], `${safeName}.jpg`, {
+                type: targetMimeType,
+                lastModified: Date.now(),
+              }),
+            );
+          },
+          targetMimeType,
+          quality,
+        );
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      const result = e.target?.result;
+      if (typeof result !== 'string') {
+        reject(new Error('Failed to read file'));
+        return;
+      }
+      img.src = result;
     };
     reader.onerror = () => reject(new Error('File read error'));
     reader.readAsDataURL(file);

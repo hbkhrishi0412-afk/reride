@@ -87,6 +87,16 @@ import {
   refreshCookieMaxAgeSeconds,
 } from '../server/refresh-cookie.js';
 
+// Allow larger JSON payloads for base64 image uploads (seller dashboard, chat attachments).
+// Vercel default parser limits are lower and can reject valid resized images before route logic runs.
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '15mb',
+    },
+  },
+};
+
 // Type for normalized user (without password)
 interface NormalizedUser extends Omit<UserType, 'password'> {
   id: string;
@@ -5746,7 +5756,28 @@ async function handleUploadImage(req: VercelRequest, res: VercelResponse) {
         reason: 'Missing fileBase64 or fileName in request body.',
       });
     }
-    const buffer = Buffer.from(fileBase64, 'base64');
+    const sanitizedBase64 = String(fileBase64).trim();
+    if (!sanitizedBase64 || !/^[A-Za-z0-9+/=\r\n]+$/.test(sanitizedBase64)) {
+      return res.status(400).json({
+        success: false,
+        reason: 'Invalid base64 payload for image upload.',
+      });
+    }
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(sanitizedBase64, 'base64');
+    } catch {
+      return res.status(400).json({
+        success: false,
+        reason: 'Could not decode upload payload. Please retry with a smaller image.',
+      });
+    }
+    if (!buffer.length) {
+      return res.status(400).json({
+        success: false,
+        reason: 'Decoded upload payload is empty.',
+      });
+    }
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
     if (buffer.length > MAX_FILE_SIZE) {
       return res.status(400).json({ success: false, reason: 'Image must be under 10MB.' });
