@@ -7,11 +7,11 @@ const badgeStyles: Record<Badge['type'], { icon: React.ReactElement<{ className?
         colors: 'bg-gradient-primary text-white border-reride-orange',
     },
     top_seller: {
-        icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M11.285 3.125a.75.75 0 00-2.57 0L6.75 5.429a.75.75 0 01-.563.41l-2.67.388a.75.75 0 00-.416 1.283l1.932 1.883a.75.75 0 01.216.664l-.456 2.659a.75.75 0 001.088.791l2.389-1.256a.75.75 0 01.7 0l2.389 1.256a.75.75 0 001.088-.79l-.456-2.66a.75.75 0 01.216-.664l1.932-1.883a.75.75 0 00-.416-1.283l-2.67-.388a.75.75 0 01-.563-.41L11.285 3.125z" /></svg>,
+        icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M11.285 3.125a.75 .75 0 00-2.57 0L6.75 5.429a.75 .75 0 01-.563.41l-2.67.388a.75 .75 0 00-.416 1.283l1.932 1.883a.75 .75 0 01.216.664l-.456 2.659a.75 .75 0 001.088.791l2.389-1.256a.75 .75 0 01.7 0l2.389 1.256a.75 .75 0 001.088-.79l-.456-2.66a.75 .75 0 01.216-.664l1.932-1.883a.75 .75 0 00-.416-1.283l-2.67-.388a.75 .75 0 01-.563-.41L11.285 3.125z" /></svg>,
         colors: 'bg-reride-blue text-reride-text-dark dark:bg-reride-blue dark:text-reride-text-dark border-amber-500/50',
     },
     high_rating: {
-        icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 2a.75.75 0 01.75.75v.512a26.63 26.63 0 014.288 3.013.75.75 0 11-.98 1.134A25.132 25.132 0 0010.5 4.792V10.5a.75.75 0 01-1.5 0V4.792a25.132 25.132 0 00-3.558 2.618.75.75 0 11-.98-1.134A26.63 26.63 0 019.25 3.262V2.75A.75.75 0 0110 2z" clipRule="evenodd" /><path fillRule="evenodd" d="M10 18a5 5 0 100-10 5 5 0 000 10zm.25-6.25a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z" clipRule="evenodd" /></svg>,
+        icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 2a.75 .75 0 01.75.75v.512a26.63 26.63 0 014.288 3.013.75 .75 0 11-.98 1.134A25.132 25.132 0 0010.5 4.792V10.5a.75 .75 0 01-1.5 0V4.792a25.132 25.132 0 00-3.558 2.618.75 .75 0 11-.98-1.134A26.63 26.63 0 019.25 3.262V2.75A.75 .75 0 0110 2z" clipRule="evenodd" /><path fillRule="evenodd" d="M10 18a5 5 0 100-10 5 5 0 000 10zm.25-6.25a.75 .75 0 00-1.5 0v2.5a.75 .75 0 001.5 0v-2.5z" clipRule="evenodd" /></svg>,
         colors: 'bg-reride-orange-light text-reride-orange dark:bg-reride-orange dark:text-reride-orange border-reride-orange/50',
     }
 };
