@@ -194,10 +194,8 @@
               link2.href = '/api/vehicles?limit=30&page=2&skipExpiryCheck=true';
               document.head.appendChild(link2);
 
-              var link3 = document.createElement('link');
-              link3.rel = 'prefetch';
-              link3.href = '/api/users';
-              document.head.appendChild(link3);
+              // Do not prefetch /api/users: non-admin sessions return 403 by design,
+              // which creates noisy console errors on seller/customer dashboards.
             })
             .catch(function () {
               clearTimeout(timeoutId);
