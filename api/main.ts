@@ -286,7 +286,7 @@ const requireAdmin = (
 };
 
 // Rate limiting using Supabase for serverless compatibility
-const config = getSecurityConfig();
+const securityConfig = getSecurityConfig();
 
 type HandlerOptions = {
   // Supabase-only - no additional options needed
@@ -369,7 +369,7 @@ const cleanupVehicleCache = () => {
 // Rate limiting for serverless environments
 const checkRateLimit = async (identifier: string): Promise<{ allowed: boolean; remaining: number }> => {
   const now = Date.now();
-  const resetTime = now + config.RATE_LIMIT.WINDOW_MS;
+  const resetTime = now + securityConfig.RATE_LIMIT.WINDOW_MS;
   
   // Use in-memory cache with TTL for rate limiting
   cleanupRateLimitCache();
@@ -378,14 +378,14 @@ const checkRateLimit = async (identifier: string): Promise<{ allowed: boolean; r
   if (cached && cached.resetTime >= now) {
     // Entry exists and is still valid
     cached.count += 1;
-    if (cached.count > config.RATE_LIMIT.MAX_REQUESTS) {
+    if (cached.count > securityConfig.RATE_LIMIT.MAX_REQUESTS) {
       return { allowed: false, remaining: 0 };
     }
-    return { allowed: true, remaining: Math.max(0, config.RATE_LIMIT.MAX_REQUESTS - cached.count) };
+    return { allowed: true, remaining: Math.max(0, securityConfig.RATE_LIMIT.MAX_REQUESTS - cached.count) };
   } else {
     // Create new entry
     rateLimitCache.set(identifier, { count: 1, resetTime });
-    return { allowed: true, remaining: config.RATE_LIMIT.MAX_REQUESTS - 1 };
+    return { allowed: true, remaining: securityConfig.RATE_LIMIT.MAX_REQUESTS - 1 };
   }
 }
 
@@ -570,16 +570,16 @@ async function mainHandler(
         return res.status(429).json({
           success: false,
           reason: 'Too many requests. Please try again later.',
-          retryAfter: Math.ceil(config.RATE_LIMIT.WINDOW_MS / 1000)
+          retryAfter: Math.ceil(securityConfig.RATE_LIMIT.WINDOW_MS / 1000)
         });
       }
       
       res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
-      res.setHeader('X-RateLimit-Limit', config.RATE_LIMIT.MAX_REQUESTS.toString());
+      res.setHeader('X-RateLimit-Limit', securityConfig.RATE_LIMIT.MAX_REQUESTS.toString());
     } else {
       // Set rate limit headers even for exempted requests (with max values)
-      res.setHeader('X-RateLimit-Remaining', config.RATE_LIMIT.MAX_REQUESTS.toString());
-      res.setHeader('X-RateLimit-Limit', config.RATE_LIMIT.MAX_REQUESTS.toString());
+      res.setHeader('X-RateLimit-Remaining', securityConfig.RATE_LIMIT.MAX_REQUESTS.toString());
+      res.setHeader('X-RateLimit-Limit', securityConfig.RATE_LIMIT.MAX_REQUESTS.toString());
     }
 
     // CSRF validation for state-changing methods (POST, PUT, PATCH, DELETE)
@@ -6678,10 +6678,10 @@ async function handleGemini(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Extract model, contents, and config from payload
+    // Extract model, contents, and generation options from payload
     const model = payload.model || 'gemini-2.5-flash';
     const contents = payload.contents || payload.prompt || '';
-    const config = payload.config || {};
+    const generationOptions = payload.config || {};
 
     // Build the request body for Gemini API
     const requestBody: any = {
@@ -6691,24 +6691,24 @@ async function handleGemini(req: VercelRequest, res: VercelResponse) {
     };
 
     // Add generation config if provided
-    if (config.responseMimeType) {
+    if (generationOptions.responseMimeType) {
       requestBody.generationConfig = {
-        responseMimeType: config.responseMimeType
+        responseMimeType: generationOptions.responseMimeType
       };
     }
 
     // Add response schema if provided
-    if (config.responseSchema) {
+    if (generationOptions.responseSchema) {
       if (!requestBody.generationConfig) {
         requestBody.generationConfig = {};
       }
-      requestBody.generationConfig.responseSchema = config.responseSchema;
+      requestBody.generationConfig.responseSchema = generationOptions.responseSchema;
     }
 
     // Add thinking config if provided
-    if (config.thinkingConfig) {
+    if (generationOptions.thinkingConfig) {
       requestBody.generationConfig = requestBody.generationConfig || {};
-      requestBody.generationConfig.thinkingConfig = config.thinkingConfig;
+      requestBody.generationConfig.thinkingConfig = generationOptions.thinkingConfig;
     }
 
     // Use the new Gemini API endpoint format
