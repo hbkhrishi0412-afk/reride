@@ -438,6 +438,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [viewMode, setViewMode] = useState<'grid' | 'tile'>('grid');
   const [isAiSearchCollapsed, setIsAiSearchCollapsed] = useState(true); // Start collapsed on mobile for better UX
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isBackgroundHydratingVehicles, setIsBackgroundHydratingVehicles] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const hasMoreRef = useRef(true);
   const isLoadingMoreRef = useRef(false);
@@ -482,6 +483,23 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
   const aiSearchRef = useRef<HTMLDivElement>(null);
   const suggestionDebounceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handleHydrationStatus = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      const status = detail.status;
+      if (status === 'start') {
+        setIsBackgroundHydratingVehicles(true);
+      } else if (status === 'done' || status === 'error') {
+        setIsBackgroundHydratingVehicles(false);
+      }
+    };
+
+    window.addEventListener('vehiclesBackgroundHydration', handleHydrationStatus);
+    return () => {
+      window.removeEventListener('vehiclesBackgroundHydration', handleHydrationStatus);
+    };
+  }, []);
 
   // Get categories from admin database vehicle data
   const uniqueCategories = useMemo(() => {
@@ -2647,6 +2665,12 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                   <span className="text-gray-500 dark:text-gray-400">{t('listings.of')}</span>{' '}
                   <span className="font-bold text-gray-900 dark:text-white">{processedVehicles.length}</span>
                 </p>
+                {isBackgroundHydratingVehicles && (
+                  <p className="text-xs text-orange-600 dark:text-orange-400 flex items-center gap-1 ml-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                    {t('listings.loadingMoreDesktop')}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2 lg:gap-3 w-full sm:w-auto justify-between sm:justify-end">
                 <div className="flex items-center p-0.5 bg-reride-off-white dark:bg-brand-gray-700 rounded-md">

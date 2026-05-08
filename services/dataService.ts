@@ -527,6 +527,42 @@ class DataService {
     return merged;
   }
 
+  /**
+   * Web storefront optimization:
+   * return page-1 quickly, then hydrate the full merged catalog in the background.
+   */
+  private hydrateRemainingVehiclePagesInBackground(
+    firstResponse: Vehicle[] | { vehicles?: Vehicle[]; pagination?: { page?: number; limit?: number; total?: number; pages?: number; hasMore?: boolean } },
+    includeAllStatuses: boolean,
+    isNativeWebView: boolean,
+    cacheKey: string
+  ): void {
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('vehiclesBackgroundHydration', { detail: { status: 'start' } }));
+    }
+
+    this.expandPublishedVehiclesIfPaginated(firstResponse, includeAllStatuses, isNativeWebView)
+      .then((fullVehicles) => {
+        if (!Array.isArray(fullVehicles) || fullVehicles.length === 0) {
+          if (typeof window !== 'undefined' && window.dispatchEvent) {
+            window.dispatchEvent(new CustomEvent('vehiclesBackgroundHydration', { detail: { status: 'done', count: 0 } }));
+          }
+          return;
+        }
+        this.setLocalStorageData(cacheKey, fullVehicles);
+        if (typeof window !== 'undefined' && window.dispatchEvent) {
+          window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles: fullVehicles } }));
+          window.dispatchEvent(new CustomEvent('vehiclesBackgroundHydration', { detail: { status: 'done', count: fullVehicles.length } }));
+        }
+      })
+      .catch((error) => {
+        console.warn('Background vehicle page hydration failed:', error);
+        if (typeof window !== 'undefined' && window.dispatchEvent) {
+          window.dispatchEvent(new CustomEvent('vehiclesBackgroundHydration', { detail: { status: 'error' } }));
+        }
+      });
+  }
+
   /** Web published listing: page size before merging pages (20–200). Override with VITE_VEHICLES_PAGE_SIZE. */
   private getWebVehiclesPageSize(): number {
     try {
@@ -657,12 +693,39 @@ class DataService {
         nativeVehiclesPageLimit
       );
       const response = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint);
+      const shouldFastPaintFirstPage =
+        !includeAllStatuses &&
+        !isNativeWebView &&
+        !forceRefresh;
 
-      const vehicles = await this.expandPublishedVehiclesIfPaginated(
-        response,
-        includeAllStatuses,
-        isNativeWebView
-      );
+      let vehicles: Vehicle[];
+      if (shouldFastPaintFirstPage) {
+        const { vehicles: firstPageVehicles, pagination } = this.extractVehiclesFromApiResponse(response);
+        vehicles = firstPageVehicles;
+
+        const hasMorePages =
+          !!pagination?.hasMore &&
+          (
+            (typeof pagination.pages === 'number' && (Number(pagination.page) || 1) < pagination.pages) ||
+            (typeof pagination.total === 'number' && firstPageVehicles.length < pagination.total) ||
+            (pagination.pages === undefined && pagination.total === undefined)
+          );
+
+        if (hasMorePages) {
+          this.hydrateRemainingVehiclePagesInBackground(
+            response,
+            includeAllStatuses,
+            isNativeWebView,
+            cacheKey
+          );
+        }
+      } else {
+        vehicles = await this.expandPublishedVehiclesIfPaginated(
+          response,
+          includeAllStatuses,
+          isNativeWebView
+        );
+      }
 
       if (!Array.isArray(vehicles)) {
         console.error('❌ Invalid response format: expected array, got:', typeof vehicles);

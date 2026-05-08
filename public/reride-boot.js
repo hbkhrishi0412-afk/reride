@@ -1,0 +1,233 @@
+(function () {
+  // OAuth PKCE verifier is stored per-origin. Never redirect apex->www on ?code= or ?error=.
+  try {
+    var h = (location.hostname || '').toLowerCase();
+    if (h === 'reride.co.in') {
+      var sp = new URLSearchParams(location.search || '');
+      if (!sp.has('code') && !sp.has('error')) {
+        var role = null;
+        try {
+          role = sessionStorage.getItem('reride_oauth_role') || localStorage.getItem('reride_oauth_role');
+        } catch (e) {}
+        var roleOk = { customer: 1, seller: 1, service_provider: 1, admin: 1 };
+        if (role && roleOk[role] && !sp.has('_oa_role')) sp.set('_oa_role', role);
+        var q = sp.toString();
+        location.replace('https://www.reride.co.in' + location.pathname + (q ? '?' + q : '') + (location.hash || ''));
+      }
+    }
+  } catch (e0) {}
+
+  // Force apex host -> www in fetch requests (307 redirect avoidance for CORS preflight).
+  try {
+    if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+      var downstream = window.fetch.bind(window);
+      function apexToWww(str) {
+        return str.replace(/(https?:\/\/)reride\.co\.in(?=[:/?#]|$)/gi, '$1www.reride.co.in');
+      }
+      window.fetch = function (input, init) {
+        try {
+          if (typeof input === 'string') return downstream(apexToWww(input), init);
+          if (typeof URL !== 'undefined' && input instanceof URL) {
+            var href = apexToWww(input.href);
+            return downstream(href !== input.href ? href : input, init);
+          }
+          if (typeof Request !== 'undefined' && input instanceof Request) {
+            var parsed = new URL(input.url);
+            if (parsed.hostname === 'reride.co.in') {
+              parsed.hostname = 'www.reride.co.in';
+              return downstream(new Request(parsed.toString(), input), init);
+            }
+          }
+        } catch (e1) {}
+        return downstream(input, init);
+      };
+    }
+  } catch (e2) {}
+
+  // Capacitor / packaged WebView: skip remote fonts.
+  try {
+    var host = location.hostname;
+    var protocol = location.protocol;
+    var port = location.port || '';
+    var devPorts = ['5173', '4173', '3000', '8080'];
+    window.__RERIDE_SKIP_REMOTE_FONTS__ =
+      host === 'appassets.androidplatform.net' ||
+      (typeof host === 'string' && host.endsWith('.appassets.androidplatform.net')) ||
+      (host === 'localhost' && (protocol === 'capacitor:' || protocol === 'ionic:')) ||
+      (host === 'localhost' && protocol === 'https:' && devPorts.indexOf(port) === -1);
+  } catch (e3) {}
+
+  // Packaged WebView: force API + apex -> www before bundle loads.
+  try {
+    var h2 = (location.hostname || '').toLowerCase();
+    var isAppAssets = h2 === 'appassets.androidplatform.net' || h2.endsWith('.appassets.androidplatform.net');
+    if (isAppAssets && typeof window.fetch === 'function') {
+      var base = 'https://www.reride.co.in';
+      function normalizeApexStr(u) {
+        if (typeof u !== 'string') return u;
+        return u.replace(/(https?:\/\/)reride\.co\.in(?=[:/?#]|$)/gi, '$1www.reride.co.in');
+      }
+      var orig = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        try {
+          if (typeof input === 'string') {
+            var s = normalizeApexStr(input);
+            if (s.indexOf('/api/') === 0) s = base + s;
+            return orig(s, init);
+          }
+          if (typeof URL !== 'undefined' && input instanceof URL) {
+            var uh = normalizeApexStr(input.href);
+            return orig(uh !== input.href ? uh : input, init);
+          }
+          if (typeof Request !== 'undefined' && input instanceof Request) {
+            var ru = input.url;
+            var parsed2;
+            try {
+              parsed2 = new URL(ru);
+            } catch (e4) {
+              return orig(input, init);
+            }
+            if (parsed2.hostname === 'reride.co.in') {
+              parsed2.hostname = 'www.reride.co.in';
+              return orig(new Request(parsed2.toString(), input), init);
+            }
+            if (parsed2.pathname.indexOf('/api/') === 0) {
+              var full = base + parsed2.pathname + parsed2.search + parsed2.hash;
+              return orig(new Request(full, input), init);
+            }
+            var n = normalizeApexStr(ru);
+            if (n !== ru) return orig(new Request(n, input), init);
+          }
+        } catch (e5) {}
+        return orig(input, init);
+      };
+    }
+  } catch (e6) {}
+
+  // Fonts and DNS hints.
+  try {
+    if (window.__RERIDE_SKIP_REMOTE_FONTS__) {
+      var fallbackStyle = document.createElement('style');
+      fallbackStyle.id = 'reride-font-fallback';
+      fallbackStyle.textContent =
+        'html,body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}';
+      document.head.appendChild(fallbackStyle);
+    } else {
+      var p1 = document.createElement('link');
+      p1.rel = 'preconnect';
+      p1.href = 'https://fonts.googleapis.com';
+      document.head.appendChild(p1);
+
+      var p2 = document.createElement('link');
+      p2.rel = 'preconnect';
+      p2.href = 'https://fonts.gstatic.com';
+      p2.crossOrigin = 'anonymous';
+      document.head.appendChild(p2);
+
+      var dns1 = document.createElement('link');
+      dns1.rel = 'dns-prefetch';
+      dns1.href = 'https://nominatim.openstreetmap.org';
+      document.head.appendChild(dns1);
+
+      var dns2 = document.createElement('link');
+      dns2.rel = 'dns-prefetch';
+      dns2.href = 'https://i.pravatar.cc';
+      document.head.appendChild(dns2);
+
+      var font = document.createElement('link');
+      font.rel = 'preload';
+      font.as = 'style';
+      font.href =
+        'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Nunito+Sans:wght@600;700;800&display=swap';
+      font.onload = function () {
+        this.onload = null;
+        this.rel = 'stylesheet';
+      };
+      document.head.appendChild(font);
+    }
+  } catch (e7) {}
+
+  // Polyfill process.emitWarning before module entry.
+  try {
+    if (typeof window !== 'undefined') {
+      if (typeof process === 'undefined') window.process = { env: {} };
+      if (!window.process.emitWarning) {
+        window.process.emitWarning = function (msg) {
+          if (typeof console !== 'undefined' && console.warn) console.warn('[process.emitWarning]', msg);
+        };
+      }
+      if (typeof globalThis !== 'undefined') globalThis.process = window.process;
+    }
+  } catch (e8) {}
+
+  // Prefetch API endpoints only in non-local web hosts.
+  try {
+    var h3 = window.location.hostname || '';
+    var hl = h3.toLowerCase();
+    var isLocalhost = h3 === 'localhost' || h3 === '127.0.0.1' || h3.indexOf('localhost') !== -1;
+    var isPackagedWebView =
+      hl === 'appassets.androidplatform.net' ||
+      hl.endsWith('.appassets.androidplatform.net') ||
+      (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    if (!isLocalhost && !isPackagedWebView) {
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          var controller = new AbortController();
+          var timeoutId = setTimeout(function () {
+            controller.abort();
+          }, 2000);
+          fetch('/api/vehicles?limit=30&skipExpiryCheck=true', {
+            method: 'HEAD',
+            cache: 'default',
+            signal: controller.signal,
+          })
+            .then(function (response) {
+              clearTimeout(timeoutId);
+              if (!response.ok) return;
+              var link1 = document.createElement('link');
+              link1.rel = 'prefetch';
+              link1.href = '/api/vehicles?limit=30&skipExpiryCheck=true';
+              document.head.appendChild(link1);
+
+              var link2 = document.createElement('link');
+              link2.rel = 'prefetch';
+              link2.href = '/api/vehicles?limit=30&page=2&skipExpiryCheck=true';
+              document.head.appendChild(link2);
+
+              var link3 = document.createElement('link');
+              link3.rel = 'prefetch';
+              link3.href = '/api/users';
+              document.head.appendChild(link3);
+            })
+            .catch(function () {
+              clearTimeout(timeoutId);
+            });
+        }, 2000);
+      });
+    }
+  } catch (e9) {}
+
+  // Viewport normalization and zoom reset.
+  try {
+    var viewport = document.querySelector('meta[name="viewport"]');
+    if (!viewport) {
+      viewport = document.createElement('meta');
+      viewport.name = 'viewport';
+      document.getElementsByTagName('head')[0].appendChild(viewport);
+    }
+    viewport.content =
+      'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover, shrink-to-fit=no';
+
+    if (document.documentElement) document.documentElement.style.zoom = '1';
+    if (document.body) {
+      document.body.style.zoom = '1';
+    } else {
+      document.addEventListener('DOMContentLoaded', function () {
+        if (document.body) document.body.style.zoom = '1';
+      });
+    }
+    if (document.documentElement && 'textSizeAdjust' in document.documentElement.style) {
+      document.documentElement.style.textSizeAdjust = '100%';
+    }
+  } catch (e10) {}
+})();

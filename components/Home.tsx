@@ -6,12 +6,11 @@ import { matchesCity } from '../utils/cityMapping';
 import LazyImage from './LazyImage';
 import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
 import {
-    HOME_DESKTOP_CITY_STYLE,
+    getHomeDesktopCityStyle,
+    getHomeMobileCityAccent,
+    getHomeMobileCityGradient,
     HOME_DISCOVERY_CATEGORIES,
     HOME_DISCOVERY_CITY_ORDER,
-    HOME_MOBILE_CITY_ACCENT,
-    HOME_MOBILE_CITY_GRADIENT,
-    type HomeDiscoveryCityName,
 } from '../constants/homeDiscovery';
 import CityMonument from './CityMonument';
 import VehicleCategoryIcon from './VehicleCategoryIcon';
@@ -165,15 +164,31 @@ const Home: React.FC<HomeProps> = ({
     }, [featuredVehicles]);
 
     const publishedVehicles = allVehicles.filter(v => v && v.status === 'published');
+    const recentListingWindowMs = useMemo(() => {
+        const raw =
+            typeof import.meta !== 'undefined'
+                ? (import.meta as any)?.env?.VITE_RECENT_LISTING_DAYS
+                : undefined;
+        const parsedDays = Number.parseInt(String(raw ?? ''), 10);
+        const safeDays = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : 7;
+        return safeDays * 24 * 60 * 60 * 1000;
+    }, []);
 
     const recentVehicles = useMemo(() => {
+        const getTimestamp = (v: Vehicle) => {
+            // "Recently added" should prioritize listing creation time.
+            const raw = v.createdAt || v.featuredAt || v.updatedAt;
+            const ts = raw ? Date.parse(raw) : NaN;
+            return Number.isFinite(ts) ? ts : 0;
+        };
+
         const sorted = [...publishedVehicles].sort((a, b) => {
-            const getDate = (v: Vehicle) => new Date(v.createdAt || v.updatedAt || v.featuredAt || 0).getTime();
-            const aDate = getDate(a);
-            const bDate = getDate(b);
-            if (aDate !== bDate) return bDate - aDate;
+            const aTime = getTimestamp(a);
+            const bTime = getTimestamp(b);
+            if (aTime !== bTime) return bTime - aTime;
             return (b.id || 0) - (a.id || 0);
         });
+
         return sorted.slice(0, 8);
     }, [publishedVehicles]);
 
@@ -181,7 +196,7 @@ const Home: React.FC<HomeProps> = ({
         () =>
             HOME_DISCOVERY_CITY_ORDER.map((name) => ({
                 name,
-                ...HOME_DESKTOP_CITY_STYLE[name],
+                ...getHomeDesktopCityStyle(name),
                 cars: 0,
             })),
         []
@@ -1294,7 +1309,13 @@ const Home: React.FC<HomeProps> = ({
                         </div>
 
                         <div ref={recentGridRef} className="reveal-on-scroll grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
-                            {recentVehicles.map((vehicle, index) => (
+                            {recentVehicles.map((vehicle, index) => {
+                                const listingTimestamp = Date.parse(vehicle.createdAt || vehicle.featuredAt || vehicle.updatedAt || '');
+                                const isNewlyListed =
+                                    Number.isFinite(listingTimestamp) &&
+                                    Date.now() - listingTimestamp <= recentListingWindowMs;
+
+                                return (
                                 <div
                                     key={vehicle.id}
                                     onClick={() => onSelectVehicle(vehicle)}
@@ -1310,9 +1331,11 @@ const Home: React.FC<HomeProps> = ({
                                             eager={index === 0}
                                         />
                                         <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
-                                            <span className="bg-orange-500 text-white px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide shadow-sm">
-                                                {t('common.newBadge')}
-                                            </span>
+                                            {isNewlyListed && (
+                                                <span className="bg-orange-500 text-white px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide shadow-sm">
+                                                    {t('common.newBadge')}
+                                                </span>
+                                            )}
                                             {showVerifiedListingBadge(vehicle) && (
                                                 <span className="bg-green-600 text-white px-2 py-0.5 rounded-md text-[10px] font-semibold tracking-wide shadow-sm">
                                                     {t('common.verified')}
@@ -1349,7 +1372,8 @@ const Home: React.FC<HomeProps> = ({
                                         </div>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -1400,8 +1424,7 @@ const Home: React.FC<HomeProps> = ({
 
                     <div ref={citiesGridRef} className="reveal-on-scroll grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
                         {topCities.slice(0, 5).map((city, index) => {
-                            const cityKey = city.name as HomeDiscoveryCityName;
-                            const accent = HOME_MOBILE_CITY_ACCENT[cityKey];
+                            const accent = getHomeMobileCityAccent(city.name);
                             const hasVehicles = city.cars > 0;
 
                             return (
@@ -1421,7 +1444,7 @@ const Home: React.FC<HomeProps> = ({
                                     {/* Gradient header — carries city identity */}
                                     <div
                                         className="mc-gradient relative h-[148px] w-full overflow-hidden"
-                                        style={{ background: HOME_MOBILE_CITY_GRADIENT[cityKey] }}
+                                        style={{ background: getHomeMobileCityGradient(city.name) }}
                                     >
                                         {/* Decorative blobs */}
                                         <div className="absolute inset-0 opacity-50 motion-reduce:hidden" aria-hidden="true">
@@ -1445,7 +1468,7 @@ const Home: React.FC<HomeProps> = ({
                                         />
 
                                         {/* Monument silhouette */}
-                                        <CityMonument city={cityKey} className="mc-monument" color={accent.solid} />
+                                        <CityMonument city={city.name} className="mc-monument" color={accent.solid} />
 
                                         {/* Pin badge with radar-ping rings */}
                                         <div className="absolute top-3 right-3" aria-hidden="true">

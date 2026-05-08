@@ -1,6 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getDisplayNameForCity, primaryLocationLabel } from '../utils/cityMapping';
+import {
+    CITY_MAPPING,
+    getCityNamesForDisplay,
+    getDisplayNameForCity,
+    primaryLocationLabel,
+} from '../utils/cityMapping';
 import { INDIAN_STATES, CITIES_BY_STATE, CITY_COORDINATES } from '../constants/location.js';
 import { supportEmail } from '../constants/legalContact';
 import { calculateDistance } from '../services/locationService';
@@ -284,6 +289,28 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         if (!selectedDistrict) return [];
         return citiesByState[selectedDistrict] || [];
     }, [selectedDistrict, citiesByState]);
+
+    const tier1CityQuickPicks = useMemo(() => {
+        const canonicalRows = allCities.map((row) => ({
+            ...row,
+            canonical: primaryLocationLabel(row.city).toLowerCase(),
+        }));
+
+        return Object.keys(CITY_MAPPING)
+            .map((displayName) => {
+                const aliases = getCityNamesForDisplay(displayName).map((name) =>
+                    primaryLocationLabel(name).toLowerCase()
+                );
+                const match = canonicalRows.find((row) => aliases.includes(row.canonical));
+                if (!match) return null;
+                return {
+                    displayName,
+                    city: match.city,
+                    stateCode: match.stateCode,
+                };
+            })
+            .filter((row): row is { displayName: string; city: string; stateCode: string } => Boolean(row));
+    }, [allCities]);
 
     const handleDetectLocation = () => {
         if (detectingInFlightRef.current) return;
@@ -643,6 +670,31 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                             />
                             <span className="text-sm text-gray-900">{t('locationModal.allIndia')}</span>
                         </label>
+
+                        {/* Tier-1 quick picks (major cities only). Full search/states stay available below. */}
+                        {tier1CityQuickPicks.length > 0 && (
+                            <div className="px-1 py-2">
+                                <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    Major Cities
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {tier1CityQuickPicks.map(({ displayName, city, stateCode }) => (
+                                        <button
+                                            key={`${displayName}-${stateCode}`}
+                                            type="button"
+                                            onClick={() => handleCitySelect(city, stateCode)}
+                                            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                                                selectedOption === 'city' && selectedCity === city
+                                                    ? 'border-blue-600 bg-blue-50 text-blue-700'
+                                                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            {displayName}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* District Options */}
                         {browseStates.map((district) => (

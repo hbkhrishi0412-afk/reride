@@ -10,6 +10,8 @@ interface CityDropdownProps {
   onViewAllCars: () => void;
 }
 
+const TIER1_CITY_ORDER = Object.keys(CITY_MAPPING);
+
 const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, onViewAllCars }) => {
   const { t } = useTranslation();
   const isMdUp = useIsMdUp();
@@ -31,13 +33,13 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
     const displayNames = uniqueCityNames.map(city => getDisplayNameForCity(city));
     const uniqueDisplayNames = Array.from(new Set(displayNames)).sort();
 
-    // Prioritize cities from CITY_MAPPING (main cities) and show them first
-    const mainCities = Object.keys(CITY_MAPPING).filter(city => 
+    // Show only Tier-1 cities in the configured priority order.
+    // Any newly added Tier-1 city listing appears automatically here.
+    const mainCities = TIER1_CITY_ORDER.filter(city =>
       uniqueDisplayNames.includes(city)
     );
-    const otherCities = uniqueDisplayNames.filter(city => !mainCities.includes(city));
-    
-    setCities([...mainCities, ...otherCities]);
+
+    setCities(mainCities);
   }, [allVehicles]);
 
   const handleCityClick = (e: React.MouseEvent, city: string) => {

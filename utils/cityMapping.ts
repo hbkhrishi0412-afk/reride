@@ -20,6 +20,9 @@ export const CITY_MAPPING: Record<string, string[]> = {
   'Bangalore': ['Bangalore', 'Bengaluru'],
   'Pune': ['Pune'],
   'Hyderabad': ['Hyderabad'],
+  'Chennai': ['Chennai', 'Madras'],
+  'Ahmedabad': ['Ahmedabad', 'Amdavad'],
+  'Kolkata': ['Kolkata', 'Calcutta'],
 };
 
 /** First segment before comma — header location may be stored as "City, State". */
