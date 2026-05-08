@@ -3145,7 +3145,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
   // PUT - Update user
   if (req.method === 'PUT') {
     // SECURITY FIX: Verify Auth
-    const auth = authenticateRequest(req);
+    const auth = await authenticateRequestDual(req);
     if (!auth.isValid) {
       logWarn('⚠️ PUT /users - Authentication failed:', auth.error);
       return res.status(401).json({ 
@@ -3566,7 +3566,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
   // DELETE - Delete user
   if (req.method === 'DELETE') {
     // SECURITY FIX: Verify Auth
-    const auth = authenticateRequest(req);
+    const auth = await authenticateRequestDual(req);
     if (!auth.isValid) {
       return res.status(401).json({ success: false, reason: auth.error });
     }
@@ -4630,7 +4630,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     }
     
     // CRITICAL FIX: Verify user exists in database
-    const user = await userService.findByEmail(auth.user?.email || '');
+    const authenticatedEmail = normalizeAuthActorEmail(auth);
+    const user = await userService.findByEmail(authenticatedEmail || '');
     if (!user) {
       logError('❌ POST /vehicles - User not found in database:', auth.user?.email);
       return res.status(401).json({ 
@@ -4641,7 +4642,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     
     // CRITICAL FIX: Ensure sellerEmail matches authenticated user
     // Auto-correct sellerEmail to match authenticated user (security: prevent users from creating vehicles for other users)
-    const authenticatedEmail = auth.user?.email || '';
     if (!req.body.sellerEmail || req.body.sellerEmail.toLowerCase() !== authenticatedEmail.toLowerCase()) {
       logWarn('⚠️ POST /vehicles - sellerEmail mismatch or missing:', {
         provided: req.body.sellerEmail,
@@ -4749,7 +4749,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       // SECURITY: Only the vehicle's seller (or admin) may boost it.
       const sellerEmailLower = String(vehicle.sellerEmail || '').toLowerCase().trim();
-      const authedEmailLower = String(auth.user?.email || '').toLowerCase().trim();
+      const authedEmailLower = normalizeAuthActorEmail(auth);
       if (auth.user?.role !== 'admin' && sellerEmailLower && authedEmailLower !== sellerEmailLower) {
         return res.status(403).json({ success: false, reason: 'You can only boost your own listings.' });
       }
@@ -4957,7 +4957,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
           // Verify ownership (unless admin)
           const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
-          const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+          const normalizedAuthEmail = normalizeAuthActorEmail(auth);
           if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
             console.error('❌ Feature action failed: Ownership mismatch', { 
               vehicleSeller: normalizedVehicleSellerEmail, 
@@ -5073,7 +5073,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
           // SECURITY FIX: Verify ownership (unless admin)
           const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
-          const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+          const normalizedAuthEmail = normalizeAuthActorEmail(auth);
           if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
             console.error('❌ Mark as sold failed: Ownership mismatch', { 
               vehicleSeller: normalizedVehicleSellerEmail, 
@@ -5122,7 +5122,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
           // SECURITY FIX: Verify ownership (unless admin)
           const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
-          const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+          const normalizedAuthEmail = normalizeAuthActorEmail(auth);
           if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
             console.error('❌ Mark as unsold failed: Ownership mismatch', { 
               vehicleSeller: normalizedVehicleSellerEmail, 
@@ -5153,7 +5153,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
     // Create new vehicle
     // SECURITY FIX: Verify Auth
-    const vehicleAuth = authenticateRequest(req);
+    const vehicleAuth = await authenticateRequestDual(req);
     if (!vehicleAuth.isValid) {
       console.error('❌ Vehicle creation failed: Authentication required');
       return res.status(401).json({ success: false, reason: vehicleAuth.error });
@@ -5162,7 +5162,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     // Verify seller email matches authenticated user (unless admin)
     if (req.body.sellerEmail) {
       const sanitizedEmail = (await sanitizeString(String(req.body.sellerEmail))).toLowerCase().trim();
-      const normalizedAuthEmail = vehicleAuth.user?.email ? vehicleAuth.user.email.toLowerCase().trim() : '';
+      const normalizedAuthEmail = normalizeAuthActorEmail(vehicleAuth);
       
       if (vehicleAuth.user?.role !== 'admin' && sanitizedEmail !== normalizedAuthEmail) {
         console.error('❌ Vehicle creation failed: Seller email mismatch', { 
@@ -5347,7 +5347,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
   if (req.method === 'PUT') {
     // SECURITY FIX: Verify Auth
-    const auth = authenticateRequest(req);
+    const auth = await authenticateRequestDual(req);
     if (!auth.isValid) {
       return res.status(401).json({ success: false, reason: auth.error });
     }
@@ -5371,7 +5371,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       
       // Normalize emails for comparison (critical for production)
       const normalizedVehicleSellerEmail = existingVehicle.sellerEmail ? existingVehicle.sellerEmail.toLowerCase().trim() : '';
-      const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+      const normalizedAuthEmail = normalizeAuthActorEmail(auth);
       if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
@@ -5465,7 +5465,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
   if (req.method === 'DELETE') {
     // SECURITY FIX: Verify Auth
-    const auth = authenticateRequest(req);
+    const auth = await authenticateRequestDual(req);
     if (!auth.isValid) {
       return res.status(401).json({ success: false, reason: auth.error });
     }
@@ -5488,7 +5488,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       
       // Normalize emails for comparison (critical for production)
       const normalizedVehicleSellerEmail = vehicleToDelete.sellerEmail ? vehicleToDelete.sellerEmail.toLowerCase().trim() : '';
-      const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+      const normalizedAuthEmail = normalizeAuthActorEmail(auth);
       if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
@@ -7055,7 +7055,7 @@ async function handleGetSupportTickets(
       // Sanitize email
       const sanitizedEmail = await sanitizeString(userEmail);
       if (!isAdmin && normalizedAuthEmail !== sanitizedEmail.toLowerCase().trim()) {
-        return res.status(403).json({ success: false, error: 'Unauthorized access to support tickets' });
+        return res.status(200).json({ success: true, tickets: [], count: 0 });
       }
       tickets = tickets.filter(ticket => ((ticket as Record<string, unknown>).userEmail as string)?.toLowerCase().trim() === sanitizedEmail.toLowerCase().trim());
     } else if (!isAdmin) {
@@ -8381,7 +8381,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           return res.status(200).json({ success: true, data: [] });
         }
         if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId) {
-          return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
+          return res.status(200).json({ success: true, data: [] });
         }
         conversations = await conversationService.findByCustomerId(String(customerId));
       } else if (sellerId) {
@@ -8391,7 +8391,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           return res.status(200).json({ success: true, data: [] });
         }
         if (!isAdmin && normalizedAuthEmail !== normalizedSellerId) {
-          return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
+          return res.status(200).json({ success: true, data: [] });
         }
         // CRITICAL: Pass normalized sellerId to service for consistent matching
         // The service will also normalize internally, but passing normalized ensures consistency
@@ -8905,7 +8905,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
           return res.status(200).json({ success: true, data: [] });
         }
         if (!isAdmin && normalizedAuthEmail !== normalizedEmail) {
-          return res.status(403).json({ success: false, reason: 'Unauthorized access to notifications' });
+          return res.status(200).json({ success: true, data: [] });
         }
         notifications = notifications.filter(n => {
           const recipient = n.recipientEmail || n.recipient_email || n.user_id || '';
