@@ -28,7 +28,7 @@ const PageTransition = ({ children, currentView }: PageTransitionProps) => {
   useEffect(() => {
     import('framer-motion')
       .then((fm) => {
-        if (fm.motion && fm.AnimatePresence && React) {
+        if (fm.motion && fm.AnimatePresence) {
           setMotionDiv(() => fm.motion.div);
           setAnimatePresence(() => fm.AnimatePresence);
           setUseAnimations(true);
