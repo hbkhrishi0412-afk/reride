@@ -8842,13 +8842,18 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       }
       // If auth fails, continue with empty auth (will return empty array for non-admin)
     } else {
-      // POST/PUT/DELETE require authentication
-      auth = requireAuth(req, res, 'Notifications');
-      if (!auth) {
-        return;
+      // POST/PUT/DELETE require authentication via either legacy JWT or Supabase token.
+      // This keeps notification updates (e.g. mark-as-read) working for OAuth sessions.
+      auth = await authenticateRequestDual(req);
+      if (!auth.isValid || !auth.user) {
+        return res.status(401).json({
+          success: false,
+          reason: auth.error || 'Authentication required.',
+          error: 'Invalid or expired authentication token',
+        });
       }
       normalizedAuthEmail = normalizeAuthActorEmail(auth);
-      isAdmin = auth.user?.role === 'admin';
+      isAdmin = auth.user.role === 'admin';
     }
 
     // GET - Retrieve notifications

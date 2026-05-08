@@ -3159,6 +3159,12 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   const handleCertifyVehicle = async (vehicleId: number) => {
     try {
+      // Prefer app-level callback (handles centralized auth/state/toast logic)
+      if (onRequestCertification) {
+        await onRequestCertification(vehicleId);
+        return;
+      }
+
       const response = await authenticatedFetch('/api/vehicles?action=certify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3196,6 +3202,12 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   const handleMarkAsSold = async (vehicleId: number) => {
     try {
+      // Prefer app-level callback so state/toasts stay consistent across environments
+      if (onMarkAsSold) {
+        await onMarkAsSold(vehicleId);
+        return;
+      }
+
       const response = await authenticatedFetch('/api/vehicles?action=sold', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
