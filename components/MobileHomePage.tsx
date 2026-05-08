@@ -13,11 +13,11 @@ const LocationModal = lazy(() => import('./LocationModal'));
 import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
 import { showVerifiedListingBadge } from '../utils/listingTrust';
 import {
-  HOME_DESKTOP_CITY_STYLE,
+  getHomeDesktopCityStyle,
+  getHomeMobileCityAccent,
+  getHomeMobileCityGradient,
   HOME_DISCOVERY_CATEGORIES,
   HOME_DISCOVERY_CITY_ORDER,
-  HOME_MOBILE_CITY_ACCENT,
-  HOME_MOBILE_CITY_GRADIENT,
 } from '../constants/homeDiscovery';
 import CityMonument from './CityMonument';
 import VehicleCategoryIcon from './VehicleCategoryIcon';
@@ -295,7 +295,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         const apiCount = storefrontAgg?.cities[name];
         return {
           name,
-          abbr: HOME_DESKTOP_CITY_STYLE[name].abbr,
+          abbr: getHomeDesktopCityStyle(name).abbr,
           count: apiCount !== undefined ? apiCount : client,
         };
       }),
@@ -1226,8 +1226,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
         >
           {cities.map((city, index) => {
-            const cityKey = city.name as (typeof HOME_DISCOVERY_CITY_ORDER)[number];
-            const accent = HOME_MOBILE_CITY_ACCENT[cityKey];
+            const accent = getHomeMobileCityAccent(city.name);
             const hasVehicles = city.count > 0;
 
             return (
@@ -1251,7 +1250,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                     for maximum postcard-style legibility. */}
                 <div
                   className="mc-gradient relative h-[108px] w-full overflow-hidden"
-                  style={{ background: HOME_MOBILE_CITY_GRADIENT[cityKey] }}
+                  style={{ background: getHomeMobileCityGradient(city.name) }}
                 >
                   {/* Soft decorative blobs (purely visual) */}
                   <div className="absolute inset-0 opacity-50 motion-reduce:hidden" aria-hidden="true">
@@ -1277,7 +1276,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
                   {/* Iconic monument silhouette — dark accent on pastel so it
                       reads as a classic postcard silhouette. */}
-                  <CityMonument city={cityKey} className="mc-monument" color={accent.solid} />
+                  <CityMonument city={city.name} className="mc-monument" color={accent.solid} />
 
                   {/* Pin badge with radar-ping rings — "live listings here".
                       Rings + chip use the city's accent colour so they stay

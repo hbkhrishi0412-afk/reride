@@ -96,17 +96,7 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             <p className="text-gray-400">
               {t('footer.copyright', { year: new Date().getFullYear() })}
             </p>
-            <div className="flex items-center gap-6">
-              <span className="text-gray-400 text-sm">{t('footer.madeInIndia')}</span>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/>
-                  </svg>
-                </div>
-                <span className="text-gray-300 font-semibold">{t('footer.premiumPlatform')}</span>
-              </div>
-            </div>
+            <span className="text-gray-400 text-sm">{t('footer.madeInIndia')}</span>
           </div>
         </div>
       </div>

@@ -8,6 +8,23 @@
  * This CSS is inlined in the <head> to prevent render-blocking
  */
 export const CRITICAL_CSS = `
+@font-face {
+  font-family: "PoppinsFallback";
+  src: local("Arial");
+  ascent-override: 105%;
+  descent-override: 35%;
+  line-gap-override: 10%;
+  size-adjust: 97%;
+}
+
+html, body {
+  font-family: "Poppins", "PoppinsFallback", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+button, a, input, select {
+  touch-action: manipulation;
+}
+
 /* Vehicle Card Critical Styles */
 .vehicle-card-container {
   display: grid;
@@ -22,6 +39,8 @@ export const CRITICAL_CSS = `
   overflow: hidden;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 380px;
 }
 
 .vehicle-card:hover {
@@ -82,6 +101,12 @@ export const CRITICAL_CSS = `
   border-radius: 0.75rem;
   padding: 0.75rem 1rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* Grid Layout */

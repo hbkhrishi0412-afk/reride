@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Vehicle } from '../types';
 import { useIsMdUp } from '../hooks/useIsMdUp';
+import { CITY_MAPPING, getDisplayNameForCity } from '../utils/cityMapping';
 
 interface SellerDropdownProps {
   allVehicles: Vehicle[];
@@ -9,6 +10,8 @@ interface SellerDropdownProps {
   onSellOnline: () => void;
   onSellScrapCar: () => void;
 }
+
+const TIER1_CITY_ORDER = Object.keys(CITY_MAPPING);
 
 const SellerDropdown: React.FC<SellerDropdownProps> = ({ 
   allVehicles, 
@@ -21,17 +24,24 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [cities, setCities] = useState<string[]>([]);
 
-  // Extract unique cities from vehicles data
+  // Extract Tier-1 cities from live vehicle data (auto-updates as inventory changes)
   useEffect(() => {
-    const uniqueCities = Array.from(
+    const uniqueCityNames = Array.from(
       new Set(
         allVehicles
           .filter(vehicle => vehicle.status === 'published' && vehicle.city)
-          .map(vehicle => vehicle.city)
+          .map(vehicle => vehicle.city!)
       )
-    ).sort();
+    );
 
-    setCities(uniqueCities);
+    const displayNames = uniqueCityNames.map(city => getDisplayNameForCity(city));
+    const uniqueDisplayNames = Array.from(new Set(displayNames));
+
+    const tier1Cities = TIER1_CITY_ORDER.filter(city =>
+      uniqueDisplayNames.includes(city)
+    );
+
+    setCities(tier1Cities);
   }, [allVehicles]);
 
   const handleCityClick = (city: string) => {

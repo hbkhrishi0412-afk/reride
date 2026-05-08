@@ -1,5 +1,4 @@
 import React from 'react';
-import type { HomeDiscoveryCityName } from '../constants/homeDiscovery';
 
 /**
  * Iconic monument silhouettes for each Home-discovery city.
@@ -138,16 +137,62 @@ const GatewayOfIndia: React.FC<MonumentProps> = ({ className }) => (
   </svg>
 );
 
-const MONUMENT_MAP: Record<HomeDiscoveryCityName, React.FC<MonumentProps>> = {
+/* Chennai — Marina Lighthouse-inspired tower beside a low coast podium. */
+const ChennaiLighthouse: React.FC<MonumentProps> = ({ className }) => (
+  <svg viewBox={VIEW_BOX} className={className} fill="currentColor" aria-hidden="true">
+    <rect x="4" y="74" width="132" height="4" rx="1" />
+    <rect x="18" y="58" width="104" height="16" />
+    <rect x="84" y="18" width="20" height="56" rx="2" />
+    <rect x="80" y="14" width="28" height="6" rx="1" />
+    {[26, 34, 42, 50].map((y) => (
+      <rect key={y} x="88" y={y} width="12" height="2" rx="1" />
+    ))}
+    <rect x="22" y="52" width="46" height="6" rx="1" />
+    <rect x="30" y="46" width="30" height="6" rx="1" />
+  </svg>
+);
+
+/* Ahmedabad — Adalaj-style stepped geometry with a central pavilion. */
+const AdalajStepwell: React.FC<MonumentProps> = ({ className }) => (
+  <svg viewBox={VIEW_BOX} className={className} fill="currentColor" aria-hidden="true">
+    <rect x="6" y="74" width="128" height="4" rx="1" />
+    <rect x="20" y="62" width="100" height="12" />
+    <rect x="28" y="54" width="84" height="8" />
+    <rect x="36" y="46" width="68" height="8" />
+    <rect x="44" y="38" width="52" height="8" />
+    <rect x="58" y="26" width="24" height="12" />
+    <path d="M52 26 L70 14 L88 26 Z" />
+    <rect x="67" y="10" width="6" height="6" rx="1" />
+  </svg>
+);
+
+/* Kolkata — Howrah Bridge inspired cantilever truss profile. */
+const HowrahBridge: React.FC<MonumentProps> = ({ className }) => (
+  <svg viewBox={VIEW_BOX} className={className} fill="currentColor" aria-hidden="true">
+    <rect x="4" y="74" width="132" height="4" rx="1" />
+    <rect x="18" y="38" width="8" height="36" />
+    <rect x="114" y="38" width="8" height="36" />
+    <path d="M22 42 L70 22 L118 42 L114 46 L70 28 L26 46 Z" />
+    {[30, 38, 46, 54, 62, 70, 78, 86, 94, 102, 110].map((x) => (
+      <rect key={x} x={x} y="46" width="2" height="16" />
+    ))}
+    <rect x="22" y="60" width="96" height="4" rx="1" />
+  </svg>
+);
+
+const MONUMENT_MAP: Record<string, React.FC<MonumentProps>> = {
   'Delhi NCR': IndiaGate,
   Hyderabad: Charminar,
   Bangalore: VidhanaSoudha,
   Pune: ShaniwarWada,
   Mumbai: GatewayOfIndia,
+  Chennai: ChennaiLighthouse,
+  Ahmedabad: AdalajStepwell,
+  Kolkata: HowrahBridge,
 };
 
 interface Props {
-  city: HomeDiscoveryCityName;
+  city: string;
   /** Extra classes to tweak opacity/animation. */
   className?: string;
   /**

@@ -261,7 +261,6 @@ const ServiceCart = React.lazy(() => import('./components/ServiceCart'));
 const CommandPalette = React.lazy(() => import('./components/CommandPalette'));
 const KeyboardShortcutsHelp = React.lazy(() => import('./components/KeyboardShortcutsHelp'));
 const ChatWidget = React.lazy(() => import('./components/ChatWidget').then(module => ({ default: module.ChatWidget })));
-const SupportChatWidget = React.lazy(() => import('./components/SupportChatWidget'));
 
 // Preload critical components - optimized for faster loading
 const preloadCriticalComponents = () => {
@@ -4650,12 +4649,6 @@ const AppContent: React.FC = () => {
           <KeyboardShortcutsHelp
             isOpen={isKeyboardShortcutsOpen}
             onClose={() => setIsKeyboardShortcutsOpen(false)}
-          />
-        </Suspense>
-        {/* Support Chat Widget - Always available */}
-        <Suspense fallback={null}>
-          <SupportChatWidget
-            currentUser={currentUser}
           />
         </Suspense>
         {currentUser && activeChat && (
