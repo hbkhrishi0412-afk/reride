@@ -68,13 +68,28 @@ export const fetchSupportTicketsFromSupabase = async (
   }
 };
 
+/** Email on the ticket must match the authenticated user or POST /api/support-tickets returns 403. */
+function resolveSessionAccountEmail(): string {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return '';
+  try {
+    const raw = localStorage.getItem('reRideCurrentUser');
+    if (!raw) return '';
+    const u = JSON.parse(raw) as { email?: string };
+    return u?.email ? String(u.email).toLowerCase().trim() : '';
+  } catch {
+    return '';
+  }
+}
+
 export const createSupportTicketInSupabase = async (
   ticket: Omit<SupportTicket, 'id' | 'createdAt' | 'updatedAt' | 'replies' | 'status'>
 ): Promise<SupportTicket | null> => {
   try {
+    const sessionEmail = resolveSessionAccountEmail();
+    const formEmail = String(ticket.userEmail || '').toLowerCase().trim();
     const payload = {
       ...ticket,
-      userEmail: String(ticket.userEmail || '').toLowerCase().trim(),
+      userEmail: sessionEmail || formEmail,
     };
     const response = await authenticatedFetch('/api/support-tickets', {
       method: 'POST',

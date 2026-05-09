@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { User, SupportTicket } from '../types';
 
 interface MobileSupportPageProps {
   currentUser: User | null;
-  onSubmitTicket: (ticketData: Omit<SupportTicket, 'id' | 'createdAt' | 'updatedAt' | 'replies' | 'status'>) => void;
+  onSubmitTicket: (
+    ticketData: Omit<SupportTicket, 'id' | 'createdAt' | 'updatedAt' | 'replies' | 'status'>,
+  ) => void | Promise<boolean>;
   onNavigate?: (view: any) => void;
 }
 
@@ -45,6 +47,15 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    setFormData((prev) => ({
+      ...prev,
+      name: currentUser.name || prev.name,
+      email: currentUser.email,
+    }));
+  }, [currentUser?.email, currentUser?.name]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -73,13 +84,28 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
     if (!validateForm()) return;
 
     setIsSubmitting(true);
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.submit;
+      return next;
+    });
     try {
-      onSubmitTicket({
-        userName: formData.name,
-        userEmail: formData.email,
-        subject: formData.subject,
-        message: formData.message,
-      });
+      const ticketEmail = (currentUser?.email || formData.email).trim();
+      const ok = await Promise.resolve(
+        onSubmitTicket({
+          userName: formData.name,
+          userEmail: ticketEmail,
+          subject: formData.subject,
+          message: formData.message,
+        }),
+      );
+      if (ok === false) {
+        setErrors((prev) => ({
+          ...prev,
+          submit: 'Failed to submit support ticket. Please try again.',
+        }));
+        return;
+      }
       setFormData({
         name: currentUser?.name || '',
         email: currentUser?.email || '',
@@ -216,6 +242,12 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
           <p className="text-[10.5px] uppercase tracking-[0.16em] font-semibold text-slate-400">New ticket</p>
           <h2 className="text-[16px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.01em' }}>Tell us what&apos;s happening</h2>
         </div>
+
+        {errors.submit && (
+          <p className="text-[11px] text-rose-600 font-semibold rounded-xl px-3 py-2 bg-rose-50 border border-rose-100">
+            {errors.submit}
+          </p>
+        )}
 
         <label className="block">
           <span className="block text-[11.5px] font-semibold text-slate-700 mb-1.5 tracking-tight">Name</span>
