@@ -415,6 +415,11 @@ interface DealerProfilesProps {
 
 type CompanyType = 'all' | 'car-service' | 'showroom';
 
+/** Filter tabs stay “Car Service” / “Showroom”; cards and map use these entity labels. */
+export const ENTITY_LABEL_SERVICE_PROVIDER = 'Service provider';
+export const ENTITY_LABEL_SELLER = 'Seller';
+export const ENTITY_LABEL_MIXED_CLUSTER = 'Sellers & service providers';
+
 export interface CompanyLocation {
   lat: number;
   lng: number;
@@ -446,7 +451,7 @@ function isShowroomSeller(user: User): boolean {
 
 function sellerHoverTooltipHtml(seller: User): string {
   const showroom = isShowroomSeller(seller);
-  const typeLabel = showroom ? 'Showroom' : 'Car service';
+  const typeLabel = showroom ? ENTITY_LABEL_SELLER : ENTITY_LABEL_SERVICE_PROVIDER;
   const title = escapeHtml(seller.dealershipName || seller.name || 'Dealer');
   const area = escapeHtml(areaDisplayLabelFromSeller(seller));
   const addr = (seller.address || '').trim();
@@ -713,7 +718,7 @@ export const DealerMap: React.FC<{
           ? (showroom ? iconShowroomSelected : iconSelected)
           : (showroom ? iconShowroomDefault : iconDefault);
         const marker = L.marker([lat, lng], { icon });
-        const typeLabel = showroom ? 'Showroom' : 'Car Service';
+        const typeLabel = showroom ? ENTITY_LABEL_SELLER : ENTITY_LABEL_SERVICE_PROVIDER;
         const aKey = areaKeyFromSeller(item.seller);
         const inArea = aKey
           ? items.filter((i) => areaKeyFromSeller(i.seller) === aKey)
@@ -750,7 +755,12 @@ export const DealerMap: React.FC<{
               `<li class="text-sm text-gray-800 py-0.5">${escapeHtml(i.seller.dealershipName || i.seller.name)}</li>`
           )
           .join('');
-        const typeLabel = clusterType === 'mixed' ? 'Car showrooms & services' : clusterType === 'showroom' ? 'Car showrooms' : 'Car services';
+        const typeLabel =
+          clusterType === 'mixed'
+            ? ENTITY_LABEL_MIXED_CLUSTER
+            : clusterType === 'showroom'
+              ? ENTITY_LABEL_SELLER + 's'
+              : ENTITY_LABEL_SERVICE_PROVIDER + 's';
         const areaLabel = areaDisplayLabelFromSeller(groupItems[0].seller);
         marker.bindTooltip(clusterHoverTooltipHtml(groupItems), TOOLTIP_OPTS);
         marker.bindPopup(
@@ -790,8 +800,8 @@ const CompanyCard: React.FC<{
   }, [seller.logoUrl, seller.email, seller.dealershipName, seller.name]);
 
   // Determine company type from the user's role (source of truth).
-  // - role === 'service_provider'  -> "Car Service"
-  // - role === 'seller'            -> "Showroom" (regardless of top_seller badge; that's a separate recognition)
+  // - role === 'service_provider'  -> service-provider bucket (badge: Service provider)
+  // - role === 'seller'            -> seller bucket (badge: Seller)
   const companyType: 'showroom' | 'car-service' = isCarServiceProvider(seller) ? 'car-service' : 'showroom';
   
   /** Matches admin "Recommended" (stored flag only — not list order or subscription). */
@@ -864,8 +874,8 @@ const CompanyCard: React.FC<{
   };
 
   const typeBadge = companyType === 'showroom'
-    ? { label: 'Showroom', cls: 'dp-type-showroom' }
-    : { label: 'Car Service', cls: 'dp-type-service' };
+    ? { label: ENTITY_LABEL_SELLER, cls: 'dp-type-showroom' }
+    : { label: ENTITY_LABEL_SERVICE_PROVIDER, cls: 'dp-type-service' };
 
   return (
     <div
@@ -1336,10 +1346,22 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
                   </svg>
                 </div>
                 <p className="text-slate-900 font-bold mb-1">
-                  {searchQuery || companyTypeFilter !== 'all' ? 'No matching dealers' : 'No dealers yet'}
+                  {companyTypeFilter === 'car-service'
+                    ? 'No matching service providers'
+                    : companyTypeFilter === 'showroom'
+                      ? 'No matching sellers'
+                      : searchQuery || companyTypeFilter !== 'all'
+                        ? 'No matching dealers'
+                        : 'No dealers yet'}
                 </p>
                 <p className="text-sm text-slate-500">
-                  {searchQuery ? 'Try a different search or filter' : 'Check back later for dealers in this region'}
+                  {searchQuery
+                    ? 'Try a different search or filter'
+                    : companyTypeFilter === 'car-service'
+                      ? 'Try another region, clear the map filter, or switch to “All”.'
+                      : companyTypeFilter === 'showroom'
+                        ? 'Try another region, clear the map filter, or switch to “All”.'
+                        : 'Check back later for dealers in this region'}
                 </p>
               </div>
             ) : (
@@ -1404,9 +1426,9 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
           {/* Map legend */}
           <div className="absolute bottom-4 left-4 z-[1000] dp-legend">
             <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 mr-1">Legend</span>
-            <span className="dp-legend-item"><span className="dp-legend-pin" style={{ background: '#2563eb' }} /> Car Service</span>
-            <span className="dp-legend-item"><span className="dp-legend-pin" style={{ background: '#16a34a' }} /> Showroom</span>
-            <span className="dp-legend-item"><span className="dp-legend-pin" style={{ background: '#7c3aed' }} /> Both</span>
+            <span className="dp-legend-item"><span className="dp-legend-pin" style={{ background: '#2563eb' }} /> {ENTITY_LABEL_SERVICE_PROVIDER}</span>
+            <span className="dp-legend-item"><span className="dp-legend-pin" style={{ background: '#16a34a' }} /> {ENTITY_LABEL_SELLER}</span>
+            <span className="dp-legend-item"><span className="dp-legend-pin" style={{ background: '#7c3aed' }} /> Mixed</span>
           </div>
 
           {/* Map count badge */}

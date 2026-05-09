@@ -3,7 +3,9 @@ import type { User, SupportTicket } from '../types';
 
 interface SupportPageProps {
   currentUser: User | null;
-  onSubmitTicket: (ticketData: Omit<SupportTicket, 'id' | 'createdAt' | 'updatedAt' | 'replies' | 'status'>) => void;
+  onSubmitTicket: (
+    ticketData: Omit<SupportTicket, 'id' | 'createdAt' | 'updatedAt' | 'replies' | 'status'>,
+  ) => void | Promise<boolean>;
 }
 
 const SupportPage: React.FC<SupportPageProps> = ({ currentUser, onSubmitTicket }) => {
@@ -17,6 +19,16 @@ const SupportPage: React.FC<SupportPageProps> = ({ currentUser, onSubmitTicket }
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Keep name/email aligned with session when auth loads after mount (avoids 403: ticket email ≠ JWT email).
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    setFormData((prev) => ({
+      ...prev,
+      name: currentUser.name || prev.name,
+      email: currentUser.email,
+    }));
+  }, [currentUser?.email, currentUser?.name]);
 
   // Prefill from stored support intent (e.g., service package booking)
   useEffect(() => {
@@ -95,15 +107,26 @@ const SupportPage: React.FC<SupportPageProps> = ({ currentUser, onSubmitTicket }
     }
 
     setIsSubmitting(true);
-    setErrors({});
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.submit;
+      return next;
+    });
 
     try {
-      onSubmitTicket({
-        userName: formData.name,
-        userEmail: formData.email,
-        subject: formData.subject,
-        message: formData.message,
-      });
+      const ticketEmail = (currentUser?.email || formData.email).trim();
+      const ok = await Promise.resolve(
+        onSubmitTicket({
+          userName: formData.name,
+          userEmail: ticketEmail,
+          subject: formData.subject,
+          message: formData.message,
+        }),
+      );
+      if (ok === false) {
+        setErrors({ submit: 'Failed to submit support ticket. Please try again.' });
+        return;
+      }
 
       // Reset form
       setFormData({
@@ -112,7 +135,7 @@ const SupportPage: React.FC<SupportPageProps> = ({ currentUser, onSubmitTicket }
         subject: '',
         message: '',
       });
-      
+
       setIsSuccess(true);
       // Clear any existing timeout before setting a new one
       if (timeoutRef.current) {

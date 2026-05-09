@@ -27,19 +27,6 @@ type SelectedIncludedService = {
   price?: number;
 };
 
-type ProviderIncludedService = {
-  id?: string;
-  name?: string;
-  price?: number;
-  active?: boolean;
-};
-
-type ProviderServicePublicRow = {
-  serviceType?: string;
-  active?: boolean;
-  includedServices?: ProviderIncludedService[];
-};
-
 // Service definitions with icons - shared between components
 const getServiceIcon = (title: string): React.ReactNode => {
   const icons: Record<string, React.ReactNode> = {
@@ -220,7 +207,6 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [servicePricingData, setServicePricingData] = useState<Record<string, Service['pricing']>>({});
   const [, setLoadingPricing] = useState(true);
-  const [includedPriceById, setIncludedPriceById] = useState<Record<string, number>>({});
 
   // Fetch services pricing from Supabase
   useEffect(() => {
@@ -320,34 +306,6 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
     }
   }, [onBack]);
 
-  useEffect(() => {
-    const loadIncludedPrices = async () => {
-      if (!selectedService?.title) return;
-      try {
-        const resp = await fetch('/api/provider-services?scope=public');
-        if (!resp.ok) return;
-        const rows = await resp.json();
-        const priceMap: Record<string, number> = {};
-        (Array.isArray(rows) ? (rows as ProviderServicePublicRow[]) : [])
-          .filter((row) => row?.serviceType === selectedService.title && row?.active !== false)
-          .forEach((row) => {
-            const included = Array.isArray(row?.includedServices) ? row.includedServices : [];
-            included.forEach((line) => {
-              if (!line || line.active === false || typeof line.name !== 'string') return;
-              const id = line.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-              const price = typeof line.price === 'number' && line.price > 0 ? line.price : undefined;
-              if (price == null) return;
-              priceMap[id] = priceMap[id] == null ? price : Math.min(priceMap[id], price);
-            });
-          });
-        setIncludedPriceById(priceMap);
-      } catch {
-        setIncludedPriceById({});
-      }
-    };
-    loadIncludedPrices();
-  }, [selectedService?.title]);
-
   const handleAddToCart = () => {
     if (!selectedService) return;
 
@@ -358,14 +316,15 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
       .map((service) => ({
         id: service.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
         name: service,
-        price: includedPriceById[service.toLowerCase().replace(/[^a-z0-9]+/g, '-')],
+        price: undefined,
       }))
       .filter((service) => Boolean(service.name));
     sessionStorage.setItem('service_cart_prefill', JSON.stringify({
       serviceId,
       serviceName: selectedService.title,
-      price: pricing.basePrice || 0,
-      customQuote: pricing.customQuote || false,
+      price: 0,
+      customQuote: true,
+      estimatedPriceRange: pricing.priceRange,
       includedServices,
     }));
 
@@ -389,6 +348,9 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
   }
 
   const pricing = servicePricingData[selectedService.title] || { basePrice: 0, customQuote: true };
+  const estimatedPriceRange = pricing.priceRange && pricing.priceRange !== 'Contact for quote'
+    ? pricing.priceRange
+    : undefined;
 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 min-h-screen pb-safe">
@@ -431,10 +393,7 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                 Services Included
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                {selectedService.services.map((service, index) => {
-                  const includedId = service.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-                  const includedPrice = includedPriceById[includedId];
-                  return (
+                {selectedService.services.map((service, index) => (
                   <div
                     key={index}
                     className="flex w-full items-start gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-3"
@@ -442,11 +401,11 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                     <div className="flex-1 flex items-center justify-between gap-2">
                       <span className="text-gray-700 dark:text-gray-300 font-medium">{service}</span>
                       <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
-                        {includedPrice ? `From ₹${includedPrice.toLocaleString('en-IN')}` : 'Price at checkout'}
+                        At checkout
                       </span>
                     </div>
                   </div>
-                )})}
+                ))}
               </div>
             </div>
 
@@ -515,32 +474,31 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
 
               {/* Pricing Display */}
               <div className="mb-6">
-                {pricing.customQuote ? (
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Starting from</p>
-                    <p className="text-3xl font-black text-blue-600 dark:text-blue-400 mb-2">
-                      Custom Quote
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Price varies based on vehicle model and service requirements
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Starting from</p>
-                    <p className="text-3xl font-black text-blue-600 dark:text-blue-400 mb-2">
-                      ₹{pricing.basePrice.toLocaleString('en-IN')}
-                    </p>
-                    {pricing.priceRange && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Price range: {pricing.priceRange}
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Final price</p>
+                  <p className="text-2xl sm:text-3xl font-black text-blue-600 dark:text-blue-400 mb-3">
+                    Price confirmed at checkout
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    We'll match you with a nearby verified service provider based on your location.
+                    Final pricing may vary by provider, vehicle model, and pickup/drop preference.
+                  </p>
+                  {estimatedPriceRange && (
+                    <div className="mt-4 rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-900/20 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                          Typical range
+                        </span>
+                        <span className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                          {estimatedPriceRange}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-blue-700/80 dark:text-blue-200/80">
+                        Estimated range only. Final price is shown before payment.
                       </p>
-                    )}
-                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-                      *Final price depends on vehicle model
-                    </p>
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Features */}
@@ -549,7 +507,13 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                   <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Transparent pricing</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Final breakup before payment</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Provider selected based on location</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

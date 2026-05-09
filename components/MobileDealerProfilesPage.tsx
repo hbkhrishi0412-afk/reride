@@ -6,7 +6,12 @@ import { getFollowersCount } from '../services/buyerEngagementService';
 import { isUserVerified } from './VerifiedBadge';
 import VerifiedBadge from './VerifiedBadge';
 import { getSellers, getServiceProviders } from '../services/userService';
-import { DealerMap, type CompanyLocation } from './DealerProfiles';
+import {
+  DealerMap,
+  type CompanyLocation,
+  ENTITY_LABEL_SELLER,
+  ENTITY_LABEL_SERVICE_PROVIDER,
+} from './DealerProfiles';
 import { getSellerMapCoordinates, normalizeIndianPincode } from '../utils/sellerLocation';
 import { resolveSellerLogoUrl, sellerInitialsAvatarDataUri } from '../utils/imageUtils';
 import { sellerMatchesHeaderRegion } from '../utils/dealerRegionFilter';
@@ -375,9 +380,7 @@ const MobileDealerCard: React.FC<{
   currentUser,
   onRequireLogin,
 }) => {
-  // Type is driven by user role (source of truth):
-  //   role === 'service_provider'  -> "Car Service"
-  //   role === 'seller'            -> "Showroom"
+  // Type is driven by user role (source of truth): service_provider vs seller
   const companyType: 'showroom' | 'car-service' = seller.role === 'service_provider' ? 'car-service' : 'showroom';
   const showStaffPickRibbon = isRerideStaffPick(seller.rerideRecommended);
   const dealerRating = getPublicDealerRating(seller);
@@ -424,7 +427,7 @@ const MobileDealerCard: React.FC<{
   }, [seller.logoUrl, seller.email, seller.dealershipName, seller.name]);
 
   const typeCls = companyType === 'showroom' ? 'mdp-type-showroom' : 'mdp-type-service';
-  const typeLabel = companyType === 'showroom' ? 'Showroom' : 'Car Service';
+  const typeLabel = companyType === 'showroom' ? ENTITY_LABEL_SELLER : ENTITY_LABEL_SERVICE_PROVIDER;
 
   return (
     <div
@@ -728,7 +731,7 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
                 Trusted Dealers {userLocation ? <span className="mdp-title-accent">· {userLocation}</span> : null}
               </h1>
               <p className="text-[11.5px] text-white/75 mt-0.5 truncate">
-                Verified showrooms &amp; car service partners
+                Verified sellers &amp; service providers
               </p>
             </div>
           </div>
@@ -739,11 +742,11 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
             </span>
             <span className="mdp-stat-chip">
               <span className="mdp-stat-dot" style={{ background: '#60a5fa' }} />
-              <strong>{serviceCount}</strong> services
+              <strong>{serviceCount}</strong> service providers
             </span>
             <span className="mdp-stat-chip">
               <span className="mdp-stat-dot" style={{ background: '#fbbf24' }} />
-              <strong>{showroomCount}</strong> showrooms
+              <strong>{showroomCount}</strong> sellers
             </span>
           </div>
         </div>
@@ -779,8 +782,8 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
             {/* Glass legend */}
             <div className="absolute bottom-3 left-3 z-[1000]">
               <span className="mdp-legend">
-                <span className="mdp-legend-item"><span className="mdp-legend-pin" style={{ background: '#2563eb' }} /> Car Service</span>
-                <span className="mdp-legend-item"><span className="mdp-legend-pin" style={{ background: '#16a34a' }} /> Showroom</span>
+                <span className="mdp-legend-item"><span className="mdp-legend-pin" style={{ background: '#2563eb' }} /> {ENTITY_LABEL_SERVICE_PROVIDER}</span>
+                <span className="mdp-legend-item"><span className="mdp-legend-pin" style={{ background: '#16a34a' }} /> {ENTITY_LABEL_SELLER}</span>
               </span>
             </div>
           </div>

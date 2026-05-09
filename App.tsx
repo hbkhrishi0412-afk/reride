@@ -3457,14 +3457,16 @@ const AppContent: React.FC = () => {
                   const created = await createSupportTicketInSupabase(ticket);
                   if (!created) {
                     addToast('Failed to submit support ticket. Please try again.', 'error');
-                    return;
+                    return false;
                   }
                   setSupportTickets(prev => [created, ...(Array.isArray(prev) ? prev : [])]);
                   addToast('Support ticket submitted!', 'success');
                   navigate(ViewEnum.HOME);
+                  return true;
                 } catch (error) {
                   logError('Support ticket submission failed:', error);
                   addToast('Failed to submit support ticket. Please try again.', 'error');
+                  return false;
                 }
               }}
               onNavigate={navigate}
@@ -3480,13 +3482,15 @@ const AppContent: React.FC = () => {
                 const created = await createSupportTicketInSupabase(ticket);
                 if (!created) {
                   addToast('Failed to submit support ticket. Please try again.', 'error');
-                  return;
+                  return false;
                 }
                 setSupportTickets(prev => [created, ...(Array.isArray(prev) ? prev : [])]);
                 addToast('Support ticket submitted!', 'success');
+                return true;
               } catch (error) {
                 logError('Support ticket submission failed:', error);
                 addToast('Failed to submit support ticket. Please try again.', 'error');
+                return false;
               }
             }}
           />

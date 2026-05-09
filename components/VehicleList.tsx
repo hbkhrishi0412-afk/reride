@@ -1067,9 +1067,41 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [makeFilter, uniqueMakes]);
 
+  // Keep sidebar category in sync with global nav defaults — but never clobber
+  // URL/deep-link state from Home hero chips (`applyFilters` always sends
+  // `category=ALL` + make/price). Previously this effect ran after the
+  // `initialFilters` effect and reset `FOUR_WHEELER` from Home onto the listing,
+  // which ANDed with make/price and hid every row.
   useEffect(() => {
-    setCategoryFilter(initialCategory);
-  }, [initialCategory]);
+    if (!initialFilters) {
+      setCategoryFilter(initialCategory);
+      return;
+    }
+    const hasUrlStructured =
+      Boolean(initialFilters.make) ||
+      Boolean(initialFilters.model) ||
+      Boolean(initialFilters.category) ||
+      Boolean(initialFilters.fuelType) ||
+      Boolean(initialFilters.transmission) ||
+      Boolean(initialFilters.location) ||
+      initialFilters.minPrice != null ||
+      initialFilters.maxPrice != null ||
+      initialFilters.minYear != null ||
+      initialFilters.maxYear != null ||
+      initialFilters.year != null ||
+      initialFilters.minMileage != null ||
+      initialFilters.maxMileage != null ||
+      Boolean(initialFilters.ownership);
+    if (!hasUrlStructured) {
+      setCategoryFilter(initialCategory);
+      return;
+    }
+    const urlCat = initialFilters.category;
+    if (urlCat != null && String(urlCat).trim() !== '') {
+      return;
+    }
+    setCategoryFilter('ALL');
+  }, [initialCategory, initialFiltersKey]);
 
   // Load location and fuel data when component mounts
   useEffect(() => {

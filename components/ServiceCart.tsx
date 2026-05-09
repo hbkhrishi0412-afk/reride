@@ -24,6 +24,15 @@ type CartItem = {
     quantity: number;
 };
 
+type CarDetails = {
+    make: string;
+    model: string;
+    year: string;
+    fuel: string;
+    reg?: string;
+    city?: string;
+};
+
 type Address = {
     id: string;
     label: string;
@@ -86,6 +95,39 @@ type CustomerServiceRequest = {
     cancelledAt?: string;
     notes?: string;
     customerReview?: { stars: number; comment?: string; submittedAt: string };
+};
+
+type ProviderIncludedServiceApiRow = {
+    id?: string;
+    name?: string;
+    price?: number;
+    etaMinutes?: number;
+    active?: boolean;
+};
+
+type ProviderServiceApiRow = {
+    providerId?: string;
+    serviceType?: string;
+    price?: number;
+    description?: string;
+    etaMinutes?: number;
+    active?: boolean;
+    includedServices?: ProviderIncludedServiceApiRow[];
+};
+
+type ProviderNameApiRow = {
+    id?: string;
+    uid?: string;
+    name?: string;
+};
+
+type ServiceCartPrefill = {
+    serviceId?: string;
+    serviceName?: string;
+    price?: number;
+    customQuote?: boolean;
+    carDetails?: CarDetails;
+    includedServices?: Array<{ id: string; name: string; price?: number }>;
 };
 
 const customerRequestVehicleLabel = (req: CustomerServiceRequest) => {
@@ -185,6 +227,12 @@ const mockCoupons: Coupon[] = [
     { code: 'SAVE200', label: 'Flat ₹200 off', amountOff: 200 },
     { code: 'SAVE10', label: '10% off up to ₹500', amountOff: 500 }, // capped; simplified as flat for mock
 ];
+
+const SERVICE_PACKAGE_TO_CATEGORY: Record<string, string> = {
+    'pkg-comprehensive': 'Essential Service',
+    'pkg-standard': 'Deep Detailing',
+    'pkg-care-plus': 'Care Plus',
+};
 
 const CART_KEY = 'service_cart_v1';
 const REQUEST_STATUS_STYLES: Record<CustomerServiceRequest['status'], string> = {
@@ -324,11 +372,12 @@ const ServiceCart: React.FC<Props> = ({
                 });
                 
                 if (!servicesResp.ok) return;
-                const servicesData = await servicesResp.json();
+                const rawServicesData = await servicesResp.json();
+                const servicesData: ProviderServiceApiRow[] = Array.isArray(rawServicesData) ? rawServicesData : [];
                 const grouped: Record<string, ServiceProvider['services']> = {};
-                servicesData.forEach((entry: any) => {
+                servicesData.forEach((entry) => {
                     const pid = entry.providerId;
-                    if (!pid) return;
+                    if (!pid || !entry.serviceType) return;
                     grouped[pid] = grouped[pid] || [];
                     grouped[pid].push({
                         serviceType: entry.serviceType,
@@ -336,7 +385,15 @@ const ServiceCart: React.FC<Props> = ({
                         description: entry.description,
                         etaMinutes: entry.etaMinutes,
                         active: entry.active !== false,
-                        includedServices: Array.isArray(entry.includedServices) ? entry.includedServices : [],
+                        includedServices: Array.isArray(entry.includedServices)
+                            ? entry.includedServices.map((line) => ({
+                                id: String(line.id || line.name || ''),
+                                name: line.name || String(line.id || ''),
+                                price: line.price,
+                                etaMinutes: line.etaMinutes,
+                                active: line.active !== false,
+                            }))
+                            : [],
                     });
                 });
                 setProviderServices(grouped);
@@ -344,31 +401,32 @@ const ServiceCart: React.FC<Props> = ({
                 // Build service packages from actual provider services
                 const serviceTypeMap = new Map<string, { price?: number; description?: string; etaMinutes?: number; count: number }>();
                 const includedLineMap = new Map<string, ServicePackage>();
-                servicesData.forEach((entry: any) => {
+                servicesData.forEach((entry) => {
                     if (!entry.serviceType || entry.active === false) return;
+                    const serviceType = entry.serviceType;
                     const existing = serviceTypeMap.get(entry.serviceType) || { count: 0 };
-                    serviceTypeMap.set(entry.serviceType, {
+                    serviceTypeMap.set(serviceType, {
                         price: existing.price === undefined ? entry.price : Math.min(existing.price || Infinity, entry.price || Infinity),
                         description: entry.description || existing.description,
                         etaMinutes: entry.etaMinutes || existing.etaMinutes,
                         count: existing.count + 1,
                     });
                     if (Array.isArray(entry.includedServices)) {
-                        entry.includedServices.forEach((line: any) => {
+                        entry.includedServices.forEach((line) => {
                             if (!line || line.active === false || !line.name) return;
                             const includedId = String(line.id || line.name);
-                            const key = `${entry.serviceType}::${includedId}`;
+                            const key = `${serviceType}::${includedId}`;
                             const linePrice = typeof line.price === 'number' ? line.price : 0;
                             const existingLine = includedLineMap.get(key);
                             if (!existingLine || linePrice < existingLine.price) {
                                 includedLineMap.set(key, {
-                                    id: includedLinePackageId(entry.serviceType, includedId),
-                                    name: `${entry.serviceType} - ${line.name}`,
+                                    id: includedLinePackageId(serviceType, includedId),
+                                    name: `${serviceType} - ${line.name}`,
                                     price: linePrice,
                                     warrantyMonths: 3,
-                                    description: `Included in ${entry.serviceType}`,
+                                    description: `Included in ${serviceType}`,
                                     isCustom: linePrice === 0,
-                                    parentServiceType: entry.serviceType,
+                                    parentServiceType: serviceType,
                                     includedServiceId: includedId,
                                 });
                             }
@@ -423,7 +481,7 @@ const ServiceCart: React.FC<Props> = ({
     /** Count of in-flight loads that should show the full-page list spinner (excludes silent polls). */
     const requestsForegroundLoadsRef = useRef(0);
 
-    const loadCustomerRequests = async (source = 'unknown') => {
+    const loadCustomerRequests = useCallback(async (source = 'unknown') => {
         const silentRefresh =
             source === 'interval-5s' || source === 'visibility' || source === 'supabase-realtime';
         // #region agent log
@@ -468,7 +526,7 @@ const ServiceCart: React.FC<Props> = ({
                 throw new Error(`Failed to load requests (${resp.status})`);
             }
             const data = await resp.json();
-            const records = Array.isArray(data) ? data : [];
+            const records: CustomerServiceRequest[] = Array.isArray(data) ? data : [];
             records.sort((a, b) => {
                 const at = new Date(a.updatedAt || a.createdAt || 0).getTime();
                 const bt = new Date(b.updatedAt || b.createdAt || 0).getTime();
@@ -513,12 +571,14 @@ const ServiceCart: React.FC<Props> = ({
             }).catch(() => {});
             // #endregion
         }
-    };
+    }, [activeTab, customerUserId, isLoggedIn]);
 
-    const loadCustomerRequestsRef = useRef<(source?: string) => ReturnType<typeof loadCustomerRequests>>(
+    const loadCustomerRequestsRef = useRef<(source?: string) => Promise<void>>(
         async () => {},
     );
-    loadCustomerRequestsRef.current = (src = 'ref-unknown') => loadCustomerRequests(src);
+    useEffect(() => {
+        loadCustomerRequestsRef.current = (src = 'ref-unknown') => loadCustomerRequests(src);
+    }, [loadCustomerRequests]);
 
     const cancelCustomerRequest = async (requestId: string) => {
         if (!window.confirm('Cancel this service request? Providers will no longer see it as active.')) {
@@ -637,7 +697,7 @@ const ServiceCart: React.FC<Props> = ({
         // #endregion
         if (activeTab !== 'track') return;
         void loadCustomerRequests('effect-activeTab-isLoggedIn');
-    }, [activeTab, isLoggedIn]);
+    }, [activeTab, isLoggedIn, loadCustomerRequests]);
 
     useEffect(() => {
         if (activeTab !== 'track' || !isLoggedIn) return;
@@ -735,7 +795,7 @@ const ServiceCart: React.FC<Props> = ({
                 const data = await resp.json();
                 if (!Array.isArray(data)) return;
                 const next: Record<string, string> = {};
-                data.forEach((p: any) => {
+                (data as ProviderNameApiRow[]).forEach((p) => {
                     const id = p?.id || p?.uid;
                     if (id) next[id] = p?.name || id;
                 });
@@ -747,7 +807,7 @@ const ServiceCart: React.FC<Props> = ({
         loadProvidersForNames();
     }, [activeTab, isLoggedIn]);
     const [note, setNote] = useState('');
-    const [carDetails, setCarDetails] = useState<any>(null);
+    const [carDetails, setCarDetails] = useState<CarDetails | null>(null);
     const [carForm, setCarForm] = useState({ make: '', model: '', year: '', fuel: '', reg: '', city: '' });
     const [carFormError, setCarFormError] = useState('');
     const [carFormOpen, setCarFormOpen] = useState(true);
@@ -858,14 +918,7 @@ const ServiceCart: React.FC<Props> = ({
     }, [items, selectedAddress, selectedBookingDate, selectedSlot, selectedCoupon, selectedProviders, note, carDetails, addresses, bookingFlowStep]);
 
     // Store prefill data in a ref to use in multiple effects
-    const prefillDataRef = useRef<{
-        serviceId: string;
-        serviceName?: string;
-        price?: number;
-        customQuote?: boolean;
-        carDetails?: any;
-        includedServices?: Array<{ id: string; name: string; price?: number }>;
-    } | null>(null);
+    const prefillDataRef = useRef<ServiceCartPrefill | null>(null);
 
     // Prefill from session (coming from landing cards or service detail page)
     useEffect(() => {
@@ -873,17 +926,18 @@ const ServiceCart: React.FC<Props> = ({
         try { raw = sessionStorage.getItem('service_cart_prefill'); } catch { /* storage unavailable */ }
         if (!raw) return;
         try {
-            const parsed = JSON.parse(raw);
+            const parsed = JSON.parse(raw) as ServiceCartPrefill;
             prefillDataRef.current = parsed;
             
-            if (parsed.serviceId) {
+            const prefillServiceId = parsed.serviceId;
+            if (prefillServiceId) {
                 // Check if this is a service ID from ServiceDetail (starts with 'service-')
-                if (parsed.serviceId.startsWith('service-')) {
+                if (prefillServiceId.startsWith('service-')) {
                     // Use the serviceName from parsed data, or extract from serviceId
                     let serviceName = parsed.serviceName;
                     if (!serviceName) {
                         // Fallback: Extract service name from serviceId
-                        serviceName = parsed.serviceId
+                        serviceName = prefillServiceId
                             .replace('service-', '')
                             .split('-')
                             .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -892,7 +946,7 @@ const ServiceCart: React.FC<Props> = ({
                     
                     // Create a dynamic package for this service
                     const dynamicPackage: ServicePackage = {
-                        id: parsed.serviceId,
+                        id: prefillServiceId,
                         name: serviceName,
                         price: parsed.price || 0,
                         warrantyMonths: 3,
@@ -903,7 +957,7 @@ const ServiceCart: React.FC<Props> = ({
                     // Add to available packages and set items in the same update cycle
                     setAvailableServicePackages(prev => {
                         const extraLinePackages: ServicePackage[] = Array.isArray(parsed.includedServices)
-                            ? parsed.includedServices.map((line: any) => ({
+                            ? parsed.includedServices.map((line) => ({
                                 id: includedLinePackageId(serviceName, String(line.id || line.name || 'line')),
                                 name: `${serviceName} - ${line.name || line.id}`,
                                 price: typeof line.price === 'number' ? line.price : 0,
@@ -925,20 +979,20 @@ const ServiceCart: React.FC<Props> = ({
                         // This ensures the package exists when items are set
                         setItems(prevItems => {
                             if (extraLinePackages.length > 0) {
-                                const filtered = prevItems.filter((item) => item.serviceId !== parsed.serviceId);
+                                const filtered = prevItems.filter((item) => item.serviceId !== prefillServiceId);
                                 const lineItems = extraLinePackages.map((linePkg) => ({ serviceId: linePkg.id, quantity: 1 }));
                                 return [...filtered, ...lineItems];
                             }
                             // Check if item already exists
-                            if (prevItems.some(item => item.serviceId === parsed.serviceId)) {
+                            if (prevItems.some(item => item.serviceId === prefillServiceId)) {
                                 return prevItems.map(item => 
-                                    item.serviceId === parsed.serviceId 
+                                    item.serviceId === prefillServiceId
                                         ? { ...item, quantity: Math.max(1, item.quantity) }
                                         : item
                                 );
                             }
                             // Add the new item - package is guaranteed to exist in updated array
-                            return [...prevItems, { serviceId: parsed.serviceId, quantity: 1 }];
+                            return [...prevItems, { serviceId: prefillServiceId, quantity: 1 }];
                         });
                         
                         return withLines;
@@ -946,25 +1000,32 @@ const ServiceCart: React.FC<Props> = ({
                 } else {
                     // For non-service- prefixed IDs, check if package exists first
                     setItems(prev => {
-                        if (prev.some(item => item.serviceId === parsed.serviceId)) {
+                        if (prev.some(item => item.serviceId === prefillServiceId)) {
                             return prev;
                         }
                         // Check if package exists in available packages
                         setAvailableServicePackages(currentPackages => {
-                            if (currentPackages.some(p => p.id === parsed.serviceId)) {
+                            if (currentPackages.some(p => p.id === prefillServiceId)) {
                                 return currentPackages;
                             }
                             // Package doesn't exist, can't add item
                             return currentPackages;
                         });
-                        return [...prev, { serviceId: parsed.serviceId, quantity: 1 }];
+                        return [...prev, { serviceId: prefillServiceId, quantity: 1 }];
                     });
                 }
             }
             
             if (parsed.carDetails) {
                 setCarDetails(parsed.carDetails);
-                setCarForm(parsed.carDetails);
+                setCarForm({
+                    make: parsed.carDetails.make,
+                    model: parsed.carDetails.model,
+                    year: parsed.carDetails.year,
+                    fuel: parsed.carDetails.fuel,
+                    reg: parsed.carDetails.reg || '',
+                    city: parsed.carDetails.city || '',
+                });
                 setCarFormOpen(false);
             }
             
@@ -1009,7 +1070,7 @@ const ServiceCart: React.FC<Props> = ({
         const subtotal = packageSubtotal;
         const couponValue = coupons.find(c => c.code === selectedCoupon)?.amountOff || 0;
         const discount = Math.min(couponValue, subtotal);
-        const pickupFee = subtotal >= 3000 ? 0 : 149;
+        const pickupFee = subtotal > 0 && subtotal < 3000 ? 149 : 0;
         const platformFee = subtotal > 0 ? 49 : 0;
         const tax = Math.round(subtotal * 0.05); // simple 5% mock tax
         const total = subtotal - discount + pickupFee + platformFee + tax;
@@ -1072,14 +1133,6 @@ const ServiceCart: React.FC<Props> = ({
         if (hour >= 8 && hour < 10) return 'Fills fast';
         return 'Good availability';
     }, [selectedSlot, timeSlots]);
-
-
-    // Map service package IDs to categories
-    const SERVICE_PACKAGE_TO_CATEGORY: Record<string, string> = {
-        'pkg-comprehensive': 'Essential Service',
-        'pkg-standard': 'Deep Detailing',
-        'pkg-care-plus': 'Care Plus',
-    };
 
     // Get service categories from selected items
     const selectedServiceCategories = useMemo(() => {
@@ -1224,7 +1277,7 @@ const ServiceCart: React.FC<Props> = ({
 
         return serviceProviders.filter(p => {
             // First check if provider has matching categories
-            const providerCategories = (p as any).serviceCategories || [];
+            const providerCategories = p.serviceCategories || [];
             const hasMatchingCategory = selectedServiceCategories.some(category => 
                 providerCategories.includes(category)
             );
@@ -1324,18 +1377,6 @@ const ServiceCart: React.FC<Props> = ({
         [websiteServicePackages, items, isParentPackageInCart],
     );
 
-    const updateQuantity = (serviceId: string, delta: number) => {
-        setItems(prev => {
-            const svcMeta = availableServicePackages.find((s) => s.id === serviceId);
-            if (svcMeta?.includedServiceId) {
-                // Included line items are binary selections; keep quantity fixed at 1.
-                return prev;
-            }
-            const next = prev.map(item => item.serviceId === serviceId ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item);
-            return next;
-        });
-    };
-
     const selectServiceForBooking = (serviceId: string) => {
         const selectedMeta =
             websiteServicePackages.find((pkg) => pkg.id === serviceId) ||
@@ -1409,10 +1450,6 @@ const ServiceCart: React.FC<Props> = ({
             }
             return [...withoutParent, { serviceId, quantity: 1 }];
         });
-    };
-
-    const removeService = (serviceId: string) => {
-        setItems(prev => prev.filter(i => i.serviceId !== serviceId));
     };
 
     const handleApplyCoupon = (code: string) => {
