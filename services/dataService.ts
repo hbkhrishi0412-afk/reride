@@ -975,7 +975,7 @@ class DataService {
     return vehicleData;
   }
 
-  async deleteVehicle(vehicleId: number): Promise<{ success: boolean, id: number }> {
+  async deleteVehicle(vehicleId: number, databaseId?: string): Promise<{ success: boolean, id: number }> {
     if (this.isDevelopment) {
       return this.deleteVehicleLocal(vehicleId);
     }
@@ -983,7 +983,10 @@ class DataService {
     try {
       const result = await this.makeApiRequest<{ success: boolean, id: number }>('/vehicles', {
         method: 'DELETE',
-        body: JSON.stringify({ id: vehicleId }),
+        body: JSON.stringify({
+          id: vehicleId,
+          ...(databaseId && String(databaseId).trim() !== '' ? { databaseId: String(databaseId).trim() } : {}),
+        }),
       });
       
       // Update local cache (use production cache key in production)
@@ -1525,7 +1528,8 @@ export const dataService = new DataService();
 export const getVehicles = () => dataService.getVehicles();
 export const addVehicle = (vehicleData: Vehicle) => dataService.addVehicle(vehicleData);
 export const updateVehicle = (vehicleData: Vehicle) => dataService.updateVehicle(vehicleData);
-export const deleteVehicle = (vehicleId: number) => dataService.deleteVehicle(vehicleId);
+export const deleteVehicle = (vehicleId: number, databaseId?: string) =>
+  dataService.deleteVehicle(vehicleId, databaseId);
 export const getUsers = () => dataService.getUsers();
 export const login = (credentials: { email: string; password: string; role?: string }) => dataService.login(credentials);
 export const register = (credentials: { name: string; email: string; password: string; mobile: string; role: string }) => dataService.register(credentials);

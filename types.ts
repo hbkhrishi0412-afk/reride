@@ -50,6 +50,8 @@ export interface VehicleDocument {
 
 export interface Vehicle {
   id: number;
+  /** Supabase `vehicles.id` (TEXT). Send on DELETE/PUT when `id` is a client-side hash of a non-numeric row id. */
+  databaseId?: string;
   category: VehicleCategory;
   make: string;
   model: string;

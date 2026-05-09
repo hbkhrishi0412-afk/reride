@@ -144,6 +144,7 @@ function supabaseRowToVehicle(row: any): Vehicle {
 
   return {
     id: vehicleId,
+    databaseId: typeof rawId === 'string' && rawId.trim() !== '' ? rawId.trim() : String(rawId ?? ''),
     category: validateCategory(row.category),
     make: row.make || '',
     model: row.model || '',
@@ -301,21 +302,24 @@ export const supabaseVehicleService = {
     return supabaseRowToVehicle(data);
   },
 
-  // Find vehicle by ID
-  async findById(id: number): Promise<Vehicle | null> {
+  /** Load by canonical TEXT primary key (matches `vehicles.id` in Supabase). */
+  async findByPrimaryKey(primaryKey: string): Promise<Vehicle | null> {
+    const pk = String(primaryKey || '').trim();
+    if (!pk) return null;
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    
-    const { data, error } = await supabase
-      .from('vehicles')
-      .select('*')
-      .eq('id', id.toString())
-      .single();
-    
+
+    const { data, error } = await supabase.from('vehicles').select('*').eq('id', pk).maybeSingle();
+
     if (error || !data) {
       return null;
     }
-    
+
     return supabaseRowToVehicle(data);
+  },
+
+  // Find vehicle by ID
+  async findById(id: number): Promise<Vehicle | null> {
+    return this.findByPrimaryKey(id.toString());
   },
 
   // Get all vehicles
@@ -449,15 +453,22 @@ export const supabaseVehicleService = {
     }
   },
 
-  // Delete vehicle
-  async delete(id: number): Promise<void> {
+  // Delete vehicle (primary key is TEXT in Supabase — use canonical `databaseId` when the numeric `id` is a client hash)
+  async delete(primaryKey: string): Promise<void> {
+    const pk = String(primaryKey || '').trim();
+    if (!pk) {
+      throw new Error('Failed to delete vehicle: missing id');
+    }
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    
-    const { error } = await supabase
-      .from('vehicles')
-      .delete()
-      .eq('id', id.toString());
-    
+
+    // Best-effort: remove conversations for this listing so FKs that lack ON DELETE SET NULL cannot block the delete.
+    const { error: convDelErr } = await supabase.from('conversations').delete().eq('vehicle_id', pk);
+    if (convDelErr && process.env.NODE_ENV !== 'production') {
+      console.warn('⚠️ Pre-delete conversation cleanup:', convDelErr.message);
+    }
+
+    const { error } = await supabase.from('vehicles').delete().eq('id', pk);
+
     if (error) {
       throw new Error(`Failed to delete vehicle: ${error.message}`);
     }
