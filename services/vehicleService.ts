@@ -302,11 +302,17 @@ const updateVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {
   return result.data!;
 };
 
-const deleteVehicleApi = async (vehicleId: number): Promise<{ success: boolean, id: number }> => {
+const deleteVehicleApi = async (
+  vehicleId: number,
+  databaseId?: string,
+): Promise<{ success: boolean, id: number }> => {
   const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
   const response = await authenticatedFetch('/api/vehicles', {
     method: 'DELETE',
-    body: JSON.stringify({ id: vehicleId }),
+    body: JSON.stringify({
+      id: vehicleId,
+      ...(databaseId && String(databaseId).trim() !== '' ? { databaseId: String(databaseId).trim() } : {}),
+    }),
   });
   const result = await handleApiResponse<{ success: boolean, id: number }>(response);
   if (!result.success) {
@@ -376,9 +382,12 @@ export const updateVehicle = async (vehicleData: Vehicle): Promise<Vehicle> => {
   return await updateVehicleLocal(vehicleData);
 };
 
-export const deleteVehicle = async (vehicleId: number): Promise<{ success: boolean, id: number }> => {
+export const deleteVehicle = async (
+  vehicleId: number,
+  databaseId?: string,
+): Promise<{ success: boolean, id: number }> => {
   if (!isDevelopment()) {
-    return await deleteVehicleApi(vehicleId);
+    return await deleteVehicleApi(vehicleId, databaseId);
   }
   return await deleteVehicleLocal(vehicleId);
 };

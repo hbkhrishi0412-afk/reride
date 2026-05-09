@@ -144,7 +144,11 @@ export async function seedVehicles(): Promise<VehicleType[]> {
   try {
     const existing = await vehicleService.findAll();
     for (const v of existing.filter(v => v.sellerEmail?.toLowerCase() === 'seller@test.com')) {
-      try { await vehicleService.delete(v.id); } catch { /* skip */ }
+      try {
+        await vehicleService.delete(v.databaseId || String(v.id));
+      } catch {
+        /* skip */
+      }
     }
   } catch { /* skip cleanup errors */ }
 

@@ -5472,40 +5472,72 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       return res.status(401).json({ success: false, reason: auth.error });
     }
     try {
-      const { id } = req.body;
-      const vehicleIdNum = typeof id === 'string' ? parseInt(id, 10) : Number(id);
-      if (!vehicleIdNum) {
-        return res.status(400).json({ success: false, reason: 'Vehicle ID is required for deletion.' });
+      const body = (req.body || {}) as { id?: unknown; databaseId?: unknown };
+      const databaseId =
+        typeof body.databaseId === 'string' && body.databaseId.trim() !== ''
+          ? body.databaseId.trim()
+          : '';
+      const idRaw = body.id;
+      const vehicleIdNum =
+        idRaw === undefined || idRaw === null || idRaw === ''
+          ? NaN
+          : typeof idRaw === 'string'
+            ? parseInt(idRaw, 10)
+            : Number(idRaw);
+
+      let vehicleToDelete: Awaited<ReturnType<typeof vehicleService.findByPrimaryKey>> = null;
+      let rowPk = '';
+
+      if (databaseId) {
+        vehicleToDelete = await vehicleService.findByPrimaryKey(databaseId);
+        if (!vehicleToDelete) {
+          return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
+        }
+        rowPk = vehicleToDelete.databaseId || databaseId;
+        if (Number.isFinite(vehicleIdNum) && vehicleIdNum > 0 && vehicleToDelete.id !== vehicleIdNum) {
+          return res.status(400).json({ success: false, reason: 'Vehicle id does not match listing.' });
+        }
+      } else if (Number.isFinite(vehicleIdNum) && vehicleIdNum > 0) {
+        vehicleToDelete = await vehicleService.findById(vehicleIdNum);
+        if (!vehicleToDelete) {
+          return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
+        }
+        rowPk = vehicleToDelete.databaseId || String(vehicleIdNum);
+      } else {
+        return res.status(400).json({
+          success: false,
+          reason: 'Vehicle ID is required for deletion (send id and optional databaseId for UUID rows).',
+        });
       }
-      
+
       if (process.env.NODE_ENV !== 'production') {
-        console.log('🔄 DELETE /vehicles - Deleting vehicle:', vehicleIdNum);
+        console.log('🔄 DELETE /vehicles - Deleting vehicle row:', rowPk);
       }
-      
-      // SECURITY FIX: Ownership Check
-      const vehicleToDelete = await vehicleService.findById(vehicleIdNum);
-      if (!vehicleToDelete) {
-        return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
-      }
-      
+
       // Normalize emails for comparison (critical for production)
-      const normalizedVehicleSellerEmail = vehicleToDelete.sellerEmail ? vehicleToDelete.sellerEmail.toLowerCase().trim() : '';
+      const normalizedVehicleSellerEmail = vehicleToDelete.sellerEmail
+        ? vehicleToDelete.sellerEmail.toLowerCase().trim()
+        : '';
       const normalizedAuthEmail = normalizeAuthActorEmail(auth);
-      if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
+      const normalizedAuthUid = auth.user?.userId ? String(auth.user.userId).toLowerCase().trim() : '';
+      const authMatchesSeller =
+        Boolean(normalizedVehicleSellerEmail) &&
+        (normalizedVehicleSellerEmail === normalizedAuthEmail ||
+          (normalizedAuthUid && normalizedVehicleSellerEmail === normalizedAuthUid));
+      if (!auth.user || (auth.user.role !== 'admin' && !authMatchesSeller)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
-      
-      await vehicleService.delete(vehicleIdNum);
-      console.log('✅ Vehicle deleted successfully from Firebase:', vehicleIdNum);
-      
-      // Verify the vehicle was deleted by querying it
-      const verifyVehicle = await vehicleService.findById(vehicleIdNum);
+
+      await vehicleService.delete(rowPk);
+      console.log('✅ Vehicle deleted successfully:', rowPk);
+
+      const verifyVehicle = await vehicleService.findByPrimaryKey(rowPk);
       if (verifyVehicle) {
         console.error('❌ Vehicle deletion verification failed - vehicle still exists in database');
       } else {
         console.log('✅ Vehicle deletion verified in database');
       }
-      
+
       return res.status(200).json({ success: true, message: 'Vehicle deleted successfully.' });
     } catch (error) {
       console.error('❌ Error deleting vehicle:', error);
@@ -6344,7 +6376,7 @@ async function seedVehicles(): Promise<VehicleType[]> {
       console.log(`🗑️ Deleting ${testVehicles.length} existing test vehicles...`);
       for (const vehicle of testVehicles) {
         try {
-          await vehicleService.delete(vehicle.id);
+          await vehicleService.delete(vehicle.databaseId || String(vehicle.id));
         } catch (deleteError) {
           console.warn(`⚠️ Failed to delete vehicle ${vehicle.id}:`, deleteError);
         }

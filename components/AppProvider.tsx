@@ -6591,7 +6591,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // Call API to delete vehicle
         const { deleteVehicle: deleteVehicleApi } = await import('../services/vehicleService');
-        const result = await deleteVehicleApi(id);
+        const result = await deleteVehicleApi(id, vehicle?.databaseId);
         
         if (result.success) {
           // Log audit entry for vehicle deletion
