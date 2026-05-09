@@ -8331,12 +8331,14 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
     // If no auth token, return empty array instead of 401 (user might not be logged in yet)
     let auth: AuthResult | null = null;
     let normalizedAuthEmail = '';
+    let normalizedAuthUserId = '';
     let isAdmin = false;
     
     if (req.method === 'GET') {
       auth = await authenticateRequestDual(req);
       if (auth.isValid && auth.user) {
         normalizedAuthEmail = normalizeAuthActorEmail(auth);
+        normalizedAuthUserId = auth.user.userId ? String(auth.user.userId).toLowerCase().trim() : '';
         isAdmin = auth.user.role === 'admin';
       }
     } else {
@@ -8350,8 +8352,14 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         });
       }
       normalizedAuthEmail = normalizeAuthActorEmail(auth);
+      normalizedAuthUserId = auth.user.userId ? String(auth.user.userId).toLowerCase().trim() : '';
       isAdmin = auth.user.role === 'admin';
     }
+    const authIdentitySet = new Set(
+      [normalizedAuthEmail, normalizedAuthUserId].map((v) => v.toLowerCase().trim()).filter(Boolean),
+    );
+    const isAuthParticipant = (participantId: string): boolean =>
+      authIdentitySet.has(String(participantId || '').toLowerCase().trim());
 
     // GET - Retrieve conversations
     if (req.method === 'GET') {
@@ -8369,7 +8377,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         if (!auth || !auth.isValid) {
           return res.status(404).json({ success: false, reason: 'Conversation not found' });
         }
-        if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
+        if (!isAdmin && !isAuthParticipant(normalizedCustomerId) && !isAuthParticipant(normalizedSellerId)) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to conversation' });
         }
         return res.status(200).json({ success: true, data: conversation });
@@ -8382,7 +8390,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         if (!auth || !auth.isValid) {
           return res.status(200).json({ success: true, data: [] });
         }
-        if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId) {
+        if (!isAdmin && !isAuthParticipant(normalizedCustomerId)) {
           return res.status(200).json({ success: true, data: [] });
         }
         conversations = await conversationService.findByCustomerId(String(customerId));
@@ -8392,7 +8400,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         if (!auth || !auth.isValid) {
           return res.status(200).json({ success: true, data: [] });
         }
-        if (!isAdmin && normalizedAuthEmail !== normalizedSellerId) {
+        if (!isAdmin && !isAuthParticipant(normalizedSellerId)) {
           return res.status(200).json({ success: true, data: [] });
         }
         // CRITICAL: Pass normalized sellerId to service for consistent matching
@@ -8436,7 +8444,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
 
       const normalizedCustomerId = String(conversationData.customerId || '').toLowerCase().trim();
       const normalizedSellerId = String(conversationData.sellerId || '').toLowerCase().trim();
-      if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
+      if (!isAdmin && !isAuthParticipant(normalizedCustomerId) && !isAuthParticipant(normalizedSellerId)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
       }
 
@@ -8484,7 +8492,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
 
       const normalizedCustomerId = String(conversation.customerId || '').toLowerCase().trim();
       const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
-      if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
+      if (!isAdmin && !isAuthParticipant(normalizedCustomerId) && !isAuthParticipant(normalizedSellerId)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
       }
 
@@ -8509,12 +8517,11 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
             },
           );
 
-          const recipientEmail =
-            normalizedAuthEmail === normalizedCustomerId ? normalizedSellerId : normalizedCustomerId;
-          const senderName =
-            normalizedAuthEmail === normalizedCustomerId
-              ? conversation.customerName || 'Customer'
-              : conversation.sellerName || 'Seller';
+          const actingAsCustomer = isAuthParticipant(normalizedCustomerId);
+          const recipientEmail = actingAsCustomer ? normalizedSellerId : normalizedCustomerId;
+          const senderName = actingAsCustomer
+            ? conversation.customerName || 'Customer'
+            : conversation.sellerName || 'Seller';
           const messageText = typeof responseMessage?.text === 'string' ? responseMessage.text : '';
           const notificationMessage =
             messageText.length > 50
@@ -8581,10 +8588,9 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         }
         
         // Create notification for the recipient (other party) so they get notified even when app is closed
-        const recipientEmail = normalizedAuthEmail === normalizedCustomerId
-          ? normalizedSellerId
-          : normalizedCustomerId;
-        const senderName = normalizedAuthEmail === normalizedCustomerId
+        const actingAsCustomer = isAuthParticipant(normalizedCustomerId);
+        const recipientEmail = actingAsCustomer ? normalizedSellerId : normalizedCustomerId;
+        const senderName = actingAsCustomer
           ? (conversation.customerName || 'Customer')
           : (conversation.sellerName || 'Seller');
         const messageText = typeof message.text === 'string' ? message.text : '';
@@ -8682,7 +8688,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
 
       const normalizedCustomerId = String(conversation.customerId || '').toLowerCase().trim();
       const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
-      if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
+      if (!isAdmin && !isAuthParticipant(normalizedCustomerId) && !isAuthParticipant(normalizedSellerId)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
       }
 
@@ -8702,8 +8708,8 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
 
       try {
         if (doClear) {
-          const clearedAsCustomer = normalizedAuthEmail === normalizedCustomerId;
-          const clearedAsSeller = normalizedAuthEmail === normalizedSellerId;
+          const clearedAsCustomer = isAuthParticipant(normalizedCustomerId);
+          const clearedAsSeller = isAuthParticipant(normalizedSellerId);
           if (!clearedAsCustomer && !clearedAsSeller && !isAdmin) {
             return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
           }
@@ -8711,9 +8717,12 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           await conversationService.clearHistoryForParticipant(String(conversation.id), role);
         } else if (threadReadBy && hasThreadReadState) {
           if (!isAdmin) {
-            const actorRole: 'customer' | 'seller' =
-              normalizedAuthEmail === normalizedCustomerId ? 'customer' : 'seller';
-            if (actorRole !== threadReadBy) {
+            const canUpdateCustomerReadState = isAuthParticipant(normalizedCustomerId);
+            const canUpdateSellerReadState = isAuthParticipant(normalizedSellerId);
+            const isAuthorizedForRequestedReadState =
+              (threadReadBy === 'customer' && canUpdateCustomerReadState) ||
+              (threadReadBy === 'seller' && canUpdateSellerReadState);
+            if (!isAuthorizedForRequestedReadState) {
               return res.status(403).json({ success: false, reason: 'Unauthorized read-state update' });
             }
           }
@@ -8758,7 +8767,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
 
       const normalizedCustomerId = String(conversation.customerId || '').toLowerCase().trim();
       const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
-      if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
+      if (!isAdmin && !isAuthParticipant(normalizedCustomerId) && !isAuthParticipant(normalizedSellerId)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation deletion' });
       }
 
