@@ -20,6 +20,8 @@ import {
     RECENTLY_VIEWED_CHANGED_EVENT,
 } from '../utils/recentlyViewed';
 import { getPopularMakes } from '../utils/popularListings';
+import { HomeLocationBanner } from './HomeLocationBanner.js';
+import { PopularCitiesChips } from './PopularCitiesChips.js';
 
 // Adds an `is-visible` class to the target element (which already has the
 // `reveal-on-scroll` class) the first time it intersects the viewport.
@@ -121,6 +123,10 @@ interface HomeProps {
     onNavigate: (view: View) => void;
     onSelectCity: (city: string) => void;
     allVehicles?: Vehicle[];
+    selectedCity?: string;
+    onBrowseAllIndia?: () => void;
+    onUseMyLocation?: (city: string, locationLabel: string) => void;
+    addToast?: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
 const Home: React.FC<HomeProps> = ({ 
@@ -136,7 +142,11 @@ const Home: React.FC<HomeProps> = ({
     recommendations,
     onSearch,
     onApplyFilters,
-    allVehicles = []
+    allVehicles = [],
+    selectedCity = '',
+    onBrowseAllIndia,
+    onUseMyLocation,
+    addToast,
 }) => {
     const { t, i18n } = useTranslation();
     const [searchQuery, setSearchQuery] = useState('');
@@ -731,6 +741,17 @@ const Home: React.FC<HomeProps> = ({
                         </button>
                     </div>
 
+                    {onBrowseAllIndia ? (
+                        <PopularCitiesChips
+                            className="hero-rise hero-rise-4 max-w-3xl mx-auto mb-5 text-left px-1"
+                            variant="light"
+                            cities={citiesWithCounts.map((c) => ({ name: c.name, count: c.cars }))}
+                            selectedCity={selectedCity}
+                            onSelectCity={onSelectCity}
+                            onBrowseAllIndia={onBrowseAllIndia}
+                        />
+                    ) : null}
+
                     {/* Budget Chips — deep-link via structured min/maxPrice filters
                         so they work even when the AI proxy is unavailable. */}
                     <div className="hero-rise hero-rise-4 flex flex-wrap items-center justify-center gap-2 mb-5 max-w-3xl mx-auto">
@@ -782,7 +803,7 @@ const Home: React.FC<HomeProps> = ({
 
                     {/* Feature Cards */}
                     <div className="hero-rise hero-rise-6 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 max-w-5xl mx-auto">
-                        {/* Card 1: 200+ Quality Checks */}
+                        {/* Card 1: Full listing details */}
                         <button
                             type="button"
                             onClick={() => onNavigate(ViewEnum.SAFETY_CENTER)}
@@ -834,7 +855,7 @@ const Home: React.FC<HomeProps> = ({
                             </p>
                         </button>
 
-                        {/* Card 2: Fixed Price */}
+                        {/* Card 2: Clear listing price */}
                         <button
                             type="button"
                             onClick={() => onNavigate(ViewEnum.USED_CARS)}
@@ -893,12 +914,12 @@ const Home: React.FC<HomeProps> = ({
                             </p>
                         </button>
 
-                        {/* Card 3: 5-Day Money Back */}
+                        {/* Card 3: Contact sellers */}
                         <button
                             type="button"
-                            onClick={() => onNavigate(ViewEnum.FAQ)}
+                            onClick={() => onNavigate(ViewEnum.USED_CARS)}
                             className="p-5 md:p-6 transition-all duration-300 hover:-translate-y-1 cursor-pointer text-left w-full"
-                            aria-label={`${t('home.card.moneyTitle')} - read policy`}
+                            aria-label={`${t('home.card.moneyTitle')} - browse listings`}
                             style={{
                                 background: 'rgba(255, 255, 255, 0.08)',
                                 backdropFilter: 'blur(14px)',
@@ -945,12 +966,12 @@ const Home: React.FC<HomeProps> = ({
                             </p>
                         </button>
 
-                        {/* Card 4: Free RC Transfer */}
+                        {/* Card 4: Inspect before you pay */}
                         <button
                             type="button"
-                            onClick={() => onNavigate(ViewEnum.FAQ)}
+                            onClick={() => onNavigate(ViewEnum.SAFETY_CENTER)}
                             className="p-5 md:p-6 transition-all duration-300 hover:-translate-y-1 cursor-pointer text-left w-full"
-                            aria-label={`${t('home.card.rcTitle')} - learn more`}
+                            aria-label={`${t('home.card.rcTitle')} - safety tips`}
                             style={{
                                 background: 'rgba(255, 255, 255, 0.08)',
                                 backdropFilter: 'blur(14px)',
@@ -1115,6 +1136,17 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             )}
+
+            {onBrowseAllIndia && onUseMyLocation ? (
+                <div className="px-4 -mt-6 mb-2 max-w-7xl mx-auto relative z-10">
+                    <HomeLocationBanner
+                        selectedCity={selectedCity}
+                        onBrowseAllIndia={onBrowseAllIndia}
+                        onUseLocation={onUseMyLocation}
+                        addToast={addToast}
+                    />
+                </div>
+            ) : null}
 
             {/* Featured Collection Section */}
             {featuredVehicles.length > 0 ? (
@@ -1407,8 +1439,10 @@ const Home: React.FC<HomeProps> = ({
                                 </span>
                                 <span className="mc-eyebrow-accent">{t('mobile.home.exploreLocation')}</span>
                             </div>
-                            <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">{t('home.cities.title')}</h2>
-                            <p className="text-gray-500 text-[15px] leading-snug">{t('mobile.home.nearYou')}</p>
+                            <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">
+                              {t('home.popularCities.label', { defaultValue: 'Popular cities' })}
+                            </h2>
+                            <p className="text-gray-500 text-[15px] leading-snug">{t('home.cities.subtitle')}</p>
                         </div>
                         <button
                             type="button"
@@ -1423,7 +1457,7 @@ const Home: React.FC<HomeProps> = ({
                     </div>
 
                     <div ref={citiesGridRef} className="reveal-on-scroll grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
-                        {topCities.slice(0, 5).map((city, index) => {
+                        {topCities.map((city, index) => {
                             const accent = getHomeMobileCityAccent(city.name);
                             const hasVehicles = city.cars > 0;
 

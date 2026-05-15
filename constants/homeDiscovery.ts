@@ -1,7 +1,7 @@
 import { VehicleCategory } from '../vehicle-category.js';
 import { CITY_MAPPING } from '../utils/cityMapping.js';
 
-/** Cities shown on home / mobile discovery rails (order preserved). */
+/** Cities shown on home / mobile discovery rails (pan-India tier-1; order from CITY_MAPPING). */
 export const HOME_DISCOVERY_CITY_ORDER = Object.keys(CITY_MAPPING);
 
 export type HomeDiscoveryCityName = string;

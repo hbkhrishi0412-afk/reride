@@ -2538,7 +2538,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                       </svg>
                     </div>
                     <h3 className="text-xl font-bold text-gray-900 mb-2">{t('listings.noVehiclesTitle')}</h3>
-                    <p className="text-gray-600 text-sm">{t('listings.noVehiclesHint')}</p>
+                    <p className="text-gray-600 text-sm">
+                      {selectedCity?.trim()
+                        ? t('listings.noVehiclesCityHint', {
+                            city: selectedCity,
+                            defaultValue: `No cars match your filters in ${selectedCity}. Try clearing filters or browse listings in another city.`,
+                          })
+                        : t('listings.noVehiclesHint')}
+                    </p>
                   </>
                 )}
               </div>
@@ -2814,7 +2821,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 ) : (
                   <>
                     <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">{t('listings.noVehiclesTitle')}</h3>
-                    <p className="text-reride-text dark:text-reride-text mt-2">{t('listings.noVehiclesHintDesktop')}</p>
+                    <p className="text-reride-text dark:text-reride-text mt-2">
+                      {selectedCity?.trim()
+                        ? t('listings.noVehiclesCityHint', {
+                            city: selectedCity,
+                            defaultValue: `No cars match your filters in ${selectedCity}. Try clearing filters or browse all listings in this city.`,
+                          })
+                        : t('listings.noVehiclesHintDesktop')}
+                    </p>
                   </>
                 )}
               </div>

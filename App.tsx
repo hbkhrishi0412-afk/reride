@@ -39,17 +39,17 @@ import {
 } from './utils/conversationParticipants';
 import { parseDeepLink } from './utils/mobileFeatures';
 import { planService } from './services/planService';
-import { saveConversationWithSync } from './services/syncService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
 import { matchesCity } from './utils/cityMapping';
-import { randomAlphanumeric, randomIntBelow } from './utils/secureRandom.js';
+import { randomIntBelow } from './utils/secureRandom.js';
 import { resolveChatCallPhone, resolveChatOtherPartyName } from './utils/chatContact';
 import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
 import { logWarn, logDebug, logError, logInfo } from './utils/logger';
 import { currentUserForLocalSessionJson } from './utils/userLocalStorageSnapshot';
 import { authenticatedFetch } from './utils/authenticatedFetch';
 import { computePageSeoMeta } from './utils/pageSeoMeta.js';
+import { openOrCreateVehicleConversation } from './utils/vehicleConversationFlow.js';
 import { RERIDE_PRICE_DROP_EVENT, type ReridePriceDropDetail } from './services/buyerService';
 // Firebase removed - using Supabase
 
@@ -425,6 +425,95 @@ const AppContent: React.FC = () => {
       n => n.recipientEmail && n.recipientEmail.toLowerCase().trim() === e,
     );
   }, [notifications, currentUser?.email]);
+
+  const handleStartVehicleChat = useCallback(
+    async (vehicle: Vehicle) => {
+      if (!currentUser) {
+        addToast('Please login to start a chat', 'info');
+        navigate(ViewEnum.LOGIN_PORTAL);
+        return;
+      }
+      const conversation = await openOrCreateVehicleConversation({
+        vehicle,
+        currentUser,
+        conversations,
+        setConversations,
+        setActiveChat,
+      });
+      if (!conversation) {
+        addToast('Unable to start chat: Seller information is missing', 'error');
+        return;
+      }
+      addToast('Chat started with seller', 'success');
+    },
+    [currentUser, conversations, setConversations, setActiveChat, addToast, navigate],
+  );
+
+  const handleBrowseAllIndia = useCallback(() => {
+    setSelectedCity('');
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('reRideSelectedCity');
+      }
+    } catch {
+      /* ignore */
+    }
+    navigate(ViewEnum.USED_CARS);
+  }, [navigate, setSelectedCity]);
+
+  const handleHomeUseMyLocation = useCallback(
+    (city: string, locationLabel: string) => {
+      setSelectedCity(city);
+      setUserLocation(locationLabel);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('reRideSelectedCity', city);
+          localStorage.setItem('reRideUserLocation', locationLabel);
+        }
+      } catch {
+        /* ignore */
+      }
+      navigate(ViewEnum.USED_CARS, { city });
+    },
+    [navigate, setSelectedCity, setUserLocation],
+  );
+
+  const handleRequestTestDrive = useCallback(
+    async (vehicle: Vehicle, details: { date: string; time: string }) => {
+      if (!currentUser) {
+        addToast('Please login to book a test drive', 'info');
+        navigate(ViewEnum.LOGIN_PORTAL);
+        return;
+      }
+      const conversation = await openOrCreateVehicleConversation({
+        vehicle,
+        currentUser,
+        conversations,
+        setConversations,
+        setActiveChat,
+      });
+      if (!conversation) {
+        addToast('Unable to send test drive request: Seller information is missing', 'error');
+        return;
+      }
+      const messageText = `Test drive request for ${vehicle.year} ${vehicle.make} ${vehicle.model} on ${details.date} at ${details.time}`;
+      await sendMessageWithType(conversation.id, messageText, 'test_drive_request', {
+        date: details.date,
+        time: details.time,
+        status: 'pending',
+      });
+      addToast('Test drive request sent to seller', 'success');
+    },
+    [
+      currentUser,
+      conversations,
+      setConversations,
+      setActiveChat,
+      sendMessageWithType,
+      addToast,
+      navigate,
+    ],
+  );
   
   // Handle service worker update notifications
   useEffect(() => {
@@ -1664,6 +1753,9 @@ const AppContent: React.FC = () => {
               userLocation={userLocation}
               onLocationChange={setUserLocation}
               addToast={addToast}
+              selectedCity={selectedCity}
+              onBrowseAllIndia={handleBrowseAllIndia}
+              onUseMyLocation={handleHomeUseMyLocation}
             />
           );
         }
@@ -1707,6 +1799,10 @@ const AppContent: React.FC = () => {
               // Pass city in navigate params — navigate(USED_CARS) without params clears the filter in AppProvider.
               navigate(ViewEnum.USED_CARS, { city });
             }}
+            selectedCity={selectedCity}
+            onBrowseAllIndia={handleBrowseAllIndia}
+            onUseMyLocation={handleHomeUseMyLocation}
+            addToast={addToast}
           />
         );
 
@@ -1853,144 +1949,8 @@ const AppContent: React.FC = () => {
                 addToast('Please login to call the seller', 'info');
                 navigate(ViewEnum.LOGIN_PORTAL);
               }}
-              onStartChat={async (vehicle) => {
-                if (process.env.NODE_ENV === 'development') {
-                  logInfo('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
-                }
-                
-                if (!currentUser) {
-                  addToast('Please login to start a chat', 'info');
-                  navigate(ViewEnum.LOGIN_PORTAL);
-                  return;
-                }
-                
-                // CRITICAL FIX: Validate sellerEmail before proceeding
-                if (!vehicle.sellerEmail) {
-                  logError('❌ Cannot start chat: vehicle.sellerEmail is missing', { vehicleId: vehicle.id });
-                  addToast('Unable to start chat: Seller information is missing', 'error');
-                  return;
-                }
-                
-                const normalizedCustomerEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
-                let conversation = normalizedCustomerEmail ? conversations.find(c => {
-                  if (!c || !c.customerId) return false;
-                  return c.vehicleId === vehicle.id && c.customerId.toLowerCase().trim() === normalizedCustomerEmail;
-                }) : undefined;
-                
-                if (!conversation) {
-                  // CRITICAL: Normalize sellerId to ensure it matches seller's email for filtering
-                  const normalizedSellerId = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
-                  
-                  // CRITICAL FIX: Ensure sellerId is not empty
-                  if (!normalizedSellerId) {
-                    logError('❌ Cannot create conversation: normalized sellerId is empty', { vehicleId: vehicle.id, sellerEmail: vehicle.sellerEmail });
-                    addToast('Unable to start chat: Seller information is invalid', 'error');
-                    return;
-                  }
-                  
-                  const newConversation = {
-                    id: `conv_${Date.now()}_${randomAlphanumeric(9)}`,
-                    customerId: currentUser.email,
-                    customerName: currentUser.name || 'Customer',
-                    sellerId: normalizedSellerId, // Use normalized (already validated above)
-                    vehicleId: vehicle.id,
-                    vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
-                    vehiclePrice: vehicle.price,
-                    messages: [],
-                    lastMessageAt: new Date().toISOString(),
-                    isReadBySeller: false,
-                    isReadByCustomer: true,
-                    isFlagged: false
-                  };
-                  
-                  if (process.env.NODE_ENV === 'development') {
-                    logInfo('🔧 Creating conversation with normalized sellerId:', {
-                      original: vehicle.sellerEmail,
-                      normalized: normalizedSellerId,
-                      vehicleId: vehicle.id,
-                      conversationId: newConversation.id
-                    });
-                  }
-                  
-                  // CRITICAL FIX: Add to local state immediately and set activeChat synchronously
-                  setConversations(prev => [...prev, newConversation]);
-                  
-                  // CRITICAL FIX: Set activeChat immediately with the new conversation
-                  // This ensures the chat widget appears right away
-                  setActiveChat(newConversation);
-                  
-                  // Persist to localStorage immediately
-                  try {
-                    localStorage.setItem('reRideActiveChat', JSON.stringify({
-                      id: newConversation.id,
-                      updatedAt: Date.now(),
-                    }));
-                  } catch (error) {
-                    logWarn('Failed to save activeChat to localStorage:', error);
-                  }
-                  
-                  // Save to Supabase with proper error handling (async, non-blocking)
-                  try {
-                    const { saveConversationToSupabase } = await import('./services/conversationService');
-                    // Try direct save first
-                    const saveResult = await saveConversationToSupabase(newConversation);
-                    
-                    if (!saveResult.success) {
-                      // Fallback to sync queue if direct save fails
-                      logWarn('⚠️ Direct save failed, using sync queue:', saveResult.error);
-                      await saveConversationWithSync(newConversation);
-                    } else {
-                      logInfo('✅ Conversation saved to Supabase:', newConversation.id);
-                      // Update with server response if it has different ID
-                      if (saveResult.data && saveResult.data.id !== newConversation.id) {
-                        const serverConv = saveResult.data;
-                        setConversations((prev) => prev.map((c) => (c.id === newConversation.id ? serverConv : c)));
-                        // Update activeChat with server response
-                        setActiveChat(serverConv);
-                        // Update localStorage with new ID
-                        try {
-                          localStorage.setItem('reRideActiveChat', JSON.stringify({
-                            id: serverConv.id,
-                            updatedAt: Date.now(),
-                          }));
-                        } catch (error) {
-                          logWarn('Failed to update activeChat in localStorage:', error);
-                        }
-                      }
-                    }
-                  } catch (error) {
-                    logError('❌ Failed to save conversation:', error);
-                    // Still continue - conversation is in local state and activeChat is set
-                    await saveConversationWithSync(newConversation);
-                  }
-                  
-                  conversation = newConversation;
-                  addToast('Chat started with seller', 'success');
-                } else {
-                  if (process.env.NODE_ENV === 'development') {
-                    logInfo('🔧 Using existing conversation:', conversation.id);
-                  }
-                  
-                  // CRITICAL FIX: Set activeChat for existing conversation
-                  setActiveChat(conversation);
-                  
-                  // Persist to localStorage
-                  try {
-                    localStorage.setItem('reRideActiveChat', JSON.stringify({
-                      id: conversation.id,
-                      updatedAt: Date.now(),
-                    }));
-                  } catch (error) {
-                    logWarn('Failed to save activeChat to localStorage:', error);
-                  }
-                  
-                  addToast('Chat started with seller', 'success');
-                }
-                
-                if (process.env.NODE_ENV === 'development') {
-                  logInfo('🔧 Setting activeChat:', conversation.id);
-                }
-              }}
+              onStartChat={handleStartVehicleChat}
+              onRequestTestDrive={handleRequestTestDrive}
               recommendations={recommendations}
               onSelectVehicle={selectVehicle}
             />
@@ -2011,144 +1971,8 @@ const AppContent: React.FC = () => {
             users={users}
             updateVehicle={updateVehicle}
             onViewSellerProfile={openSellerProfileByEmail}
-            onStartChat={async (vehicle) => {
-              if (process.env.NODE_ENV === 'development') {
-                logInfo('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
-              }
-              
-              if (!currentUser) {
-                addToast('Please login to start a chat', 'info');
-                navigate(ViewEnum.LOGIN_PORTAL);
-                return;
-              }
-              
-              // CRITICAL FIX: Validate sellerEmail before proceeding
-              if (!vehicle.sellerEmail) {
-                logError('❌ Cannot start chat: vehicle.sellerEmail is missing', { vehicleId: vehicle.id });
-                addToast('Unable to start chat: Seller information is missing', 'error');
-                return;
-              }
-              
-              const normalizedCustomerEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
-              let conversation = normalizedCustomerEmail ? conversations.find(c => {
-                if (!c || !c.customerId) return false;
-                return c.vehicleId === vehicle.id && c.customerId.toLowerCase().trim() === normalizedCustomerEmail;
-              }) : undefined;
-              
-              if (!conversation) {
-                // CRITICAL: Normalize sellerId to ensure it matches seller's email for filtering
-                const normalizedSellerId = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
-                
-                // CRITICAL FIX: Ensure sellerId is not empty
-                if (!normalizedSellerId) {
-                  logError('❌ Cannot create conversation: normalized sellerId is empty', { vehicleId: vehicle.id, sellerEmail: vehicle.sellerEmail });
-                  addToast('Unable to start chat: Seller information is invalid', 'error');
-                  return;
-                }
-                
-                const newConversation = {
-                  id: `conv_${Date.now()}_${randomAlphanumeric(9)}`,
-                  customerId: currentUser.email,
-                  customerName: currentUser.name || 'Customer',
-                  sellerId: normalizedSellerId, // Use normalized (already validated above)
-                  vehicleId: vehicle.id,
-                  vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
-                  vehiclePrice: vehicle.price,
-                  messages: [],
-                  lastMessageAt: new Date().toISOString(),
-                  isReadBySeller: false,
-                  isReadByCustomer: true,
-                  isFlagged: false
-                };
-                
-                if (process.env.NODE_ENV === 'development') {
-                  logInfo('🔧 Creating conversation with normalized sellerId:', {
-                    original: vehicle.sellerEmail,
-                    normalized: normalizedSellerId,
-                    vehicleId: vehicle.id,
-                    conversationId: newConversation.id
-                  });
-                }
-                
-                // CRITICAL FIX: Add to local state immediately and set activeChat synchronously
-                setConversations(prev => [...prev, newConversation]);
-                
-                // CRITICAL FIX: Set activeChat immediately with the new conversation
-                // This ensures the chat widget appears right away
-                setActiveChat(newConversation);
-                
-                // Persist to localStorage immediately
-                try {
-                  localStorage.setItem('reRideActiveChat', JSON.stringify({
-                    id: newConversation.id,
-                    updatedAt: Date.now(),
-                  }));
-                } catch (error) {
-                  logWarn('Failed to save activeChat to localStorage:', error);
-                }
-                
-                // Save to Supabase with proper error handling (async, non-blocking)
-                try {
-                  const { saveConversationToSupabase } = await import('./services/conversationService');
-                  // Try direct save first
-                  const saveResult = await saveConversationToSupabase(newConversation);
-                  
-                  if (!saveResult.success) {
-                    // Fallback to sync queue if direct save fails
-                    logWarn('⚠️ Direct save failed, using sync queue:', saveResult.error);
-                    await saveConversationWithSync(newConversation);
-                  } else {
-                    logInfo('✅ Conversation saved to Supabase:', newConversation.id);
-                    // Update with server response if it has different ID
-                    if (saveResult.data && saveResult.data.id !== newConversation.id) {
-                      const serverConv = saveResult.data;
-                      setConversations((prev) => prev.map((c) => (c.id === newConversation.id ? serverConv : c)));
-                      // Update activeChat with server response
-                      setActiveChat(serverConv);
-                      // Update localStorage with new ID
-                      try {
-                        localStorage.setItem('reRideActiveChat', JSON.stringify({
-                          id: serverConv.id,
-                          updatedAt: Date.now(),
-                        }));
-                      } catch (error) {
-                        logWarn('Failed to update activeChat in localStorage:', error);
-                      }
-                    }
-                  }
-                } catch (error) {
-                  logError('❌ Failed to save conversation:', error);
-                  // Still continue - conversation is in local state and activeChat is set
-                  await saveConversationWithSync(newConversation);
-                }
-                
-                conversation = newConversation;
-                addToast('Chat started with seller', 'success');
-              } else {
-                if (process.env.NODE_ENV === 'development') {
-                  logInfo('🔧 Using existing conversation:', conversation.id);
-                }
-                
-                // CRITICAL FIX: Set activeChat for existing conversation
-                setActiveChat(conversation);
-                
-                // Persist to localStorage
-                try {
-                  localStorage.setItem('reRideActiveChat', JSON.stringify({
-                    id: conversation.id,
-                    updatedAt: Date.now(),
-                  }));
-                } catch (error) {
-                  logWarn('Failed to save activeChat to localStorage:', error);
-                }
-                
-                addToast('Chat started with seller', 'success');
-              }
-              
-              if (process.env.NODE_ENV === 'development') {
-                logInfo('🔧 Setting activeChat:', conversation.id);
-              }
-            }}
+            onStartChat={handleStartVehicleChat}
+            onRequestTestDrive={handleRequestTestDrive}
             recommendations={recommendations}
             onSelectVehicle={selectVehicle}
           />

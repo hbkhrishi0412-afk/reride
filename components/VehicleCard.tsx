@@ -6,6 +6,7 @@ import { getFirstValidImage } from '../utils/imageUtils.js';
 import LazyImage from './LazyImage.js';
 import { logInfo, logError } from '../utils/logger.js';
 import { showVerifiedListingBadge } from '../utils/listingTrust.js';
+import { ListingStockBadge } from './ListingStockBadge.js';
 
 interface VehicleCardProps {
   vehicle: Vehicle;
@@ -140,9 +141,9 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
         {/* Gradient Overlay on Hover */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
         
-        {/* Premium Featured Badge - Top Left */}
-        {(showVerifiedListingBadge(vehicle) || isFeatured) && (
+        {/* Stock + optional verified / featured badges — top left */}
         <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 items-start">
+        <ListingStockBadge vehicle={vehicle} />
         {showVerifiedListingBadge(vehicle) && (
           <div className="flex items-center gap-1.5 rounded-full bg-green-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-sm">
             <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
@@ -184,7 +185,6 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
           </div>
         )}
         </div>
-        )}
         
         {/* Action Icons - Top Right (Compare & Favorite) */}
         <div className="absolute top-3 right-3 flex items-center gap-2 z-10">

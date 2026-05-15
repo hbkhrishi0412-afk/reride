@@ -795,7 +795,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (error) { logWarn('Failed to persist seller ratings:', error); }
   }, [sellerRatings]);
   const [userLocation, setUserLocationState] = useState<string>(() => {
-    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return 'Mumbai';
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return '';
     try {
       const storedLocation = localStorage.getItem('reRideUserLocation');
       if (storedLocation && storedLocation.trim().length > 0) {
@@ -805,7 +805,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (error) {
       logWarn('Failed to load user location from localStorage:', error);
     }
-    return 'Mumbai';
+    return '';
   });
   const [selectedCity, setSelectedCityState] = useState<string>(() => {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return '';
@@ -813,11 +813,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const storedCity = localStorage.getItem('reRideSelectedCity');
       if (storedCity && storedCity.trim().length > 0) {
         const n = normalizeUserLocationForStorage(storedCity);
-        if (n) return n;
-      }
-      const storedLocation = localStorage.getItem('reRideUserLocation');
-      if (storedLocation && storedLocation.trim().length > 0) {
-        const n = normalizeUserLocationForStorage(storedLocation);
         if (n) return n;
       }
     } catch (error) {

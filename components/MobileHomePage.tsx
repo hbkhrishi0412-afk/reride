@@ -26,6 +26,8 @@ import {
   getLocalRecentIds,
 } from '../utils/recentlyViewed';
 import { getPopularMakes } from '../utils/popularListings';
+import { HomeLocationBanner } from './HomeLocationBanner';
+import { PopularCitiesChips } from './PopularCitiesChips';
 
 // Adds the `is-visible` class once the element scrolls into view (one-shot).
 // Used in tandem with the `.reveal-on-scroll` CSS utility for a fade-up effect.
@@ -135,6 +137,9 @@ interface MobileHomePageProps {
   userLocation?: string;
   onLocationChange?: (location: string) => void;
   addToast?: (message: string, type: 'success' | 'error' | 'info') => void;
+  selectedCity?: string;
+  onBrowseAllIndia?: () => void;
+  onUseMyLocation?: (city: string, locationLabel: string) => void;
 }
 
 /**
@@ -164,6 +169,9 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   userLocation,
   onLocationChange,
   addToast,
+  selectedCity = '',
+  onBrowseAllIndia,
+  onUseMyLocation,
 }) => {
   const { t } = useTranslation();
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
@@ -285,6 +293,20 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
     () => allVehicles.filter(vehicle => vehicle && vehicle.status === 'published' && vehicle.listingType !== 'rental'),
     [allVehicles]
   );
+
+  const verifiedListingCount = useMemo(
+    () => publishedVehicles.filter((v) => showVerifiedListingBadge(v)).length,
+    [publishedVehicles]
+  );
+
+  const averageCustomerRating = useMemo(() => {
+    const rated = publishedVehicles.filter(
+      (v) => typeof v.averageRating === 'number' && (v.ratingCount || 0) > 0
+    );
+    if (rated.length === 0) return 0;
+    const total = rated.reduce((sum, v) => sum + Number(v.averageRating || 0), 0);
+    return total / rated.length;
+  }, [publishedVehicles]);
 
   const cities = useMemo(
     () =>
@@ -628,6 +650,17 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             </div>
           </div>
 
+          {onBrowseAllIndia ? (
+            <PopularCitiesChips
+              className="hero-rise hero-rise-4 mt-3 mb-1"
+              variant="light"
+              cities={cities.map((c) => ({ name: c.name, count: c.count }))}
+              selectedCity={selectedCity}
+              onSelectCity={onSelectCity}
+              onBrowseAllIndia={onBrowseAllIndia}
+            />
+          ) : null}
+
           {/* Budget quick-filter chips — the most-used filter on a mobile
               used-car app. Placed above brands so budget-first shoppers
               don't have to scroll. Natural-language queries are parsed by
@@ -733,10 +766,40 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             suffix={cities.filter((c) => c.count > 0).length >= 10 ? '+' : ''}
             visible={statsVisible}
           />
-          <MobileStat value={200} label={t('home.stats.checks') || 'Checks'} suffix="+" visible={statsVisible} />
-          <MobileStat value={4.8} label={t('home.stats.rating') || 'Rating'} visible={statsVisible} formatter={(n) => n.toFixed(1)} />
+          <MobileStat
+            value={verifiedListingCount}
+            label={t('home.stats.checks') || 'Verified'}
+            suffix={verifiedListingCount >= 100 ? '+' : ''}
+            visible={statsVisible}
+          />
+          {averageCustomerRating > 0 ? (
+            <MobileStat
+              value={averageCustomerRating}
+              label={t('home.stats.rating') || 'Rating'}
+              visible={statsVisible}
+              formatter={(n) => n.toFixed(1)}
+            />
+          ) : (
+            <MobileStat
+              value={publishedVehicles.filter((v) => v.isFeatured).length}
+              label={t('home.featured.badge') || 'Featured'}
+              suffix={publishedVehicles.filter((v) => v.isFeatured).length >= 10 ? '+' : ''}
+              visible={statsVisible}
+            />
+          )}
         </div>
       </div>
+
+      {onBrowseAllIndia && onUseMyLocation ? (
+        <div className="px-4 py-3 bg-white border-t border-gray-100">
+          <HomeLocationBanner
+            selectedCity={selectedCity}
+            onBrowseAllIndia={onBrowseAllIndia}
+            onUseLocation={onUseMyLocation}
+            addToast={addToast}
+          />
+        </div>
+      ) : null}
 
       {/* Continue Browsing — anon-friendly "pick up where you left off"
           strip. Only renders when the local recently-viewed list has at
@@ -1206,9 +1269,9 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               id="mobile-home-locations-heading"
               className="text-[22px] font-extrabold text-gray-900 tracking-tight leading-tight"
             >
-              {t('home.cities.title')}
+              {t('home.popularCities.label', { defaultValue: 'Popular cities' })}
             </h2>
-            <p className="text-[12.5px] text-gray-500 leading-snug">{t('mobile.home.nearYou')}</p>
+            <p className="text-[12.5px] text-gray-500 leading-snug">{t('home.cities.subtitle')}</p>
           </div>
           <button
             type="button"

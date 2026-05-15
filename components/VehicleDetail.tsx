@@ -14,7 +14,15 @@ import { getFollowersCount } from '../services/buyerEngagementService';
 import { useApp } from './AppProvider';
 import { logWarn, logDebug } from '../utils/logger';
 import { scrollAppToTop } from '../utils/scrollAppToTop';
-import { getVehicleListingUrl } from '../utils/whatsappShare.js';
+import { buildVehicleShareMessage, buildWhatsAppShareUrl, getVehicleListingUrl } from '../utils/whatsappShare.js';
+import { buildSellerWhatsAppUrl, getSellerCallPhone } from '../utils/sellerContact.js';
+import { trackPhoneView, trackShare } from '../services/listingService.js';
+import { telHrefFromRawPhone } from '../utils/numberUtils.js';
+import TestDriveModal from './TestDriveModal.js';
+import { ListingStockBadge } from './ListingStockBadge.js';
+import { ListingTrustChips } from './ListingTrustChips.js';
+import VehicleDetailTrustStrip from './VehicleDetailTrustStrip.js';
+import { isListingAvailable } from '../utils/listingStock.js';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -29,6 +37,7 @@ interface VehicleDetailProps {
   users: User[];
   onViewSellerProfile: (sellerEmail: string) => void;
   onStartChat: (vehicle: Vehicle) => void;
+  onRequestTestDrive?: (vehicle: Vehicle, details: { date: string; time: string }) => void | Promise<void>;
   recommendations: Vehicle[];
   onSelectVehicle: (vehicle: Vehicle) => void;
   updateVehicle?: (id: number, updates: Partial<Vehicle>, options?: { successMessage?: string; skipToast?: boolean }) => Promise<void>;
@@ -69,19 +78,34 @@ const SocialShareButtons: React.FC<{ vehicle: Vehicle }> = ({ vehicle }) => {
               ? t('vehicle.share.failed')
               : t('vehicle.share.copyLink');
 
+    const handleWhatsAppShare = () => {
+        const urlToShare = cleanListingUrl || (typeof window !== 'undefined' ? window.location.href : '');
+        if (!urlToShare) return;
+        const message = buildVehicleShareMessage(vehicle, urlToShare);
+        window.open(buildWhatsAppShareUrl(message), '_blank', 'noopener,noreferrer');
+        trackShare(vehicle.id, 'whatsapp');
+    };
+
     return (
-        <div className="flex-1">
+        <>
+            <button
+                type="button"
+                onClick={handleWhatsAppShare}
+                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold bg-[#25D366] text-white px-3 py-2.5 rounded-lg hover:bg-[#20BA5A] transition-colors"
+            >
+                {t('vehicle.share.whatsapp', { defaultValue: 'WhatsApp' })}
+            </button>
             <button
                 type="button"
                 onClick={handleCopyLink}
-                className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold bg-gray-100 text-gray-700 px-3 py-2.5 rounded-lg hover:bg-gray-200 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold bg-gray-100 text-gray-700 px-3 py-2.5 rounded-lg hover:bg-gray-200 transition-colors"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
                     <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
                 </svg>
                 <span>{copyLabel}</span>
             </button>
-        </div>
+        </>
     );
 };
 
@@ -276,11 +300,9 @@ const CertifiedInspectionReport: React.FC<{ report: CertifiedInspection }> = ({ 
 };
 
 
-export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: onBackToHome, comparisonList, onToggleCompare, onAddSellerRating, wishlist, onToggleWishlist, currentUser, onFlagContent, users, onViewSellerProfile, onStartChat, recommendations, onSelectVehicle, updateVehicle: updateVehicleProp }) => {
+export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: onBackToHome, comparisonList, onToggleCompare, onAddSellerRating, wishlist, onToggleWishlist, currentUser, onFlagContent, users, onViewSellerProfile, onStartChat, onRequestTestDrive, recommendations, onSelectVehicle, updateVehicle: updateVehicleProp }) => {
   const { t } = useTranslation();
-  console.log('🎯 VehicleDetail component rendering with vehicle:', vehicle);
-  console.log('🎯 Vehicle data:', { id: vehicle?.id, make: vehicle?.make, model: vehicle?.model, price: vehicle?.price });
-  
+
   // Get updateVehicle from context (hook must be called unconditionally)
   // Prefer prop over context if both are available
   const context = useApp();
@@ -324,6 +346,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState<boolean>(false);
   const [showEMICalculator, setShowEMICalculator] = useState<boolean>(false);
+  const [showTestDriveModal, setShowTestDriveModal] = useState(false);
   const ratingSuccessTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emiCalculatorRef = useRef<HTMLDivElement>(null);
   const trackedViewRef = useRef<Set<number>>(new Set());
@@ -334,6 +357,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     setProsAndCons(null);
     setIsGeneratingProsCons(false);
     setShowEMICalculator(false);
+    setShowTestDriveModal(false);
     setActiveMediaTab(vehicle.videoUrl ? 'video' : 'images');
     scrollAppToTop();
     requestAnimationFrame(() => scrollAppToTop());
@@ -408,9 +432,33 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     });
   }, [users, safeVehicle.sellerEmail]);
 
-  // Debug logging after seller is defined
-  console.log('🎯 Seller data:', seller);
-  console.log('🎯 Seller partnerBanks:', seller?.partnerBanks);
+  const callHref = useMemo(
+    () => telHrefFromRawPhone(getSellerCallPhone(safeVehicle, seller)),
+    [safeVehicle, seller],
+  );
+  const sellerWhatsAppUrl = useMemo(
+    () => buildSellerWhatsAppUrl(safeVehicle, seller),
+    [safeVehicle, seller],
+  );
+  const listingAvailable = isListingAvailable(safeVehicle);
+
+  const handleCallSeller = () => {
+    if (!currentUser) {
+      void onStartChat(safeVehicle);
+      return;
+    }
+    trackPhoneView(safeVehicle.id);
+    if (callHref) window.location.href = callHref;
+  };
+
+  const handleWhatsAppSeller = () => {
+    if (!currentUser) {
+      void onStartChat(safeVehicle);
+      return;
+    }
+    trackPhoneView(safeVehicle.id);
+    if (sellerWhatsAppUrl) window.open(sellerWhatsAppUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const filteredRecommendations = useMemo(() => {
       return recommendations.filter(rec => rec.id !== safeVehicle.id).slice(0, 3);
@@ -477,8 +525,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicle?.id]); // Only depend on the actual vehicle ID, not safeVehicle or updateVehicle
 
-  console.log('🎯 VehicleDetail about to render JSX');
-  
   // Format currency helper
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -690,6 +736,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                               {/* Left Column - Overview Content */}
                               <div className="lg:col-span-2 space-y-6">
+                                <VehicleDetailTrustStrip />
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                   <KeySpec label={t('vehicle.year')} value={safeVehicle.year} />
                                   <KeySpec
@@ -955,7 +1002,11 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             </svg>
                           </button>
                         </div>
-                        <VerificationBadge vehicle={safeVehicle} className="mt-2" />
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <ListingStockBadge vehicle={safeVehicle} size="md" />
+                          <VerificationBadge vehicle={safeVehicle} />
+                        </div>
+                        <ListingTrustChips vehicle={safeVehicle} seller={seller} className="mt-2" />
                         {/* Key Specs */}
                         <div className="flex items-center gap-1.5 text-sm text-gray-600">
                           <span className="font-semibold">{typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'} km</span>
@@ -1120,16 +1171,48 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                         </div>
 
                         {/* Fixed Action Buttons at Bottom */}
-                        <div className="pt-3 mt-auto border-t border-gray-200 flex-shrink-0">
-                          <button 
-                            onClick={() => onStartChat(safeVehicle)} 
-                            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3.5 px-4 rounded-lg text-lg transition-all transform hover:scale-[1.01] shadow-lg flex items-center justify-center gap-2"
+                        <div className="pt-3 mt-auto border-t border-gray-200 flex-shrink-0 space-y-2">
+                          {listingAvailable && (callHref || sellerWhatsAppUrl) ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              {callHref ? (
+                                <button
+                                  type="button"
+                                  onClick={handleCallSeller}
+                                  className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
+                                >
+                                  {t('vehicle.detail.call')}
+                                </button>
+                              ) : null}
+                              {sellerWhatsAppUrl ? (
+                                <button
+                                  type="button"
+                                  onClick={handleWhatsAppSeller}
+                                  className="flex items-center justify-center gap-1.5 rounded-lg bg-[#25D366] py-2.5 text-sm font-bold text-white hover:bg-[#20BA5A]"
+                                >
+                                  {t('vehicle.detail.whatsapp', { defaultValue: 'WhatsApp' })}
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => onStartChat(safeVehicle)}
+                            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg text-base transition-all flex items-center justify-center gap-2"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                             </svg>
                             {t('vehicle.detail.chatWithSeller')}
                           </button>
+                          {onRequestTestDrive && listingAvailable ? (
+                            <button
+                              type="button"
+                              onClick={() => setShowTestDriveModal(true)}
+                              className="w-full border-2 border-purple-200 text-purple-700 font-semibold py-2.5 px-4 rounded-lg text-sm hover:bg-purple-50"
+                            >
+                              {t('vehicle.detail.bookTestDrive', { defaultValue: 'Book test drive' })}
+                            </button>
+                          ) : null}
                         </div>
 
                       </div>
@@ -1158,6 +1241,16 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
 
           </div>
       </div>
+
+      {showTestDriveModal && onRequestTestDrive ? (
+        <TestDriveModal
+          onClose={() => setShowTestDriveModal(false)}
+          onSubmit={(details) => {
+            void onRequestTestDrive(safeVehicle, details);
+            setShowTestDriveModal(false);
+          }}
+        />
+      ) : null}
     </>
   );
 };
