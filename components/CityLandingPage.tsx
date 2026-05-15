@@ -95,29 +95,29 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
           Buy Used Cars in {city}
         </h2>
         <p className="text-gray-600 mb-4">
-          Looking to buy a used car in {city}? ReRide offers the best selection of pre-owned vehicles 
-          with verified sellers, detailed inspections, and transparent pricing. Browse through {cityStats.totalListings} listings 
-          and find your perfect car today. All our vehicles undergo thorough quality checks to ensure you get 
-          the best value for your money.
+          Looking to buy a used car in {city}? ReRide lists pre-owned vehicles from sellers and dealers
+          in {city}. Browse {cityStats.totalListings} listings, compare details like RC and ownership,
+          and contact sellers directly by call, chat, or WhatsApp. Always inspect the vehicle and
+          verify documents before you pay.
         </p>
         <h3 className="text-xl font-semibold text-reride-text-dark mb-3">
           Popular Car Brands in {city}
         </h3>
         <p className="text-gray-600 mb-4">
-          The most popular car brands in {city} include {cityStats.popularMakes.join(', ')}. 
-          We have a wide range of options from budget-friendly hatchbacks to luxury sedans. Every listing 
-          comes with complete vehicle history, service records, and financing options.
+          Popular brands in {city} include {cityStats.popularMakes.join(', ')}.
+          Filter by budget, fuel type, and body style to find hatchbacks, sedans, SUVs, and more.
+          Listing details vary by seller — check photos, RC, insurance, and owner count on each page.
         </p>
         <h3 className="text-xl font-semibold text-reride-text-dark mb-3">
           Why Buy from ReRide in {city}?
         </h3>
         <ul className="list-disc list-inside text-gray-600 space-y-2">
-          <li>200+ Quality Checks on every vehicle</li>
-          <li>Fixed, transparent pricing with no hidden costs</li>
-          <li>5-Day Money Back Guarantee</li>
-          <li>Free RC Transfer and documentation support</li>
-          <li>Direct contact with verified sellers</li>
-          <li>Test drive at your convenience</li>
+          <li>RC, owners, insurance, and photos on listings where provided</li>
+          <li>Clear asking price — negotiate directly with the seller</li>
+          <li>Call, WhatsApp, or in-app chat with sellers</li>
+          <li>Compare up to four vehicles side by side</li>
+          <li>Report suspicious listings to our team</li>
+          <li>Inspect in person and verify documents before payment</li>
         </ul>
       </div>
     </div>

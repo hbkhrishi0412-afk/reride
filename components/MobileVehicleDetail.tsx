@@ -12,6 +12,12 @@ import { scrollAppToTop } from '../utils/scrollAppToTop';
 import { getFollowersCount } from '../services/buyerEngagementService';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 import { MobileVehicleTrustStrip } from './MobileVehicleTrustStrip';
+import { buildSellerWhatsAppUrl } from '../utils/sellerContact.js';
+import { trackPhoneView } from '../services/listingService.js';
+import TestDriveModal from './TestDriveModal.js';
+import { ListingStockBadge } from './ListingStockBadge.js';
+import { ListingTrustChips } from './ListingTrustChips.js';
+import { isListingAvailable } from '../utils/listingStock.js';
 
 interface MobileVehicleDetailProps {
   vehicle: Vehicle;
@@ -24,6 +30,7 @@ interface MobileVehicleDetailProps {
   users: User[];
   onViewSellerProfile: (sellerEmail: string) => void;
   onStartChat: (vehicle: Vehicle) => void;
+  onRequestTestDrive?: (vehicle: Vehicle, details: { date: string; time: string }) => void | Promise<void>;
   /** Shown when user taps Call but must sign in first (hides `tel:` until logged in). */
   onRequestLogin: () => void;
   recommendations: Vehicle[];
@@ -50,6 +57,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   users = [],
   onViewSellerProfile,
   onStartChat,
+  onRequestTestDrive,
   onRequestLogin,
   recommendations = [],
   onSelectVehicle
@@ -58,6 +66,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   const [showGallery, setShowGallery] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [showEMICalculator, setShowEMICalculator] = useState(false);
+  const [showTestDriveModal, setShowTestDriveModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'specs' | 'features'>('overview');
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState(false);
@@ -142,6 +151,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     setShowGallery(false);
     setShowShareSheet(false);
     setShowEMICalculator(false);
+    setShowTestDriveModal(false);
     setProsAndCons(null);
     setIsGeneratingProsCons(false);
     scrollAppToTop();
@@ -165,6 +175,20 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   const rawCallPhone = (seller?.mobile || safeVehicle.sellerPhone || '').trim();
   const callHref = useMemo(() => telHrefFromRawPhone(rawCallPhone), [rawCallPhone]);
   const callPhoneLabel = phoneDisplayCompact(rawCallPhone);
+  const sellerWhatsAppUrl = useMemo(
+    () => buildSellerWhatsAppUrl(safeVehicle, seller),
+    [safeVehicle, seller],
+  );
+  const listingAvailable = isListingAvailable(safeVehicle);
+
+  const handleWhatsAppSeller = () => {
+    if (!currentUser) {
+      onRequestLogin();
+      return;
+    }
+    trackPhoneView(safeVehicle.id);
+    if (sellerWhatsAppUrl) window.open(sellerWhatsAppUrl, '_blank', 'noopener,noreferrer');
+  };
   const followersForSeller = safeVehicle.sellerEmail
     ? getFollowersCount(seller?.email || safeVehicle.sellerEmail)
     : 0;
@@ -225,6 +249,16 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 {t('vehicle.detail.call')}
               </button>
             )}
+            {sellerWhatsAppUrl && listingAvailable ? (
+              <button
+                type="button"
+                onClick={handleWhatsAppSeller}
+                className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl bg-[#25D366] px-2 py-3 text-sm font-semibold text-white hover:bg-[#20BA5A] active:scale-[0.99]"
+                style={{ minHeight: '52px' }}
+              >
+                {t('vehicle.detail.whatsapp', { defaultValue: 'WhatsApp' })}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={(e) => {
@@ -280,6 +314,10 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               <h1 className="text-2xl font-bold text-gray-900 mb-1">
                 {safeVehicle.year} {safeVehicle.make} {safeVehicle.model}
               </h1>
+              <div className="flex flex-wrap gap-2 mb-2">
+                <ListingStockBadge vehicle={safeVehicle} />
+                <ListingTrustChips vehicle={safeVehicle} seller={seller} />
+              </div>
               {safeVehicle.variant && (
                 <p className="text-sm text-gray-600 mb-2">{safeVehicle.variant}</p>
               )}
@@ -373,6 +411,15 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           {!currentUser && (
             <p className="text-xs text-center text-gray-500 -mt-1 mb-0">{t('vehicle.detail.signInToMessageSeller')}</p>
           )}
+          {onRequestTestDrive && listingAvailable ? (
+            <button
+              type="button"
+              onClick={() => setShowTestDriveModal(true)}
+              className="mt-3 w-full rounded-xl border-2 border-purple-200 py-2.5 text-sm font-semibold text-purple-700"
+            >
+              {t('vehicle.detail.bookTestDrive', { defaultValue: 'Book test drive' })}
+            </button>
+          ) : null}
         </div>
 
         {/* Pricing Card */}
@@ -621,6 +668,16 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           onClose={() => setShowEMICalculator(false)}
         />
       )}
+
+      {showTestDriveModal && onRequestTestDrive ? (
+        <TestDriveModal
+          onClose={() => setShowTestDriveModal(false)}
+          onSubmit={(details) => {
+            void onRequestTestDrive(safeVehicle, details);
+            setShowTestDriveModal(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 };
