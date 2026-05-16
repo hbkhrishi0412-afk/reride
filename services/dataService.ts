@@ -10,11 +10,13 @@ import { ensureCsrfToken } from '../utils/authenticatedFetch';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 import { userRolesEqual } from '../utils/user-role';
 import { currentUserForLocalSession, currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
+import { migrateVehicleListCache, normalizeVehiclesList } from '../utils/vehicleIdentity';
 
 // Unified data service that handles both local and API data consistently
 class DataService {
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  private vehicleCacheMigrated = false;
   /** Coalesce concurrent identical getVehicles() calls (mount + listeners, strict mode, etc.). */
   private vehiclesFetchInflight = new Map<string, Promise<Vehicle[]>>();
 
@@ -628,12 +630,23 @@ class DataService {
     return run;
   }
 
+  private ensureVehicleCacheMigrated(): void {
+    if (this.vehicleCacheMigrated) return;
+    migrateVehicleListCache();
+    this.vehicleCacheMigrated = true;
+  }
+
+  private finalizeVehicleList(vehicles: Vehicle[]): Vehicle[] {
+    return normalizeVehiclesList(vehicles);
+  }
+
   private async executeGetVehicles(
     includeAllStatuses: boolean,
     forceRefresh: boolean,
     useApiInDev: boolean,
     isNativeWebView: boolean
   ): Promise<Vehicle[]> {
+    this.ensureVehicleCacheMigrated();
     const nativeVehiclesPageLimit = 30;
     const maxNativeVehiclesCacheChars = 2_000_000; // ~2MB; generous limit so full dataset fits in cache
 
@@ -666,7 +679,8 @@ class DataService {
               isNativeWebView
             );
             if (Array.isArray(vehicles) && vehicles.length >= 0) {
-              this.setLocalStorageData(cacheKey, vehicles);
+              const normalized = this.finalizeVehicleList(vehicles);
+              this.setLocalStorageData(cacheKey, normalized);
               console.log(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
               if (typeof window !== 'undefined' && window.dispatchEvent) {
                 window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles } }));
@@ -683,7 +697,7 @@ class DataService {
         });
 
       console.log(`✅ Returning ${cachedVehicles.length} cached vehicles instantly`);
-      return cachedVehicles;
+      return this.finalizeVehicleList(cachedVehicles);
     }
 
     try {
@@ -756,8 +770,9 @@ class DataService {
         console.log(`📊 Vehicle status breakdown:`, statusCounts);
       }
 
-      this.setLocalStorageData(cacheKey, vehicles);
-      return vehicles;
+      const normalized = this.finalizeVehicleList(vehicles);
+      this.setLocalStorageData(cacheKey, normalized);
+      return normalized;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ Production API failed to load vehicles:', errorMessage);
@@ -778,7 +793,7 @@ class DataService {
 
       if (cachedVehicles.length > 0) {
         console.warn(`⚠️ Using stale cached data (${cachedVehicles.length} vehicles) due to API failure`);
-        return cachedVehicles;
+        return this.finalizeVehicleList(cachedVehicles);
       }
 
       console.error('❌ No cached production data available. API error details:', {
@@ -935,9 +950,19 @@ class DataService {
     }
 
     try {
+      const { getCanonicalPrimaryKey, VehicleMutationIdentityError } = await import('../utils/vehicleIdentity');
+      const databaseId = getCanonicalPrimaryKey(vehicleData);
+      if (!databaseId) {
+        throw new VehicleMutationIdentityError();
+      }
+      const putPayload: Record<string, unknown> = {
+        ...vehicleData,
+        id: vehicleData.id,
+        databaseId,
+      };
       const vehicle = await this.makeApiRequest<Vehicle>('/vehicles', {
         method: 'PUT',
-        body: JSON.stringify(vehicleData),
+        body: JSON.stringify(putPayload),
       });
       
       // Update local cache (use production cache key in production)

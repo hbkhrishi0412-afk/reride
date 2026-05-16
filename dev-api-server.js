@@ -67,7 +67,7 @@ const io = new Server(server, {
     methods: ['GET', 'POST']
   }
 });
-const PORT = 3001;
+const PORT = parseInt(process.env.VITE_LOCAL_API_PORT || '3001', 10) || 3001;
 
 /**
  * Dev parity with api/main.ts oauth-login: derive session from Supabase JWT.
@@ -3467,6 +3467,10 @@ if (io) {
 //     console.warn('⚠️ Native WebSocket server not available (this is OK for dev server):', error.message);
 //   }
 // })();
+
+app.post('/api/content-reports', (req, res) => {
+  res.json({ success: true });
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

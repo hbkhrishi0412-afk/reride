@@ -1,5 +1,6 @@
 import type { User } from '../types';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
+import { authenticatedFetch } from '../utils/authenticatedFetch';
 import { login } from './userService';
 
 /**
@@ -23,10 +24,7 @@ export async function fetchServiceProviderProfileWithAppJwt(): Promise<Record<st
   const token = getBrowserAccessTokenForApi();
   if (!token) return null;
   try {
-    const resp = await fetch('/api/service-providers', {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const resp = await authenticatedFetch('/api/service-providers');
     if (!resp.ok) return null;
     return (await resp.json()) as Record<string, unknown>;
   } catch {

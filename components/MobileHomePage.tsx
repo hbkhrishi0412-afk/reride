@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { View as ViewEnum, VehicleCategory, type Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
 import { matchesCity, primaryLocationLabel } from '../utils/cityMapping';
+import { countCityVehicles } from '../utils/storefrontDiscoveryCounts';
 import { FALLBACK_VEHICLES } from '../constants/fallback';
 import MobileVehicleCard from './MobileVehicleCard';
 import LazyImage from './LazyImage';
@@ -57,45 +58,6 @@ const useRevealOnScroll = <T extends HTMLElement>(delayMs: number = 0) => {
   return ref;
 };
 
-// Lightweight number ticker driven by requestAnimationFrame. Triggers when `start` flips true.
-const useCountUp = (end: number, start: boolean, duration: number = 1400) => {
-  const [value, setValue] = useState(0);
-  useEffect(() => {
-    if (!start) return;
-    let raf = 0;
-    const t0 = performance.now();
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - t0) / duration);
-      const eased = 1 - Math.pow(1 - p, 3);
-      setValue(end * eased);
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [end, start, duration]);
-  return value;
-};
-
-interface MobileStatProps {
-  value: number;
-  suffix?: string;
-  label: string;
-  visible: boolean;
-  formatter?: (n: number) => string;
-}
-
-const MobileStat: React.FC<MobileStatProps> = ({ value, suffix = '', label, visible, formatter }) => {
-  const current = useCountUp(value, visible);
-  const display = formatter ? formatter(current) : Math.round(current).toLocaleString('en-IN');
-  return (
-    <div className="text-center">
-      <div className="text-xl font-bold text-gray-900 tracking-tight tabular-nums leading-none">
-        {display}{suffix}
-      </div>
-      <div className="text-[11px] text-gray-500 mt-1 tracking-wide">{label}</div>
-    </div>
-  );
-};
 
 // Rough EMI estimate: 5-year loan at ~10% APR, 20% down. Display-only.
 const estimateMobileEmi = (price: number) => {
@@ -212,23 +174,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   }, []);
 
   // Reveal-on-scroll refs for major mobile sections (fade-up entrance).
-  const statsRef = useRef<HTMLDivElement | null>(null);
-  const [statsVisible, setStatsVisible] = useState(false);
-  useEffect(() => {
-    const node = statsRef.current;
-    if (!node) return;
-    const obs = new IntersectionObserver(
-      (entries) => entries.forEach((e) => {
-        if (e.isIntersecting) {
-          e.target.classList.add('is-visible');
-          setStatsVisible(true);
-        }
-      }),
-      { threshold: 0.4 }
-    );
-    obs.observe(node);
-    return () => obs.disconnect();
-  }, []);
 
   // Recently-viewed ids — populated by AppProvider.selectVehicle via
   // `utils/recentlyViewed` (localStorage). We subscribe to the in-app
@@ -294,31 +239,17 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
     [allVehicles]
   );
 
-  const verifiedListingCount = useMemo(
-    () => publishedVehicles.filter((v) => showVerifiedListingBadge(v)).length,
-    [publishedVehicles]
-  );
-
-  const averageCustomerRating = useMemo(() => {
-    const rated = publishedVehicles.filter(
-      (v) => typeof v.averageRating === 'number' && (v.ratingCount || 0) > 0
-    );
-    if (rated.length === 0) return 0;
-    const total = rated.reduce((sum, v) => sum + Number(v.averageRating || 0), 0);
-    return total / rated.length;
-  }, [publishedVehicles]);
 
   const cities = useMemo(
     () =>
       HOME_DISCOVERY_CITY_ORDER.map((name) => {
-        const client = publishedVehicles.filter((vehicle) =>
-          matchesCity(vehicle.city, name)
-        ).length;
+        const clientTotal = countCityVehicles(publishedVehicles, name);
         const apiCount = storefrontAgg?.cities[name];
+        const total = clientTotal > 0 ? clientTotal : (apiCount !== undefined ? apiCount : 0);
         return {
           name,
           abbr: getHomeDesktopCityStyle(name).abbr,
-          count: apiCount !== undefined ? apiCount : client,
+          total,
         };
       }),
     [publishedVehicles, storefrontAgg?.cities]
@@ -654,7 +585,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             <PopularCitiesChips
               className="hero-rise hero-rise-4 mt-3 mb-1"
               variant="light"
-              cities={cities.map((c) => ({ name: c.name, count: c.count }))}
+              cities={cities.map((c) => ({ name: c.name, count: c.total }))}
               selectedCity={selectedCity}
               onSelectCity={onSelectCity}
               onBrowseAllIndia={onBrowseAllIndia}
@@ -743,50 +674,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Stats Trust Strip — show honest counts. Only append "+" once the
-          numbers are meaningfully large, so a growing marketplace doesn't
-          advertise "7+ Cars, 5+ Cities" and torpedo the trust badge. */}
-      <div
-        ref={statsRef}
-        className="reveal-on-scroll bg-white border-t border-gray-100 px-4 py-4"
-      >
-        <div className="grid grid-cols-4 gap-2">
-          <MobileStat
-            value={publishedVehicles.length}
-            label={t('home.stats.cars') || 'Cars'}
-            suffix={publishedVehicles.length >= 100 ? '+' : ''}
-            visible={statsVisible}
-          />
-          <MobileStat
-            value={cities.filter((c) => c.count > 0).length || cities.length}
-            label={t('home.stats.cities') || 'Cities'}
-            suffix={cities.filter((c) => c.count > 0).length >= 10 ? '+' : ''}
-            visible={statsVisible}
-          />
-          <MobileStat
-            value={verifiedListingCount}
-            label={t('home.stats.checks') || 'Verified'}
-            suffix={verifiedListingCount >= 100 ? '+' : ''}
-            visible={statsVisible}
-          />
-          {averageCustomerRating > 0 ? (
-            <MobileStat
-              value={averageCustomerRating}
-              label={t('home.stats.rating') || 'Rating'}
-              visible={statsVisible}
-              formatter={(n) => n.toFixed(1)}
-            />
-          ) : (
-            <MobileStat
-              value={publishedVehicles.filter((v) => v.isFeatured).length}
-              label={t('home.featured.badge') || 'Featured'}
-              suffix={publishedVehicles.filter((v) => v.isFeatured).length >= 10 ? '+' : ''}
-              visible={statsVisible}
-            />
-          )}
         </div>
       </div>
 
@@ -1290,13 +1177,12 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         >
           {cities.map((city, index) => {
             const accent = getHomeMobileCityAccent(city.name);
-            const hasVehicles = city.count > 0;
 
             return (
               <button
                 key={city.name}
                 type="button"
-                aria-label={t('mobile.home.cityAria', { name: city.name, count: city.count })}
+                aria-label={t('mobile.home.cityAria', { name: city.name, count: city.total })}
                 onClick={() => onSelectCity(city.name)}
                 className="mc-card group relative flex-shrink-0 w-[156px] h-[184px] rounded-3xl bg-white overflow-hidden snap-start text-left transition-all duration-300 active:scale-[0.97] hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                 style={{
@@ -1413,7 +1299,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                     </svg>
                   </div>
 
-                  {hasVehicles ? (
+                  {city.total > 0 ? (
                     <span
                       className="inline-flex items-center gap-1 self-start px-2 py-0.5 rounded-full text-[11px] font-bold"
                       style={{ backgroundColor: accent.soft, color: accent.solid }}
@@ -1423,7 +1309,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                         style={{ backgroundColor: accent.solid }}
                         aria-hidden="true"
                       />
-                      {t('mobile.home.cityAvailable', { count: city.count })}
+                      {t('mobile.home.cityAvailable', { count: city.total })}
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 self-start px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-500">

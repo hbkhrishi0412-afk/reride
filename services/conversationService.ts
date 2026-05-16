@@ -233,17 +233,14 @@ export async function getConversationByIdFromSupabase(
     const response = await authenticatedFetch(
       `/api/conversations?conversationId=${encodeURIComponent(id)}`,
     );
-    if (response.status === 404) {
-      return { success: false, error: 'Not found' };
-    }
-    const parsed = await handleApiResponse<{ data?: Conversation; success?: boolean }>(response);
+    const parsed = await handleApiResponse<{ data?: Conversation | null; success?: boolean }>(response);
     if (!parsed.success || !parsed.data) {
       return { success: false, error: parsed.reason || parsed.error || 'Failed to load conversation' };
     }
-    const body = parsed.data as { data?: Conversation };
+    const body = parsed.data as { data?: Conversation | null };
     const conv = body?.data;
     if (!conv || typeof conv !== 'object') {
-      return { success: false, error: 'Invalid conversation payload' };
+      return { success: false, error: 'Not found' };
     }
     return { success: true, data: conv as Conversation };
   } catch (error) {

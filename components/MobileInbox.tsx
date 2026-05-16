@@ -12,7 +12,7 @@ import { isOfferChatMessage } from '../utils/isOfferChatMessage';
 import { uploadImage, uploadChatAudio } from '../services/imageUploadService';
 import { ChatMessageImage } from './ChatMessageImage';
 import { ChatMessageVoice } from './ChatMessageVoice';
-import ReadReceiptIcon from './ReadReceiptIcon';
+import ReadReceiptIcon, { OfferMessage, TestDriveMessage } from './ReadReceiptIcon';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 
 interface MobileInboxProps {
@@ -35,6 +35,11 @@ interface MobileInboxProps {
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
+  onTestDriveResponse?: (
+    conversationId: string,
+    messageId: number,
+    newStatus: 'confirmed' | 'rejected',
+  ) => void;
   currentUser: User | null;
   /** Customer inbox vs seller inbox (buyer threads). */
   inboxRole?: 'customer' | 'seller';
@@ -77,6 +82,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   onMarkMessagesAsRead,
   onFlagContent,
   onOfferResponse,
+  onTestDriveResponse,
   currentUser,
   inboxRole = 'customer',
   onNavigate,
@@ -528,8 +534,10 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
             const isUser =
               inboxRole === 'customer' ? msg.sender === 'user' : msg.sender === 'seller';
             const isOffer = isOfferChatMessage(msg);
+            const isTestDrive = msg.type === 'test_drive_request';
             const isImage = msg.type === 'image' && Boolean(msg.payload?.imageUrl);
             const isVoice = msg.type === 'voice' && Boolean(msg.payload?.audioUrl);
+            const viewerRole = inboxRole === 'seller' ? 'seller' : 'customer';
 
             return (
               <div
@@ -555,19 +563,30 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                       : 'bg-[#E4E6EB] text-gray-900 rounded-[18px] rounded-bl-[4px]'
                   }`}
                 >
-                  {isOffer && (
-                    <div
-                      className={`mb-1.5 p-2 rounded-xl text-left ${
-                        isUser ? 'bg-white/15' : 'bg-black/[0.06]'
-                      }`}
-                    >
-                      <p className="text-[13px] font-semibold">
-                        Offer: ₹
-                        {(msg.payload?.offerPrice ?? msg.payload?.price ?? 0).toLocaleString('en-IN')}
-                      </p>
-                      {msg.payload?.message && (
-                        <p className="text-[13px] mt-1 opacity-90">{msg.payload.message}</p>
-                      )}
+                  {isOffer && selectedConv && (
+                    <div className="mb-1.5">
+                      <OfferMessage
+                        msg={msg}
+                        currentUserRole={viewerRole}
+                        listingPrice={selectedConv.vehiclePrice}
+                        onRespond={(messageId, response, counterPrice) =>
+                          onOfferResponse(selectedConv.id, messageId, response, counterPrice)
+                        }
+                      />
+                    </div>
+                  )}
+                  {isTestDrive && selectedConv && (
+                    <div className="mb-1.5">
+                      <TestDriveMessage
+                        msg={msg}
+                        currentUserRole={viewerRole}
+                        onRespond={
+                          onTestDriveResponse
+                            ? (messageId, response) =>
+                                onTestDriveResponse(selectedConv.id, messageId, response)
+                            : undefined
+                        }
+                      />
                     </div>
                   )}
                   {isImage && msg.payload?.imageUrl && (

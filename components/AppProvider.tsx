@@ -32,12 +32,26 @@ import {
   updateSupportTicketInSupabase,
 } from '../services/supportTicketService';
 import { dataService } from '../services/dataService';
-import { getAuthHeaders, refreshAuthToken, resetAuthFetchStateAfterLogout } from '../utils/authenticatedFetch';
+import {
+  authenticatedFetch,
+  getAuthHeaders,
+  refreshAuthToken,
+  resetAuthFetchStateAfterLogout,
+} from '../utils/authenticatedFetch';
 import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
+import {
+  buildVehicleMutationBody,
+  migrateVehicleListCache,
+  normalizeVehicleIdentity,
+  normalizeVehiclesList,
+  vehicleMissingCanonicalId,
+  VehicleMutationIdentityError,
+} from '../utils/vehicleIdentity';
+import { resolveVehicleFromApi } from '../services/vehicleIdentityService';
 import { randomAlphanumeric, randomIntBelow } from '../utils/secureRandom.js';
 import { clearRememberMeState } from '../utils/rememberMe';
 import { deduplicateRequest } from '../utils/requestDeduplication';
@@ -152,17 +166,18 @@ function scheduleCapacitorPostLoginUi(fn: () => void): void {
  * Admins always take the server result so bulk deletes stay correct.
  */
 function mergeVehicleCatalog(prev: Vehicle[], incoming: Vehicle[], isAdmin: boolean): Vehicle[] {
-  if (!Array.isArray(incoming)) return Array.isArray(prev) ? prev : [];
-  if (incoming.length === 0) return prev.length > 0 ? prev : [];
-  if (prev.length === 0 || incoming.length >= prev.length) return incoming;
-  if (isAdmin) return incoming;
-  if (prev.length >= 5 && incoming.length <= 2) {
+  const normPrev = normalizeVehiclesList(Array.isArray(prev) ? prev : []);
+  const normIncoming = normalizeVehiclesList(Array.isArray(incoming) ? incoming : []);
+  if (normIncoming.length === 0) return normPrev.length > 0 ? normPrev : [];
+  if (normPrev.length === 0 || normIncoming.length >= normPrev.length) return normIncoming;
+  if (isAdmin) return normIncoming;
+  if (normPrev.length >= 5 && normIncoming.length <= 2) {
     console.warn(
-      `⚠️ Skipping vehicle state shrink (${incoming.length} vs ${prev.length} cached) — likely partial API response.`
+      `⚠️ Skipping vehicle state shrink (${normIncoming.length} vs ${normPrev.length} cached) — likely partial API response.`
     );
-    return prev;
+    return normPrev;
   }
-  return incoming;
+  return normIncoming;
 }
 
 interface VehicleUpdateOptions {
@@ -2222,6 +2237,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser?.role, setVehicles, addToast, t]);
 
+  const sellerIdentityHealRef = useRef(false);
+  useEffect(() => {
+    if (sellerIdentityHealRef.current) return;
+    if (!currentUser?.email) return;
+    if (currentUser.role !== 'seller') return;
+    const email = currentUser.email.toLowerCase().trim();
+    const mine = vehicles.filter(
+      (v) => v?.sellerEmail && v.sellerEmail.toLowerCase().trim() === email,
+    );
+    if (mine.length === 0) return;
+    if (!mine.some(vehicleMissingCanonicalId)) return;
+    sellerIdentityHealRef.current = true;
+    void refreshVehicles();
+  }, [currentUser?.email, currentUser?.role, vehicles, refreshVehicles]);
+
   // Auto-navigate to appropriate dashboard after login/registration
   // This ensures the view is set correctly even if state updates are async
   useEffect(() => {
@@ -2537,6 +2567,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // CRITICAL FIX: Set loading to false immediately on mount to allow UI to render
   // Data will load in background and update the UI when ready
   useEffect(() => {
+    migrateVehicleListCache();
     // Set loading to false immediately so UI can render
     // This prevents the app from being stuck in loading state
     setIsLoading(false);
@@ -2579,7 +2610,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const cachedVehicles = JSON.parse(cachedVehiclesJson);
               if (Array.isArray(cachedVehicles) && cachedVehicles.length > 0) {
                 // Show cached vehicles INSTANTLY - don't wait for API
-                setVehicles(cachedVehicles);
+                setVehicles(normalizeVehiclesList(cachedVehicles));
                 setVehiclesCatalogReady(true);
                 // PERFORMANCE: Recommendations are now computed via useMemo, no need to set
                 setIsLoading(false); // Stop loading immediately
@@ -4652,9 +4683,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateVehicleHandler = useCallback(async (id: number, updates: Partial<Vehicle>, options: VehicleUpdateOptions = {}) => {
     // Prevent duplicate updates for the same vehicle
     if (updatingVehiclesRef.current.has(id)) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('⏸️ Update already in progress for vehicle:', id);
-      }
+      addToast('Update already in progress. Please wait.', 'info');
       return;
     }
 
@@ -4662,16 +4691,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Mark vehicle as being updated
       updatingVehiclesRef.current.add(id);
 
-      const vehicleToUpdate = Array.isArray(vehicles) ? vehicles.find(v => v.id === id) : undefined;
+      let vehicleToUpdate = Array.isArray(vehicles) ? vehicles.find(v => v.id === id) : undefined;
       if (!vehicleToUpdate) {
         updatingVehiclesRef.current.delete(id);
         addToast(t('toast.vehicleNotFound'), 'error');
         return;
       }
 
-      const updatedVehicle = { ...vehicleToUpdate, ...updates };
+      vehicleToUpdate = normalizeVehicleIdentity(vehicleToUpdate);
+      if (!vehicleToUpdate.databaseId?.trim()) {
+        const recovered = await resolveVehicleFromApi(id);
+        if (recovered) {
+          vehicleToUpdate = recovered;
+          setVehicles((prev) =>
+            Array.isArray(prev)
+              ? prev.map((v) => (v && v.id === id ? { ...v, ...recovered } : v))
+              : [recovered],
+          );
+        }
+      }
+
+      const mergedForApi = normalizeVehicleIdentity({ ...vehicleToUpdate, ...updates });
+      if (!mergedForApi.databaseId?.trim()) {
+        throw new VehicleMutationIdentityError();
+      }
+
       const { updateVehicle: updateVehicleApi } = await import('../services/vehicleService');
-      const result = await updateVehicleApi(updatedVehicle);
+      const result = normalizeVehicleIdentity(await updateVehicleApi(mergedForApi));
 
       setVehicles(prev =>
         Array.isArray(prev) ? prev.map(vehicle => (vehicle && vehicle.id === id ? result : vehicle)) : []
@@ -4705,10 +4751,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.log('✅ Vehicle updated via API:', result);
       }
     } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : t('toast.vehicleUpdateFailed');
       if (process.env.NODE_ENV === 'development') {
         console.error('❌ Failed to update vehicle:', error);
       }
-      addToast(t('toast.vehicleUpdateFailed'), 'error');
+      addToast(message, 'error');
     } finally {
       // Always remove from updating set, even if there was an error
       updatingVehiclesRef.current.delete(id);
@@ -5103,7 +5153,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const { authenticatedFetch } = await import('../utils/authenticatedFetch');
           const response = await authenticatedFetch('/api/vehicles?action=feature', {
             method: 'POST',
-            body: JSON.stringify({ vehicleId })
+            body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles)),
           });
 
           const responseText = await response.text();
@@ -5324,11 +5374,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const defaultPassword = `TempPass${randomAlphanumeric(10)}`;
             
             // Create user via API register endpoint
-            const response = await fetch('/api/users', {
+            const { publicApiFetch } = await import('../utils/apiFetch');
+            const response = await publicApiFetch('/api/users', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
               body: JSON.stringify({
                 action: 'register',
                 email: userData.email,
@@ -5357,11 +5405,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (userData.dealershipName || userData.bio || userData.subscriptionPlan || 
                 userData.isVerified !== undefined || userData.location) {
               try {
-                const updateResponse = await fetch('/api/users', {
+                const updateResponse = await authenticatedFetch('/api/users', {
                   method: 'PUT',
-                  headers: {
-                    ...getAuthHeaders(),
-                  },
                   body: JSON.stringify({
                     email: userData.email,
                     ...(userData.dealershipName && { dealershipName: userData.dealershipName }),
@@ -6208,9 +6253,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Best-effort: also notify the server so the report survives cross-device.
       // Endpoint may not exist in all environments; we swallow 404/network errors.
       try {
-        void fetch('/api/content-reports', {
+        void authenticatedFetch('/api/content-reports', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(getAuthHeaders() || {}) },
           body: JSON.stringify({
             reportedBy: currentUser?.email || 'anonymous',
             targetType: type,

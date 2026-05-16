@@ -38,14 +38,8 @@ button, a, input, select {
   border-radius: 1rem;
   overflow: hidden;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
   content-visibility: auto;
   contain-intrinsic-size: 0 380px;
-}
-
-.vehicle-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
 .vehicle-image {

@@ -3,6 +3,8 @@
  * Monitors MongoDB connection health and provides status updates
  */
 
+import { publicApiFetch } from './apiFetch';
+
 export interface ConnectionHealth {
   status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
   lastCheck: number;
@@ -27,13 +29,12 @@ export async function checkConnectionHealth(forceRefresh = false): Promise<Conne
   const startTime = Date.now();
   
   try {
-    const response = await fetch('/api/db-health', {
+    const response = await publicApiFetch('/api/db-health', {
       method: 'GET',
       headers: {
-        'Accept': 'application/json'
+        Accept: 'application/json',
       },
-      // Add timeout to prevent hanging
-      signal: AbortSignal.timeout(10000) // 10 second timeout
+      signal: AbortSignal.timeout(10000),
     });
 
     const responseTime = Date.now() - startTime;

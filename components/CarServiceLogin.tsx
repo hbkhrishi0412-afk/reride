@@ -124,9 +124,9 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
 
       // Prefer server-side registration: Supabase client signUp often fails with
       // "Database error saving new user" when auth DB triggers conflict with public.users.
-      const registerResp = await fetch('/api/service-providers/register', {
+      const { publicApiFetch } = await import('../utils/apiFetch');
+      const registerResp = await publicApiFetch('/api/service-providers/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           email,

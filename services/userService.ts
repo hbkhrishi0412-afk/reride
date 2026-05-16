@@ -472,12 +472,11 @@ const getUsersApi = async (role?: 'seller' | 'customer' | 'admin' | 'service_pro
     });
     return handleResponse(response);
   } catch (error) {
-    // If authenticatedFetch fails, try regular fetch (for development)
-    // For public roles, use regular fetch since it's public access
+    const { publicApiFetch } = await import('../utils/apiFetch');
     const url = role ? `/api/users?role=${role}` : '/api/users';
-    const response = await fetch(url, {
-      headers: isPublicRole ? {} : getAuthHeader(),
-    });
+    const response = isPublicRole
+      ? await publicApiFetch(url)
+      : await authenticatedFetch(url);
     return handleResponse(response);
   }
 };

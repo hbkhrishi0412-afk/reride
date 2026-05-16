@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ChatMessage, User } from '../types';
 
 interface ReadReceiptIconProps {
@@ -269,5 +270,80 @@ export const OfferMessage: React.FC<{
                 />
             )}
         </>
+    );
+};
+
+export const TestDriveMessage: React.FC<{
+    msg: ChatMessage;
+    currentUserRole: User['role'];
+    onRespond?: (messageId: number, response: 'confirmed' | 'rejected') => void;
+}> = ({ msg, currentUserRole, onRespond }) => {
+    const { t } = useTranslation();
+    const { date, time, status } = msg.payload || {};
+    const isSellerRecipient = currentUserRole === 'seller' && msg.sender === 'user';
+    const statusNorm = (status ?? 'pending').toString().trim().toLowerCase();
+    const showActions =
+        isSellerRecipient && !!onRespond && (statusNorm === 'pending' || statusNorm === '');
+
+    const statusInfo = useMemo(
+        (): Record<string, { text: string; color: string }> => ({
+            pending: { text: t('chat.testDrive.status.pending'), color: 'bg-yellow-100 text-yellow-800' },
+            confirmed: { text: t('chat.testDrive.status.confirmed'), color: 'bg-green-100 text-green-800' },
+            rejected: { text: t('chat.testDrive.status.declined'), color: 'bg-red-100 text-red-800' },
+        }),
+        [t],
+    );
+    const statusDisplay = statusInfo[statusNorm] ?? statusInfo.pending;
+
+    return (
+        <div
+            className="relative z-[1] p-3 border-l-4 border-purple-400 rounded-r-lg bg-purple-50/80"
+            style={{ pointerEvents: 'auto', touchAction: 'manipulation' }}
+        >
+            <div className="flex justify-between items-start gap-2">
+                <div className="min-w-0">
+                    <p className="font-semibold text-sm text-gray-900">{t('chat.testDrive.request')}</p>
+                    {(date || time) && (
+                        <p className="text-sm text-gray-700 mt-1">
+                            {date && <span>{date}</span>}
+                            {date && time && <span> · </span>}
+                            {time && <span>{time}</span>}
+                        </p>
+                    )}
+                    {msg.text && (
+                        <p className="text-xs text-gray-600 mt-1 break-words">{msg.text}</p>
+                    )}
+                </div>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${statusDisplay.color}`}>
+                    {statusDisplay.text}
+                </span>
+            </div>
+            {showActions && (
+                <div className="mt-3 pt-3 border-t border-purple-200 flex gap-2">
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onRespond(msg.id, 'confirmed');
+                        }}
+                        className="flex-1 text-sm bg-green-500 text-white font-bold py-2 px-3 rounded-md active:scale-[0.98]"
+                    >
+                        {t('chat.testDrive.confirm')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onRespond(msg.id, 'rejected');
+                        }}
+                        className="flex-1 text-sm bg-red-500 text-white font-bold py-2 px-3 rounded-md active:scale-[0.98]"
+                    >
+                        {t('chat.testDrive.decline')}
+                    </button>
+                </div>
+            )}
+        </div>
     );
 };

@@ -17,6 +17,14 @@ export default defineConfig(({ mode }) => {
     env.VITE_LOCAL_API_PORT || process.env.VITE_LOCAL_API_PORT || '3001'
   ).replace(/^:/, '')
 
+  const mobileLocalDev =
+    env.VITE_MOBILE_LOCAL_DEV === 'true' && mode === 'development'
+  const injectedApiOrigin = mobileLocalDev
+    ? `http://10.0.2.2:${localApiPort}`
+    : env.VITE_API_URL
+      ? String(env.VITE_API_URL).replace(/\/+$/, '')
+      : 'https://www.reride.co.in'
+
   return {
   base: capacitor ? './' : '/',
   define: {
@@ -24,6 +32,16 @@ export default defineConfig(({ mode }) => {
     __RERIDE_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   plugins: [
+    {
+      name: 'reride-inject-api-origin',
+      transformIndexHtml(html) {
+        if (!capacitor && mode !== 'development') return html
+        const tag = `<script>window.__RERIDE_API_ORIGIN__=${JSON.stringify(
+          capacitor || mobileLocalDev ? injectedApiOrigin : '',
+        )};</script>`
+        return html.replace('<script src="/reride-boot.js"></script>', `${tag}\n    <script src="/reride-boot.js"></script>`)
+      },
+    },
     {
       name: 'reride-debug-nav-log',
       configureServer(server) {

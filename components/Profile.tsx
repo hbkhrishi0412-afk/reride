@@ -1401,10 +1401,9 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                     onClick={async () => {
                       if (!window.confirm('Are you sure? Your profile data will be permanently anonymized and you will be logged out.')) return;
                       try {
-                        const res = await fetch('/api/users', {
+                        const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+                        const res = await authenticatedFetch('/api/users', {
                           method: 'POST',
-                          headers: getAuthHeaders(),
-                          credentials: 'include',
                           body: JSON.stringify({ action: 'request-data-deletion' }),
                         });
                         const data = await res.json();

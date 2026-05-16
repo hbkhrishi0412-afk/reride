@@ -99,7 +99,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   return (
     <div 
       onClick={handleCardClick}
-      className="group cursor-pointer bg-white dark:bg-gray-800 overflow-hidden flex flex-col rounded-2xl border border-gray-100 dark:border-gray-700"
+      className="cursor-pointer bg-white dark:bg-gray-800 overflow-hidden flex flex-col rounded-2xl border border-gray-100 dark:border-gray-700 shadow-md"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -109,38 +109,19 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
       }}
       aria-label={t('vehicle.card.viewDetailsAria', { make: vehicle.make, model: vehicle.model })}
       data-vehicle-id={vehicle.id}
-      style={{
-        fontFamily: "'Poppins', sans-serif",
-        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-      }}
+      style={{ fontFamily: "'Poppins', sans-serif" }}
       data-testid="vehicle-card"
-      onMouseEnter={(e) => {
-        void import('./VehicleDetail.js');
-        void import('./MobileVehicleDetail.js');
-        e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
-        e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
-        e.currentTarget.style.borderColor = '#1E88E5';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-        e.currentTarget.style.transform = 'translateY(0) scale(1)';
-        e.currentTarget.style.borderColor = '';
-      }}
     >
       {/* Premium Image Section - Top 50-60% of card */}
       <div className="relative overflow-hidden flex-shrink-0 bg-gradient-to-br from-gray-100 to-gray-200" style={{ height: '55%', minHeight: '200px' }}>
         <LazyImage
           src={getFirstValidImage(vehicle.images, vehicle.id)}
           alt={`${vehicle.make} ${vehicle.model}`}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+          className="w-full h-full object-cover"
           width={800}
           quality={80}
           data-testid="vehicle-image"
         />
-        {/* Gradient Overlay on Hover */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-        
         {/* Stock + optional verified / featured badges — top left */}
         <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 items-start">
         <ListingStockBadge vehicle={vehicle} />

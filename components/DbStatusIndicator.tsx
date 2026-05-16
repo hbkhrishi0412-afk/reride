@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authenticatedFetch } from '../utils/authenticatedFetch';
 
 type DbStatus = 'checking' | 'connected' | 'error';
 
@@ -8,7 +9,7 @@ const DbStatusIndicator: React.FC = () => {
     useEffect(() => {
         const checkDbStatus = async () => {
             try {
-                const response = await fetch('/api/admin?action=health');
+                const response = await authenticatedFetch('/api/admin?action=health');
                 if (response.ok) {
                     // Check content type before parsing JSON
                     const contentType = response.headers.get('content-type');

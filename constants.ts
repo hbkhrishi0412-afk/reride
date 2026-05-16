@@ -117,27 +117,8 @@ export async function getMockUsers(): Promise<User[]> {
             
             const data = await response.json();
             return Array.isArray(data) ? data : (data.users || []);
-        } catch (authError) {
-            // If authenticatedFetch fails, try regular fetch with auth headers
-            try {
-                const { getAuthHeaders } = await import('./utils/authenticatedFetch');
-                const response = await fetch('/api/users', {
-                    headers: getAuthHeaders()
-                });
-                
-                if (!response.ok) {
-                    if (response.status === 401) {
-                        return getFallbackUsers();
-                    }
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const data = await response.json();
-                return Array.isArray(data) ? data : (data.users || []);
-            } catch (fetchError) {
-                // If all else fails, return fallback
-                return getFallbackUsers();
-            }
+        } catch {
+            return getFallbackUsers();
         }
     } catch (error) {
         console.error('Error fetching users:', error);
@@ -195,7 +176,8 @@ export const MOCK_USERS = getMockUsers;
 // Fetch FAQs from Supabase API
 export async function getMockFAQs(): Promise<FAQItem[]> {
     try {
-        const response = await fetch('/api/faqs');
+        const { publicApiFetch } = await import('./utils/apiFetch');
+        const response = await publicApiFetch('/api/faqs');
         const data = await response.json();
         return data.faqs || [];
     } catch (error) {
@@ -400,7 +382,8 @@ export const MOCK_FAQS = getMockFAQs;
 // Fetch Support Tickets from Supabase API
 export async function getMockSupportTickets(): Promise<SupportTicket[]> {
     try {
-        const response = await fetch('/api/support-tickets');
+        const { authenticatedFetch } = await import('./utils/authenticatedFetch');
+        const response = await authenticatedFetch('/api/support-tickets');
         const data = await response.json();
         return data.tickets || [];
     } catch (error) {
@@ -505,7 +488,8 @@ const generateMockVehicles = (count: number): Vehicle[] => {
 // Fetch Vehicles from Supabase API
 export async function getMockVehicles(): Promise<Vehicle[]> {
     try {
-        const response = await fetch('/api/vehicles');
+        const { publicApiFetch } = await import('./utils/apiFetch');
+        const response = await publicApiFetch('/api/vehicles');
         const data = await response.json();
         return data.vehicles || [];
     } catch (error) {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { isCapacitorNative } from '../utils/apiConfig';
 
 export type MobileUiDetection = { isMobileApp: boolean; isMobile: boolean };
 
@@ -18,9 +19,7 @@ export function computeMobileUiState(): MobileUiDetection {
       (window.navigator as any).standalone || // iOS
       document.referrer.includes('android-app://'); // Android
 
-    const isCapacitorNative =
-      typeof (window as any).Capacitor !== 'undefined' &&
-      (window as any).Capacitor?.isNativePlatform?.() === true;
+    const isNativeAppShell = isCapacitorNative();
 
     const checkMobile =
       /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
@@ -28,7 +27,7 @@ export function computeMobileUiState(): MobileUiDetection {
       'ontouchstart' in window;
 
     const isMobileBrowser = checkMobile && !isStandalone;
-    const shouldShowMobileUI = isCapacitorNative || isStandalone || isMobileBrowser;
+    const shouldShowMobileUI = isNativeAppShell || isStandalone || isMobileBrowser;
 
     return { isMobileApp: shouldShowMobileUI, isMobile: checkMobile };
   } catch {
