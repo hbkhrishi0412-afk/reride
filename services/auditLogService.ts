@@ -4,6 +4,19 @@ import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFet
 const AUDIT_LOG_STORAGE_KEY = 'reRideAuditLog';
 const MAX_LOCAL_ENTRIES = 200;
 
+/** Audit log API is admin-only; skip remote calls for other roles to avoid 403 console noise. */
+const isCurrentUserAdmin = (): boolean => {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    const raw = localStorage.getItem('reRideCurrentUser');
+    if (!raw) return false;
+    const user = JSON.parse(raw) as { role?: string };
+    return user?.role === 'admin';
+  } catch {
+    return false;
+  }
+};
+
 export const getAuditLog = (): AuditLogEntry[] => {
   try {
     if (typeof window === 'undefined') return [];
@@ -114,6 +127,9 @@ export const fetchAuditLog = async (limit = 500): Promise<AuditLogEntry[]> => {
 export const persistAuditEntry = async (
   entry: AuditLogEntry | AuditLogEntry[],
 ): Promise<void> => {
+  if (!isCurrentUserAdmin()) {
+    return;
+  }
   try {
     const body = Array.isArray(entry) ? { entries: entry } : entry;
     await authenticatedFetch('/api/audit-log', {

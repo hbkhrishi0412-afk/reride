@@ -222,9 +222,9 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
                   console.warn('Failed to save safety report:', e);
                 }
                 try {
-                  void fetch('/api/content-reports', {
+                  void import('../utils/authenticatedFetch').then(({ authenticatedFetch }) =>
+                    authenticatedFetch('/api/content-reports', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       reportedBy: sellerEmail || 'anonymous',
                       targetType: type,
@@ -232,7 +232,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
                       reason: reason || 'No reason provided',
                       createdAt: new Date().toISOString(),
                     }),
-                  }).catch(() => { /* ignore network errors */ });
+                  })).catch(() => { /* ignore network errors */ });
                 } catch { /* ignore */ }
               }}
               onOfferResponse={onOfferResponse}

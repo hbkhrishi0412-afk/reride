@@ -442,9 +442,10 @@ export const authenticatedFetch = async (
 
     // Capacitor / cross-origin WebView: omit cookies — credentialed cross-origin CORS often fails preflight.
     // Same-origin web (e.g. www → /api on Vercel) keeps credentials: include for CSRF cookies when needed.
-    const credentialsMode: RequestCredentials =
-      fetchOptions.credentials ??
-      (omitCredentials ? 'omit' : 'include');
+    // Never let callers force credentialed cross-origin fetches on Capacitor (breaks CORS preflight).
+    const credentialsMode: RequestCredentials = omitCredentials
+      ? 'omit'
+      : (fetchOptions.credentials ?? 'include');
 
     // First attempt - wrap in try-catch to handle network errors
     let response: Response;

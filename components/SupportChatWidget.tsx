@@ -199,7 +199,11 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
       const userId = currentUser?.email || sessionId;
       if (!userId) return;
 
-      const response = await fetch(`/api/chat/history?userId=${encodeURIComponent(userId)}`);
+      const { authenticatedFetch, publicApiFetch } = await import('../utils/apiFetch');
+      const chatFetch = currentUser?.email ? authenticatedFetch : publicApiFetch;
+      const response = await chatFetch(
+        `/api/chat/history?userId=${encodeURIComponent(userId)}`,
+      );
       if (response.ok) {
         const data = await response.json();
         if (data.success && Array.isArray(data.messages)) {
@@ -272,11 +276,10 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
 
     // Fallback to REST API if WebSocket is not available
     try {
-      const response = await fetch('/api/chat', {
+      const { authenticatedFetch, publicApiFetch } = await import('../utils/apiFetch');
+      const chatFetch = currentUser?.email ? authenticatedFetch : publicApiFetch;
+      const response = await chatFetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           message: messageText,
           userId: currentUser?.email || sessionId,

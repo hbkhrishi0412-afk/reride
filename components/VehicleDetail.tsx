@@ -7,6 +7,8 @@ import { stringifyVehicleForSession } from '../utils/vehicleSessionCache';
 import StarRating from './StarRating';
 import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
+import InlineChat from './InlineChat';
+import { resolveChatCallPhone, resolveChatOtherPartyName } from '../utils/chatContact';
 import VerificationBadge from './VerificationBadge';
 import { VehicleOfferBanner } from './VehicleOfferBanner';
 import VehicleHistory from './VehicleHistory';
@@ -144,51 +146,9 @@ const KeySpec: React.FC<{ label: string; value: string | number; icon?: React.Re
     </div>
 ));
 
-// Helper function to get bank logo URL
-const getBankLogoUrl = (bankName: string): string => {
-  // Normalize bank name for matching
-  const normalizedName = bankName.toLowerCase().trim();
-  
-  // Bank logo URLs - using high-quality sources (PNG for better clarity)
-  const bankLogos: Record<string, string> = {
-    'hdfc': 'https://logos-world.net/wp-content/uploads/2021/02/HDFC-Bank-Logo.png',
-    'hdfc bank': 'https://logos-world.net/wp-content/uploads/2021/02/HDFC-Bank-Logo.png',
-    'icici': 'https://logos-world.net/wp-content/uploads/2021/02/ICICI-Bank-Logo.png',
-    'icici bank': 'https://logos-world.net/wp-content/uploads/2021/02/ICICI-Bank-Logo.png',
-    'sbi': 'https://logos-world.net/wp-content/uploads/2021/02/State-Bank-of-India-SBI-Logo.png',
-    'state bank of india': 'https://logos-world.net/wp-content/uploads/2021/02/State-Bank-of-India-SBI-Logo.png',
-    'axis': 'https://logos-world.net/wp-content/uploads/2021/02/Axis-Bank-Logo.png',
-    'axis bank': 'https://logos-world.net/wp-content/uploads/2021/02/Axis-Bank-Logo.png',
-    'kotak': 'https://logos-world.net/wp-content/uploads/2021/02/Kotak-Mahindra-Bank-Logo.png',
-    'kotak mahindra': 'https://logos-world.net/wp-content/uploads/2021/02/Kotak-Mahindra-Bank-Logo.png',
-    'kotak mahindra bank': 'https://logos-world.net/wp-content/uploads/2021/02/Kotak-Mahindra-Bank-Logo.png',
-    'bajaj finserv': 'https://logos-world.net/wp-content/uploads/2021/02/Bajaj-Finserv-Logo.png',
-    'bajaj': 'https://logos-world.net/wp-content/uploads/2021/02/Bajaj-Finserv-Logo.png',
-    'tata capital': 'https://logos-world.net/wp-content/uploads/2021/02/Tata-Capital-Logo.png',
-    'mahindra finance': 'https://logos-world.net/wp-content/uploads/2021/02/Mahindra-Finance-Logo.png',
-    'yes bank': 'https://logos-world.net/wp-content/uploads/2021/02/Yes-Bank-Logo.png',
-    'yes': 'https://logos-world.net/wp-content/uploads/2021/02/Yes-Bank-Logo.png',
-    'idfc': 'https://logos-world.net/wp-content/uploads/2021/02/IDFC-First-Bank-Logo.png',
-    'idfc first': 'https://logos-world.net/wp-content/uploads/2021/02/IDFC-First-Bank-Logo.png',
-    'idfc first bank': 'https://logos-world.net/wp-content/uploads/2021/02/IDFC-First-Bank-Logo.png',
-    'bank of baroda': 'https://logos-world.net/wp-content/uploads/2021/02/Bank-of-Baroda-Logo.png',
-    'baroda': 'https://logos-world.net/wp-content/uploads/2021/02/Bank-of-Baroda-Logo.png',
-    'pnb': 'https://logos-world.net/wp-content/uploads/2021/02/Punjab-National-Bank-PNB-Logo.png',
-    'punjab national bank': 'https://logos-world.net/wp-content/uploads/2021/02/Punjab-National-Bank-PNB-Logo.png',
-    'union bank': 'https://logos-world.net/wp-content/uploads/2021/02/Union-Bank-of-India-Logo.png',
-    'union bank of india': 'https://logos-world.net/wp-content/uploads/2021/02/Union-Bank-of-India-Logo.png',
-    'canara bank': 'https://logos-world.net/wp-content/uploads/2021/02/Canara-Bank-Logo.png',
-    'canara': 'https://logos-world.net/wp-content/uploads/2021/02/Canara-Bank-Logo.png',
-    'indian bank': 'https://logos-world.net/wp-content/uploads/2021/02/Indian-Bank-Logo.png'
-  };
-  
-  // Try to find exact match or partial match
-  const logoKey = Object.keys(bankLogos).find(key => 
-    normalizedName.includes(key) || key.includes(normalizedName)
-  );
-  
-  return logoKey ? bankLogos[logoKey] : '';
-};
+// External hotlink hosts (e.g. logos-world.net) block cross-origin embeds (CORP).
+// BankLogo falls back to the emoji badge when no URL is returned.
+const getBankLogoUrl = (_bankName: string): string => '';
 
 // Bank Logo Component with fallback
 const BankLogo: React.FC<{ bankName: string; size?: 'sm' | 'md' | 'lg' }> = ({ bankName, size = 'md' }) => {
@@ -307,6 +267,19 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   // Prefer prop over context if both are available
   const context = useApp();
   const updateVehicle = updateVehicleProp || context.updateVehicle;
+  const {
+    conversations,
+    activeChat,
+    vehicles: contextVehicles,
+    sendMessage,
+    sendMessageWithType,
+    typingStatus,
+    toggleTyping,
+    markAsRead,
+    clearConversationMessages,
+    onOfferResponse,
+    chatPeerOnlineByConversationId,
+  } = context;
   
   // ✅ FIX: Memoize safeVehicle to prevent unnecessary re-renders
   const safeVehicle = useMemo(() => ({
@@ -346,9 +319,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState<boolean>(false);
   const [showEMICalculator, setShowEMICalculator] = useState<boolean>(false);
+  const [showSellerChat, setShowSellerChat] = useState(false);
   const [showTestDriveModal, setShowTestDriveModal] = useState(false);
   const ratingSuccessTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emiCalculatorRef = useRef<HTMLDivElement>(null);
+  const scrollToEmiOnShowRef = useRef(false);
+  const sellerChatRef = useRef<HTMLDivElement>(null);
+  const scrollToChatOnShowRef = useRef(false);
   const trackedViewRef = useRef<Set<number>>(new Set());
 
   // ✅ FIX: Optimize useEffect dependency - only depend on vehicle.id and videoUrl
@@ -357,6 +334,9 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     setProsAndCons(null);
     setIsGeneratingProsCons(false);
     setShowEMICalculator(false);
+    scrollToEmiOnShowRef.current = false;
+    setShowSellerChat(false);
+    scrollToChatOnShowRef.current = false;
     setShowTestDriveModal(false);
     setActiveMediaTab(vehicle.videoUrl ? 'video' : 'images');
     scrollAppToTop();
@@ -373,6 +353,45 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
       }
     };
   }, []);
+
+  // Scroll after EMI calculator mounts (ref is null until showEMICalculator is true)
+  useEffect(() => {
+    if (!showEMICalculator || !scrollToEmiOnShowRef.current) return;
+    scrollToEmiOnShowRef.current = false;
+    const scrollToCalculator = () => {
+      emiCalculatorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    requestAnimationFrame(() => requestAnimationFrame(scrollToCalculator));
+  }, [showEMICalculator]);
+
+  const listingConversation = useMemo(() => {
+    if (!currentUser || currentUser.role !== 'customer') return null;
+    const customerEmail = currentUser.email?.toLowerCase().trim();
+    if (!customerEmail) return null;
+    if (
+      activeChat?.vehicleId === safeVehicle.id &&
+      activeChat.customerId?.toLowerCase().trim() === customerEmail
+    ) {
+      return activeChat;
+    }
+    return (
+      conversations.find(
+        (c) =>
+          c.vehicleId === safeVehicle.id &&
+          c.customerId?.toLowerCase().trim() === customerEmail,
+      ) ?? null
+    );
+  }, [currentUser, activeChat, conversations, safeVehicle.id]);
+
+  // Scroll after seller chat section mounts
+  useEffect(() => {
+    if (!showSellerChat || !scrollToChatOnShowRef.current || !listingConversation) return;
+    scrollToChatOnShowRef.current = false;
+    const scrollToChat = () => {
+      sellerChatRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    requestAnimationFrame(() => requestAnimationFrame(scrollToChat));
+  }, [showSellerChat, listingConversation]);
   
   // ✅ FIX: Use valid images for navigation to prevent index errors
   const validImages = useMemo(() => getValidImages(safeVehicle.images, safeVehicle.id), [safeVehicle.images, safeVehicle.id]);
@@ -460,6 +479,16 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     if (sellerWhatsAppUrl) window.open(sellerWhatsAppUrl, '_blank', 'noopener,noreferrer');
   };
 
+  const handleChatWithSeller = async () => {
+    if (!currentUser) {
+      void onStartChat(safeVehicle);
+      return;
+    }
+    scrollToChatOnShowRef.current = true;
+    setShowSellerChat(true);
+    await Promise.resolve(onStartChat(safeVehicle));
+  };
+
   const filteredRecommendations = useMemo(() => {
       return recommendations.filter(rec => rec.id !== safeVehicle.id).slice(0, 3);
   }, [recommendations, safeVehicle.id]);
@@ -479,10 +508,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     
     const trackView = async () => {
       try {
-        const res = await fetch('/api/vehicles?action=track-view', {
+        const { publicApiFetch } = await import('../utils/apiFetch');
+        const res = await publicApiFetch('/api/vehicles?action=track-view', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ vehicleId })
+          body: JSON.stringify({
+            vehicleId,
+            ...(vehicle?.databaseId ? { databaseId: vehicle.databaseId } : {}),
+          }),
         });
         const data = await res.json().catch((error) => {
           logWarn('Failed to parse view count response:', error);
@@ -968,11 +1000,54 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
 
                     {/* EMI Calculator - Shown at bottom when clicked */}
                     {showEMICalculator && (
-                        <div ref={emiCalculatorRef} className="mt-8">
+                        <div id="emi-calculator" ref={emiCalculatorRef} className="mt-8 scroll-mt-24">
                             <EMICalculator
                               principal={safeVehicle.price}
                               onClose={() => setShowEMICalculator(false)}
                             />
+                        </div>
+                    )}
+
+                    {showSellerChat && listingConversation && currentUser?.role === 'customer' && (
+                        <div
+                          id="seller-chat-section"
+                          ref={sellerChatRef}
+                          className="mt-8 scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+                        >
+                          <div className="border-b border-gray-200 px-4 py-3">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {t('vehicle.detail.chatWithSeller')}
+                            </h3>
+                          </div>
+                          <InlineChat
+                            conversation={listingConversation}
+                            currentUserRole="customer"
+                            otherUserName={resolveChatOtherPartyName(users, listingConversation, 'seller')}
+                            callTargetPhone={resolveChatCallPhone(users, contextVehicles, listingConversation, 'customer')}
+                            callTargetName={resolveChatOtherPartyName(users, listingConversation, 'seller')}
+                            otherUserOnline={chatPeerOnlineByConversationId[String(listingConversation.id)]}
+                            onStartCall={(phone) => {
+                              if (phone) window.open(`tel:${phone}`);
+                            }}
+                            onSendMessage={(messageText, type, payload) => {
+                              if (type || payload) {
+                                sendMessageWithType(listingConversation.id, messageText, type, payload);
+                              } else {
+                                sendMessage(listingConversation.id, messageText);
+                              }
+                            }}
+                            typingStatus={typingStatus}
+                            onUserTyping={(conversationId) => toggleTyping(conversationId, true)}
+                            onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
+                            uploaderEmail={currentUser.email}
+                            onMarkMessagesAsRead={(conversationId) =>
+                              markAsRead(conversationId, { readerRole: 'customer', forceReadState: true })
+                            }
+                            onFlagContent={onFlagContent}
+                            onOfferResponse={onOfferResponse}
+                            onClearChat={clearConversationMessages}
+                            height="h-[28rem]"
+                          />
                         </div>
                     )}
                   </div>
@@ -1113,17 +1188,14 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             <div className="flex items-baseline gap-2">
                               <span className="text-2xl font-bold text-gray-900">{formatCurrency(baseEMI)}/m</span>
                               <button 
+                                type="button"
                                 onClick={() => {
-                                  const wasHidden = !showEMICalculator;
-                                  setShowEMICalculator(!showEMICalculator);
-                                  if (wasHidden && emiCalculatorRef.current) {
-                                    setTimeout(() => {
-                                      emiCalculatorRef.current?.scrollIntoView({ 
-                                        behavior: 'smooth', 
-                                        block: 'start'
-                                      });
-                                    }, 100);
+                                  if (showEMICalculator) {
+                                    setShowEMICalculator(false);
+                                    return;
                                   }
+                                  scrollToEmiOnShowRef.current = true;
+                                  setShowEMICalculator(true);
                                 }}
                                 className="text-base text-purple-600 font-semibold hover:underline"
                               >
@@ -1196,7 +1268,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           ) : null}
                           <button
                             type="button"
-                            onClick={() => onStartChat(safeVehicle)}
+                            onClick={() => void handleChatWithSeller()}
                             className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg text-base transition-all flex items-center justify-center gap-2"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

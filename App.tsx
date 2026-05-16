@@ -48,6 +48,7 @@ import { calculateDistance, getCityCoordinates, getUserLocation } from './servic
 import { logWarn, logDebug, logError, logInfo } from './utils/logger';
 import { currentUserForLocalSessionJson } from './utils/userLocalStorageSnapshot';
 import { authenticatedFetch } from './utils/authenticatedFetch';
+import { buildVehicleMutationBody } from './utils/vehicleIdentity';
 import { computePageSeoMeta } from './utils/pageSeoMeta.js';
 import { openOrCreateVehicleConversation } from './utils/vehicleConversationFlow.js';
 import { RERIDE_PRICE_DROP_EVENT, type ReridePriceDropDetail } from './services/buyerService';
@@ -481,7 +482,7 @@ const AppContent: React.FC = () => {
   const handleRequestTestDrive = useCallback(
     async (vehicle: Vehicle, details: { date: string; time: string }) => {
       if (!currentUser) {
-        addToast('Please login to book a test drive', 'info');
+        addToast(t('toast.testDrive.loginRequired'), 'info');
         navigate(ViewEnum.LOGIN_PORTAL);
         return;
       }
@@ -493,16 +494,21 @@ const AppContent: React.FC = () => {
         setActiveChat,
       });
       if (!conversation) {
-        addToast('Unable to send test drive request: Seller information is missing', 'error');
+        addToast(t('toast.testDrive.sellerMissing'), 'error');
         return;
       }
-      const messageText = `Test drive request for ${vehicle.year} ${vehicle.make} ${vehicle.model} on ${details.date} at ${details.time}`;
+      const vehicleLabel = `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
+      const messageText = t('chat.testDrive.messageBody', {
+        vehicle: vehicleLabel,
+        date: details.date,
+        time: details.time,
+      });
       await sendMessageWithType(conversation.id, messageText, 'test_drive_request', {
         date: details.date,
         time: details.time,
         status: 'pending',
       });
-      addToast('Test drive request sent to seller', 'success');
+      addToast(t('toast.testDrive.sent'), 'success');
     },
     [
       currentUser,
@@ -512,7 +518,68 @@ const AppContent: React.FC = () => {
       sendMessageWithType,
       addToast,
       navigate,
+      t,
     ],
+  );
+
+  const handleTestDriveResponse = useCallback(
+    async (conversationId: string, messageId: number, newStatus: 'confirmed' | 'rejected') => {
+      try {
+        const conversation = conversations.find((c) => c && c.id === conversationId);
+        if (!conversation) {
+          logWarn('Conversation not found for test drive response:', conversationId);
+          return;
+        }
+
+        const message = conversation.messages?.find((m) => m && m.id === messageId);
+        if (!message || message.type !== 'test_drive_request') {
+          logWarn('Test drive message not found:', messageId);
+          return;
+        }
+
+        const updatedMessage: ChatMessage = {
+          ...message,
+          payload: {
+            ...message.payload,
+            status: newStatus as 'pending' | 'accepted' | 'rejected' | 'countered' | 'confirmed',
+          },
+        };
+
+        const vehicleLabel = conversation.vehicleName || t('chat.testDrive.vehicleFallback');
+        const responseText =
+          newStatus === 'confirmed'
+            ? t('chat.testDrive.replyConfirmed', { vehicle: vehicleLabel })
+            : t('chat.testDrive.replyDeclined', { vehicle: vehicleLabel });
+
+        await sendMessageWithType(conversationId, responseText, 'text', {
+          originalMessageId: messageId,
+          status: newStatus,
+        });
+
+        setConversations((prev: Conversation[]) =>
+          prev.map((conv: Conversation) =>
+            conv.id === conversationId
+              ? {
+                  ...conv,
+                  messages:
+                    conv.messages?.map((msg: ChatMessage) =>
+                      msg.id === messageId ? updatedMessage : msg,
+                    ) || [],
+                }
+              : conv,
+          ),
+        );
+
+        addToast(
+          newStatus === 'confirmed' ? t('toast.testDrive.confirmed') : t('toast.testDrive.declined'),
+          'success',
+        );
+      } catch (error) {
+        logError('Failed to respond to test drive request:', error);
+        addToast(t('toast.testDrive.responseFailed'), 'error');
+      }
+    },
+    [conversations, sendMessageWithType, setConversations, addToast, t],
   );
   
   // Handle service worker update notifications
@@ -733,14 +800,8 @@ const AppContent: React.FC = () => {
 
     const run = async () => {
       try {
-        const { getSession } = await import('./services/supabase-auth-service');
-        const sessionResult = await getSession();
-        if (cancelled) return;
-        const token = sessionResult?.success ? sessionResult.session?.access_token : null;
-        if (!token) return;
-        const resp = await fetch('/api/service-providers?scope=mine', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const { authenticatedFetch } = await import('./utils/authenticatedFetch');
+        const resp = await authenticatedFetch('/api/service-providers?scope=mine');
         // 404 = customer/seller account hitting the provider endpoint; ignore.
         if (!resp.ok) return;
         const provider = await resp.json().catch(() => null);
@@ -1940,9 +2001,11 @@ const AppContent: React.FC = () => {
               onBack={() => goBack(ViewEnum.USED_CARS)}
               comparisonList={comparisonList}
               onToggleCompare={toggleCompare}
+              onAddSellerRating={addSellerRating}
               wishlist={wishlist}
               onToggleWishlist={toggleWishlist}
               currentUser={currentUser}
+              onFlagContent={(type, id, _reason) => flagContent(type, id)}
               users={users}
               onViewSellerProfile={openSellerProfileByEmail}
               onRequestLogin={() => {
@@ -2166,12 +2229,148 @@ const AppContent: React.FC = () => {
                       await updateVehicle(vehicleId, { status: 'sold', soldAt: new Date().toISOString(), listingStatus: 'sold' });
                     }
                   }}
+                  onMarkAsUnsold={async (vehicleId) => {
+                    await updateVehicle(vehicleId, { status: 'published', soldAt: undefined, listingStatus: 'active' });
+                  }}
+                  onAddMultipleVehicles={async (vehiclesData) => {
+                    try {
+                      if (currentUser.planExpiryDate) {
+                        const expiryDate = new Date(currentUser.planExpiryDate);
+                        if (expiryDate < new Date()) {
+                          addToast('Your subscription plan has expired. Please renew your plan to create new vehicle listings.', 'error');
+                          return;
+                        }
+                      }
+                      let listingExpiresAt: string | undefined;
+                      if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
+                        listingExpiresAt = currentUser.planExpiryDate;
+                      } else if (currentUser.subscriptionPlan !== 'premium') {
+                        const expiryDate = new Date();
+                        expiryDate.setDate(expiryDate.getDate() + 30);
+                        listingExpiresAt = expiryDate.toISOString();
+                      }
+                      const newVehicles = vehiclesData.map(vehicle => ({
+                        ...vehicle,
+                        id: Date.now() + randomIntBelow(1000),
+                        sellerEmail: currentUser.email,
+                        averageRating: 0,
+                        ratingCount: 0,
+                        createdAt: new Date().toISOString(),
+                        listingExpiresAt,
+                      }));
+                      const { addVehicle, getVehicles } = await import('./services/vehicleService');
+                      const results = await Promise.all(newVehicles.map(vehicle => addVehicle(vehicle)));
+                      try {
+                        const refreshedVehicles = await getVehicles();
+                        setVehicles(refreshedVehicles);
+                      } catch (refreshError) {
+                        logWarn('Failed to refresh vehicles list after adding vehicles:', refreshError);
+                        setVehicles(prev => [...prev, ...results]);
+                      }
+                      addToast(`${results.length} vehicles added successfully`, 'success');
+                    } catch (error) {
+                      logError('❌ Failed to add vehicles:', error);
+                      addToast('Failed to add vehicles', 'error');
+                      throw error;
+                    }
+                  }}
+                  onRequestCertification={async (vehicleId) => {
+                    try {
+                      const vehicle = vehicles.find(v => v.id === vehicleId);
+                      const sellerEmail = vehicle?.sellerEmail || currentUser?.email;
+                      const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                      const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                      if (!seller) {
+                        addToast('Unable to determine the seller for this certification request.', 'error');
+                        return;
+                      }
+                      const planId = (seller.subscriptionPlan || 'free') as SubscriptionPlan;
+                      const planDetails = await planService.getPlanDetails(planId);
+                      const totalCertifications = planDetails.freeCertifications ?? 0;
+                      const usedCertifications = seller.usedCertifications ?? 0;
+                      if (totalCertifications <= 0) {
+                        addToast(
+                          `The ${planDetails.name} plan does not include certification requests. Upgrade your plan to request certifications.`,
+                          'warning'
+                        );
+                        return;
+                      }
+                      if (usedCertifications >= totalCertifications) {
+                        addToast(
+                          `You have used all ${totalCertifications} certification requests included in your ${planDetails.name} plan. Upgrade to request more.`,
+                          'warning'
+                        );
+                        return;
+                      }
+                      const { authenticatedFetch } = await import('./utils/authenticatedFetch');
+                      const response = await authenticatedFetch('/api/vehicles?action=certify', {
+                        method: 'POST',
+                        body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles)),
+                      });
+                      const responseText = await response.text();
+                      let result: ApiResponse = {};
+                      if (responseText) {
+                        try {
+                          result = JSON.parse(responseText) as ApiResponse;
+                        } catch (parseError) {
+                          logWarn('⚠️ Failed to parse certification response JSON:', parseError);
+                        }
+                      }
+                      if (!response.ok) {
+                        const errorMessage =
+                          result?.reason ||
+                          result?.error ||
+                          `Failed to submit certification request (HTTP ${response.status})`;
+                        addToast(errorMessage, 'error');
+                        return;
+                      }
+                      if (result?.alreadyRequested) {
+                        addToast('This vehicle is already pending certification review.', 'info');
+                        return;
+                      }
+                      if (!result?.success || !result?.vehicle) {
+                        addToast('Failed to submit certification request. Please try again.', 'error');
+                        return;
+                      }
+                      await updateVehicle(vehicleId, result.vehicle, {
+                        successMessage: 'Certification request submitted for review',
+                      });
+                      const updatedUsedCertifications =
+                        typeof result.usedCertifications === 'number'
+                          ? result.usedCertifications
+                          : usedCertifications + 1;
+                      setUsers((prevUsers: User[]) =>
+                        prevUsers.map((user: User) => {
+                          if (!user || !user.email) return user;
+                          return user.email.toLowerCase().trim() === normalizedSellerEmail
+                            ? { ...user, usedCertifications: updatedUsedCertifications }
+                            : user;
+                        })
+                      );
+                      if (currentUser?.email && currentUser.email.toLowerCase().trim() === normalizedSellerEmail) {
+                        setCurrentUser({
+                          ...currentUser,
+                          usedCertifications: updatedUsedCertifications,
+                        });
+                      }
+                      await updateUser(seller.email, { usedCertifications: updatedUsedCertifications });
+                      if (typeof result.remainingCertifications === 'number') {
+                        addToast(
+                          `Certification requests remaining this month: ${result.remainingCertifications}`,
+                          'info'
+                        );
+                      }
+                    } catch (error) {
+                      logError('❌ Failed to certify vehicle:', error);
+                      addToast('Failed to submit certification request. Please try again.', 'error');
+                    }
+                  }}
                   onFeatureListing={async (vehicleId) => {
                     try {
                       const { authenticatedFetch } = await import('./utils/authenticatedFetch');
                       const response = await authenticatedFetch('/api/vehicles?action=feature', {
                         method: 'POST',
-                        body: JSON.stringify({ vehicleId })
+                        body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles))
                       });
 
                       const responseText = await response.text();
@@ -2488,7 +2687,7 @@ const AppContent: React.FC = () => {
                   const { authenticatedFetch } = await import('./utils/authenticatedFetch');
                   const response = await authenticatedFetch('/api/vehicles?action=feature', {
                     method: 'POST',
-                    body: JSON.stringify({ vehicleId })
+                    body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles))
                   });
 
                   const responseText = await response.text();
@@ -2496,7 +2695,7 @@ const AppContent: React.FC = () => {
                   if (responseText) {
                     try {
                       result = JSON.parse(responseText) as ApiResponse<Vehicle>;
-                    } catch (parseError) {
+                      } catch (parseError) {
                       logWarn('⚠️ Failed to parse feature response JSON:', parseError);
                       result = {};
                     }
@@ -2578,7 +2777,7 @@ const AppContent: React.FC = () => {
                   const { authenticatedFetch } = await import('./utils/authenticatedFetch');
                   const response = await authenticatedFetch('/api/vehicles?action=certify', {
                     method: 'POST',
-                    body: JSON.stringify({ vehicleId })
+                    body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles))
                   });
 
                   const responseText = await response.text();
@@ -2648,65 +2847,7 @@ const AppContent: React.FC = () => {
                 }
               }}
               onNavigate={navigate}
-              onTestDriveResponse={async (conversationId: string, messageId: number, newStatus: 'confirmed' | 'rejected') => {
-                try {
-                  // Find the conversation and message
-                  const conversation = conversations.find(c => c && c.id === conversationId);
-                  if (!conversation) {
-                    logWarn('⚠️ Conversation not found for test drive response:', conversationId);
-                    return;
-                  }
-
-                  const message = conversation.messages?.find(m => m && m.id === messageId);
-                  if (!message || message.type !== 'test_drive_request') {
-                    logWarn('⚠️ Test drive message not found:', messageId);
-                    return;
-                  }
-
-                  // Update the message status
-                  const updatedMessage: ChatMessage = {
-                    ...message,
-                    payload: {
-                      ...message.payload,
-                      status: newStatus as 'pending' | 'accepted' | 'rejected' | 'countered' | 'confirmed'
-                    }
-                  };
-
-                  // Send response message
-                  const responseText = newStatus === 'confirmed' 
-                    ? `Test drive confirmed for ${conversation.vehicleName || 'the vehicle'}. We'll contact you shortly.`
-                    : `Test drive request declined for ${conversation.vehicleName || 'the vehicle'}.`;
-
-                  await sendMessageWithType(conversationId, responseText, 'text', {
-                    originalMessageId: messageId,
-                    status: newStatus
-                  });
-
-                  // Update conversation in local state
-                  setConversations((prev: Conversation[]) =>
-                    prev.map((conv: Conversation) =>
-                      conv.id === conversationId
-                        ? {
-                            ...conv,
-                            messages: conv.messages?.map((msg: ChatMessage) =>
-                              msg.id === messageId ? updatedMessage : msg
-                            ) || []
-                          }
-                        : conv
-                    )
-                  );
-
-                  addToast(
-                    newStatus === 'confirmed' 
-                      ? 'Test drive confirmed successfully' 
-                      : 'Test drive request declined',
-                    'success'
-                  );
-                } catch (error) {
-                  logError('❌ Failed to respond to test drive request:', error);
-                  addToast('Failed to respond to test drive request. Please try again.', 'error');
-                }
-              }}
+              onTestDriveResponse={handleTestDriveResponse}
               allVehicles={vehicles || []}
               onOfferResponse={onOfferResponse}
               onViewVehicle={selectVehicle}
@@ -2863,9 +3004,40 @@ const AppContent: React.FC = () => {
                   await updateUser(currentUser.email, details);
                 }
               }}
-              onUpdatePassword={async (_passwords) => {
-                // This would need to be implemented in the API
-                return false;
+              onUpdatePassword={async (passwords) => {
+                if (!currentUser) return false;
+                try {
+                  const { login } = await import('./services/userService');
+                  const loginResult = await login({
+                    email: currentUser.email,
+                    password: passwords.current,
+                    role: currentUser.role,
+                  });
+                  if (!loginResult.success) {
+                    addToast('Current password is incorrect', 'error');
+                    return false;
+                  }
+                  try {
+                    await updateUser(currentUser.email, { password: passwords.new });
+                    return true;
+                  } catch (updateError) {
+                    logError('Failed to update password:', updateError);
+                    const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
+                    if (errorMessage.includes('Server error') || errorMessage.includes('500')) {
+                      addToast('Password update failed: Server error. Please try again.', 'error');
+                    } else if (errorMessage.includes('Authentication') || errorMessage.includes('401')) {
+                      addToast('Password update failed: Authentication expired. Please log in again.', 'error');
+                    } else {
+                      addToast(`Password update failed: ${errorMessage}`, 'error');
+                    }
+                    return false;
+                  }
+                } catch (error) {
+                  logError('Failed to update password:', error);
+                  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                  addToast(`Password update failed: ${errorMessage}`, 'error');
+                  return false;
+                }
               }}
               onBack={() => goBack(ViewEnum.HOME)}
               onLogout={handleLogoutAll}
@@ -2995,6 +3167,7 @@ const AppContent: React.FC = () => {
               onOfferResponse={(conversationId, messageId, response, counterPrice) => {
                 onOfferResponse(conversationId, messageId, response, counterPrice);
               }}
+              onTestDriveResponse={handleTestDriveResponse}
               currentUser={currentUser}
               onNavigate={navigate}
               onClearChat={clearConversationMessages}
@@ -3931,11 +4104,143 @@ const AppContent: React.FC = () => {
                   listingStatus: 'active',
                 });
               }}
+              onAddMultipleVehicles={async (vehiclesData) => {
+                try {
+                  if (currentUser.planExpiryDate) {
+                    const expiryDate = new Date(currentUser.planExpiryDate);
+                    if (expiryDate < new Date()) {
+                      addToast('Your subscription plan has expired. Please renew your plan to create new vehicle listings.', 'error');
+                      return;
+                    }
+                  }
+                  let listingExpiresAt: string | undefined;
+                  if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
+                    listingExpiresAt = currentUser.planExpiryDate;
+                  } else if (currentUser.subscriptionPlan !== 'premium') {
+                    const expiryDate = new Date();
+                    expiryDate.setDate(expiryDate.getDate() + 30);
+                    listingExpiresAt = expiryDate.toISOString();
+                  }
+                  const newVehicles = vehiclesData.map(vehicle => ({
+                    ...vehicle,
+                    id: Date.now() + randomIntBelow(1000),
+                    sellerEmail: currentUser.email,
+                    averageRating: 0,
+                    ratingCount: 0,
+                    createdAt: new Date().toISOString(),
+                    listingExpiresAt,
+                  }));
+                  const { addVehicle, getVehicles } = await import('./services/vehicleService');
+                  const results = await Promise.all(newVehicles.map(vehicle => addVehicle(vehicle)));
+                  try {
+                    const refreshedVehicles = await getVehicles();
+                    setVehicles(refreshedVehicles);
+                  } catch (refreshError) {
+                    logWarn('Failed to refresh vehicles list after adding vehicles:', refreshError);
+                    setVehicles(prev => [...prev, ...results]);
+                  }
+                  addToast(`${results.length} vehicles added successfully`, 'success');
+                } catch (error) {
+                  logError('❌ Failed to add vehicles:', error);
+                  addToast('Failed to add vehicles', 'error');
+                  throw error;
+                }
+              }}
+              onRequestCertification={async (vehicleId) => {
+                try {
+                  const vehicle = vehicles.find(v => v.id === vehicleId);
+                  const sellerEmail = vehicle?.sellerEmail || currentUser?.email;
+                  const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                  const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                  if (!seller) {
+                    addToast('Unable to determine the seller for this certification request.', 'error');
+                    return;
+                  }
+                  const planId = (seller.subscriptionPlan || 'free') as SubscriptionPlan;
+                  const planDetails = await planService.getPlanDetails(planId);
+                  const totalCertifications = planDetails.freeCertifications ?? 0;
+                  const usedCertifications = seller.usedCertifications ?? 0;
+                  if (totalCertifications <= 0) {
+                    addToast(
+                      `The ${planDetails.name} plan does not include certification requests. Upgrade your plan to request certifications.`,
+                      'warning'
+                    );
+                    return;
+                  }
+                  if (usedCertifications >= totalCertifications) {
+                    addToast(
+                      `You have used all ${totalCertifications} certification requests included in your ${planDetails.name} plan. Upgrade to request more.`,
+                      'warning'
+                    );
+                    return;
+                  }
+                  const response = await authenticatedFetch('/api/vehicles?action=certify', {
+                    method: 'POST',
+                    body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles)),
+                  });
+                  const responseText = await response.text();
+                  let result: ApiResponse = {};
+                  if (responseText) {
+                    try {
+                      result = JSON.parse(responseText) as ApiResponse;
+                    } catch (parseError) {
+                      logWarn('Failed to parse certification response JSON:', parseError);
+                    }
+                  }
+                  if (!response.ok) {
+                    const errorMessage =
+                      result?.reason ||
+                      result?.error ||
+                      `Failed to submit certification request (HTTP ${response.status})`;
+                    addToast(errorMessage, 'error');
+                    return;
+                  }
+                  if (result?.alreadyRequested) {
+                    addToast('This vehicle is already pending certification review.', 'info');
+                    return;
+                  }
+                  if (!result?.success || !result?.vehicle) {
+                    addToast('Failed to submit certification request. Please try again.', 'error');
+                    return;
+                  }
+                  await updateVehicle(vehicleId, result.vehicle, {
+                    successMessage: 'Certification request submitted for review',
+                  });
+                  const updatedUsedCertifications =
+                    typeof result.usedCertifications === 'number'
+                      ? result.usedCertifications
+                      : usedCertifications + 1;
+                  setUsers((prevUsers: User[]) =>
+                    prevUsers.map((user: User) => {
+                      if (!user || !user.email) return user;
+                      return user.email.toLowerCase().trim() === normalizedSellerEmail
+                        ? { ...user, usedCertifications: updatedUsedCertifications }
+                        : user;
+                    })
+                  );
+                  if (currentUser?.email && currentUser.email.toLowerCase().trim() === normalizedSellerEmail) {
+                    setCurrentUser({
+                      ...currentUser,
+                      usedCertifications: updatedUsedCertifications,
+                    });
+                  }
+                  await updateUser(seller.email, { usedCertifications: updatedUsedCertifications });
+                  if (typeof result.remainingCertifications === 'number') {
+                    addToast(
+                      `Certification requests remaining this month: ${result.remainingCertifications}`,
+                      'info'
+                    );
+                  }
+                } catch (error) {
+                  logError('Failed to certify vehicle:', error);
+                  addToast('Failed to submit certification request. Please try again.', 'error');
+                }
+              }}
               onFeatureListing={async (vehicleId) => {
                 try {
                   const response = await authenticatedFetch('/api/vehicles?action=feature', {
                     method: 'POST',
-                    body: JSON.stringify({ vehicleId }),
+                    body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles)),
                   });
 
                   const responseText = await response.text();
@@ -4153,6 +4458,7 @@ const AppContent: React.FC = () => {
                     onOfferResponse(conversationId, messageId, response, counterPrice);
                     addToast(`Offer ${response}`, 'success');
                   }}
+                  onTestDriveResponse={handleTestDriveResponse}
                   onClearChat={clearConversationMessages}
                   onSetConversationReadState={(conversationId, isRead) =>
                     setConversationReadState(conversationId, 'seller', isRead)
@@ -4277,6 +4583,7 @@ const AppContent: React.FC = () => {
                       onOfferResponse(conversationId, messageId, response, counterPrice);
                       addToast(`Offer ${response}`, 'success');
                     }}
+                    onTestDriveResponse={handleTestDriveResponse}
                     onClearChat={clearConversationMessages}
                     onSetConversationReadState={(conversationId, isRead) =>
                       setConversationReadState(conversationId, 'customer', isRead)
@@ -4389,6 +4696,7 @@ const AppContent: React.FC = () => {
                   onOfferResponse(conversationId, messageId, response, counterPrice);
                   addToast(`Offer ${response}`, 'success');
                 }}
+                onTestDriveResponse={handleTestDriveResponse}
                 onClearChat={clearConversationMessages}
                 onSetConversationReadState={(conversationId, isRead) =>
                   setConversationReadState(
@@ -4518,6 +4826,7 @@ const AppContent: React.FC = () => {
                   onOfferResponse(conversationId, messageId, response, counterPrice);
                   addToast(`Offer ${response}`, 'success');
                 }}
+                onTestDriveResponse={handleTestDriveResponse}
                 onClearChat={clearConversationMessages}
                 onSetConversationReadState={(conversationId, isRead) =>
                   setConversationReadState(

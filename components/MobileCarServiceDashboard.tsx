@@ -16,6 +16,7 @@ import {
 } from '../constants/carServiceSubServices.js';
 import { nextPrimaryStatus, primaryAdvanceButtonLabel } from '../utils/serviceRequestStatusFlow';
 import { View as ViewEnum } from '../types';
+import { spApiFetch } from '../utils/spApiFetch';
 
 type IncludedServicePrice = {
   id: string;
@@ -395,21 +396,12 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
     window.setTimeout(() => setInfo((current) => (current === message ? null : current)), 2400);
   }, []);
 
-  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
-    const t = await getValidAccessToken();
-    if (t.success && t.accessToken) {
-      return { Authorization: `Bearer ${t.accessToken}` };
-    }
-    throw new Error(t.reason || 'Not authenticated. Please sign in again.');
-  }, []);
-
   const fetchMyRequests = useCallback(async () => {
     if (!provider) return;
     setLoading(true);
     setError(null);
     try {
-      const headers = await getAuthHeaders();
-      const resp = await fetch('/api/service-requests', { headers });
+      const resp = await spApiFetch('/api/service-requests');
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to load requests');
@@ -421,20 +413,19 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
     } finally {
       setLoading(false);
     }
-  }, [getAuthHeaders, provider]);
+  }, [ provider]);
 
   const fetchOpenRequests = useCallback(async () => {
     if (!provider) return;
     setOpenLoading(true);
     try {
-      const headers = await getAuthHeaders();
       const params = new URLSearchParams();
       params.set('scope', 'open');
       const cityRaw = openCity.trim();
       const city = cityRaw.toLowerCase() === 'pending setup' ? '' : cityRaw;
       if (city) params.set('city', city);
       if (openServiceType !== 'all') params.set('serviceType', openServiceType);
-      const resp = await fetch(`/api/service-requests?${params.toString()}`, { headers });
+      const resp = await spApiFetch(`/api/service-requests?${params.toString()}`);
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to load open requests');
@@ -446,14 +437,13 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
     } finally {
       setOpenLoading(false);
     }
-  }, [getAuthHeaders, openCity, openServiceType, provider]);
+  }, [ openCity, openServiceType, provider]);
 
   const fetchProviderServices = useCallback(async () => {
     if (!provider) return;
     setServicesLoading(true);
     try {
-      const headers = await getAuthHeaders();
-      const resp = await fetch('/api/provider-services?scope=mine', { headers });
+      const resp = await spApiFetch('/api/provider-services?scope=mine');
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to load services');
@@ -465,7 +455,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
     } finally {
       setServicesLoading(false);
     }
-  }, [getAuthHeaders, provider]);
+  }, [ provider]);
 
   const refreshAll = useCallback(() => {
     fetchMyRequests();
@@ -583,10 +573,8 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       setClaimingId(id);
       setError(null);
       try {
-        const headers = await getAuthHeaders();
-        const resp = await fetch('/api/service-requests', {
+      const resp = await spApiFetch('/api/service-requests', {
           method: 'PATCH',
-          headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, action: 'claim' }),
         });
         if (!resp.ok) {
@@ -604,7 +592,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
         setClaimingId(null);
       }
     },
-    [getAuthHeaders, flashInfo],
+    [ flashInfo],
   );
 
   const updateStatus = useCallback(
@@ -612,10 +600,8 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       setUpdatingId(id);
       setError(null);
       try {
-        const headers = await getAuthHeaders();
-        const resp = await fetch('/api/service-requests', {
+      const resp = await spApiFetch('/api/service-requests', {
           method: 'PATCH',
-          headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, status }),
         });
         if (!resp.ok) {
@@ -631,7 +617,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
         setUpdatingId(null);
       }
     },
-    [getAuthHeaders, flashInfo],
+    [ flashInfo],
   );
 
   const deleteRequest = useCallback(
@@ -640,10 +626,8 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       setDeletingId(id);
       setError(null);
       try {
-        const headers = await getAuthHeaders();
-        const resp = await fetch(`/api/service-requests?id=${encodeURIComponent(id)}`, {
+        const resp = await spApiFetch(`/api/service-requests?id=${encodeURIComponent(id)}`, {
           method: 'DELETE',
-          headers,
         });
         if (!resp.ok) {
           const data = await resp.json().catch(() => ({}));
@@ -657,7 +641,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
         setDeletingId(null);
       }
     },
-    [getAuthHeaders, flashInfo],
+    [ flashInfo],
   );
 
   const toggleServiceActive = useCallback(
@@ -665,10 +649,8 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       setSavingService(true);
       setError(null);
       try {
-        const headers = await getAuthHeaders();
-        const resp = await fetch('/api/provider-services', {
+      const resp = await spApiFetch('/api/provider-services', {
           method: 'PATCH',
-          headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ serviceType, active }),
         });
         if (!resp.ok) {
@@ -683,7 +665,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
         setSavingService(false);
       }
     },
-    [getAuthHeaders],
+    [],
   );
 
   const deleteService = useCallback(
@@ -692,10 +674,9 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       setSavingService(true);
       setError(null);
       try {
-        const headers = await getAuthHeaders();
-        const resp = await fetch(
+        const resp = await spApiFetch(
           `/api/provider-services?serviceType=${encodeURIComponent(serviceType)}`,
-          { method: 'DELETE', headers },
+          { method: 'DELETE' },
         );
         if (!resp.ok) {
           const data = await resp.json().catch(() => ({}));
@@ -710,7 +691,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
         setSavingService(false);
       }
     },
-    [getAuthHeaders, flashInfo],
+    [ flashInfo],
   );
 
   const upsertService = useCallback(
@@ -725,10 +706,8 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       setSavingService(true);
       setError(null);
       try {
-        const headers = await getAuthHeaders();
-        const resp = await fetch('/api/provider-services', {
+      const resp = await spApiFetch('/api/provider-services', {
           method: 'PATCH',
-          headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
         if (!resp.ok) {
@@ -745,7 +724,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
         setSavingService(false);
       }
     },
-    [getAuthHeaders, flashInfo, closeServiceEditor],
+    [ flashInfo, closeServiceEditor],
   );
 
   const saveProfile = useCallback(async () => {
@@ -753,7 +732,6 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
     setSavingProfile(true);
     setError(null);
     try {
-      const headers = await getAuthHeaders();
       const skills = profileForm.skills
         .split(',')
         .map((s) => s.trim())
@@ -774,9 +752,8 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
         workshops,
         serviceCategories: profileForm.serviceCategories,
       };
-      const resp = await fetch('/api/service-providers', {
+      const resp = await spApiFetch('/api/service-providers', {
         method: 'PATCH',
-        headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       if (!resp.ok) {
@@ -805,7 +782,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
     } finally {
       setSavingProfile(false);
     }
-  }, [getAuthHeaders, localProvider, profileForm, flashInfo]);
+  }, [ localProvider, profileForm, flashInfo]);
 
   /* ----- No provider: App.tsx auto-redirects to CAR_SERVICE_LOGIN; render
    *        nothing so the user never sees an intermediate "sign-in required"

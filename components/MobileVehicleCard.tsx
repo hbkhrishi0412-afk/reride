@@ -175,19 +175,8 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
         borderRadius: '16px',
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.08)',
         border: '0.5px solid rgba(0, 0, 0, 0.04)',
-        transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
         overflow: 'hidden',
         marginBottom: '16px'
-      }}
-      onMouseDown={(e) => {
-        if (e.button !== 0) return;
-        e.currentTarget.style.transform = 'scale(0.98)';
-        e.currentTarget.style.boxShadow = '0 1px 4px rgba(0, 0, 0, 0.08)';
-      }}
-      onMouseUp={(e) => {
-        if (e.button !== 0) return;
-        e.currentTarget.style.transform = 'scale(1)';
-        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.08)';
       }}
     >
       {/* Image Section */}

@@ -14,6 +14,12 @@ import { userRolesEqual, normalizeUserRoleString } from '../utils/user-role.js';
 import { verifySupabaseToken } from '../server/supabase-auth.js';
 import { readVehicleCatalogFromSupabase, writeVehicleCatalogToSupabase } from '../lib/vehicleCatalogSupabase.js';
 import { sendInquiryNotificationToSeller } from '../lib/email.js';
+import {
+  parseVehicleIdentityFromBody,
+  hasResolvableVehicleIdentity,
+  normalizeVehiclesList,
+  MUTATION_IDENTITY_REFRESH_MESSAGE,
+} from '../utils/vehicleIdentity.js';
 // Supabase admin database utilities (replaces Firebase admin functions)
 import { 
   adminRead, 
@@ -56,6 +62,43 @@ function getSupabaseErrorMessage(): string {
 const userService = supabaseUserService;
 const vehicleService = supabaseVehicleService;
 const conversationService = supabaseConversationService;
+
+type VehicleMutationResolve =
+  | { ok: true; vehicle: VehicleType; primaryKey: string }
+  | { ok: false; status: number; reason: string };
+
+/** Resolve listing for seller mutations — prefers `databaseId`, then numeric `id`. */
+async function resolveVehicleForMutation(body: Record<string, unknown>): Promise<VehicleMutationResolve> {
+  const parsed = parseVehicleIdentityFromBody(body);
+  if (!hasResolvableVehicleIdentity(parsed)) {
+    return { ok: false, status: 400, reason: 'Vehicle ID is required.' };
+  }
+  try {
+    const resolved = await vehicleService.resolveVehicleIdentity({
+      id: parsed.numericId,
+      databaseId: parsed.databaseId,
+    });
+    if (parsed.numericId !== undefined && resolved.vehicle.id !== parsed.numericId) {
+      return { ok: false, status: 400, reason: 'Vehicle id does not match listing.' };
+    }
+    return { ok: true, vehicle: resolved.vehicle, primaryKey: resolved.primaryKey };
+  } catch {
+    if (!parsed.databaseId && parsed.numericId !== undefined) {
+      return { ok: false, status: 400, reason: MUTATION_IDENTITY_REFRESH_MESSAGE };
+    }
+    return { ok: false, status: 404, reason: 'Vehicle not found.' };
+  }
+}
+
+function setVehicleApiCacheHeaders(req: VercelRequest, res: VercelResponse): void {
+  const hasAuth =
+    Boolean(req.headers.authorization) ||
+    Boolean(req.headers.cookie && String(req.headers.cookie).includes('refreshToken'));
+  if (hasAuth) {
+    res.setHeader('Cache-Control', 'private, no-cache, must-revalidate');
+    res.setHeader('Vary', 'Authorization, Cookie');
+  }
+}
 import { 
   hashPassword, 
   validatePassword, 
@@ -79,6 +122,7 @@ import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
 import { generateCsrfToken, validateCsrfToken, getCsrfCookieName, getCsrfHeaderName } from '../utils/csrf.js';
 import { getPublicAppOriginForPasswordReset, sendPasswordResetEmail } from './lib/send-password-reset-email.js';
 import { checkUpstashRateLimit } from '../lib/rate-limit-upstash.js';
+import { resolveEffectiveApiPathname } from '../utils/api-path-routing.js';
 import {
   appendRefreshTokenCookie,
   clearRefreshTokenCookie,
@@ -601,6 +645,18 @@ async function mainHandler(
     const urlHasGemini =
       pathname.includes('/gemini') ||
       (typeof req.url === 'string' && req.url.includes('/gemini'));
+    const trackViewAction = firstQueryParam(req.query?.action);
+    const originalPathForCsrf = String(req.headers['x-vercel-original-path'] || '');
+    const invokePathForCsrf = String(req.headers['x-invoke-path'] || '');
+    const urlForCsrf = typeof req.url === 'string' ? req.url : '';
+    const isPublicTrackView =
+      req.method === 'POST' &&
+      trackViewAction === 'track-view' &&
+      (pathname.includes('/vehicles') ||
+        pathname.endsWith('/vehicles') ||
+        originalPathForCsrf.includes('/vehicles') ||
+        invokePathForCsrf.includes('/vehicles') ||
+        urlForCsrf.includes('/vehicles'));
     const isCsrfExempt =
       pathname.includes('/login') ||
       pathname.includes('/csrf-token') ||
@@ -608,7 +664,8 @@ async function mainHandler(
       pathname.includes('/db-health') ||
       pathname.includes('/service-providers/register') ||
       urlHasGemini ||
-      skipCsrfForCapacitorNative;
+      skipCsrfForCapacitorNative ||
+      isPublicTrackView;
     if (isStateChanging && !isCsrfExempt) {
       const headerToken = (req.headers['x-csrf-token'] || req.headers['X-CSRF-Token']) as string | undefined;
       const cookieToken = (req.headers.cookie || '')
@@ -647,6 +704,22 @@ async function mainHandler(
         logInfo(`🔍 Early detection: Routing ${req.method} to handleUsers based on URL/header pattern`);
         const handlerOptions: HandlerOptions = {};
         return await handleUsers(req, res, handlerOptions);
+      }
+      if (
+        originalPath?.includes('/conversations') ||
+        invokePath?.includes('/conversations') ||
+        urlPath.includes('/conversations')
+      ) {
+        const handlerOptions: HandlerOptions = {};
+        return await handleConversations(req, res, handlerOptions);
+      }
+      if (
+        originalPath?.includes('/buyer-activity') ||
+        invokePath?.includes('/buyer-activity') ||
+        urlPath.includes('/buyer-activity')
+      ) {
+        const handlerOptions: HandlerOptions = {};
+        return await handleBuyerActivity(req, res, handlerOptions);
       }
     }
 
@@ -688,6 +761,20 @@ async function mainHandler(
         } else if (checkPath.includes('/audit-log') || checkPath.endsWith('/audit-log')) {
           logInfo(`✅ Routing ${req.method} request from /api/main to handleAuditLog (original: ${checkPath})`);
           return await handleAuditLog(req, res, handlerOptions);
+        } else if (checkPath.includes('/conversations') || checkPath.endsWith('/conversations')) {
+          logInfo(`✅ Routing ${req.method} request from /api/main to handleConversations (original: ${checkPath})`);
+          return await handleConversations(req, res, handlerOptions);
+        } else if (checkPath.includes('/buyer-activity') || checkPath.endsWith('/buyer-activity')) {
+          logInfo(`✅ Routing ${req.method} request from /api/main to handleBuyerActivity (original: ${checkPath})`);
+          return await handleBuyerActivity(req, res, handlerOptions);
+        } else if (checkPath.includes('/content-reports') || checkPath.endsWith('/content-reports')) {
+          return await handleContentReports(req, res, handlerOptions);
+        } else if (checkPath.includes('/notifications') || checkPath.endsWith('/notifications')) {
+          logInfo(`✅ Routing ${req.method} request from /api/main to handleNotifications (original: ${checkPath})`);
+          return await handleNotifications(req, res, handlerOptions);
+        } else if (checkPath.includes('/login') || checkPath.endsWith('/login')) {
+          const { handleLogin } = await import('./login.js');
+          return await handleLogin(req, res);
         } else if (checkPath.includes('/settings') || checkPath.endsWith('/settings')) {
           logInfo(`✅ Routing ${req.method} request from /api/main to handlePlatformSettings (original: ${checkPath})`);
           return await handlePlatformSettings(req, res, handlerOptions);
@@ -721,12 +808,13 @@ async function mainHandler(
         return await handleUsers(req, res, handlerOptions);
       }
       
-      // Last resort: default to users handler for /api/main
-      // Only log in development to avoid information leakage
-      if (process.env.NODE_ENV !== 'production') {
-        logInfo(`⚠️ Routing ${req.method} request from /api/main to handleUsers (default fallback - no original path found)`);
-      }
-      return await handleUsers(req, res, handlerOptions);
+      // Unknown rewrite target — never fall through to handleUsers (caused 403/500 console spam).
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(404).json({
+        success: false,
+        reason: 'API route not found',
+        error: 'Unknown endpoint after rewrite',
+      });
     }
 
     // Enhanced routing check for /users endpoint - handles /api/users, /users, and variations
@@ -804,6 +892,8 @@ async function mainHandler(
       return await handleNotifications(req, res, handlerOptions);
     } else if (pathname.includes('/buyer-activity') || pathname.endsWith('/buyer-activity')) {
       return await handleBuyerActivity(req, res, handlerOptions);
+    } else if (pathname.includes('/content-reports') || pathname.endsWith('/content-reports')) {
+      return await handleContentReports(req, res, handlerOptions);
     } else if (pathname.includes('/login') || pathname.endsWith('/login')) {
       // Import and call login handler
       const { handleLogin } = await import('./login.js');
@@ -1012,63 +1102,6 @@ function errorToPublicMessage(error: unknown): string {
     // ignore
   }
   return 'An unexpected server error occurred.';
-}
-
-/**
- * After rewrite to /api/main.ts, pathname can be `/api/main` while headers omit the client path.
- * Wrong routing sends e.g. GET /api/vehicles?type=data to handleUsers → 500 and broken CORS preflight.
- */
-function resolveEffectiveApiPathname(req: VercelRequest, pathname: string): string {
-  const mainLike =
-    pathname === '/api/main' ||
-    pathname === '/main' ||
-    pathname.endsWith('/api/main.ts') ||
-    pathname.endsWith('/main.ts');
-
-  const scanPath = (raw: string): string | null => {
-    if (!raw || typeof raw !== 'string') return null;
-    const pathOnly = raw.split('?')[0] || '';
-    if (pathOnly.includes('/csrf-token')) return '/api/csrf-token';
-    if (pathOnly.includes('/vehicle-data')) return '/api/vehicle-data';
-    if (pathOnly.includes('/service-providers/register')) return '/api/service-providers/register';
-    if (pathOnly.includes('/users')) return '/api/users';
-    if (pathOnly.includes('/vehicles')) return '/api/vehicles';
-    return null;
-  };
-
-  const headerVals = [
-    req.headers['x-vercel-original-path'],
-    req.headers['x-invoke-path'],
-    req.headers['x-matched-path'],
-  ];
-  for (const h of headerVals) {
-    const v = Array.isArray(h) ? h[0] : h;
-    const hit = scanPath(String(v || ''));
-    if (hit) return hit;
-  }
-
-  const urlHit = scanPath(typeof req.url === 'string' ? req.url : '');
-  if (urlHit) return urlHit;
-
-  if (mainLike) {
-    const t = firstQueryParam(req.query?.type);
-    const a = firstQueryParam(req.query?.aggregate);
-    const skip = firstQueryParam(req.query?.skipExpiryCheck);
-    const act = firstQueryParam(req.query?.action);
-    // Vehicle catalog + storefront aggregate + common listing queries use these params together with /vehicles
-    if (t === 'data' || a === 'storefront' || skip === 'true' || act === 'track-view') {
-      return '/api/vehicles';
-    }
-    // Last resort: some runtimes only echo the public URL in a non-standard header.
-    for (const val of Object.values(req.headers)) {
-      const s = Array.isArray(val) ? val[0] : val;
-      if (typeof s !== 'string' || s.length < 6 || !s.includes('/api/')) continue;
-      const hit = scanPath(s);
-      if (hit) return hit;
-    }
-  }
-
-  return pathname;
 }
 
 /**
@@ -4133,6 +4166,29 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
 
       // ADMIN: Fetch and save a single vehicle image by make/model/year, then update DB
+      if (action === 'resolve') {
+        const resolveAuth = await authenticateRequestDual(req);
+        if (!resolveAuth.isValid) {
+          return res.status(401).json({ success: false, reason: resolveAuth.error || 'Unauthorized' });
+        }
+        const mutation = await resolveVehicleForMutation(req.query as Record<string, unknown>);
+        if (!mutation.ok) {
+          return res.status(mutation.status).json({ success: false, reason: mutation.reason });
+        }
+        const normalizedVehicleSellerEmail = mutation.vehicle.sellerEmail
+          ? mutation.vehicle.sellerEmail.toLowerCase().trim()
+          : '';
+        const normalizedAuthEmail = normalizeAuthActorEmail(resolveAuth);
+        if (
+          resolveAuth.user?.role !== 'admin' &&
+          normalizedVehicleSellerEmail &&
+          normalizedAuthEmail !== normalizedVehicleSellerEmail
+        ) {
+          return res.status(403).json({ success: false, reason: 'Unauthorized' });
+        }
+        return res.status(200).json({ success: true, vehicle: mutation.vehicle });
+      }
+
       if (action === 'fetch-vehicle-image') {
         const adminAuth = authenticateRequest(req);
         if (!adminAuth.isValid || adminAuth.user?.role !== 'admin') {
@@ -4141,15 +4197,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             reason: adminAuth.isValid ? 'Admin required' : (adminAuth.error || 'Unauthorized')
           });
         }
-        const vehicleId = parseInt(String(req.query.id || req.query.vehicleId || '0'), 10);
-        if (!vehicleId) {
-          return res.status(400).json({ success: false, reason: 'Query param id or vehicleId required' });
-        }
         try {
-          const vehicle = await vehicleService.findById(vehicleId);
-          if (!vehicle) {
-            return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+          const mutation = await resolveVehicleForMutation(req.query as Record<string, unknown>);
+          if (!mutation.ok) {
+            return res.status(mutation.status).json({ success: false, reason: mutation.reason });
           }
+          const vehicle = mutation.vehicle;
           const { fetchImageAndUpdateVehicle } = await import('../services/vehicleImageFetchService.js');
           const result = await fetchImageAndUpdateVehicle({
             id: vehicle.id,
@@ -4348,7 +4401,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       // PERFORMANCE: Skip expensive seller expiry checks for fast initial loads
       // These checks can be done in background or on-demand
       const sellerMap = new Map<string, UserType>();
-      const vehicleUpdates: Array<{ id: number; updates: Partial<VehicleType> }> = [];
+      const vehicleUpdates: Array<{ id: number; primaryKey: string; updates: Partial<VehicleType> }> = [];
       
       if (!skipExpiryCheck) {
         // Only do expiry checks if explicitly requested (not for initial fast load)
@@ -4469,7 +4522,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         if (Object.keys(updateFields).length > 0) {
           vehicleUpdates.push({
             id: vehicle.id,
-            updates: updateFields
+            primaryKey: vehicle.databaseId || String(vehicle.id),
+            updates: updateFields,
           });
         }
       });
@@ -4513,6 +4567,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
               if (v.id) {
                 vehicleUpdates.push({
                   id: v.id,
+                  primaryKey: v.databaseId || String(v.id),
                   updates: { status: 'unpublished', listingStatus: 'suspended' }
                 });
               }
@@ -4528,8 +4583,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       if (!skipExpiryCheck && vehicleUpdates.length > 0) {
         // Do updates in background to not block response
         Promise.all(vehicleUpdates.map(update => 
-          vehicleService.update(update.id, update.updates).catch(err => 
-            console.warn(`⚠️ Failed to update vehicle ${update.id}:`, err)
+          vehicleService.update(update.primaryKey, update.updates).catch(err => 
+            console.warn(`⚠️ Failed to update vehicle ${update.primaryKey}:`, err)
           )
         )).then(() => {
           // Invalidate cache after updates (in background)
@@ -4552,11 +4607,15 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
       
       // Normalize sellerEmail to lowercase for consistent filtering
-      const normalizedVehicles = finalVehicles.map(v => ({
-        ...v,
-        sellerEmail: v.sellerEmail?.toLowerCase().trim() || v.sellerEmail
-      }));
-      
+      const normalizedVehicles = normalizeVehiclesList(
+        finalVehicles.map((v) => ({
+          ...v,
+          sellerEmail: v.sellerEmail?.toLowerCase().trim() || v.sellerEmail,
+        })),
+      );
+
+      setVehicleApiCacheHeaders(req, res);
+
       // Use the total count we fetched earlier (or from cache)
       const finalTotalCount = totalVehiclesCount || normalizedVehicles.length;
       
@@ -4597,23 +4656,17 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     // PUBLIC ACTION: Track view doesn't require authentication (it's just tracking public views)
     if (action === 'track-view') {
       try {
-        const { vehicleId } = req.body || {};
-        const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
-        if (!vehicleIdNum || Number.isNaN(vehicleIdNum)) {
-          return res.status(400).json({ success: false, reason: 'Valid vehicleId is required' });
+        const mutation = await resolveVehicleForMutation((req.body || {}) as Record<string, unknown>);
+        if (!mutation.ok) {
+          return res.status(mutation.status).json({ success: false, reason: mutation.reason });
         }
 
-        const vehicle = await vehicleService.findById(vehicleIdNum);
-        if (!vehicle) {
-          return res.status(404).json({ success: false, reason: 'Vehicle not found' });
-        }
-
-        const currentViews = typeof vehicle.views === 'number' ? vehicle.views : 0;
-        await vehicleService.update(vehicleIdNum, {
-          views: currentViews + 1
+        const currentViews = typeof mutation.vehicle.views === 'number' ? mutation.vehicle.views : 0;
+        const updated = await vehicleService.update(mutation.primaryKey, {
+          views: currentViews + 1,
         });
 
-        return res.status(200).json({ success: true, views: vehicle.views });
+        return res.status(200).json({ success: true, views: updated.views });
       } catch (error) {
         logWarn('⚠️ track-view failed (non-fatal):', error);
         return res.status(200).json({ success: false });
@@ -4706,21 +4759,19 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     }
 
     if (action === 'refresh') {
-      const { vehicleId, refreshAction, sellerEmail } = req.body;
-      const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
-      const vehicle = await vehicleService.findById(vehicleIdNum);
-      
-      if (!vehicle) {
-        return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+      const { refreshAction, sellerEmail } = req.body;
+      const mutation = await resolveVehicleForMutation((req.body || {}) as Record<string, unknown>);
+      if (!mutation.ok) {
+        return res.status(mutation.status).json({ success: false, reason: mutation.reason });
       }
-      
-      // Normalize emails for comparison (critical for production)
+      const vehicle = mutation.vehicle;
+
       const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
       const normalizedRequestSellerEmail = sellerEmail ? String(sellerEmail).toLowerCase().trim() : '';
       if (normalizedVehicleSellerEmail !== normalizedRequestSellerEmail) {
         return res.status(403).json({ success: false, reason: 'Unauthorized' });
       }
-      
+
       const updates: Partial<VehicleType> = {};
       if (refreshAction === 'refresh') {
         updates.views = 0;
@@ -4728,26 +4779,24 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       } else if (refreshAction === 'renew') {
         updates.listingExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       }
-      
-      await vehicleService.update(vehicleIdNum, updates);
-      const updatedVehicle = await vehicleService.findById(vehicleIdNum);
+
+      const updatedVehicle = await vehicleService.update(mutation.primaryKey, updates);
       return res.status(200).json({ success: true, vehicle: updatedVehicle });
     }
 
     if (action === 'boost') {
       const {
-        vehicleId,
         packageId,
         razorpay_order_id: boostOrderId,
         razorpay_payment_id: boostPaymentId,
         razorpay_signature: boostSignature,
       } = req.body;
-      const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
-      const vehicle = await vehicleService.findById(vehicleIdNum);
-
-      if (!vehicle) {
-        return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+      const mutation = await resolveVehicleForMutation((req.body || {}) as Record<string, unknown>);
+      if (!mutation.ok) {
+        return res.status(mutation.status).json({ success: false, reason: mutation.reason });
       }
+      const vehicle = mutation.vehicle;
+      const vehicleIdNum = vehicle.id;
 
       // SECURITY: Only the vehicle's seller (or admin) may boost it.
       const sellerEmailLower = String(vehicle.sellerEmail || '').toLowerCase().trim();
@@ -4825,9 +4874,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       const activeBoosts = vehicle.activeBoosts || [];
       activeBoosts.push(boostInfo);
       
-      await vehicleService.update(vehicleIdNum, {
+      const updatedVehicle = await vehicleService.update(mutation.primaryKey, {
         activeBoosts,
-        isFeatured: true
+        isFeatured: true,
       });
 
       // Record the boost payment (if any) so admins have a full audit trail.
@@ -4859,23 +4908,16 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         }
       }
 
-      const updatedVehicle = await vehicleService.findById(vehicleIdNum);
       return res.status(200).json({ success: true, vehicle: updatedVehicle });
     }
 
       if (action === 'certify') {
         try {
-          const { vehicleId } = req.body;
-          const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
-          if (!vehicleIdNum) {
-            return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
+          const mutation = await resolveVehicleForMutation((req.body || {}) as Record<string, unknown>);
+          if (!mutation.ok) {
+            return res.status(mutation.status).json({ success: false, reason: mutation.reason });
           }
-
-          const vehicle = await vehicleService.findById(vehicleIdNum);
-          
-          if (!vehicle) {
-            return res.status(404).json({ success: false, reason: 'Vehicle not found' });
-          }
+          const vehicle = mutation.vehicle;
           
           // Sanitize seller email
           const sanitizedSellerEmail = await sanitizeString(String(vehicle.sellerEmail));
@@ -4913,16 +4955,15 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             });
           }
 
-          await vehicleService.update(vehicleIdNum, {
+          const updatedVehicle = await vehicleService.update(mutation.primaryKey, {
             certificationStatus: 'requested',
-            certificationRequestedAt: new Date().toISOString()
+            certificationRequestedAt: new Date().toISOString(),
           });
-          
+
           await userService.update(seller.email, {
-            usedCertifications: usedCertifications + 1
+            usedCertifications: usedCertifications + 1,
           });
-          
-          const updatedVehicle = await vehicleService.findById(vehicleIdNum);
+
           const updatedSeller = await userService.findByEmail(seller.email);
           const totalUsed = updatedSeller?.usedCertifications ?? usedCertifications + 1;
           const remaining = Math.max(allowedCertifications - totalUsed, 0);
@@ -4944,18 +4985,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       if (action === 'feature') {
         try {
-          // SECURITY FIX: Verify ownership
-          const { vehicleId } = req.body;
-          const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
-          if (!vehicleIdNum) {
-            return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
+          const mutation = await resolveVehicleForMutation((req.body || {}) as Record<string, unknown>);
+          if (!mutation.ok) {
+            return res.status(mutation.status).json({ success: false, reason: mutation.reason });
           }
-
-          const vehicle = await vehicleService.findById(vehicleIdNum);
-          
-          if (!vehicle) {
-            return res.status(404).json({ success: false, reason: 'Vehicle not found' });
-          }
+          const vehicle = mutation.vehicle;
 
           // Verify ownership (unless admin)
           const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
@@ -5023,17 +5057,15 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             });
           }
 
-          await vehicleService.update(vehicleIdNum, {
+          const updatedVehicle = await vehicleService.update(mutation.primaryKey, {
             isFeatured: true,
-            featuredAt: new Date().toISOString()
+            featuredAt: new Date().toISOString(),
           });
 
-          // Deduct one featured credit
           await userService.update(seller.email, {
-            featuredCredits: Math.max(0, remainingCredits - 1)
+            featuredCredits: Math.max(0, remainingCredits - 1),
           });
-          
-          const updatedVehicle = await vehicleService.findById(vehicleIdNum);
+
           const updatedSeller = await userService.findByEmail(seller.email);
           
           return res.status(200).json({ 
@@ -5052,26 +5084,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       if (action === 'sold') {
         try {
-          const { vehicleId } = req.body;
-          console.log('📝 Marking vehicle as sold, vehicleId:', vehicleId, 'type:', typeof vehicleId);
-          
-          if (!vehicleId && vehicleId !== 0) {
-            return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
+          const mutation = await resolveVehicleForMutation((req.body || {}) as Record<string, unknown>);
+          if (!mutation.ok) {
+            return res.status(mutation.status).json({ success: false, reason: mutation.reason });
           }
-
-          // Convert vehicleId to number if it's a string
-          const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
-          if (isNaN(vehicleIdNum)) {
-            return res.status(400).json({ success: false, reason: 'Invalid vehicle ID format' });
-          }
-          
-          console.log('🔍 Finding vehicle with id:', vehicleIdNum);
-          const vehicle = await vehicleService.findById(vehicleIdNum);
-          
-          if (!vehicle) {
-            console.warn('⚠️ Vehicle not found with id:', vehicleIdNum);
-            return res.status(404).json({ success: false, reason: 'Vehicle not found' });
-          }
+          const vehicle = mutation.vehicle;
+          console.log('📝 Marking vehicle as sold:', mutation.primaryKey);
 
           // SECURITY FIX: Verify ownership (unless admin)
           const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
@@ -5088,15 +5106,13 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           }
           
           console.log('✏️ Updating vehicle status to sold...');
-          await vehicleService.update(vehicleIdNum, {
+          const updatedVehicle = await vehicleService.update(mutation.primaryKey, {
             status: 'sold',
             listingStatus: 'sold',
-            soldAt: new Date().toISOString()
+            soldAt: new Date().toISOString(),
           });
-          
+
           console.log('✅ Vehicle saved successfully');
-          const updatedVehicle = await vehicleService.findById(vehicleIdNum);
-          
           return res.status(200).json({ success: true, vehicle: updatedVehicle });
         } catch (error) {
           console.error('❌ Error marking vehicle as sold:', error);
@@ -5110,17 +5126,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       if (action === 'unsold') {
         try {
-          const { vehicleId } = req.body;
-          const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
-          if (!vehicleIdNum) {
-            return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
+          const mutation = await resolveVehicleForMutation((req.body || {}) as Record<string, unknown>);
+          if (!mutation.ok) {
+            return res.status(mutation.status).json({ success: false, reason: mutation.reason });
           }
-
-          const vehicle = await vehicleService.findById(vehicleIdNum);
-          
-          if (!vehicle) {
-            return res.status(404).json({ success: false, reason: 'Vehicle not found' });
-          }
+          const vehicle = mutation.vehicle;
 
           // SECURITY FIX: Verify ownership (unless admin)
           const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
@@ -5136,13 +5146,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             });
           }
           
-          await vehicleService.update(vehicleIdNum, {
+          const updatedVehicle = await vehicleService.update(mutation.primaryKey, {
             status: 'published',
-            listingStatus: 'active'
+            listingStatus: 'active',
           });
-          
-          const updatedVehicle = await vehicleService.findById(vehicleIdNum);
-          
+
           return res.status(200).json({ success: true, vehicle: updatedVehicle });
         } catch (error) {
           console.error('❌ Error marking vehicle as unsold:', error);
@@ -5354,21 +5362,26 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       return res.status(401).json({ success: false, reason: auth.error });
     }
     try {
-      const { id, ...updateData } = req.body;
-      const vehicleIdNum = typeof id === 'string' ? parseInt(id, 10) : Number(id);
-      if (!vehicleIdNum) {
-        return res.status(400).json({ success: false, reason: 'Vehicle ID is required for update.' });
+      const body = (req.body || {}) as Record<string, unknown>;
+      const { id: _id, databaseId: _databaseId, ...updateData } = body;
+
+      const mutation = await resolveVehicleForMutation(body);
+      if (!mutation.ok) {
+        const reason =
+          mutation.reason === 'Vehicle ID is required.'
+            ? 'Vehicle ID is required for update.'
+            : mutation.reason;
+        return res.status(mutation.status).json({ success: false, reason });
       }
-      
+      const existingVehicle = mutation.vehicle;
+      const rowPk = mutation.primaryKey;
+
       if (process.env.NODE_ENV !== 'production') {
-        console.log('🔄 PUT /vehicles - Updating vehicle:', { id: vehicleIdNum, fields: Object.keys(updateData) });
-      }
-      
-      // SECURITY FIX: Ownership Check
-      // Fetch vehicle to verify ownership before update
-      const existingVehicle = await vehicleService.findById(vehicleIdNum);
-      if (!existingVehicle) {
-        return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
+        console.log('🔄 PUT /vehicles - Updating vehicle:', {
+          id: existingVehicle.id,
+          databaseId: rowPk,
+          fields: Object.keys(updateData),
+        });
       }
       
       // Normalize emails for comparison (critical for production)
@@ -5442,19 +5455,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         }
       }
 
-      // Update vehicle in Firebase
-      await vehicleService.update(vehicleIdNum, sanitizedUpdate);
-      console.log('✅ Vehicle updated and saved successfully:', vehicleIdNum);
-      
-      // Verify the update by querying again
-      const updatedVehicle = await vehicleService.findById(vehicleIdNum);
-      if (!updatedVehicle) {
-        console.warn('⚠️ Vehicle update verification failed - vehicle not found after update');
-        return res.status(500).json({ success: false, reason: 'Failed to update vehicle.' });
-      } else {
-        console.log('✅ Vehicle update verified in database');
-      }
-      
+      const updatedVehicle = await vehicleService.update(rowPk, sanitizedUpdate);
+      console.log('✅ Vehicle updated and saved successfully:', rowPk);
+
       return res.status(200).json(updatedVehicle);
     } catch (error) {
       console.error('❌ Error updating vehicle:', error);
@@ -8401,16 +8404,17 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         // Get single conversation
         const conversation = await conversationService.findById(String(conversationId));
         if (!conversation) {
-          return res.status(404).json({ success: false, reason: 'Conversation not found' });
+          // 200 + null avoids noisy console 404s during open-thread polling before sync completes.
+          return res.status(200).json({ success: true, data: null });
         }
         const normalizedCustomerId = String(conversation.customerId || '').toLowerCase().trim();
         const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
-        // If not authenticated, return 404 (don't reveal conversation exists)
+        // If not authenticated, return empty payload (don't reveal conversation exists)
         if (!auth || !auth.isValid) {
-          return res.status(404).json({ success: false, reason: 'Conversation not found' });
+          return res.status(200).json({ success: true, data: null });
         }
         if (!isAdmin && !isAuthParticipant(normalizedCustomerId) && !isAuthParticipant(normalizedSellerId)) {
-          return res.status(403).json({ success: false, reason: 'Unauthorized access to conversation' });
+          return res.status(200).json({ success: true, data: null });
         }
         return res.status(200).json({ success: true, data: conversation });
       }
@@ -9165,6 +9169,63 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
 }
 
 // Buyer Activity Handler
+async function handleContentReports(
+  req: VercelRequest,
+  res: VercelResponse,
+  _options: HandlerOptions,
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, reason: 'Method not allowed' });
+  }
+  try {
+    const body = (req.body || {}) as Record<string, unknown>;
+    const reportedBy =
+      typeof body.reportedBy === 'string' ? body.reportedBy.slice(0, 255) : 'anonymous';
+    const targetType =
+      typeof body.targetType === 'string' ? body.targetType.slice(0, 64) : '';
+    const targetId =
+      body.targetId != null ? String(body.targetId).slice(0, 255) : '';
+    const reason =
+      typeof body.reason === 'string' ? body.reason.slice(0, 2000) : '';
+    if (!targetType || !targetId) {
+      return res.status(400).json({
+        success: false,
+        reason: 'targetType and targetId are required',
+      });
+    }
+
+    logSecurity('content-report', {
+      reportedBy,
+      targetType,
+      targetId,
+      reason: reason || undefined,
+    });
+
+    if (USE_SUPABASE) {
+      try {
+        const supabase = getSupabaseAdminClient();
+        await supabase.from('audit_log').insert({
+          id: Date.now(),
+          timestamp:
+            typeof body.createdAt === 'string' ? body.createdAt : new Date().toISOString(),
+          actor: reportedBy,
+          action: 'content-report',
+          target: `${targetType}:${targetId}`,
+          details: reason || null,
+        });
+      } catch (dbErr) {
+        logWarn('content-report audit_log insert failed (non-fatal):', dbErr);
+      }
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logError('handleContentReports error:', message);
+    return res.status(500).json({ success: false, reason: message });
+  }
+}
+
 async function handleBuyerActivity(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
     if (!USE_SUPABASE) {
@@ -9174,12 +9235,28 @@ async function handleBuyerActivity(req: VercelRequest, res: VercelResponse, _opt
       });
     }
 
-    const auth = requireAuth(req, res, 'Buyer Activity');
-    if (!auth) {
-      return;
+    const auth = await authenticateRequestDual(req);
+    if (!auth.isValid || !auth.user) {
+      logWarn('⚠️ Buyer Activity - Authentication failed:', auth.error);
+      return res.status(401).json({
+        success: false,
+        reason: auth.error || 'Authentication required.',
+        error: 'Invalid or expired authentication token',
+      });
     }
-    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
-    const isAdmin = auth.user?.role === 'admin';
+    const normalizedAuthEmail = normalizeAuthActorEmail(auth);
+    const normalizedAuthUserId = auth.user.userId
+      ? String(auth.user.userId).toLowerCase().trim()
+      : '';
+    const isAdmin = auth.user.role === 'admin';
+    const canAccessBuyerActivity = (userId: string): boolean => {
+      const norm = String(userId || '').toLowerCase().trim();
+      if (!norm) return false;
+      if (isAdmin) return true;
+      if (norm === normalizedAuthEmail) return true;
+      if (normalizedAuthUserId && norm === normalizedAuthUserId) return true;
+      return false;
+    };
 
     // GET - Retrieve buyer activity
     if (req.method === 'GET') {
@@ -9193,7 +9270,7 @@ async function handleBuyerActivity(req: VercelRequest, res: VercelResponse, _opt
       const normalizedUserId = userIdValue.toLowerCase().trim();
       
       // Users can only access their own activity (unless admin)
-      if (!isAdmin && normalizedUserId !== normalizedAuthEmail) {
+      if (!canAccessBuyerActivity(normalizedUserId)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized access to buyer activity' });
       }
 
@@ -9251,7 +9328,7 @@ async function handleBuyerActivity(req: VercelRequest, res: VercelResponse, _opt
       const normalizedUserId = activityData.userId.toLowerCase().trim();
       
       // Users can only save their own activity (unless admin)
-      if (!isAdmin && normalizedUserId !== normalizedAuthEmail) {
+      if (!canAccessBuyerActivity(normalizedUserId)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized to save buyer activity' });
       }
 

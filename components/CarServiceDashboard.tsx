@@ -20,6 +20,7 @@ import {
   nextPrimaryStatus,
   primaryAdvanceButtonLabel,
 } from '../utils/serviceRequestStatusFlow';
+import { spApiFetch } from '../utils/spApiFetch';
 
 interface Provider {
   name: string;
@@ -987,14 +988,6 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     return `${base} bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-800 border-emerald-300`;
   };
 
-  const getAuthHeaders = async (): Promise<Record<string, string>> => {
-    const t = await getValidAccessToken();
-    if (t.success && t.accessToken) {
-      return { Authorization: `Bearer ${t.accessToken}` };
-    }
-    throw new Error(t.reason || 'Not authenticated. Please sign in again.');
-  };
-
   // Dummy data helpers for quick UI checks (dev only)
   const buildSampleRequests = (assigned: boolean): ServiceRequest[] => {
     const now = new Date();
@@ -1047,8 +1040,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     setServicesLoading(true);
     setServicesError(null);
     try {
-      const headers = await getAuthHeaders();
-      const resp = await fetch('/api/provider-services?scope=mine', { headers });
+      const resp = await spApiFetch('/api/provider-services?scope=mine');
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to load services');
@@ -1067,7 +1059,6 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     setSavingService(true);
     setServicesError(null);
     try {
-      const headers = await getAuthHeaders();
       const etaRaw = serviceForm.etaMinutes ? Number(serviceForm.etaMinutes) : undefined;
       const etaMinutesPayload =
         etaRaw != null && Number.isFinite(etaRaw) && etaRaw >= 0
@@ -1081,9 +1072,8 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
         includedServices: includedDraftsToPayload(serviceForm.includedServices),
         active: serviceForm.active,
       };
-      const resp = await fetch('/api/provider-services', {
+            const resp = await spApiFetch('/api/provider-services', {
         method: 'PATCH',
-        headers: { ...headers, 'Content-Type': 'application/json' } as Record<string, string>,
         body: JSON.stringify(body),
       });
       if (!resp.ok) {
@@ -1118,11 +1108,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     setSavingService(true);
     setServicesError(null);
     try {
-      const headers = await getAuthHeaders();
-      const body = { serviceType, active };
-      const resp = await fetch('/api/provider-services', {
+const body = { serviceType, active };
+            const resp = await spApiFetch('/api/provider-services', {
         method: 'PATCH',
-        headers: { ...headers, 'Content-Type': 'application/json' } as Record<string, string>,
         body: JSON.stringify(body),
       });
       if (!resp.ok) {
@@ -1308,10 +1296,8 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     setSavingService(true);
     setServicesError(null);
     try {
-      const headers = await getAuthHeaders();
-      const resp = await fetch(`/api/provider-services?serviceType=${encodeURIComponent(serviceType)}`, {
+      const resp = await spApiFetch(`/api/provider-services?serviceType=${encodeURIComponent(serviceType)}`, {
         method: 'DELETE',
-        headers,
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
@@ -1329,22 +1315,12 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     }
   };
 
-  const withToken = async (): Promise<string> => {
-    const t = await getValidAccessToken();
-    if (t.success && t.accessToken) {
-      return t.accessToken;
-    }
-    throw new Error(t.reason || 'Not authenticated. Please sign in again.');
-  };
-
   const fetchRequests = async () => {
     setLoading(true);
     setError(null);
     try {
-      const token = await withToken();
-      const resp = await fetch('/api/service-requests', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const resp = await spApiFetch('/api/service-requests', {
+});
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to load requests');
@@ -1362,8 +1338,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
   const fetchOpenRequests = async () => {
     setOpenLoading(true);
     try {
-      const token = await withToken();
-      const params = new URLSearchParams();
+const params = new URLSearchParams();
       params.set('scope', 'open');
       const cityRaw = openFilters.city.trim();
       const cityQuery =
@@ -1371,9 +1346,8 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
       if (cityQuery) params.set('city', cityQuery);
       if (openFilters.serviceType !== 'all') params.set('serviceType', openFilters.serviceType);
       if (openFilters.last24h) params.set('recentHours', '24');
-      const resp = await fetch(`/api/service-requests?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+            const resp = await spApiFetch(`/api/service-requests?${params.toString()}`, {
+});
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to load open requests');
@@ -1462,11 +1436,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     setClaimingId(id);
     setError(null);
     try {
-      const token = await withToken();
-      const resp = await fetch('/api/service-requests', {
+      const resp = await spApiFetch('/api/service-requests', {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action: 'claim' }),
+body: JSON.stringify({ id, action: 'claim' }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
@@ -1494,11 +1466,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
         }, 2500);
         return;
       }
-      const token = await withToken();
-      const resp = await fetch('/api/service-requests', {
+      const resp = await spApiFetch('/api/service-requests', {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status }),
+body: JSON.stringify({ id, status }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
@@ -1529,11 +1499,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     setDeletingId(id);
     setError(null);
     try {
-      const token = await withToken();
-      const resp = await fetch(`/api/service-requests?id=${encodeURIComponent(id)}`, {
+      const resp = await spApiFetch(`/api/service-requests?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+});
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to delete request');
@@ -1573,10 +1541,8 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     const handleProfileUpdate = async () => {
       // Refresh provider data when updated elsewhere
       try {
-        const token = await withToken();
-        const resp = await fetch('/api/service-providers', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const resp = await spApiFetch('/api/service-providers', {
+  });
         if (resp.ok) {
           const updated = await resp.json();
           setLocalProvider(updated);
@@ -1646,11 +1612,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     setSavingProfile(true);
     setError(null);
     try {
-      const token = await withToken();
-      const resp = await fetch('/api/service-providers', {
+      const resp = await spApiFetch('/api/service-providers', {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+body: JSON.stringify({
           email: localProvider.email,
           name: profileForm.name,
           phone: profileForm.phone,
@@ -1681,9 +1645,8 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
       
       // Refresh provider data to ensure sync
       try {
-        const refreshResp = await fetch('/api/service-providers', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const refreshResp = await spApiFetch('/api/service-providers', {
+  });
         if (refreshResp.ok) {
           const refreshed = await refreshResp.json();
           setLocalProvider(refreshed);
@@ -1704,11 +1667,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     setError(null);
     try {
       const skillsArray = skillsInput.split(',').map(s => s.trim()).filter(Boolean);
-      const token = await withToken();
-      const resp = await fetch('/api/service-providers', {
+      const resp = await spApiFetch('/api/service-providers', {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: localProvider.email, skills: skillsArray }),
+body: JSON.stringify({ email: localProvider.email, skills: skillsArray }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
@@ -1737,11 +1698,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     setError(null);
     try {
       const workshopsArray = workshopsInput.split(',').map(w => w.trim()).filter(Boolean);
-      const token = await withToken();
-      const resp = await fetch('/api/service-providers', {
+      const resp = await spApiFetch('/api/service-providers', {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: localProvider.email, workshops: workshopsArray }),
+body: JSON.stringify({ email: localProvider.email, workshops: workshopsArray }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
@@ -1769,11 +1728,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     setSavingProfile(true);
     setError(null);
     try {
-      const token = await withToken();
-      const resp = await fetch('/api/service-providers', {
+      const resp = await spApiFetch('/api/service-providers', {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCategories }),
+body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCategories }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));

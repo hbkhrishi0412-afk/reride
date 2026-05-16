@@ -1,5 +1,5 @@
 import type { User } from '../types';
-import { getAuthHeaders } from '../utils/authenticatedFetch';
+import { authenticatedFetch } from '../utils/authenticatedFetch';
 
 export function downloadProfileExport(currentUser: User): void {
   const bundle = {
@@ -20,13 +20,8 @@ export function downloadProfileExport(currentUser: User): void {
 }
 
 export async function requestAccountDataAnonymization(): Promise<{ success: boolean; message?: string; reason?: string }> {
-  const res = await fetch('/api/users', {
+  const res = await authenticatedFetch('/api/users', {
     method: 'POST',
-    headers: {
-      ...getAuthHeaders(),
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include',
     body: JSON.stringify({ action: 'request-data-deletion' }),
   });
   const data = (await res.json().catch(() => ({}))) as {

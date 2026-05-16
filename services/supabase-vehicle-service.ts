@@ -3,6 +3,7 @@ import type { Vehicle } from '../types.js';
 import { VehicleCategory } from '../vehicle-category.js';
 import { CITY_MAPPING } from '../utils/cityMapping.js';
 import { HOME_DISCOVERY_CITY_ORDER } from '../constants/homeDiscovery.js';
+import { stringToNumericVehicleId } from '../utils/vehicleIdentity.js';
 
 // Detect if we're in a server context (serverless function)
 const isServerSide = typeof window === 'undefined';
@@ -81,24 +82,6 @@ function processImageUrls(images: string[] | null | undefined, vehicleId?: numbe
   }
 }
 
-// Deterministic, collision-resistant 53-bit hash for non-numeric TEXT ids.
-// Same input always maps to the same positive integer, so a UUID-style id stays
-// stable across refetches and won't collapse to 0.
-function stringToNumericId(s: string): number {
-  let h1 = 0xdeadbeef ^ s.length;
-  let h2 = 0x41c6ce57 ^ s.length;
-  for (let i = 0; i < s.length; i++) {
-    const ch = s.charCodeAt(i);
-    h1 = Math.imul(h1 ^ ch, 2654435761);
-    h2 = Math.imul(h2 ^ ch, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
-  h2 = Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  const hi = (h2 ^ (h1 >>> 16)) >>> 0;
-  const lo = (h1 ^ (h2 >>> 16)) >>> 0;
-  return (hi % 0x1fffff) * 0x100000000 + lo;
-}
-
 // Helper to convert Supabase row to Vehicle type
 function supabaseRowToVehicle(row: any): Vehicle {
   // Row.id is TEXT in Supabase but Vehicle.id is typed as number. Prefer the
@@ -111,7 +94,7 @@ function supabaseRowToVehicle(row: any): Vehicle {
   } else if (typeof rawId === 'string' && rawId.trim() !== '' && !Number.isNaN(Number(rawId))) {
     vehicleId = Number(rawId);
   } else if (typeof rawId === 'string' && rawId.trim() !== '') {
-    vehicleId = stringToNumericId(rawId);
+    vehicleId = stringToNumericVehicleId(rawId);
   } else {
     vehicleId = 0;
   }
@@ -322,6 +305,31 @@ export const supabaseVehicleService = {
     return this.findByPrimaryKey(id.toString());
   },
 
+  /**
+   * Resolve a listing for mutations. Prefer `databaseId` (canonical TEXT PK in Supabase);
+   * fall back to numeric `id` when it matches the stored row id.
+   */
+  async resolveVehicleIdentity(params: {
+    id?: number;
+    databaseId?: string;
+  }): Promise<{ vehicle: Vehicle; primaryKey: string }> {
+    const dbId = params.databaseId?.trim();
+    if (dbId) {
+      const vehicle = await this.findByPrimaryKey(dbId);
+      if (vehicle) {
+        return { vehicle, primaryKey: vehicle.databaseId || dbId };
+      }
+    }
+    const numId = params.id;
+    if (numId != null && Number.isFinite(numId) && numId > 0) {
+      const vehicle = await this.findById(numId);
+      if (vehicle) {
+        return { vehicle, primaryKey: vehicle.databaseId || String(numId) };
+      }
+    }
+    throw new Error('Vehicle not found.');
+  },
+
   // Get all vehicles
   async findAll(): Promise<Vehicle[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
@@ -375,81 +383,100 @@ export const supabaseVehicleService = {
     return allVehicles;
   },
 
-  // Update vehicle
-  async update(id: number, updates: Partial<Vehicle>): Promise<void> {
+  // Update vehicle (returns updated row; resolves UUID TEXT ids via databaseId when provided)
+  async update(
+    primaryKeyOrId: string | number,
+    updates: Partial<Vehicle>,
+    options?: { databaseId?: string },
+  ): Promise<Vehicle> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    
-    // First, get existing vehicle to merge metadata properly
+
+    let primaryKey: string;
+    if (typeof primaryKeyOrId === 'string') {
+      primaryKey = primaryKeyOrId.trim();
+    } else {
+      const resolved = await this.resolveVehicleIdentity({
+        id: primaryKeyOrId,
+        databaseId: options?.databaseId,
+      });
+      primaryKey = resolved.primaryKey;
+    }
+
+    if (!primaryKey) {
+      throw new Error('Failed to update vehicle: missing id');
+    }
+
+    // Fetch existing metadata for merge (scoped to canonical primary key)
     const { data: existingVehicle, error: fetchError } = await supabase
       .from('vehicles')
       .select('metadata')
-      .eq('id', id.toString())
-      .single();
-    
-    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = not found
+      .eq('id', primaryKey)
+      .maybeSingle();
+
+    if (fetchError) {
       throw new Error(`Failed to fetch existing vehicle: ${fetchError.message}`);
     }
-    
+
     const row = vehicleToSupabaseRow(updates);
-    
-    // Remove id from updates
+
+    // Never overwrite the primary key on update
     delete row.id;
 
     // Preserve NOT NULL seller_email on partial updates.
-    // `vehicleToSupabaseRow` defaults missing sellerEmail to null for full-row inserts,
-    // but update payloads frequently omit sellerEmail entirely.
-    // If sellerEmail was not explicitly provided, never send seller_email.
     if (!Object.prototype.hasOwnProperty.call(updates, 'sellerEmail')) {
       delete row.seller_email;
     }
-    
-    // Remove undefined values to avoid issues
+
     Object.keys(row).forEach(key => {
       if (row[key] === undefined) {
         delete row[key];
       }
     });
-    
-    // CRITICAL: Merge metadata instead of replacing it
-    // This preserves existing metadata fields when updating specific fields
+
     if (row.metadata && existingVehicle?.metadata) {
-      // Merge new metadata with existing metadata
       row.metadata = {
         ...(existingVehicle.metadata || {}),
-        ...(row.metadata || {})
+        ...(row.metadata || {}),
       };
-    } else if (row.metadata && !existingVehicle?.metadata) {
-      // New metadata, no existing metadata - use as is
     } else if (!row.metadata && existingVehicle?.metadata) {
-      // No new metadata, but existing metadata exists - preserve it
       row.metadata = existingVehicle.metadata;
     }
-    
-    // Only include metadata if it has values
+
     if (row.metadata === null || (typeof row.metadata === 'object' && Object.keys(row.metadata).length === 0)) {
       delete row.metadata;
     }
-    
-    const { error } = await supabase
-      .from('vehicles')
-      .update(row)
-      .eq('id', id.toString());
-    
-    if (error) {
-      // If error is about metadata column, retry without metadata
-      if (error.message.includes("metadata") || error.message.includes("Could not find")) {
-        delete row.metadata;
-        const { error: retryError } = await supabase
-          .from('vehicles')
-          .update(row)
-          .eq('id', id.toString());
-        
-        if (retryError) {
-          throw new Error(`Failed to update vehicle: ${retryError.message}`);
-        }
-      } else {
-        throw new Error(`Failed to update vehicle: ${error.message}`);
+
+    const applyUpdate = async (payload: Record<string, unknown>): Promise<Vehicle> => {
+      const { data, error } = await supabase
+        .from('vehicles')
+        .update(payload)
+        .eq('id', primaryKey)
+        .select('*')
+        .single();
+
+      if (error) {
+        throw error;
       }
+      if (!data) {
+        throw new Error('Vehicle update did not apply — listing may have been removed.');
+      }
+      return supabaseRowToVehicle(data);
+    };
+
+    try {
+      return await applyUpdate(row);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('metadata') || message.includes('Could not find')) {
+        delete row.metadata;
+        try {
+          return await applyUpdate(row);
+        } catch (retryError: unknown) {
+          const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+          throw new Error(`Failed to update vehicle: ${retryMessage}`);
+        }
+      }
+      throw new Error(`Failed to update vehicle: ${message}`);
     }
   },
 

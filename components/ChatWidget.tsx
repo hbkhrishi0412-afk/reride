@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import type { Conversation, ChatMessage } from '../types';
-import ReadReceiptIcon, { OfferMessage, OfferModal } from './ReadReceiptIcon';
+import ReadReceiptIcon, { OfferMessage, OfferModal, TestDriveMessage } from './ReadReceiptIcon';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 import { uploadImage, uploadChatAudio } from '../services/imageUploadService';
 import { ChatMessageImage } from './ChatMessageImage';
@@ -25,6 +25,11 @@ interface ChatWidgetProps {
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
+  onTestDriveResponse?: (
+    conversationId: string,
+    messageId: number,
+    newStatus: 'confirmed' | 'rejected',
+  ) => void;
   onClearChat?: (conversationId: string) => void | Promise<void>;
   onMakeOffer?: () => void; // For seller dashboard
   onStartCall?: (phone: string) => void;
@@ -62,6 +67,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     onMarkMessagesAsRead,
     onFlagContent,
     onOfferResponse,
+    onTestDriveResponse,
     onClearChat,
     onMakeOffer,
     onStartCall,
@@ -729,6 +735,17 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                                       listingPrice={conversation.vehiclePrice}
                                       onRespond={(messageId, response, counterPrice) =>
                                         onOfferResponse(conversation.id, messageId, response, counterPrice)
+                                      }
+                                    />
+                                  ) : msg.type === 'test_drive_request' ? (
+                                    <TestDriveMessage
+                                      msg={msg}
+                                      currentUserRole={currentUserRole}
+                                      onRespond={
+                                        onTestDriveResponse
+                                          ? (messageId, response) =>
+                                              onTestDriveResponse(conversation.id, messageId, response)
+                                          : undefined
                                       }
                                     />
                                   ) : msg.type === 'image' && msg.payload?.imageUrl ? (

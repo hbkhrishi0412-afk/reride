@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../types';
+import i18n from '../lib/i18n';
 
 /** One-line preview for thread lists (Messenger-style). */
 export function getThreadLastMessagePreview(
@@ -25,7 +26,7 @@ export function getThreadLastMessagePreview(
     return { prefix: other ? `${other}: ` : '', text: body };
   }
   if (last.type === 'test_drive_request') {
-    return { prefix: '', text: 'Test drive request' };
+    return { prefix: '', text: i18n.t('chat.testDrive.request') };
   }
   if (last.type === 'image') {
     const body = '📷 Photo';

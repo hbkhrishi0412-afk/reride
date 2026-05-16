@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { VehicleCategory, View as ViewEnum, type Vehicle, type View } from '../types';
 import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
 import { matchesCity } from '../utils/cityMapping';
+import { countCityVehicles } from '../utils/storefrontDiscoveryCounts';
 import LazyImage from './LazyImage';
 import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
 import {
@@ -53,53 +54,6 @@ const useRevealOnScroll = <T extends HTMLElement>(delayMs: number = 0) => {
         return () => observer.disconnect();
     }, [delayMs]);
     return ref;
-};
-
-// Lightweight count-up that animates from 0 to `end` once `start` flips true.
-// Uses requestAnimationFrame so it's smooth and stops cleanly on unmount.
-const useCountUp = (end: number, start: boolean, duration: number = 1600) => {
-    const [value, setValue] = useState(0);
-    useEffect(() => {
-        if (!start) return;
-        let raf = 0;
-        const t0 = performance.now();
-        const tick = (now: number) => {
-            const progress = Math.min(1, (now - t0) / duration);
-            // easeOutCubic for a satisfying decelerate
-            const eased = 1 - Math.pow(1 - progress, 3);
-            setValue(end * eased);
-            if (progress < 1) raf = requestAnimationFrame(tick);
-        };
-        raf = requestAnimationFrame(tick);
-        return () => cancelAnimationFrame(raf);
-    }, [end, start, duration]);
-    return value;
-};
-
-interface AnimatedStatProps {
-    value: number;
-    suffix?: string;
-    label: string;
-    visible: boolean;
-    formatter?: (n: number) => string;
-}
-
-const AnimatedStat: React.FC<AnimatedStatProps> = ({ value, suffix = '', label, visible, formatter }) => {
-    const current = useCountUp(value, visible);
-    const display = formatter ? formatter(current) : Math.round(current).toLocaleString('en-IN');
-    return (
-        <div className="flex flex-col items-center justify-center text-center px-2 pt-6 md:pt-0 first:pt-0">
-            <div
-                className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight tabular-nums"
-                style={{ fontFamily: "'Poppins', sans-serif" }}
-            >
-                {display}{suffix}
-            </div>
-            <div className="text-[12px] md:text-[13px] text-gray-500 mt-1 tracking-wide">
-                {label}
-            </div>
-        </div>
-    );
 };
 
 interface HomeProps {
@@ -207,39 +161,21 @@ const Home: React.FC<HomeProps> = ({
             HOME_DISCOVERY_CITY_ORDER.map((name) => ({
                 name,
                 ...getHomeDesktopCityStyle(name),
-                cars: 0,
+                total: 0,
             })),
         []
     );
 
     const citiesWithCounts = useMemo(() => {
         return citiesBase.map((city) => {
-            const clientCount = publishedVehicles.filter((vehicle) =>
-                matchesCity(vehicle.city, city.name)
-            ).length;
+            const clientTotal = countCityVehicles(publishedVehicles, city.name);
             const apiCount = storefrontAgg?.cities[city.name];
-            const cars = apiCount !== undefined ? apiCount : clientCount;
-            return { ...city, cars };
+            const total = clientTotal > 0 ? clientTotal : (apiCount !== undefined ? apiCount : 0);
+            return { ...city, total };
         });
     }, [citiesBase, publishedVehicles, storefrontAgg?.cities]);
 
-    // Real trust metrics derived from actual published listings (no fabricated figures).
-    // `verifiedListings` counts listings that qualify for the verified badge.
-    // `averageRating` averages the `averageRating` field of all rated listings.
-    const verifiedListingCount = useMemo(
-        () => publishedVehicles.filter((v) => showVerifiedListingBadge(v)).length,
-        [publishedVehicles]
-    );
-    const averageCustomerRating = useMemo(() => {
-        const rated = publishedVehicles.filter(
-            (v) => typeof v.averageRating === 'number' && (v.ratingCount || 0) > 0
-        );
-        if (rated.length === 0) return 0;
-        const total = rated.reduce((sum, v) => sum + Number(v.averageRating || 0), 0);
-        return total / rated.length;
-    }, [publishedVehicles]);
-
-    const sortedCities = [...citiesWithCounts].sort((a, b) => b.cars - a.cars);
+    const sortedCities = [...citiesWithCounts].sort((a, b) => b.total - a.total);
     const topCities = sortedCities.slice(0, 6);
 
     const categoryCounts = useMemo(
@@ -297,19 +233,6 @@ const Home: React.FC<HomeProps> = ({
     }, []);
 
     // Refs that drive scroll-reveal animations on each major section.
-    const statsRef = useRevealOnScroll<HTMLDivElement>(0);
-    const [statsVisible, setStatsVisible] = useState(false);
-    useEffect(() => {
-        const node = statsRef.current;
-        if (!node) return;
-        const obs = new IntersectionObserver(
-            (entries) => entries.forEach((e) => e.isIntersecting && setStatsVisible(true)),
-            { threshold: 0.4 }
-        );
-        obs.observe(node);
-        return () => obs.disconnect();
-    }, [statsRef]);
-
     const featuredHeadRef = useRevealOnScroll<HTMLDivElement>(0);
     const featuredGridRef = useRevealOnScroll<HTMLDivElement>(120);
     const recentHeadRef = useRevealOnScroll<HTMLDivElement>(0);
@@ -745,7 +668,7 @@ const Home: React.FC<HomeProps> = ({
                         <PopularCitiesChips
                             className="hero-rise hero-rise-4 max-w-3xl mx-auto mb-5 text-left px-1"
                             variant="light"
-                            cities={citiesWithCounts.map((c) => ({ name: c.name, count: c.cars }))}
+                            cities={citiesWithCounts.map((c) => ({ name: c.name, count: c.total }))}
                             selectedCity={selectedCity}
                             onSelectCity={onSelectCity}
                             onBrowseAllIndia={onBrowseAllIndia}
@@ -1022,54 +945,6 @@ const Home: React.FC<HomeProps> = ({
                 </div>
             </div>
 
-            {/* Stats Trust Strip — real counters trigger when scrolled into view.
-                We intentionally avoid fabricated numbers: cars/cities reflect
-                published inventory and only show "+" when the figure is
-                meaningfully large. */}
-            <div ref={statsRef} className="bg-white border-b border-gray-100 reveal-on-scroll">
-                <div className="max-w-6xl mx-auto px-4 py-8 md:py-10">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 divide-y md:divide-y-0 md:divide-x divide-gray-100">
-                        <AnimatedStat
-                            value={publishedVehicles.length}
-                            suffix={publishedVehicles.length >= 100 ? '+' : ''}
-                            label="Cars Listed"
-                            visible={statsVisible}
-                            formatter={(n) => Math.round(n).toLocaleString('en-IN')}
-                        />
-                        <AnimatedStat
-                            value={citiesWithCounts.filter((c) => c.cars > 0).length}
-                            suffix={citiesWithCounts.filter((c) => c.cars > 0).length >= 10 ? '+' : ''}
-                            label="Cities Covered"
-                            visible={statsVisible}
-                        />
-                        <AnimatedStat
-                            value={verifiedListingCount}
-                            suffix={verifiedListingCount >= 100 ? '+' : ''}
-                            label="Verified Listings"
-                            visible={statsVisible}
-                            formatter={(n) => Math.round(n).toLocaleString('en-IN')}
-                        />
-                        {averageCustomerRating > 0 ? (
-                            <AnimatedStat
-                                value={averageCustomerRating}
-                                suffix="★"
-                                label="Avg Listing Rating"
-                                visible={statsVisible}
-                                formatter={(n) => n.toFixed(1)}
-                            />
-                        ) : (
-                            <AnimatedStat
-                                value={publishedVehicles.filter((v) => v.isFeatured).length}
-                                suffix={publishedVehicles.filter((v) => v.isFeatured).length >= 10 ? '+' : ''}
-                                label="Featured Cars"
-                                visible={statsVisible}
-                                formatter={(n) => Math.round(n).toLocaleString('en-IN')}
-                            />
-                        )}
-                    </div>
-                </div>
-            </div>
-
             {/* Continue browsing — only rendered when we actually have recent
                 vehicles to show. Backed by localStorage so it works for
                 logged-out visitors too. */}
@@ -1207,19 +1082,18 @@ const Home: React.FC<HomeProps> = ({
                                     <div
                                         key={vehicle.id}
                                         onClick={() => onSelectVehicle(vehicle)}
-                                        className="shine-on-hover bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-200/80 hover:shadow-xl hover:border-gray-300 transition-all duration-300 cursor-pointer group hover:-translate-y-1 flex-shrink-0 snap-start min-w-[260px] md:min-w-[300px] lg:min-w-[320px]"
+                                        className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-200/80 cursor-pointer flex-shrink-0 snap-start min-w-[260px] md:min-w-[300px] lg:min-w-[320px]"
                                     >
                                         <div className="relative h-56 overflow-hidden">
                                             <LazyImage
                                                 src={getFirstValidImage(vehicle.images, vehicle.id)}
                                                 alt={`${vehicle.make} ${vehicle.model}`}
-                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                                className="w-full h-full object-cover"
                                                 width={400}
                                                 quality={85}
                                                 eager={index === 0}
                                                 fetchPriority={index === 0 ? 'high' : 'auto'}
                                             />
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                                             <div className="absolute top-3 left-3 bg-green-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1 text-[11px] font-semibold tracking-wide shadow-sm">
                                                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                                                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
@@ -1231,7 +1105,7 @@ const Home: React.FC<HomeProps> = ({
                                                     e.stopPropagation();
                                                     onToggleWishlist(vehicle.id);
                                                 }}
-                                                className="absolute top-3 right-3 w-9 h-9 bg-white/95 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all duration-300 shadow-sm hover:scale-110"
+                                                className="absolute top-3 right-3 w-9 h-9 bg-white/95 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm"
                                             >
                                                 <svg 
                                                     className={`w-5 h-5 transition-all ${wishlist.includes(vehicle.id) ? 'fill-red-500 text-red-500' : 'text-gray-600'}`}
@@ -1351,13 +1225,13 @@ const Home: React.FC<HomeProps> = ({
                                 <div
                                     key={vehicle.id}
                                     onClick={() => onSelectVehicle(vehicle)}
-                                    className="shine-on-hover bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-200/80 hover:shadow-lg hover:border-gray-300 transition-all duration-300 cursor-pointer group hover:-translate-y-1"
+                                    className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-200/80 cursor-pointer"
                                 >
                                     <div className="relative h-48 overflow-hidden">
                                         <LazyImage
                                             src={getFirstValidImage(vehicle.images, vehicle.id)}
                                             alt={`${vehicle.make} ${vehicle.model}`}
-                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                            className="w-full h-full object-cover"
                                             width={380}
                                             quality={85}
                                             eager={index === 0}
@@ -1459,13 +1333,12 @@ const Home: React.FC<HomeProps> = ({
                     <div ref={citiesGridRef} className="reveal-on-scroll grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
                         {topCities.map((city, index) => {
                             const accent = getHomeMobileCityAccent(city.name);
-                            const hasVehicles = city.cars > 0;
 
                             return (
                                 <button
                                     key={index}
                                     type="button"
-                                    aria-label={t('mobile.home.cityAria', { name: city.name, count: city.cars })}
+                                    aria-label={t('mobile.home.cityAria', { name: city.name, count: city.total })}
                                     onClick={() => onSelectCity(city.name)}
                                     className="mc-card group relative rounded-3xl bg-white overflow-hidden text-left transition-all duration-300 active:scale-[0.98] hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                                     style={{
@@ -1573,7 +1446,7 @@ const Home: React.FC<HomeProps> = ({
                                             </svg>
                                         </div>
 
-                                        {hasVehicles ? (
+                                        {city.total > 0 ? (
                                             <span
                                                 className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full text-[12px] font-bold"
                                                 style={{ backgroundColor: accent.soft, color: accent.solid }}
@@ -1583,7 +1456,7 @@ const Home: React.FC<HomeProps> = ({
                                                     style={{ backgroundColor: accent.solid }}
                                                     aria-hidden="true"
                                                 />
-                                                {t('mobile.home.cityAvailable', { count: city.cars })}
+                                                {t('mobile.home.cityAvailable', { count: city.total })}
                                             </span>
                                         ) : (
                                             <span className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full text-[12px] font-semibold bg-gray-100 text-gray-500">

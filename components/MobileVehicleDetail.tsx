@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle, ProsAndCons, User } from '../types';
@@ -18,15 +18,18 @@ import TestDriveModal from './TestDriveModal.js';
 import { ListingStockBadge } from './ListingStockBadge.js';
 import { ListingTrustChips } from './ListingTrustChips.js';
 import { isListingAvailable } from '../utils/listingStock.js';
+import StarRating from './StarRating';
 
 interface MobileVehicleDetailProps {
   vehicle: Vehicle;
   onBack: () => void;
   comparisonList: number[];
   onToggleCompare: (id: number) => void;
+  onAddSellerRating?: (sellerEmail: string, rating: number) => void;
   wishlist: number[];
   onToggleWishlist: (id: number) => void;
   currentUser: User | null;
+  onFlagContent?: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
   users: User[];
   onViewSellerProfile: (sellerEmail: string) => void;
   onStartChat: (vehicle: Vehicle) => void;
@@ -51,9 +54,11 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   onBack,
   comparisonList = [],
   onToggleCompare,
+  onAddSellerRating,
   wishlist = [],
   onToggleWishlist,
   currentUser,
+  onFlagContent,
   users = [],
   onViewSellerProfile,
   onStartChat,
@@ -63,6 +68,8 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   onSelectVehicle
 }) => {
   const { t } = useTranslation();
+  const ratingSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [showEMICalculator, setShowEMICalculator] = useState(false);
@@ -111,6 +118,27 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
 
   const isComparing = comparisonList.includes(safeVehicle.id);
   const isInWishlist = wishlist.includes(safeVehicle.id);
+  const canRate = currentUser?.role === 'customer' && !!onAddSellerRating;
+
+  const handleRateSeller = (rating: number) => {
+    if (!onAddSellerRating || !safeVehicle.sellerEmail) return;
+    onAddSellerRating(safeVehicle.sellerEmail, Number(rating));
+    setShowSellerRatingSuccess(true);
+    if (ratingSuccessTimeoutRef.current) {
+      clearTimeout(ratingSuccessTimeoutRef.current);
+    }
+    ratingSuccessTimeoutRef.current = setTimeout(() => setShowSellerRatingSuccess(false), 3000);
+  };
+
+  const handleFlagClick = () => {
+    if (!onFlagContent) return;
+    if (window.confirm('Are you sure you want to report this listing for review by an administrator?')) {
+      const reason = window.prompt('Please provide a reason for reporting this listing (optional):');
+      if (reason !== null) {
+        onFlagContent('vehicle', safeVehicle.id, reason || 'No reason provided');
+      }
+    }
+  };
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -611,6 +639,30 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
             )}
           </div>
         </div>
+
+        {canRate && seller && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-gray-600">Rate your experience:</p>
+              <StarRating rating={0} onRate={handleRateSeller} />
+            </div>
+            {showSellerRatingSuccess && (
+              <p className="mt-2 text-center text-sm text-green-600">Thanks for your feedback!</p>
+            )}
+          </div>
+        )}
+
+        {onFlagContent && (
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={handleFlagClick}
+              className="text-xs text-gray-500 hover:text-orange-500"
+            >
+              {t('vehicle.detail.reportThisListing')}
+            </button>
+          </div>
+        )}
 
         {/* Recommendations */}
         {filteredRecommendations.length > 0 && (

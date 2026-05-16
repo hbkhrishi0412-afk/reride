@@ -6,7 +6,17 @@
 (function () {
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
 
-  const API_ORIGIN = 'https://www.reride.co.in';
+  function getConfiguredApiOrigin() {
+    try {
+      var o = window.__RERIDE_API_ORIGIN__;
+      if (typeof o === 'string' && o.length > 0) {
+        return o.replace(/\/+$/, '');
+      }
+    } catch (e0) {}
+    return 'https://www.reride.co.in';
+  }
+
+  const API_ORIGIN = getConfiguredApiOrigin();
 
   function isAndroidAppAssetsHost(hostname) {
     if (!hostname) return false;

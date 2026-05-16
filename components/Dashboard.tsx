@@ -2586,10 +2586,7 @@ const ReportsView: React.FC<{
 
 // Main Dashboard Component
 const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat }) => {
-  // Note: onRequestCertification, and onTestDriveResponse are part of the interface contract
-  // but are not currently used in this component. They may be used in future features or passed to child components.
   void onRequestCertification;
-  void onTestDriveResponse;
   void onSellerOpenChat;
 
   const { t } = useTranslation();
@@ -2640,6 +2637,19 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   // Safety checks: Ensure arrays are initialized and validate all props (must be after hooks)
   const safeSellerVehicles = useMemo(() => Array.isArray(sellerVehicles) ? sellerVehicles : [], [sellerVehicles]);
+
+  /** Include canonical Supabase `databaseId` so API mutations work for UUID primary keys. */
+  const buildVehicleActionBody = useCallback(
+    (vehicleId: number, extra: Record<string, unknown> = {}) => {
+      const vehicle = safeSellerVehicles.find((v) => v && v.id === vehicleId);
+      return {
+        vehicleId,
+        ...(vehicle?.databaseId ? { databaseId: vehicle.databaseId } : {}),
+        ...extra,
+      };
+    },
+    [safeSellerVehicles],
+  );
   const safeConversations = useMemo(() => Array.isArray(conversations) ? conversations : [], [conversations]);
   const safeReportedVehicles = useMemo(() => Array.isArray(reportedVehicles) ? reportedVehicles : [], [reportedVehicles]);
   const safeVehicleData = useMemo(() => {
@@ -3078,12 +3088,11 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       const response = await authenticatedFetch('/api/vehicles?action=refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify(buildVehicleActionBody(vehicleId, {
           action: 'refresh',
-          vehicleId, 
-          refreshAction: 'refresh', 
-          sellerEmail: seller?.email 
-        })
+          refreshAction: 'refresh',
+          sellerEmail: seller?.email,
+        }))
       });
       
       if (response.ok) {
@@ -3120,12 +3129,11 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       const response = await authenticatedFetch('/api/vehicles?action=refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify(buildVehicleActionBody(vehicleId, {
           action: 'refresh',
-          vehicleId, 
-          refreshAction: 'renew', 
-          sellerEmail: seller?.email 
-        })
+          refreshAction: 'renew',
+          sellerEmail: seller?.email,
+        }))
       });
       
       if (response.ok) {
@@ -3168,7 +3176,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       const response = await authenticatedFetch('/api/vehicles?action=certify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vehicleId })
+        body: JSON.stringify(buildVehicleActionBody(vehicleId))
       });
       
       if (response.ok) {
@@ -3211,7 +3219,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       const response = await authenticatedFetch('/api/vehicles?action=sold', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vehicleId })
+        body: JSON.stringify(buildVehicleActionBody(vehicleId))
       });
       
       if (response.ok) {
@@ -3266,7 +3274,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         headers: { 
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vehicleId })
+        body: JSON.stringify(buildVehicleActionBody(vehicleId))
       });
       
       if (response.ok) {
@@ -4404,6 +4412,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             }}
             typingStatus={typingStatus}
             onOfferResponse={onOfferResponse}
+            onTestDriveResponse={onTestDriveResponse}
             onClearChat={onClearChat}
           />
         )}
@@ -4467,15 +4476,14 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 const response = await authenticatedFetch('/api/vehicles?action=boost', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    vehicleId,
+                  body: JSON.stringify(buildVehicleActionBody(vehicleId, {
                     packageId,
                     sellerEmail: seller.email,
                     razorpay_order_id: razorpayProof.razorpay_order_id,
                     razorpay_payment_id: razorpayProof.razorpay_payment_id,
                     razorpay_signature: razorpayProof.razorpay_signature,
                     amount: razorpayProof.amountInr,
-                  })
+                  }))
                 });
                 
                 if (response.ok) {

@@ -290,10 +290,20 @@ const addVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {
 };
 
 const updateVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {
+  const { getCanonicalPrimaryKey, VehicleMutationIdentityError } = await import('../utils/vehicleIdentity');
+  const databaseId = getCanonicalPrimaryKey(vehicleData);
+  if (!databaseId) {
+    throw new VehicleMutationIdentityError();
+  }
   const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
+  const payload: Record<string, unknown> = {
+    ...vehicleData,
+    id: vehicleData.id,
+    databaseId,
+  };
   const response = await authenticatedFetch('/api/vehicles', {
     method: 'PUT',
-    body: JSON.stringify(vehicleData),
+    body: JSON.stringify(payload),
   });
   const result = await handleApiResponse<Vehicle>(response);
   if (!result.success) {

@@ -506,7 +506,7 @@ const en = {
   'mobile.home.browseAllCars': 'Browse All Cars',
   'mobile.home.exploreLocation': 'Explore by Location',
   'mobile.home.cityAria': '{{name}}, {{count}} vehicles',
-  'mobile.home.cityAvailable': '{{count}} cars',
+  'mobile.home.cityAvailable': '{{count}} vehicles',
   'mobile.home.cityComingSoon': 'Coming soon',
   'a11y.searchVehicles': 'Search vehicles',
   'mobile.hero.checksPill': 'Full details',
@@ -797,6 +797,18 @@ const en = {
   'vehicle.detail.call': 'Call',
   'vehicle.detail.whatsapp': 'WhatsApp',
   'vehicle.detail.bookTestDrive': 'Book test drive',
+  'chat.testDrive.request': 'Test drive request',
+  'chat.testDrive.status.pending': 'Pending',
+  'chat.testDrive.status.confirmed': 'Confirmed',
+  'chat.testDrive.status.declined': 'Declined',
+  'chat.testDrive.confirm': 'Confirm',
+  'chat.testDrive.decline': 'Decline',
+  'chat.testDrive.messageBody':
+    'Test drive request for {{vehicle}} on {{date}} at {{time}}',
+  'chat.testDrive.replyConfirmed':
+    "Test drive confirmed for {{vehicle}}. We'll contact you shortly.",
+  'chat.testDrive.replyDeclined': 'Test drive request declined for {{vehicle}}.',
+  'chat.testDrive.vehicleFallback': 'the vehicle',
   'vehicle.share.whatsapp': 'WhatsApp',
   'vehicle.detail.chat': 'Chat',
   'stock.inStock': 'In stock',
@@ -1833,6 +1845,18 @@ const hi: Record<string, string> = {
   'carServices.services.periodic.bullets':
     'इंजन ऑयल चेंज|||ऑयल फिल्टर बदलना|||एयर फिल्टर बदलना|||25-पॉइंट सेफ्टी चेक|||बैटरी हेल्थ चेक',
 
+  'chat.testDrive.request': 'टेस्ट ड्राइव अनुरोध',
+  'chat.testDrive.status.pending': 'लंबित',
+  'chat.testDrive.status.confirmed': 'पुष्टि',
+  'chat.testDrive.status.declined': 'अस्वीकृत',
+  'chat.testDrive.confirm': 'पुष्टि करें',
+  'chat.testDrive.decline': 'अस्वीकार',
+  'chat.testDrive.messageBody': '{{vehicle}} के लिए {{date}} को {{time}} पर टेस्ट ड्राइव अनुरोध',
+  'chat.testDrive.replyConfirmed':
+    '{{vehicle}} के लिए टेस्ट ड्राइव की पुष्टि। हम जल्द संपर्क करेंगे।',
+  'chat.testDrive.replyDeclined': '{{vehicle}} के लिए टेस्ट ड्राइव अनुरोध अस्वीकृत।',
+  'chat.testDrive.vehicleFallback': 'वाहन',
+
   ...toastHi,
 };
 
@@ -2685,6 +2709,18 @@ const te: Record<string, string> = {
     'OEM సిఫార్సు చేసిన షెడ్యూల్స్ ప్రకారం అసలైన పార్ట్స్‌తో సర్వీసింగ్.',
   'carServices.services.periodic.bullets':
     'ఇంజిన్ ఆయిల్ మార్పు|||ఆయిల్ ఫిల్టర్ మార్పు|||ఎయిర్ ఫిల్టర్ మార్పు|||25-పాయింట్ సేఫ్టీ చెక్|||బ్యాటరీ హెల్త్ చెక్',
+
+  'chat.testDrive.request': 'టెస్ట్ డ్రైవ్ అభ్యర్థన',
+  'chat.testDrive.status.pending': 'పెండింగ్',
+  'chat.testDrive.status.confirmed': 'నిర్ధారించబడింది',
+  'chat.testDrive.status.declined': 'తిరస్కరించబడింది',
+  'chat.testDrive.confirm': 'నిర్ధారించు',
+  'chat.testDrive.decline': 'తిరస్కరించు',
+  'chat.testDrive.messageBody': '{{date}} {{time}}కు {{vehicle}} కోసం టెస్ట్ డ్రైవ్ అభ్యర్థన',
+  'chat.testDrive.replyConfirmed':
+    '{{vehicle}} కోసం టెస్ట్ డ్రైవ్ నిర్ధారించబడింది. మేము త్వరలో సంప్రదిస్తాము.',
+  'chat.testDrive.replyDeclined': '{{vehicle}} కోసం టెస్ట్ డ్రైవ్ అభ్యర్థన తిరస్కరించబడింది.',
+  'chat.testDrive.vehicleFallback': 'వాహనం',
 
   ...toastTe,
 };
@@ -3539,6 +3575,18 @@ const ta: Record<string, string> = {
     'OEM பரிந்துரைத்த அட்டவணைப்படி அசல் பாகங்களுடன் சேவை.',
   'carServices.services.periodic.bullets':
     'இன்ஜின் ஆயில் மாற்றம்|||ஆயில் ஃபில்டர் மாற்றம்|||ஏர் ஃபில்டர் மாற்றம்|||25-பாயிண்ட் பாதுகாப்பு சோதனை|||பேட்டரி நிலை சோதனை',
+
+  'chat.testDrive.request': 'டெஸ்ட் டிரைவ் கோரிக்கை',
+  'chat.testDrive.status.pending': 'நிலுவையில்',
+  'chat.testDrive.status.confirmed': 'உறுதிப்படுத்தப்பட்டது',
+  'chat.testDrive.status.declined': 'நிராகரிக்கப்பட்டது',
+  'chat.testDrive.confirm': 'உறுதிப்படுத்து',
+  'chat.testDrive.decline': 'நிராகரி',
+  'chat.testDrive.messageBody': '{{date}} {{time}} அன்று {{vehicle}} க்கான டெஸ்ட் டிரைவ் கோரிக்கை',
+  'chat.testDrive.replyConfirmed':
+    '{{vehicle}} க்கான டெஸ்ட் டிரைவ் உறுதிப்படுத்தப்பட்டது. விரைவில் தொடர்பு கொள்வோம்.',
+  'chat.testDrive.replyDeclined': '{{vehicle}} க்கான டெஸ்ட் டிரைவ் கோரிக்கை நிராகரிக்கப்பட்டது.',
+  'chat.testDrive.vehicleFallback': 'வாகனம்',
 
   ...toastTa,
 };

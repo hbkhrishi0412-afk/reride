@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User, Vehicle, Conversation } from '../types';
 import { View as ViewEnum } from '../types';
@@ -46,12 +46,15 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
   onLogout
 }) => {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity' | 'serviceTrack'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity' | 'alerts' | 'serviceTrack'>('overview');
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
-  const savedSearches = useMemo(
-    () => buyerService.getSavedSearches(currentUser?.email || ''),
-    [currentUser?.email]
+  const [savedSearches, setSavedSearches] = useState(() =>
+    buyerService.getSavedSearches(currentUser?.email || '')
   );
+
+  useEffect(() => {
+    setSavedSearches(buyerService.getSavedSearches(currentUser?.email || ''));
+  }, [currentUser?.email]);
 
   // Load recently viewed in useEffect to avoid infinite re-renders (async getRecentlyViewed)
   useEffect(() => {
@@ -93,12 +96,33 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
     [conversations]
   );
 
+  const priceDrops = useMemo(() => {
+    if (!currentUser?.email) return [];
+    return buyerService.checkPriceDrops(currentUser.email, wishlist, vehicles);
+  }, [currentUser?.email, wishlist, vehicles]);
+
+  const newMatches = useMemo(() => {
+    if (!currentUser?.email) return [];
+    return buyerService.findNewMatches(currentUser.email, vehicles).filter(
+      (result) => result.matches.length > 0
+    );
+  }, [currentUser?.email, vehicles]);
+
+  const handleToggleAlerts = useCallback(
+    (searchId: string, emailAlerts: boolean) => {
+      buyerService.updateSavedSearch(currentUser.email, searchId, { emailAlerts });
+      setSavedSearches(buyerService.getSavedSearches(currentUser.email));
+    },
+    [currentUser.email]
+  );
+
   const mobileTabs = useMemo(
     () =>
       [
         { id: 'overview' as const, label: t('buyerDashboard.mobile.tab.overview') },
         { id: 'searches' as const, label: t('buyerDashboard.mobile.tab.searches') },
         { id: 'activity' as const, label: t('buyerDashboard.mobile.tab.activity') },
+        { id: 'alerts' as const, label: t('buyerDashboard.tab.alerts') },
         { id: 'serviceTrack' as const, label: t('buyerDashboard.mobile.tab.trackRequests') },
       ],
     [t]
@@ -214,7 +238,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                 if (next) setActiveTab(next.id);
               }}
               onClick={() => setActiveTab(id)}
-              className={`flex-1 min-w-[25%] py-3 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500 ${
+              className={`flex-1 min-w-[20%] py-3 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500 ${
                 isActive
                   ? 'text-orange-500 border-b-2 border-orange-500'
                   : 'text-gray-600 border-b-2 border-transparent'
@@ -228,6 +252,34 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
 
       {/* Content */}
       <div className="px-4 py-4">
+        {activeTab !== 'alerts' && (priceDrops.length > 0 || newMatches.length > 0) && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('alerts')}
+            className="mb-4 flex w-full items-center justify-between gap-3 rounded-xl border border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50 px-4 py-3 text-left active:scale-[0.99]"
+            aria-label={t('buyerDashboard.newAlerts')}
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-yellow-400 to-amber-500 text-white shadow">
+                🔔
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-yellow-900">
+                  {t('buyerDashboard.newAlerts')}
+                </p>
+                <p className="truncate text-xs text-yellow-800/80">
+                  {priceDrops.length > 0 && t('buyerDashboard.priceDropsHeading', { count: priceDrops.length })}
+                  {priceDrops.length > 0 && newMatches.length > 0 && ' • '}
+                  {newMatches.length > 0 && `${newMatches.length} ${t('buyerDashboard.newMatchesHeading')}`}
+                </p>
+              </div>
+            </div>
+            <span className="shrink-0 text-sm font-semibold text-yellow-900">
+              {t('buyerDashboard.viewAllArrow')}
+            </span>
+          </button>
+        )}
+
         {activeTab === 'overview' && (
           <div role="tabpanel" id="mbd-panel-overview" aria-labelledby="mbd-tab-overview" className="space-y-6">
             {/* Quick Actions Section */}
@@ -364,6 +416,15 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                   <div key={search.id ?? `search-${idx}`} className="bg-white rounded-xl p-4 shadow-sm">
                     <h3 className="font-semibold text-gray-900 mb-2 truncate">{search.name}</h3>
                     <p className="text-sm text-gray-600 mb-3">{filterText}</p>
+                    <label className="mb-3 flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={search.emailAlerts}
+                        onChange={(e) => handleToggleAlerts(search.id, e.target.checked)}
+                        className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                      />
+                      {t('buyerDashboard.emailAlerts')}
+                    </label>
                     <button
                       type="button"
                       onClick={() => onNavigate(ViewEnum.USED_CARS)}
@@ -436,6 +497,89 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                     {t('nav.logout')}
                   </div>
                 </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'alerts' && (
+          <div role="tabpanel" id="mbd-panel-alerts" aria-labelledby="mbd-tab-alerts" className="space-y-4">
+            <h2 className="text-lg font-bold text-gray-900">{t('buyerDashboard.yourAlerts')}</h2>
+            {priceDrops.length === 0 && newMatches.length === 0 ? (
+              <EmptyState
+                icon="🔔"
+                title={t('buyerDashboard.noAlerts')}
+                description={t('buyerDashboard.welcomeSubtitle', { name: currentUser.name })}
+                secondaryAction={{ label: t('buyerDashboard.tab.savedSearches'), onClick: () => setActiveTab('searches') }}
+                dense
+              />
+            ) : (
+              <div className="space-y-6">
+                {priceDrops.length > 0 && (
+                  <div>
+                    <h3 className="mb-3 font-semibold text-gray-900">
+                      🔽 {t('buyerDashboard.priceDropsSection')}
+                    </h3>
+                    <div className="space-y-3">
+                      {priceDrops.map((drop) => {
+                        const vehicle = vehicles.find((v) => v.id === drop.vehicleId);
+                        if (!vehicle) return null;
+                        return (
+                          <button
+                            key={drop.vehicleId}
+                            type="button"
+                            onClick={() => onSelectVehicle(vehicle)}
+                            className="flex w-full gap-4 rounded-xl bg-white p-4 text-left shadow-sm active:scale-[0.98]"
+                          >
+                            <img
+                              src={getFirstValidImage(vehicle.images, vehicle.id)}
+                              alt=""
+                              className="h-20 w-24 shrink-0 rounded-lg object-cover"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-gray-900">
+                                {vehicle.year} {vehicle.make} {vehicle.model}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                <span className="line-through">₹{drop.oldPrice.toLocaleString('en-IN')}</span>
+                                {' → '}
+                                <span className="font-bold text-orange-500">
+                                  ₹{drop.newPrice.toLocaleString('en-IN')}
+                                </span>
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {newMatches.length > 0 && (
+                  <div>
+                    <h3 className="mb-3 font-semibold text-gray-900">
+                      ✨ {t('buyerDashboard.newMatchesHeading')}
+                    </h3>
+                    <div className="space-y-3">
+                      {newMatches.map((result) => {
+                        const search = savedSearches.find((s) => s.id === result.searchId);
+                        if (!search) return null;
+                        return (
+                          <div
+                            key={result.searchId}
+                            className="rounded-xl bg-white p-4 shadow-sm"
+                          >
+                            <p className="font-semibold text-gray-900">{search.name}</p>
+                            <p className="text-sm text-gray-600">
+                              {result.matches.length === 1
+                                ? t('buyerDashboard.oneNewMatch')
+                                : t('buyerDashboard.nNewMatches', { count: result.matches.length })}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
