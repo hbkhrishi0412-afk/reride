@@ -29,6 +29,135 @@ export interface CertifiedInspection {
     details: Record<string, string>; // e.g., { Engine: "No leaks found...", ... }
 }
 
+// ============================================
+// AI-POWERED PHOTO INSPECTION SYSTEM
+// ============================================
+
+export type AIInspectionGrade = 'A' | 'B' | 'C' | 'D' | 'F';
+
+export interface AIInspectionFinding {
+  type: 'scratch' | 'dent' | 'rust' | 'paint_damage' | 'crack' | 'wear' | 'tear' | 'stain' | 'missing_part' | 'modification';
+  location: string; // e.g., "front bumper", "rear door left", "dashboard"
+  severity: 'minor' | 'moderate' | 'major';
+  description: string;
+  imageIndex: number; // Which uploaded image shows this issue
+  confidence: number; // 0-100 confidence score
+}
+
+export interface AIExteriorAnalysis {
+  grade: AIInspectionGrade;
+  score: number; // 0-100
+  findings: AIInspectionFinding[];
+  summary: string;
+  paintCondition: 'excellent' | 'good' | 'fair' | 'poor';
+  bodyCondition: 'excellent' | 'good' | 'fair' | 'poor';
+}
+
+export interface AIInteriorAnalysis {
+  grade: AIInspectionGrade;
+  score: number; // 0-100
+  findings: AIInspectionFinding[];
+  summary: string;
+  seatCondition: 'excellent' | 'good' | 'fair' | 'poor';
+  dashboardCondition: 'excellent' | 'good' | 'fair' | 'poor';
+  cleanlinessLevel: 'spotless' | 'clean' | 'average' | 'needs_cleaning';
+}
+
+export interface AITyreAnalysis {
+  grade: AIInspectionGrade;
+  score: number; // 0-100
+  estimatedTreadDepth: 'new' | 'good' | 'fair' | 'replace_soon' | 'unsafe';
+  mismatchedTyres: boolean;
+  brandVisible: string | null;
+  summary: string;
+}
+
+export interface AIPhotoQualityAssessment {
+  overallScore: number; // 0-100
+  issues: ('blur' | 'low_light' | 'obstructed' | 'reflection' | 'too_far' | 'wrong_angle')[];
+  missingViews: ('front' | 'rear' | 'left_side' | 'right_side' | 'interior_front' | 'interior_rear' | 'engine_bay' | 'boot' | 'odometer' | 'tyres')[];
+  recommendations: string[];
+}
+
+export interface AIDocumentAnalysis {
+  rcDetected: boolean;
+  rcReadable: boolean;
+  registrationMatchesListing: boolean | null; // null if can't verify
+  insuranceDocDetected: boolean;
+  insuranceValid: boolean | null;
+  detectedRegistrationNumber: string | null;
+  detectedOwnerName: string | null;
+}
+
+export interface AIInspectionReport {
+  reportId: string;
+  vehicleId: number;
+  generatedAt: string; // ISO timestamp
+  modelVersion: string;
+  processingTimeMs: number;
+  
+  // Overall Assessment
+  overallGrade: AIInspectionGrade;
+  overallScore: number; // 0-100
+  confidenceScore: number; // 0-100, how confident the AI is in its assessment
+  
+  // Component Analysis
+  exterior: AIExteriorAnalysis;
+  interior: AIInteriorAnalysis;
+  tyres: AITyreAnalysis;
+  
+  // Photo Quality
+  photoQuality: AIPhotoQualityAssessment;
+  
+  // Document Analysis (if documents uploaded)
+  documentAnalysis?: AIDocumentAnalysis;
+  
+  // Buyer Advisory
+  highlights: string[]; // Positive points
+  concerns: string[]; // Issues to check
+  buyerAdvisory: string[]; // Recommendations for buyer
+  
+  // Estimated Value Impact
+  conditionImpact: {
+    estimatedValueReduction: number; // Percentage reduction from ideal condition
+    majorIssuesCount: number;
+    moderateIssuesCount: number;
+    minorIssuesCount: number;
+  };
+  
+  // Raw data for detailed view
+  allFindings: AIInspectionFinding[];
+  imageAnalysis: {
+    imageIndex: number;
+    imageUrl: string;
+    detectedElements: string[];
+    issuesFound: number;
+  }[];
+}
+
+export interface AIInspectionRequest {
+  vehicleId?: number;
+  imageUrls: string[];
+  vehicleDetails: {
+    make: string;
+    model: string;
+    year: number;
+    mileage?: number;
+    fuelType?: string;
+    color?: string;
+  };
+  includeDocumentAnalysis?: boolean;
+  documentUrls?: string[];
+}
+
+export interface AIInspectionStatus {
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  progress: number; // 0-100
+  currentStep: string;
+  estimatedTimeRemaining?: number; // seconds
+  error?: string;
+}
+
 export interface ServiceRecord {
   date: string; // ISO string
   service: string;
@@ -94,6 +223,12 @@ export interface Vehicle {
   displacement: string; // e.g., "1086 cc"
   groundClearance: string; // e.g., "165 mm"
   bootSpace: string; // e.g., "235 litres"
+  
+  // Vahan Verification Fields
+  registrationNumber?: string; // Full vehicle registration number (e.g., MH12AB1234)
+  engineNumber?: string; // Engine number from RC book
+  chassisNumber?: string; // Chassis number from RC book
+  vahanVerifiedAt?: string; // ISO timestamp when verified with Vahan API
   qualityReport?: {
     fixesDone: string[];
   };
@@ -168,6 +303,9 @@ export interface Vehicle {
   offerDescription?: string;
   offerHighlight?: string;
   offerDisclaimer?: string;
+  
+  /** AI-powered photo inspection report */
+  aiInspectionReport?: AIInspectionReport;
 }
 
 export type SubscriptionPlan = 'free' | 'pro' | 'premium';

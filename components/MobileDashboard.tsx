@@ -14,6 +14,12 @@ import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
 import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { formatRelativeTime } from '../utils/date';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
+import { 
+  enhanceVehicleListing,
+  isListingReadyToPublish,
+  getListingImprovementSuggestions,
+  type ListingEnhancementResult 
+} from '../services/listingEnhancementService';
 
 // ---------- Premium inline SVG icon set (kept local to avoid new deps) ----------
 type IconProps = { className?: string; size?: number; stroke?: number };
@@ -2345,6 +2351,137 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     return Object.keys(newErrors).length === 0;
   };
 
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  
+  // Photo checklist state - tracks which specific views have been uploaded
+  type PhotoViewId = 'front' | 'rear' | 'left' | 'right' | 'interior' | 'tyres';
+  const [mobilePhotoViewUploads, setMobilePhotoViewUploads] = useState<Record<PhotoViewId, string | null>>({
+    front: null, rear: null, left: null, right: null, interior: null, tyres: null
+  });
+  const [mobileActivePhotoView, setMobileActivePhotoView] = useState<PhotoViewId | null>(null);
+  const mobileChecklistFileInputRef = React.useRef<HTMLInputElement>(null);
+  
+  // Handle checklist photo view click - triggers upload for specific view
+  const handleMobilePhotoViewClick = (viewId: PhotoViewId) => {
+    setMobileActivePhotoView(viewId);
+    mobileChecklistFileInputRef.current?.click();
+  };
+  
+  // Handle checklist file upload for mobile
+  const handleMobileChecklistFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    if (!input.files || input.files.length === 0 || !mobileActivePhotoView) {
+      setMobileActivePhotoView(null);
+      return;
+    }
+
+    setIsUploadingImages(true);
+    const file = input.files[0];
+    
+    try {
+      const { uploadImages, validateImageFile } = await import('../services/imageUploadService');
+      
+      const validation = validateImageFile(file);
+      if (!validation.valid) {
+        alert(validation.error || 'Invalid image file');
+        setIsUploadingImages(false);
+        input.value = '';
+        setMobileActivePhotoView(null);
+        return;
+      }
+      
+      const uploadResults = await uploadImages([file], 'vehicles', currentUser?.email);
+      
+      if (uploadResults[0]?.success && uploadResults[0]?.url) {
+        const uploadedUrl = uploadResults[0].url;
+        
+        // Update photo view uploads
+        setMobilePhotoViewUploads(prev => ({
+          ...prev,
+          [mobileActivePhotoView]: uploadedUrl
+        }));
+        
+        // Also add to main images array
+        const currentImages = addFormData.images || [];
+        const maxImages = 10;
+        if (currentImages.length < maxImages) {
+          setAddFormData(prev => ({ ...prev, images: [...prev.images, uploadedUrl] }));
+        }
+        
+        console.log(`✅ Uploaded ${mobileActivePhotoView} view photo`);
+      } else {
+        alert('Failed to upload image. Please try again.');
+      }
+    } catch (error) {
+      console.error("Error uploading checklist photo:", error);
+      alert('Failed to upload image. Please try again.');
+    } finally {
+      setIsUploadingImages(false);
+      input.value = '';
+      setMobileActivePhotoView(null);
+    }
+  };
+
+  const handleAddImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    const files = Array.from(e.target.files);
+    const input = e.target;
+    
+    setIsUploadingImages(true);
+    try {
+      const { uploadImages, validateImageFile } = await import('../services/imageUploadService');
+      
+      // Validate all files first
+      for (const file of files) {
+        const validation = validateImageFile(file);
+        if (!validation.valid) {
+          alert(validation.error || 'Invalid image file');
+          if (input) input.value = '';
+          setIsUploadingImages(false);
+          return;
+        }
+      }
+      
+      // Upload images
+      const uploadResults = await uploadImages(files, 'vehicles', currentUser.email);
+      
+      // Get successful uploads
+      const successfulUrls = uploadResults
+        .filter(r => r.success && r.url)
+        .map(r => r.url!);
+      
+      if (successfulUrls.length > 0) {
+        const currentImages = addFormData.images || [];
+        const maxImages = 10;
+        const remainingSlots = maxImages - currentImages.length;
+        
+        if (remainingSlots <= 0) {
+          alert(`Maximum ${maxImages} images allowed. Please remove some images first.`);
+        } else {
+          const imagesToAdd = successfulUrls.slice(0, remainingSlots);
+          setAddFormData(prev => ({
+            ...prev,
+            images: [...(prev.images || []), ...imagesToAdd]
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      alert('Failed to upload images. Please try again.');
+    } finally {
+      setIsUploadingImages(false);
+      if (input) input.value = '';
+    }
+  };
+  
+  const handleRemoveAddImage = (urlToRemove: string) => {
+    setAddFormData(prev => ({
+      ...prev,
+      images: (prev.images || []).filter(url => url !== urlToRemove)
+    }));
+  };
+
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -2354,13 +2491,39 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
     setIsAddingVehicle(true);
     try {
+      // Run enhancement pipeline (validation + AI inspection + quality scoring)
+      const enhancementResult = await enhanceVehicleListing(addFormData, {
+        runValidation: true,
+        runAIInspection: addFormData.images && addFormData.images.length >= 4,
+        checkPhotoQuality: true,
+        calculateListingScore: true,
+      });
+
+      if (!enhancementResult.success) {
+        // Show validation errors
+        const newErrors: Record<string, string> = {};
+        enhancementResult.validation.errors.forEach(err => {
+          newErrors[err.field] = err.message;
+        });
+        setAddErrors(newErrors);
+        setIsAddingVehicle(false);
+        return;
+      }
+
+      // Use enhanced vehicle data
       if (onAddVehicle) {
-        await onAddVehicle(addFormData, false);
+        await onAddVehicle(enhancementResult.vehicle, false);
         setAddFormData(initialAddFormData);
         setActiveTab('listings');
       }
     } catch (error) {
       console.error('Failed to add vehicle:', error);
+      // Fallback to direct save if enhancement fails
+      if (onAddVehicle) {
+        await onAddVehicle(addFormData, false);
+        setAddFormData(initialAddFormData);
+        setActiveTab('listings');
+      }
     } finally {
       setIsAddingVehicle(false);
     }
@@ -2626,6 +2789,211 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             </div>
           </div>
 
+          {/* Photos Section with AI Inspection Checklist */}
+          <div className="space-y-4 pt-6 border-t border-gray-200">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+              <h4 className="font-bold text-gray-900 text-base">{t('sellerListing.section.photos', 'Photos')}</h4>
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-semibold">
+                {t('sellerListing.aiEnabled', 'AI Inspection Enabled')}
+              </span>
+            </div>
+            
+            {/* Photo Checklist Guide */}
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-4 border border-blue-100">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900 text-sm">{t('sellerListing.photoGuide.title', 'Photo Guide for Best Results')}</p>
+                  <p className="text-xs text-gray-600 mt-0.5">{t('sellerListing.photoGuide.subtitle', 'Upload 6+ photos for AI inspection report')}</p>
+                </div>
+              </div>
+              
+              {/* Checklist Items - Clickable */}
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'front' as PhotoViewId, label: t('sellerListing.photoGuide.front', 'Front View'), icon: '🚗' },
+                  { id: 'rear' as PhotoViewId, label: t('sellerListing.photoGuide.rear', 'Rear View'), icon: '🔙' },
+                  { id: 'left' as PhotoViewId, label: t('sellerListing.photoGuide.left', 'Left Side'), icon: '◀️' },
+                  { id: 'right' as PhotoViewId, label: t('sellerListing.photoGuide.right', 'Right Side'), icon: '▶️' },
+                  { id: 'interior' as PhotoViewId, label: t('sellerListing.photoGuide.interior', 'Interior/Dashboard'), icon: '🪑' },
+                  { id: 'tyres' as PhotoViewId, label: t('sellerListing.photoGuide.tyres', 'Tyres Close-up'), icon: '⚫' },
+                ].map((item) => {
+                  const uploadedUrl = mobilePhotoViewUploads[item.id];
+                  const isChecked = !!uploadedUrl;
+                  const isLoading = isUploadingImages && mobileActivePhotoView === item.id;
+                  return (
+                    <button
+                      type="button"
+                      key={item.id}
+                      onClick={() => !isLoading && handleMobilePhotoViewClick(item.id)}
+                      disabled={isLoading}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium transition-all active:scale-[0.98] ${
+                        isChecked 
+                          ? 'bg-green-100 text-green-700 border-2 border-green-300' 
+                          : 'bg-white text-gray-600 border-2 border-gray-200 border-dashed'
+                      } ${isLoading ? 'opacity-70' : ''}`}
+                    >
+                      {isChecked && uploadedUrl ? (
+                        <div className="relative w-8 h-8 rounded overflow-hidden ring-2 ring-green-400 flex-shrink-0">
+                          <img src={uploadedUrl} alt={item.label} className="w-full h-full object-cover" />
+                          <div className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                            <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        </div>
+                      ) : isLoading ? (
+                        <svg className="animate-spin h-5 w-5 text-blue-500 flex-shrink-0" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      ) : (
+                        <span className="text-lg">{item.icon}</span>
+                      )}
+                      <span className="flex-1 text-left">{item.label}</span>
+                      {!isChecked && !isLoading && (
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Hidden file input for checklist uploads */}
+              <input 
+                ref={mobileChecklistFileInputRef}
+                type="file" 
+                className="sr-only" 
+                accept="image/png, image/jpeg" 
+                onChange={handleMobileChecklistFileUpload}
+              />
+              
+              {/* Progress Indicator */}
+              {(() => {
+                const uploadedViewCount = Object.values(mobilePhotoViewUploads).filter(Boolean).length;
+                return (
+                  <div className="mt-3 pt-3 border-t border-blue-200">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-medium text-gray-700">
+                        {t('sellerListing.photoGuide.progress', 'Photos uploaded')}
+                      </span>
+                      <span className="text-xs font-bold text-blue-700">
+                        {uploadedViewCount}/6 {t('sellerListing.photoGuide.recommended', 'recommended')}
+                      </span>
+                    </div>
+                    <div className="h-2 bg-white rounded-full overflow-hidden border border-blue-200">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          uploadedViewCount >= 6 ? 'bg-green-500' : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${Math.min(100, (uploadedViewCount / 6) * 100)}%` }}
+                      />
+                    </div>
+                    {uploadedViewCount >= 4 && (
+                      <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        {t('sellerListing.photoGuide.aiReady', 'AI Inspection will be generated!')}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Upload Button */}
+            <label
+              htmlFor="add-vehicle-images"
+              className={`flex items-center justify-center gap-3 p-4 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
+                isUploadingImages 
+                  ? 'border-gray-300 bg-gray-50 cursor-wait' 
+                  : 'border-blue-300 bg-blue-50 hover:border-blue-400 hover:bg-blue-100 active:scale-[0.98]'
+              }`}
+            >
+              {isUploadingImages ? (
+                <>
+                  <svg className="animate-spin h-5 w-5 text-blue-500" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-600">{t('sellerListing.uploading', 'Uploading...')}</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <div>
+                    <span className="text-sm font-semibold text-blue-700">{t('sellerListing.tapToUpload', 'Tap to Upload Photos')}</span>
+                    <p className="text-xs text-blue-600">{t('sellerListing.photoFormats', 'JPG, PNG up to 10MB each')}</p>
+                  </div>
+                </>
+              )}
+              <input 
+                id="add-vehicle-images"
+                type="file" 
+                className="sr-only" 
+                multiple 
+                accept="image/*" 
+                onChange={handleAddImageUpload}
+                disabled={isUploadingImages}
+              />
+            </label>
+
+            {/* Uploaded Images Preview */}
+            {addFormData.images && addFormData.images.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-600">
+                  {t('sellerListing.uploadedImages', 'Uploaded Images')} ({addFormData.images.length})
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {addFormData.images.map((url, index) => (
+                    <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group">
+                      <img
+                        src={url}
+                        className="w-full h-full object-cover"
+                        alt={`Upload ${index + 1}`}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+                        }}
+                      />
+                      {index === 0 && (
+                        <span className="absolute top-1 left-1 bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                          {t('sellerListing.cover', 'COVER')}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAddImage(url)}
+                        className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tip */}
+            <p className="text-xs text-gray-500 flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              {t('sellerListing.photoTip', 'Tip: Listings with 6+ clear photos get 3x more views!')}
+            </p>
+          </div>
+
           {/* Description */}
           <div className="space-y-4 pt-6 border-t border-gray-200">
             <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.description')}</h4>
@@ -2795,13 +3163,34 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
       setIsSubmitting(true);
       try {
+        const enhancementResult = await enhanceVehicleListing(formData, {
+          runValidation: true,
+          runAIInspection: Boolean(formData.images && formData.images.length >= 4),
+          checkPhotoQuality: true,
+          calculateListingScore: true,
+        });
+
+        if (!enhancementResult.success) {
+          const newErrors: Record<string, string> = {};
+          enhancementResult.validation.errors.forEach((err) => {
+            newErrors[err.field] = err.message;
+          });
+          setEditErrors(newErrors);
+          return;
+        }
+
         if (onUpdateVehicle) {
-          await onUpdateVehicle(formData);
+          await onUpdateVehicle(enhancementResult.vehicle);
           setEditingVehicle(null);
           setActiveTab('listings');
         }
       } catch (error) {
         console.error('Failed to update vehicle:', error);
+        if (onUpdateVehicle) {
+          await onUpdateVehicle(formData);
+          setEditingVehicle(null);
+          setActiveTab('listings');
+        }
       } finally {
         setIsSubmitting(false);
       }
@@ -3443,7 +3832,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         setTimeout(() => setSaveSuccess(false), 3000);
         addToast?.('Bank partners updated successfully!', 'success');
       } catch (error) {
-        addToast?.('Failed to update bank partners', 'error');
+        addToast?.('Could not update bank partners. Please try again.', 'error');
       } finally {
         setIsSavingBanks(false);
       }
@@ -3881,7 +4270,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           onBoost={async (vehicleId, packageId) => {
             await onBoostListing(vehicleId, packageId);
             setBoostVehicle(null);
-            addToast?.('Listing boosted successfully!', 'success');
+            addToast?.('Your listing has been boosted! It will get more visibility.', 'success');
           }}
         />
       )}

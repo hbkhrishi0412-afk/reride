@@ -897,14 +897,17 @@ class DataService {
   }
 
   async addVehicle(vehicleData: Vehicle): Promise<Vehicle> {
+    // Apply production enhancements (validation, quality scoring, timestamps)
+    const enhancedVehicle = this.applyProductionEnhancements(vehicleData);
+    
     if (this.isDevelopment) {
-      return this.addVehicleLocal(vehicleData);
+      return this.addVehicleLocal(enhancedVehicle);
     }
 
     try {
       const vehicle = await this.makeApiRequest<Vehicle>('/vehicles', {
         method: 'POST',
-        body: JSON.stringify(vehicleData),
+        body: JSON.stringify(enhancedVehicle),
       });
       
       // Update local cache (use production cache key in production)
@@ -934,6 +937,68 @@ class DataService {
       throw new Error(`Failed to add vehicle: ${errorMessage}`);
     }
   }
+  
+  /**
+   * Apply production enhancements to vehicle data before saving
+   * This ensures all vehicles get quality scoring, proper timestamps, etc.
+   */
+  private applyProductionEnhancements(vehicleData: Vehicle): Vehicle {
+    const now = new Date().toISOString();
+    const imageCount = vehicleData.images?.length || 0;
+    
+    // Calculate listing quality score
+    let qualityScore = 0;
+    // Photos (30 points)
+    if (imageCount >= 10) qualityScore += 30;
+    else if (imageCount >= 6) qualityScore += 25;
+    else if (imageCount >= 4) qualityScore += 20;
+    else if (imageCount >= 1) qualityScore += 10;
+    // Description (20 points)
+    const descLength = vehicleData.description?.length || 0;
+    if (descLength >= 500) qualityScore += 20;
+    else if (descLength >= 200) qualityScore += 15;
+    else if (descLength >= 100) qualityScore += 10;
+    else if (descLength >= 50) qualityScore += 5;
+    // Essential details (30 points)
+    if (vehicleData.make && vehicleData.model) qualityScore += 8;
+    if (vehicleData.year) qualityScore += 5;
+    if (vehicleData.price) qualityScore += 5;
+    if (vehicleData.mileage !== undefined) qualityScore += 5;
+    if (vehicleData.fuelType) qualityScore += 4;
+    if (vehicleData.transmission) qualityScore += 3;
+    // Features & location (20 points)
+    if ((vehicleData.features?.length || 0) >= 3) qualityScore += 10;
+    if (vehicleData.city || vehicleData.state) qualityScore += 5;
+    if (vehicleData.rto) qualityScore += 5;
+    
+    return {
+      ...vehicleData,
+      // Ensure required fields have defaults
+      status: vehicleData.status || 'published',
+      listingStatus: vehicleData.listingStatus || 'active',
+      views: vehicleData.views || 0,
+      inquiriesCount: vehicleData.inquiriesCount || 0,
+      isFeatured: vehicleData.isFeatured || false,
+      // Set quality indicators
+      descriptionQuality: Math.min(100, qualityScore),
+      photoQuality: imageCount >= 6 ? 'high' : imageCount >= 3 ? 'medium' : 'low',
+      hasMinimumPhotos: imageCount >= 6,
+      // Normalize string fields
+      make: vehicleData.make?.trim(),
+      model: vehicleData.model?.trim(),
+      description: vehicleData.description?.trim(),
+      city: vehicleData.city?.trim(),
+      state: vehicleData.state?.trim()?.toUpperCase(),
+      // Ensure arrays are not undefined
+      features: vehicleData.features || [],
+      images: vehicleData.images || [],
+      // Set timestamps
+      createdAt: vehicleData.createdAt || now,
+      updatedAt: now,
+      // Set listing expiry (30 days from now)
+      listingExpiresAt: vehicleData.listingExpiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+  }
 
   private async addVehicleLocal(vehicleData: Vehicle): Promise<Vehicle> {
     // Use production cache key in production, dev key in development
@@ -945,19 +1010,22 @@ class DataService {
   }
 
   async updateVehicle(vehicleData: Vehicle): Promise<Vehicle> {
+    // Apply production enhancements to updated vehicle data
+    const enhancedVehicle = this.applyProductionEnhancements(vehicleData);
+    
     if (this.isDevelopment) {
-      return this.updateVehicleLocal(vehicleData);
+      return this.updateVehicleLocal(enhancedVehicle);
     }
 
     try {
       const { getCanonicalPrimaryKey, VehicleMutationIdentityError } = await import('../utils/vehicleIdentity');
-      const databaseId = getCanonicalPrimaryKey(vehicleData);
+      const databaseId = getCanonicalPrimaryKey(enhancedVehicle);
       if (!databaseId) {
         throw new VehicleMutationIdentityError();
       }
       const putPayload: Record<string, unknown> = {
-        ...vehicleData,
-        id: vehicleData.id,
+        ...enhancedVehicle,
+        id: enhancedVehicle.id,
         databaseId,
       };
       const vehicle = await this.makeApiRequest<Vehicle>('/vehicles', {

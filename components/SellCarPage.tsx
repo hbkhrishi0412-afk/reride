@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View as ViewEnum } from '../types';
 import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianStates, getDistrictsByState, getCarYears, getOwnershipOptions, ScrapedCarData, CarMake } from '../utils/rerideScraper';
 import { sellCarAPI } from '../services/sellCarService';
+import { fetchVehicleSpecs, cacheAISpecs } from '../services/vehicleSpecsService';
+import { getAiVehicleSuggestions } from '../services/geminiService';
 
 interface SellCarPageProps {
   onNavigate: (view: ViewEnum) => void;
@@ -329,6 +331,70 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
       setCarDetails(prev => ({ ...prev, variant: '' }));
     }
   }, [carDetails.model, carData]);
+
+  // Auto-fetch vehicle specs when make, model, and year are selected
+  const autoFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFetchedKey = useRef<string>('');
+  
+  useEffect(() => {
+    const { make, model, year } = carDetails;
+    
+    if (!make || !model || !year) return;
+    
+    const vehicleKey = `${make}_${model}_${year}`;
+    if (lastFetchedKey.current === vehicleKey) return;
+    
+    // Don't overwrite if user already selected values
+    if (selectedFuelType && selectedTransmission) {
+      lastFetchedKey.current = vehicleKey;
+      return;
+    }
+    
+    if (autoFetchTimeoutRef.current) {
+      clearTimeout(autoFetchTimeoutRef.current);
+    }
+    
+    autoFetchTimeoutRef.current = setTimeout(async () => {
+      console.log('🚗 SellCar: Auto-fetching specs for:', { make, model, year });
+      lastFetchedKey.current = vehicleKey;
+      
+      try {
+        const specs = await fetchVehicleSpecs(make, model, parseInt(year, 10));
+        if (specs) {
+          if (specs.fuelType && !selectedFuelType) {
+            setSelectedFuelType(specs.fuelType);
+            setCarDetails(prev => ({ ...prev, fuelType: specs.fuelType || '' }));
+          }
+          if (specs.transmission && !selectedTransmission) {
+            setSelectedTransmission(specs.transmission);
+            setCarDetails(prev => ({ ...prev, transmission: specs.transmission || '' }));
+          }
+          console.log('✅ SellCar: Auto-filled fuel/transmission:', specs.fuelType, specs.transmission);
+        } else {
+          const suggestions = await getAiVehicleSuggestions({ make, model, year: parseInt(year, 10) });
+          if (suggestions.structuredSpecs) {
+            if (suggestions.structuredSpecs.fuelType && !selectedFuelType) {
+              setSelectedFuelType(suggestions.structuredSpecs.fuelType);
+              setCarDetails(prev => ({ ...prev, fuelType: suggestions.structuredSpecs!.fuelType || '' }));
+            }
+            if (suggestions.structuredSpecs.transmission && !selectedTransmission) {
+              setSelectedTransmission(suggestions.structuredSpecs.transmission);
+              setCarDetails(prev => ({ ...prev, transmission: suggestions.structuredSpecs!.transmission || '' }));
+            }
+            cacheAISpecs(make, model, parseInt(year, 10), suggestions.structuredSpecs as Record<string, string>);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to auto-fetch specs:', error);
+      }
+    }, 500);
+    
+    return () => {
+      if (autoFetchTimeoutRef.current) {
+        clearTimeout(autoFetchTimeoutRef.current);
+      }
+    };
+  }, [carDetails.make, carDetails.model, carDetails.year, selectedFuelType, selectedTransmission]);
 
   /* ---------------- Navigation & submit (unchanged logic) ---------------- */
 

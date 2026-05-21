@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense, laz
 import { useTranslation } from 'react-i18next';
 import { View as ViewEnum, VehicleCategory, type Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
-import { matchesCity, primaryLocationLabel } from '../utils/cityMapping';
+import { matchesCity } from '../utils/cityMapping';
 import { countCityVehicles } from '../utils/storefrontDiscoveryCounts';
 import { FALLBACK_VEHICLES } from '../constants/fallback';
 import MobileVehicleCard from './MobileVehicleCard';
@@ -27,7 +27,6 @@ import {
   getLocalRecentIds,
 } from '../utils/recentlyViewed';
 import { getPopularMakes } from '../utils/popularListings';
-import { HomeLocationBanner } from './HomeLocationBanner';
 import { PopularCitiesChips } from './PopularCitiesChips';
 
 // Adds the `is-visible` class once the element scrolls into view (one-shot).
@@ -138,14 +137,14 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   const { t } = useTranslation();
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
-  // Short label for the pill: strip state suffix ("Mumbai, MH" → "Mumbai").
-  const locationLabel = useMemo(() => {
-    const raw = (userLocation || '').trim();
-    if (!raw) return t('header.selectLocation') || 'Select location';
-    return primaryLocationLabel(raw) || raw;
-  }, [userLocation, t]);
-
   const canUseLocationPicker = typeof onLocationChange === 'function';
+
+  useEffect(() => {
+    if (!canUseLocationPicker) return;
+    const open = () => setIsLocationModalOpen(true);
+    window.addEventListener('reride:open-location-modal', open);
+    return () => window.removeEventListener('reride:open-location-modal', open);
+  }, [canUseLocationPicker]);
 
   const handleLocationChange = useCallback(
     (next: string) => {
@@ -485,40 +484,11 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         />
 
         <div className="relative">
-          {/* Top row: Location picker + Trust badge.
-              The location pill sits on the left so one-handed users can reach
-              it with a thumb; the RTO trust badge stays centered as the visual
-              anchor. Both share the same glassmorphic treatment. */}
-          <div className="flex items-center justify-between gap-2 mb-4 hero-rise hero-rise-1">
-            {canUseLocationPicker ? (
-              <button
-                type="button"
-                onClick={() => setIsLocationModalOpen(true)}
-                aria-label={t('a11y.chooseLocation') || 'Choose location'}
-                className="inline-flex items-center gap-1.5 max-w-[55%] px-3 py-1.5 bg-white/15 hover:bg-white/25 active:bg-white/30 backdrop-blur-md rounded-full border border-white/25 text-white text-[11px] font-semibold tracking-wide transition-colors active:scale-95 notranslate"
-                style={{ minHeight: '32px' }}
-                data-no-translate
-                translate="no"
-              >
-                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span className="truncate">{locationLabel}</span>
-                <svg className="w-3 h-3 flex-shrink-0 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            ) : (
-              <span aria-hidden="true" />
-            )}
+          <div className="flex justify-center mb-4 hero-rise hero-rise-1">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-white/15 backdrop-blur-md rounded-full border border-white/20">
               <span className="w-1.5 h-1.5 bg-green-400 rounded-full sparkle-pulse" />
               <span className="text-white text-[11px] font-medium tracking-wide">{t('home.trustBadgeVerified')}</span>
             </div>
-            {/* Balancing spacer so the trust badge sits optically centered when
-                the location pill is hidden (e.g. caller didn't wire it). */}
-            {!canUseLocationPicker && <span aria-hidden="true" />}
           </div>
 
           {/* Heading */}
@@ -676,17 +646,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           </div>
         </div>
       </div>
-
-      {onBrowseAllIndia && onUseMyLocation ? (
-        <div className="px-4 py-3 bg-white border-t border-gray-100">
-          <HomeLocationBanner
-            selectedCity={selectedCity}
-            onBrowseAllIndia={onBrowseAllIndia}
-            onUseLocation={onUseMyLocation}
-            addToast={addToast}
-          />
-        </div>
-      ) : null}
 
       {/* Continue Browsing — anon-friendly "pick up where you left off"
           strip. Only renders when the local recently-viewed list has at

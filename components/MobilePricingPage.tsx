@@ -34,7 +34,7 @@ export const MobilePricingPage: React.FC<MobilePricingPageProps> = ({
         setPlans(plansData);
       } catch (error) {
         console.error('Failed to load plans:', error);
-        addToast('Could not load plans', 'error');
+        addToast('Could not load pricing plans. Please try again.', 'error');
       } finally {
         setIsLoading(false);
       }
@@ -44,7 +44,7 @@ export const MobilePricingPage: React.FC<MobilePricingPageProps> = ({
 
   const handlePlanSelect = async (planId: SubscriptionPlan) => {
     if (!currentUser || currentUser.role !== 'seller') {
-      addToast('Sign in as a seller to choose a plan.', 'info');
+      addToast('Please sign in as a seller to choose a plan.', 'info');
       if (onNavigate) onNavigate(ViewEnum.LOGIN_PORTAL);
       return;
     }
@@ -59,7 +59,7 @@ export const MobilePricingPage: React.FC<MobilePricingPageProps> = ({
       setShowPaymentModal(true);
     } catch (error) {
       console.error('Failed to get plan details:', error);
-      addToast('Could not open payment for this plan', 'error');
+      addToast('Could not start payment. Please try again.', 'error');
     }
   };
 

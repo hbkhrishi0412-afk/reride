@@ -56,15 +56,12 @@ async function callGeminiAPI(payload: any): Promise<string> {
     } catch (error) {
         // Only log as error if it's not a 404 (expected in dev)
         if (error instanceof Error && error.message === 'AI_API_UNAVAILABLE') {
-            // Silently fail for dev mode - don't spam console
-        } else {
-            console.warn("⚠️ Gemini API error (may be unavailable in dev):", error instanceof Error ? error.message : error);
+            throw error;
         }
-        // Return a default value that won't break the UI.
+        console.warn("⚠️ Gemini API error (may be unavailable in dev):", error instanceof Error ? error.message : error);
         const isJson = payload.config?.responseMimeType === "application/json";
         if (isJson) {
-            // Check if the expected response is an array or object
-            return payload.config?.responseSchema?.type === SchemaType.ARRAY ? "[]" : "{}";
+            throw error instanceof Error ? error : new Error('Gemini API request failed');
         }
         // For non-JSON responses, return a user-friendly message
         return "AI service is temporarily unavailable. Please try again later.";
@@ -213,12 +210,13 @@ export const generateVehicleDescription = async (vehicle: Partial<Vehicle>): Pro
 };
 
 export const getAiVehicleSuggestions = async (
-    vehicle: { make: string, model: string, variant?: string, year: number }
+    vehicle: { make: string, model: string, variant?: string, year: number; category?: string }
 ): Promise<{
     structuredSpecs: Partial<Pick<Vehicle, 'engine' | 'transmission' | 'fuelType' | 'fuelEfficiency' | 'displacement' | 'groundClearance' | 'bootSpace'>>;
     featureSuggestions: Record<string, string[]>;
 }> => {
-    const prompt = `For a ${vehicle.year} ${vehicle.make} ${vehicle.model} ${vehicle.variant || ''} in the Indian market, provide:
+    const categoryHint = vehicle.category ? ` (${vehicle.category})` : '';
+    const prompt = `For a ${vehicle.year} ${vehicle.make} ${vehicle.model} ${vehicle.variant || ''}${categoryHint} in the Indian market, provide:
 1.  Key technical specifications.
 2.  A list of common features, categorized.
 

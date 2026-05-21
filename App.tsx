@@ -159,15 +159,186 @@ interface WindowWithSW extends Window {
   __swRefreshHandler?: () => void;
 }
 
-// Simple loading component
-const LoadingSpinner: React.FC = () => (
-    <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
-        <div className="flex items-center gap-4">
-            <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-orange-500"></div>
-            <span className="text-xl font-semibold text-gray-600">Loading...</span>
-        </div>
-    </div>
+// Skeleton shimmer animation component
+const SkeletonPulse: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <div className={`animate-pulse bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 bg-[length:200%_100%] ${className}`} 
+       style={{ animation: 'shimmer 1.5s ease-in-out infinite' }} />
 );
+
+// Vehicle card skeleton
+const VehicleCardSkeleton: React.FC = () => (
+  <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
+    {/* Image placeholder */}
+    <div className="relative aspect-[16/10] bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200 animate-pulse">
+      <div className="absolute top-3 left-3 w-16 h-6 bg-white/50 rounded-full" />
+      <div className="absolute top-3 right-3 w-12 h-6 bg-white/50 rounded-full" />
+    </div>
+    {/* Content */}
+    <div className="p-4 space-y-3">
+      <div className="flex items-start justify-between">
+        <div className="space-y-2 flex-1">
+          <div className="h-5 bg-gray-200 rounded-lg w-3/4 animate-pulse" />
+          <div className="h-4 bg-gray-100 rounded-lg w-1/2 animate-pulse" />
+        </div>
+        <div className="h-6 w-20 bg-orange-100 rounded-lg animate-pulse" />
+      </div>
+      <div className="flex gap-2 pt-2">
+        <div className="h-6 w-16 bg-gray-100 rounded-full animate-pulse" />
+        <div className="h-6 w-20 bg-gray-100 rounded-full animate-pulse" />
+        <div className="h-6 w-14 bg-gray-100 rounded-full animate-pulse" />
+      </div>
+    </div>
+  </div>
+);
+
+// Stats card skeleton
+const StatsCardSkeleton: React.FC = () => (
+  <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+    <div className="flex items-center gap-4">
+      <div className="w-12 h-12 rounded-xl bg-gray-200 animate-pulse" />
+      <div className="flex-1 space-y-2">
+        <div className="h-4 bg-gray-100 rounded w-20 animate-pulse" />
+        <div className="h-6 bg-gray-200 rounded w-12 animate-pulse" />
+      </div>
+    </div>
+  </div>
+);
+
+// Dashboard skeleton loader
+const DashboardSkeleton: React.FC = () => (
+  <div className="min-h-screen bg-gray-50">
+    {/* Header skeleton */}
+    <div className="bg-gradient-to-r from-orange-500 to-orange-400 px-6 py-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-8 w-48 bg-white/30 rounded-lg animate-pulse" />
+            <div className="h-4 w-32 bg-white/20 rounded-lg animate-pulse" />
+          </div>
+          <div className="h-10 w-32 bg-white/30 rounded-lg animate-pulse" />
+        </div>
+      </div>
+    </div>
+
+    <div className="max-w-7xl mx-auto px-6 py-6">
+      {/* Stats row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {[...Array(4)].map((_, i) => <StatsCardSkeleton key={i} />)}
+      </div>
+
+      {/* Section header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="h-7 w-40 bg-gray-200 rounded-lg animate-pulse" />
+        <div className="h-9 w-28 bg-orange-100 rounded-lg animate-pulse" />
+      </div>
+
+      {/* Vehicle cards grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[...Array(6)].map((_, i) => <VehicleCardSkeleton key={i} />)}
+      </div>
+    </div>
+
+    {/* Loading indicator */}
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white px-5 py-3 rounded-full shadow-lg border border-gray-200 flex items-center gap-3 z-50">
+      <div className="w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      <span className="text-sm font-medium text-gray-600">Loading your dashboard...</span>
+    </div>
+  </div>
+);
+
+// Generic page skeleton
+const PageSkeleton: React.FC = () => (
+  <div className="min-h-screen bg-gray-50">
+    {/* Header area */}
+    <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="h-8 w-32 bg-gray-200 rounded-lg animate-pulse" />
+        <div className="flex gap-3">
+          <div className="h-9 w-24 bg-gray-100 rounded-lg animate-pulse" />
+          <div className="h-9 w-20 bg-orange-100 rounded-lg animate-pulse" />
+        </div>
+      </div>
+    </div>
+
+    <div className="max-w-7xl mx-auto px-6 py-8">
+      {/* Content skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[...Array(6)].map((_, i) => <VehicleCardSkeleton key={i} />)}
+      </div>
+    </div>
+
+    {/* Loading indicator */}
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white px-5 py-3 rounded-full shadow-lg border border-gray-200 flex items-center gap-3 z-50">
+      <div className="w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      <span className="text-sm font-medium text-gray-600">Loading...</span>
+    </div>
+  </div>
+);
+
+// Mobile Dashboard skeleton
+const MobileDashboardSkeleton: React.FC = () => (
+  <div className="min-h-screen bg-gray-50 pb-20">
+    {/* Mobile header */}
+    <div className="bg-gradient-to-r from-orange-500 to-orange-400 px-4 py-6 rounded-b-3xl">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-14 h-14 rounded-full bg-white/30 animate-pulse" />
+        <div className="flex-1 space-y-2">
+          <div className="h-5 w-32 bg-white/30 rounded-lg animate-pulse" />
+          <div className="h-4 w-24 bg-white/20 rounded-lg animate-pulse" />
+        </div>
+      </div>
+      {/* Quick stats */}
+      <div className="grid grid-cols-3 gap-3 mt-4">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="bg-white/20 rounded-xl p-3 text-center">
+            <div className="h-6 w-8 mx-auto bg-white/30 rounded animate-pulse mb-1" />
+            <div className="h-3 w-12 mx-auto bg-white/20 rounded animate-pulse" />
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* Content */}
+    <div className="px-4 py-4 space-y-4">
+      {/* Action buttons */}
+      <div className="flex gap-3">
+        <div className="flex-1 h-12 bg-orange-100 rounded-xl animate-pulse" />
+        <div className="flex-1 h-12 bg-gray-200 rounded-xl animate-pulse" />
+      </div>
+
+      {/* Vehicle cards */}
+      <div className="space-y-4 mt-6">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div className="aspect-[16/9] bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200 animate-pulse" />
+            <div className="p-4 space-y-3">
+              <div className="flex justify-between items-start">
+                <div className="space-y-2 flex-1">
+                  <div className="h-5 bg-gray-200 rounded-lg w-3/4 animate-pulse" />
+                  <div className="h-4 bg-gray-100 rounded-lg w-1/2 animate-pulse" />
+                </div>
+                <div className="h-6 w-20 bg-orange-100 rounded-lg animate-pulse" />
+              </div>
+              <div className="flex gap-2">
+                <div className="h-6 w-16 bg-gray-100 rounded-full animate-pulse" />
+                <div className="h-6 w-20 bg-gray-100 rounded-full animate-pulse" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* Loading toast */}
+    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-white px-4 py-2.5 rounded-full shadow-lg border border-gray-200 flex items-center gap-2 z-50">
+      <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      <span className="text-sm font-medium text-gray-600">Loading...</span>
+    </div>
+  </div>
+);
+
+// Simple loading component (kept for backward compatibility)
+const LoadingSpinner: React.FC = () => <PageSkeleton />;
 
 // Minimal loading fallback for non-critical lazy components
 const MinimalLoader: React.FC = () => null;
@@ -442,7 +613,7 @@ const AppContent: React.FC = () => {
         setActiveChat,
       });
       if (!conversation) {
-        addToast('Unable to start chat: Seller information is missing', 'error');
+        addToast('Unable to start chat. The seller may no longer be available.', 'error');
         return;
       }
       addToast('Chat started with seller', 'success');
@@ -997,7 +1168,7 @@ const AppContent: React.FC = () => {
 
   /** Dealers & seller profiles are public to view; calling, follow, save, compare require an account. */
   const requireLoginForDealerInteraction = React.useCallback(() => {
-    addToast('Log in to call dealers, follow, save listings, and compare vehicles.', 'info');
+    addToast('Please log in to access all features like calling dealers, saving listings, and more.', 'info');
     navigate(ViewEnum.LOGIN_PORTAL);
   }, [addToast, navigate]);
 
@@ -1863,6 +2034,12 @@ const AppContent: React.FC = () => {
             selectedCity={selectedCity}
             onBrowseAllIndia={handleBrowseAllIndia}
             onUseMyLocation={handleHomeUseMyLocation}
+            userLocation={userLocation}
+            onOpenLocationPicker={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('reride:open-location-modal'));
+              }
+            }}
             addToast={addToast}
           />
         );
@@ -2200,6 +2377,7 @@ const AppContent: React.FC = () => {
           // Return just the component - MobileLayout wrapper is handled by outer wrapper
           return (
             <DashboardErrorBoundary>
+              <Suspense fallback={<MobileDashboardSkeleton />}>
               <MobileDashboard
                   currentUser={currentUser}
                   userVehicles={enrichVehiclesWithSellerInfo(
@@ -2237,7 +2415,7 @@ const AppContent: React.FC = () => {
                       if (currentUser.planExpiryDate) {
                         const expiryDate = new Date(currentUser.planExpiryDate);
                         if (expiryDate < new Date()) {
-                          addToast('Your subscription plan has expired. Please renew your plan to create new vehicle listings.', 'error');
+                          addToast('Your subscription has expired. Please renew to add new listings.', 'error');
                           return;
                         }
                       }
@@ -2270,7 +2448,7 @@ const AppContent: React.FC = () => {
                       addToast(`${results.length} vehicles added successfully`, 'success');
                     } catch (error) {
                       logError('❌ Failed to add vehicles:', error);
-                      addToast('Failed to add vehicles', 'error');
+                      addToast('Could not add vehicles. Please check your connection and try again.', 'error');
                       throw error;
                     }
                   }}
@@ -2281,7 +2459,7 @@ const AppContent: React.FC = () => {
                       const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
                       const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
                       if (!seller) {
-                        addToast('Unable to determine the seller for this certification request.', 'error');
+                        addToast('Could not process certification request. Please try again.', 'error');
                         return;
                       }
                       const planId = (seller.subscriptionPlan || 'free') as SubscriptionPlan;
@@ -2317,11 +2495,7 @@ const AppContent: React.FC = () => {
                         }
                       }
                       if (!response.ok) {
-                        const errorMessage =
-                          result?.reason ||
-                          result?.error ||
-                          `Failed to submit certification request (HTTP ${response.status})`;
-                        addToast(errorMessage, 'error');
+                        addToast('Could not submit certification request. Please try again.', 'error');
                         return;
                       }
                       if (result?.alreadyRequested) {
@@ -2329,7 +2503,7 @@ const AppContent: React.FC = () => {
                         return;
                       }
                       if (!result?.success || !result?.vehicle) {
-                        addToast('Failed to submit certification request. Please try again.', 'error');
+                        addToast('Could not submit certification request. Please try again.', 'error');
                         return;
                       }
                       await updateVehicle(vehicleId, result.vehicle, {
@@ -2362,7 +2536,7 @@ const AppContent: React.FC = () => {
                       }
                     } catch (error) {
                       logError('❌ Failed to certify vehicle:', error);
-                      addToast('Failed to submit certification request. Please try again.', 'error');
+                      addToast('Could not submit certification request. Please try again.', 'error');
                     }
                   }}
                   onFeatureListing={async (vehicleId) => {
@@ -2385,7 +2559,7 @@ const AppContent: React.FC = () => {
                       }
 
                       if (!response.ok) {
-                        const errorMessage = result?.reason || result?.error || `Failed to feature vehicle (HTTP ${response.status})`;
+                        const errorMessage = result?.reason || result?.error || 'Could not feature vehicle. Please try again.';
                         addToast(errorMessage, response.status === 403 ? 'warning' : 'error');
                         return;
                       }
@@ -2412,14 +2586,14 @@ const AppContent: React.FC = () => {
                             await updateUser(sellerEmail, { featuredCredits: remainingCredits });
                           }
 
-                          addToast(`Featured credits remaining: ${remainingCredits}`, 'info');
+                          addToast(`Listing featured! You have ${remainingCredits} feature credits left.`, 'success');
                         }
                       } else {
-                        addToast('Failed to feature vehicle. Please try again.', 'error');
+                        addToast('Could not feature this listing. Please try again.', 'error');
                       }
                     } catch (error) {
                       logError('❌ Failed to feature vehicle:', error);
-                      addToast('Failed to feature vehicle. Please try again.', 'error');
+                      addToast('Could not feature this listing. Please try again.', 'error');
                     }
                   }}
                   onSendMessage={sendMessage}
@@ -2477,7 +2651,7 @@ const AppContent: React.FC = () => {
                       addToast('Vehicle added successfully!', 'success');
                     } catch (error) {
                       logError('❌ Failed to add vehicle:', error);
-                      addToast('Failed to add vehicle. Please try again.', 'error');
+                      addToast('Could not add vehicle. Please check your details and try again.', 'error');
                       throw error;
                     }
                   }}
@@ -2506,6 +2680,7 @@ const AppContent: React.FC = () => {
                   onMarkAllAsReadBySeller={() => void markAllVisibleAsRead('seller')}
                   onSellerOpenChat={handleSellerOpenChatFromDashboard}
                 />
+              </Suspense>
             </DashboardErrorBoundary>
           );
         }
@@ -2520,7 +2695,7 @@ const AppContent: React.FC = () => {
 
         return (
           <DashboardErrorBoundary>
-            <Suspense fallback={<LoadingSpinner />}>
+            <Suspense fallback={<DashboardSkeleton />}>
               <Dashboard
               seller={currentUser}
               sellerVehicles={enrichVehiclesWithSellerInfo(
@@ -2586,7 +2761,7 @@ const AppContent: React.FC = () => {
                     const expiryDate = new Date(currentUser.planExpiryDate);
                     const isExpired = expiryDate < new Date();
                     if (isExpired) {
-                      addToast('Your subscription plan has expired. Please renew your plan to create new vehicle listings.', 'error');
+                      addToast('Your subscription has expired. Please renew to add new listings.', 'error');
                       return;
                     }
                   }
@@ -2630,7 +2805,7 @@ const AppContent: React.FC = () => {
                   addToast(`${results.length} vehicles added successfully`, 'success');
                 } catch (error) {
                   logError('❌ Failed to add vehicles:', error);
-                  addToast('Failed to add vehicles', 'error');
+                  addToast('Could not add vehicles. Please check your connection and try again.', 'error');
                   throw error;
                 }
               }}
@@ -2702,7 +2877,7 @@ const AppContent: React.FC = () => {
                   }
 
                   if (!response.ok) {
-                    const errorMessage = result?.reason || result?.error || `Failed to feature vehicle (HTTP ${response.status})`;
+                    const errorMessage = result?.reason || result?.error || 'Could not feature vehicle. Please try again.';
                     addToast(errorMessage, response.status === 403 ? 'warning' : 'error');
                     return;
                   }
@@ -2730,14 +2905,14 @@ const AppContent: React.FC = () => {
                         await updateUser(sellerEmail, { featuredCredits: remainingCredits });
                       }
 
-                      addToast(`Featured credits remaining: ${remainingCredits}`, 'info');
+                      addToast(`Listing featured! You have ${remainingCredits} feature credits left.`, 'success');
                     }
                   } else {
-                    addToast('Failed to feature vehicle. Please try again.', 'error');
+                    addToast('Could not feature this listing. Please try again.', 'error');
                   }
                 } catch (error) {
                   logError('❌ Failed to feature vehicle:', error);
-                  addToast('Failed to feature vehicle. Please try again.', 'error');
+                  addToast('Could not feature this listing. Please try again.', 'error');
                 }
               }}
               onRequestCertification={async (vehicleId) => {
@@ -2749,7 +2924,7 @@ const AppContent: React.FC = () => {
                   const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
 
                   if (!seller) {
-                    addToast('Unable to determine the seller for this certification request.', 'error');
+                    addToast('Could not process certification request. Please try again.', 'error');
                     return;
                   }
 
@@ -2791,11 +2966,7 @@ const AppContent: React.FC = () => {
                   }
 
                   if (!response.ok) {
-                    const errorMessage =
-                      result?.reason ||
-                      result?.error ||
-                      `Failed to submit certification request (HTTP ${response.status})`;
-                    addToast(errorMessage, 'error');
+                    addToast('Could not submit certification request. Please try again.', 'error');
                     return;
                   }
 
@@ -2805,7 +2976,7 @@ const AppContent: React.FC = () => {
                   }
 
                   if (!result?.success || !result?.vehicle) {
-                    addToast('Failed to submit certification request. Please try again.', 'error');
+                    addToast('Could not submit certification request. Please try again.', 'error');
                     return;
                   }
 
@@ -2843,7 +3014,7 @@ const AppContent: React.FC = () => {
                   }
                 } catch (error) {
                   logError('❌ Failed to certify vehicle:', error);
-                  addToast('Failed to submit certification request. Please try again.', 'error');
+                  addToast('Could not submit certification request. Please try again.', 'error');
                 }
               }}
               onNavigate={navigate}
@@ -3024,18 +3195,18 @@ const AppContent: React.FC = () => {
                     logError('Failed to update password:', updateError);
                     const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
                     if (errorMessage.includes('Server error') || errorMessage.includes('500')) {
-                      addToast('Password update failed: Server error. Please try again.', 'error');
+                      addToast('Could not update password. Please try again later.', 'error');
                     } else if (errorMessage.includes('Authentication') || errorMessage.includes('401')) {
-                      addToast('Password update failed: Authentication expired. Please log in again.', 'error');
+                      addToast('Your session has expired. Please log in again to update your password.', 'error');
                     } else {
-                      addToast(`Password update failed: ${errorMessage}`, 'error');
+                      addToast('Could not update password. Please check your connection and try again.', 'error');
                     }
                     return false;
                   }
                 } catch (error) {
                   logError('Failed to update password:', error);
                   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                  addToast(`Password update failed: ${errorMessage}`, 'error');
+                  addToast('Could not update password. Please check your connection and try again.', 'error');
                   return false;
                 }
               }}
@@ -3081,18 +3252,18 @@ const AppContent: React.FC = () => {
                     // Check if it's a specific error from the API
                     const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
                     if (errorMessage.includes('Server error') || errorMessage.includes('500')) {
-                      addToast('Password update failed: Server error. Please try again.', 'error');
+                      addToast('Could not update password. Please try again later.', 'error');
                     } else if (errorMessage.includes('Authentication') || errorMessage.includes('401')) {
-                      addToast('Password update failed: Authentication expired. Please log in again.', 'error');
+                      addToast('Your session has expired. Please log in again to update your password.', 'error');
                     } else {
-                      addToast(`Password update failed: ${errorMessage}`, 'error');
+                      addToast('Could not update password. Please check your connection and try again.', 'error');
                     }
                     return false;
                   }
                 } catch (error) {
                   logError('Failed to update password:', error);
                   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                  addToast(`Password update failed: ${errorMessage}`, 'error');
+                  addToast('Could not update password. Please check your connection and try again.', 'error');
                   return false;
                 }
               }
@@ -3417,7 +3588,7 @@ const AppContent: React.FC = () => {
             navigate(ViewEnum.SELLER_DASHBOARD);
           } catch (error) {
             logError('Failed to update plan:', error);
-            addToast('Failed to update plan', 'error');
+            addToast('Could not update your plan. Please try again later.', 'error');
           }
         };
 
@@ -3453,16 +3624,16 @@ const AppContent: React.FC = () => {
                   const { createSupportTicketInSupabase } = await import('./services/supportTicketService');
                   const created = await createSupportTicketInSupabase(ticket);
                   if (!created) {
-                    addToast('Failed to submit support ticket. Please try again.', 'error');
+                    addToast('Could not send your message. Please try again.', 'error');
                     return false;
                   }
                   setSupportTickets(prev => [created, ...(Array.isArray(prev) ? prev : [])]);
-                  addToast('Support ticket submitted!', 'success');
+                  addToast('Your message has been sent! We will get back to you soon.', 'success');
                   navigate(ViewEnum.HOME);
                   return true;
                 } catch (error) {
                   logError('Support ticket submission failed:', error);
-                  addToast('Failed to submit support ticket. Please try again.', 'error');
+                  addToast('Could not send your message. Please try again.', 'error');
                   return false;
                 }
               }}
@@ -3478,15 +3649,15 @@ const AppContent: React.FC = () => {
                 const { createSupportTicketInSupabase } = await import('./services/supportTicketService');
                 const created = await createSupportTicketInSupabase(ticket);
                 if (!created) {
-                  addToast('Failed to submit support ticket. Please try again.', 'error');
+                  addToast('Could not send your message. Please try again.', 'error');
                   return false;
                 }
                 setSupportTickets(prev => [created, ...(Array.isArray(prev) ? prev : [])]);
-                addToast('Support ticket submitted!', 'success');
+                addToast('Your message has been sent! We will get back to you soon.', 'success');
                 return true;
               } catch (error) {
                 logError('Support ticket submission failed:', error);
-                addToast('Failed to submit support ticket. Please try again.', 'error');
+                addToast('Could not send your message. Please try again.', 'error');
                 return false;
               }
             }}
@@ -4109,7 +4280,7 @@ const AppContent: React.FC = () => {
                   if (currentUser.planExpiryDate) {
                     const expiryDate = new Date(currentUser.planExpiryDate);
                     if (expiryDate < new Date()) {
-                      addToast('Your subscription plan has expired. Please renew your plan to create new vehicle listings.', 'error');
+                      addToast('Your subscription has expired. Please renew to add new listings.', 'error');
                       return;
                     }
                   }
@@ -4142,7 +4313,7 @@ const AppContent: React.FC = () => {
                   addToast(`${results.length} vehicles added successfully`, 'success');
                 } catch (error) {
                   logError('❌ Failed to add vehicles:', error);
-                  addToast('Failed to add vehicles', 'error');
+                  addToast('Could not add vehicles. Please check your connection and try again.', 'error');
                   throw error;
                 }
               }}
@@ -4153,7 +4324,7 @@ const AppContent: React.FC = () => {
                   const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
                   const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
                   if (!seller) {
-                    addToast('Unable to determine the seller for this certification request.', 'error');
+                    addToast('Could not process certification request. Please try again.', 'error');
                     return;
                   }
                   const planId = (seller.subscriptionPlan || 'free') as SubscriptionPlan;
@@ -4188,11 +4359,7 @@ const AppContent: React.FC = () => {
                     }
                   }
                   if (!response.ok) {
-                    const errorMessage =
-                      result?.reason ||
-                      result?.error ||
-                      `Failed to submit certification request (HTTP ${response.status})`;
-                    addToast(errorMessage, 'error');
+                    addToast('Could not submit certification request. Please try again.', 'error');
                     return;
                   }
                   if (result?.alreadyRequested) {
@@ -4200,7 +4367,7 @@ const AppContent: React.FC = () => {
                     return;
                   }
                   if (!result?.success || !result?.vehicle) {
-                    addToast('Failed to submit certification request. Please try again.', 'error');
+                    addToast('Could not submit certification request. Please try again.', 'error');
                     return;
                   }
                   await updateVehicle(vehicleId, result.vehicle, {
@@ -4233,7 +4400,7 @@ const AppContent: React.FC = () => {
                   }
                 } catch (error) {
                   logError('Failed to certify vehicle:', error);
-                  addToast('Failed to submit certification request. Please try again.', 'error');
+                  addToast('Could not submit certification request. Please try again.', 'error');
                 }
               }}
               onFeatureListing={async (vehicleId) => {
@@ -4255,8 +4422,7 @@ const AppContent: React.FC = () => {
                   }
 
                   if (!response.ok) {
-                    const errorMessage =
-                      result?.reason || result?.error || `Failed to feature vehicle (HTTP ${response.status})`;
+                    const errorMessage = result?.reason || result?.error || 'Could not feature vehicle. Please try again.';
                     addToast(errorMessage, response.status === 403 ? 'warning' : 'error');
                     return;
                   }
@@ -4286,14 +4452,14 @@ const AppContent: React.FC = () => {
                         await updateUser(sellerEmail, { featuredCredits: remainingCredits });
                       }
 
-                      addToast(`Featured credits remaining: ${remainingCredits}`, 'info');
+                      addToast(`Listing featured! You have ${remainingCredits} feature credits left.`, 'success');
                     }
                   } else {
-                    addToast('Failed to feature vehicle. Please try again.', 'error');
+                    addToast('Could not feature this listing. Please try again.', 'error');
                   }
                 } catch (error) {
                   logError('Failed to feature vehicle:', error);
-                  addToast('Failed to feature vehicle. Please try again.', 'error');
+                  addToast('Could not feature this listing. Please try again.', 'error');
                 }
               }}
               onSendMessage={sendMessage}
@@ -4350,7 +4516,7 @@ const AppContent: React.FC = () => {
                 addToast('Vehicle added successfully!', 'success');
               } catch (error) {
                 logError('❌ Failed to add vehicle:', error);
-                addToast('Failed to add vehicle. Please try again.', 'error');
+                addToast('Could not add vehicle. Please check your details and try again.', 'error');
                 throw error;
               }
             }}
@@ -4369,7 +4535,7 @@ const AppContent: React.FC = () => {
                 // Toast is shown by updateVehicle function
               } catch (error) {
                 logError('❌ Failed to update vehicle:', error);
-                addToast('Failed to update vehicle. Please try again.', 'error');
+                addToast('Could not update vehicle details. Please try again.', 'error');
               }
             }}
             vehicleData={vehicleData}
@@ -4383,7 +4549,7 @@ const AppContent: React.FC = () => {
                 addToast('Profile updated successfully!', 'success');
               } catch (error) {
                 logError('Failed to update profile:', error);
-                addToast('Failed to update profile. Please try again.', 'error');
+                addToast('Could not update your profile. Please try again.', 'error');
                 throw error;
               }
             }}
@@ -4456,7 +4622,7 @@ const AppContent: React.FC = () => {
                       logInfo('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
                     }
                     onOfferResponse(conversationId, messageId, response, counterPrice);
-                    addToast(`Offer ${response}`, 'success');
+                    addToast(`Offer ${response} successfully!`, 'success');
                   }}
                   onTestDriveResponse={handleTestDriveResponse}
                   onClearChat={clearConversationMessages}
@@ -4581,7 +4747,7 @@ const AppContent: React.FC = () => {
                         logInfo('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
                       }
                       onOfferResponse(conversationId, messageId, response, counterPrice);
-                      addToast(`Offer ${response}`, 'success');
+                      addToast(`Offer ${response} successfully!`, 'success');
                     }}
                     onTestDriveResponse={handleTestDriveResponse}
                     onClearChat={clearConversationMessages}
@@ -4639,6 +4805,16 @@ const AppContent: React.FC = () => {
           inboxCount={unreadMessagesCount}
           unreadNotificationCount={unreadNotificationsCount}
           serviceProvider={serviceProvider}
+          userLocation={userLocation}
+          selectedCity={selectedCity}
+          onBrowseAllIndia={handleBrowseAllIndia}
+          onUseMyLocation={handleHomeUseMyLocation}
+          onOpenLocationPicker={() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('reride:open-location-modal'));
+            }
+          }}
+          addToast={addToast}
         >
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
@@ -4694,7 +4870,7 @@ const AppContent: React.FC = () => {
                 }}
                 onOfferResponse={(conversationId, messageId, response, counterPrice) => {
                   onOfferResponse(conversationId, messageId, response, counterPrice);
-                  addToast(`Offer ${response}`, 'success');
+                  addToast(`Offer ${response} successfully!`, 'success');
                 }}
                 onTestDriveResponse={handleTestDriveResponse}
                 onClearChat={clearConversationMessages}
@@ -4741,6 +4917,7 @@ const AppContent: React.FC = () => {
           compareCount={comparisonList.length}
           wishlistCount={wishlist.length}
           inboxCount={unreadMessagesCount}
+          isHomePage={currentView === ViewEnum.HOME}
           onOpenMessages={handleOpenMessages}
           notifications={notifications.filter(n => {
             if (!n.recipientEmail || !currentUser?.email) return false;
@@ -4754,6 +4931,9 @@ const AppContent: React.FC = () => {
           onLocationChange={setUserLocation}
           addToast={addToast}
           allVehicles={vehicles}
+          selectedCity={selectedCity}
+          onBrowseAllIndia={handleBrowseAllIndia}
+          onUseMyLocation={handleHomeUseMyLocation}
         />
         <main id="main-content" className="min-h-[calc(100vh-140px)]" tabIndex={-1}>
           <ErrorBoundary>
@@ -4824,7 +5004,7 @@ const AppContent: React.FC = () => {
                 }}
                 onOfferResponse={(conversationId, messageId, response, counterPrice) => {
                   onOfferResponse(conversationId, messageId, response, counterPrice);
-                  addToast(`Offer ${response}`, 'success');
+                  addToast(`Offer ${response} successfully!`, 'success');
                 }}
                 onTestDriveResponse={handleTestDriveResponse}
                 onClearChat={clearConversationMessages}

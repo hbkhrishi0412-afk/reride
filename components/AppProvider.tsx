@@ -1018,9 +1018,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const emergencyTimeout = setTimeout(() => {
       setIsLoading(current => {
         if (current && vehicles.length === 0) {
-          // Only show notification if we truly have no data
+          // Only log warning if we truly have no data - don't show toast to users
           logWarn('⚠️ EMERGENCY: No vehicles loaded after 3s');
-          addToast(t('toast.loadingVehicles'), 'info');
           return false;
         }
         return current;
@@ -2222,9 +2221,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const next = Array.isArray(list) ? list : [];
       setVehicles((prev) => mergeVehicleCatalog(prev, next, !!isAdmin));
       setVehiclesCatalogReady(true);
-      if (list.length > 0) {
-        addToast(t('toast.loadedVehiclesCount', { count: list.length }), 'success');
-      }
     } catch (err) {
       setVehiclesCatalogReady(true);
       logWarn('Refresh vehicles failed:', err);
@@ -4659,7 +4655,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('🔄 App came online, syncing data...');
       dataService.syncWhenOnline().then(() => {
         console.log('✅ Data sync completed');
-        addToast(t('toast.dataSyncSuccess'), 'success');
       }).catch((error) => {
         console.warn('⚠️ Data sync failed:', error);
         addToast(t('toast.dataSyncPartial'), 'warning');
@@ -4683,7 +4678,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateVehicleHandler = useCallback(async (id: number, updates: Partial<Vehicle>, options: VehicleUpdateOptions = {}) => {
     // Prevent duplicate updates for the same vehicle
     if (updatingVehiclesRef.current.has(id)) {
-      addToast('Update already in progress. Please wait.', 'info');
+      addToast('Please wait while we save your changes.', 'info');
       return;
     }
 
@@ -4751,14 +4746,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.log('✅ Vehicle updated via API:', result);
       }
     } catch (error) {
-      const message =
-        error instanceof Error && error.message.trim()
-          ? error.message
-          : t('toast.vehicleUpdateFailed');
       if (process.env.NODE_ENV === 'development') {
         console.error('❌ Failed to update vehicle:', error);
       }
-      addToast(message, 'error');
+      addToast(t('toast.vehicleUpdateFailed'), 'error');
     } finally {
       // Always remove from updating set, even if there was an error
       updatingVehiclesRef.current.delete(id);
@@ -6062,7 +6053,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   )
                 : [],
             );
-            addToast(res?.error || 'Failed to update read state.', 'error');
+            addToast('Could not update. Please try again.', 'error');
           }
         })
         .catch((err) => {
@@ -6076,7 +6067,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 : [],
             );
           }
-          addToast('Failed to update read state.', 'error');
+          addToast('Could not update conversation. Please try again.', 'error');
         });
     }),
     setConversationReadState: async (
@@ -6087,7 +6078,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!currentUser) return;
       if (isRead) {
         await inboxMarkRead.fn?.(conversationId, { readerRole, forceReadState: true });
-        addToast('Conversation marked as read.', 'success');
         return;
       }
 
@@ -6121,10 +6111,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   : [],
               );
             }
-            addToast(res?.error || 'Failed to mark conversation unread.', 'error');
+            addToast('Could not update. Please try again.', 'error');
             return;
           }
-          addToast('Conversation marked as unread.', 'success');
         })
         .catch((err) => {
           console.warn('Persist mark-unread failed (non-fatal):', err);
@@ -6137,7 +6126,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 : [],
             );
           }
-          addToast('Failed to mark conversation unread.', 'error');
+          addToast('Could not update conversation. Please try again.', 'error');
         });
     },
     clearConversationMessages: async (conversationId: string) => {
@@ -6215,7 +6204,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return next;
         });
         setActiveChat((prev) => (prev && String(prev.id) === String(conversationId) ? null : prev));
-        addToast('Conversation deleted.', 'success');
+        addToast('Conversation deleted successfully.', 'success');
       } catch (error) {
         console.error('deleteConversation:', error);
         addToast(t('toast.failedSendMessageGeneric'), 'error');

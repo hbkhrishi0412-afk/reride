@@ -20,6 +20,7 @@ import {
   normalizeVehiclesList,
   MUTATION_IDENTITY_REFRESH_MESSAGE,
 } from '../utils/vehicleIdentity.js';
+import { lookupVehicleSpecsFromCarQuery } from '../lib/carquerySpecs.js';
 // Supabase admin database utilities (replaces Firebase admin functions)
 import { 
   adminRead, 
@@ -644,7 +645,8 @@ async function mainHandler(
       appClientHeader === 'capacitor' && Boolean(isCapacitorApp);
     const urlHasGemini =
       pathname.includes('/gemini') ||
-      (typeof req.url === 'string' && req.url.includes('/gemini'));
+      pathname.includes('/ai-inspection') ||
+      (typeof req.url === 'string' && (req.url.includes('/gemini') || req.url.includes('/ai-inspection')));
     const trackViewAction = firstQueryParam(req.query?.action);
     const originalPathForCsrf = String(req.headers['x-vercel-original-path'] || '');
     const invokePathForCsrf = String(req.headers['x-invoke-path'] || '');
@@ -847,6 +849,8 @@ async function mainHandler(
       return await handleHealth(req, res);
     } else if (pathname.includes('/seed') || pathname.endsWith('/seed')) {
       return await handleSeed(req, res, handlerOptions);
+    } else if (pathname.includes('/vehicle-specs') || pathname.endsWith('/vehicle-specs')) {
+      return await handleVehicleSpecs(req, res);
     } else     if (pathname.includes('/vehicle-data') || pathname.endsWith('/vehicle-data')) {
       try {
         return await handleVehicleData(req, res, handlerOptions);
@@ -5722,6 +5726,40 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: Ha
 }
 
 // Health handler - preserves exact functionality from db-health.ts
+/** Public GET proxy for CarQuery (browser cannot call carqueryapi.com due to CORS). */
+async function handleVehicleSpecs(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ success: false, reason: 'Method not allowed' });
+  }
+
+  const make = firstQueryParam(req.query?.make)?.trim();
+  const model = firstQueryParam(req.query?.model)?.trim();
+  const yearRaw = firstQueryParam(req.query?.year);
+  const year = yearRaw ? parseInt(yearRaw, 10) : NaN;
+
+  if (!make || !model || !Number.isFinite(year) || year < 1900) {
+    return res.status(400).json({
+      success: false,
+      reason: 'Query params make, model, and year are required',
+    });
+  }
+
+  try {
+    const specs = await lookupVehicleSpecsFromCarQuery(make, model, year);
+    return res.status(200).json({
+      success: Boolean(specs),
+      specs: specs ?? null,
+    });
+  } catch (error) {
+    logError('CarQuery vehicle-specs proxy error:', error);
+    return res.status(200).json({
+      success: false,
+      specs: null,
+      reason: 'CarQuery lookup failed',
+    });
+  }
+}
+
 async function handleHealth(_req: VercelRequest, res: VercelResponse) {
   try {
     if (!USE_SUPABASE) {
@@ -6686,11 +6724,266 @@ async function handleAI(req: VercelRequest, res: VercelResponse, _options: Handl
   const url = new URL(req.url || '', `http://${req.headers.host}`);
   const pathname = url.pathname;
 
-  if (pathname.includes('/gemini') || pathname.endsWith('/gemini')) {
+  if (pathname.includes('/ai-inspection') || pathname.endsWith('/ai-inspection')) {
+    return await handleAIInspection(req, res);
+  } else if (pathname.includes('/gemini') || pathname.endsWith('/gemini')) {
     return await handleGemini(req, res);
   } else {
     return res.status(404).json({ success: false, reason: 'AI endpoint not found' });
   }
+}
+
+// AI Vehicle Photo Inspection handler
+async function handleAIInspection(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, reason: 'Method not allowed' });
+  }
+
+  const auth = requireAuth(req, res, 'AI Inspection API');
+  if (!auth) {
+    return;
+  }
+
+  try {
+    const { model, imageUrls, documentUrls, prompt, vehicleDetails, config } = req.body;
+
+    if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
+      return res.status(400).json({
+        success: false,
+        reason: 'At least one image URL is required for inspection'
+      });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        reason: 'GEMINI_API_KEY environment variable is not configured'
+      });
+    }
+
+    // Use vision-capable model
+    const modelName = model || 'gemini-2.0-flash';
+    
+    // Build content parts with images
+    const parts: any[] = [];
+    
+    // Add images (limit to 10 for performance)
+    const limitedImageUrls = imageUrls.slice(0, 10);
+    for (let i = 0; i < limitedImageUrls.length; i++) {
+      const imageUrl = limitedImageUrls[i];
+      
+      // Skip invalid URLs
+      if (!imageUrl || typeof imageUrl !== 'string') continue;
+      
+      try {
+        // Fetch image and convert to base64
+        const imageResponse = await fetch(imageUrl, {
+          headers: { 'Accept': 'image/*' },
+          signal: AbortSignal.timeout(10000) // 10s timeout per image
+        });
+        
+        if (!imageResponse.ok) {
+          console.warn(`Failed to fetch image ${i + 1}: ${imageResponse.statusText}`);
+          continue;
+        }
+        
+        const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+        const arrayBuffer = await imageResponse.arrayBuffer();
+        const base64Data = Buffer.from(arrayBuffer).toString('base64');
+        
+        parts.push({
+          inlineData: {
+            mimeType: contentType,
+            data: base64Data
+          }
+        });
+      } catch (imgError) {
+        console.warn(`Error fetching image ${i + 1}:`, imgError instanceof Error ? imgError.message : imgError);
+        // Continue with other images
+      }
+    }
+    
+    // Add document images if provided
+    if (documentUrls && Array.isArray(documentUrls)) {
+      for (const docUrl of documentUrls.slice(0, 3)) {
+        if (!docUrl || typeof docUrl !== 'string') continue;
+        
+        try {
+          const docResponse = await fetch(docUrl, {
+            headers: { 'Accept': 'image/*' },
+            signal: AbortSignal.timeout(10000)
+          });
+          
+          if (docResponse.ok) {
+            const contentType = docResponse.headers.get('content-type') || 'image/jpeg';
+            const arrayBuffer = await docResponse.arrayBuffer();
+            const base64Data = Buffer.from(arrayBuffer).toString('base64');
+            
+            parts.push({
+              inlineData: {
+                mimeType: contentType,
+                data: base64Data
+              }
+            });
+          }
+        } catch (docError) {
+          console.warn('Error fetching document image:', docError);
+        }
+      }
+    }
+
+    if (parts.length === 0) {
+      return res.status(400).json({
+        success: false,
+        reason: 'Could not process any of the provided images. Please ensure URLs are accessible.'
+      });
+    }
+
+    // Add the text prompt
+    const inspectionPrompt = prompt || buildDefaultInspectionPrompt(vehicleDetails);
+    parts.push({ text: inspectionPrompt });
+
+    // Build the request body
+    const requestBody: any = {
+      contents: [{ parts }]
+    };
+
+    // Add generation config
+    if (config?.responseMimeType) {
+      requestBody.generationConfig = {
+        responseMimeType: config.responseMimeType
+      };
+    }
+
+    if (config?.responseSchema) {
+      if (!requestBody.generationConfig) {
+        requestBody.generationConfig = {};
+      }
+      requestBody.generationConfig.responseSchema = config.responseSchema;
+    }
+
+    // Call Gemini API
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(60000) // 60s timeout for vision processing
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      let errorMessage = `Gemini API error: ${response.statusText}`;
+      try {
+        const errorJson = JSON.parse(errorBody);
+        errorMessage = errorJson.error?.message || errorJson.error || errorMessage;
+      } catch {
+        errorMessage = errorBody || errorMessage;
+      }
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+    
+    // Extract response text
+    let generatedText = '';
+    if (data.candidates && data.candidates[0]) {
+      const candidate = data.candidates[0];
+      if (candidate.content && candidate.content.parts) {
+        generatedText = candidate.content.parts[0]?.text || '';
+      }
+    }
+
+    if (!generatedText) {
+      generatedText = JSON.stringify(data);
+    }
+
+    return res.status(200).json({
+      success: true,
+      response: generatedText,
+      result: generatedText,
+      imagesProcessed: parts.length - 1, // Exclude text part
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('AI Inspection Error:', error);
+    
+    return res.status(500).json({
+      success: false,
+      reason: 'AI Inspection failed',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+// Build default inspection prompt if none provided
+function buildDefaultInspectionPrompt(vehicleDetails?: any): string {
+  const details = vehicleDetails || {};
+  
+  return `You are an expert vehicle inspector analyzing photos of a used vehicle for an Indian marketplace.
+
+VEHICLE DETAILS:
+- Make: ${details.make || 'Unknown'}
+- Model: ${details.model || 'Unknown'}
+- Year: ${details.year || 'Unknown'}
+- Claimed Mileage: ${details.mileage ? `${details.mileage.toLocaleString()} km` : 'Not provided'}
+- Fuel Type: ${details.fuelType || 'Not specified'}
+- Color: ${details.color || 'Not specified'}
+
+INSPECTION TASK:
+Analyze all provided vehicle images thoroughly. Provide a comprehensive inspection report including:
+
+1. OVERALL ASSESSMENT:
+   - Overall condition score (0-100)
+   - Overall confidence in assessment (0-100)
+
+2. EXTERIOR CONDITION:
+   - Score (0-100)
+   - Paint condition: excellent/good/fair/poor
+   - Body condition: excellent/good/fair/poor
+   - List any findings (scratches, dents, rust, paint damage, cracks)
+   - Summary
+
+3. INTERIOR CONDITION:
+   - Score (0-100)
+   - Seat condition: excellent/good/fair/poor
+   - Dashboard condition: excellent/good/fair/poor
+   - Cleanliness: spotless/clean/average/needs_cleaning
+   - List any findings (wear, tear, stains)
+   - Summary
+
+4. TYRE CONDITION:
+   - Score (0-100)
+   - Estimated tread depth: new/good/fair/replace_soon/unsafe
+   - Mismatched tyres: true/false
+   - Brand visible (if any)
+   - Summary
+
+5. PHOTO QUALITY:
+   - Overall score (0-100)
+   - Issues: blur/low_light/obstructed/reflection/too_far/wrong_angle
+   - Missing views: front/rear/left_side/right_side/interior_front/interior_rear/engine_bay/boot/odometer/tyres
+   - Recommendations for better photos
+
+6. HIGHLIGHTS (positive points about the vehicle)
+
+7. CONCERNS (issues to be aware of)
+
+8. BUYER ADVISORY (recommendations for potential buyers)
+
+GRADING:
+- A (90-100): Excellent - Like new
+- B (75-89): Good - Minor wear, well maintained
+- C (60-74): Fair - Visible wear, some issues
+- D (40-59): Poor - Significant issues
+- F (0-39): Very Poor - Major damage
+
+Be realistic and fair. Indian used car market context applies.
+
+Respond ONLY with a valid JSON object matching the requested schema.`;
 }
 
 // Gemini handler

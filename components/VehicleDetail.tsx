@@ -1,7 +1,9 @@
 import React, { useState, useMemo, memo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, ProsAndCons, User, CertifiedInspection, VehicleDocument } from '../types';
+import type { Vehicle, ProsAndCons, User, CertifiedInspection, VehicleDocument, AIInspectionReport as AIInspectionReportType } from '../types';
 import { generateProsAndCons } from '../services/geminiService';
+import { generateAIInspection } from '../services/aiInspectionService';
+import AIInspectionReportComponent from './AIInspectionReport';
 import { getFirstValidImage, getValidImages, getSafeImageSrc, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, VEHICLE_THUMB_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder, isPlaceholderService } from '../utils/imageUtils';
 import { stringifyVehicleForSession } from '../utils/vehicleSessionCache';
 import StarRating from './StarRating';
@@ -25,6 +27,7 @@ import { ListingStockBadge } from './ListingStockBadge.js';
 import { ListingTrustChips } from './ListingTrustChips.js';
 import VehicleDetailTrustStrip from './VehicleDetailTrustStrip.js';
 import { isListingAvailable } from '../utils/listingStock.js';
+import { PriceInsights } from './PriceInsights';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -203,7 +206,7 @@ const getBankLogo = (bankName: string, size: 'sm' | 'md' | 'lg' = 'md'): React.R
   return <BankLogo bankName={bankName} size={size} />;
 };
 
-const SpecDetail: React.FC<{ label: string; value: string | number | undefined }> = ({ label, value }) => (
+const SpecDetail: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
     <div className="flex justify-between py-2 border-b border-gray-200-100 dark:border-gray-200 last:border-b-0">
         <dt className="text-sm text-brand-gray-600 dark:text-reride-text">{label}</dt>
         <dd className="text-sm font-semibold text-reride-text-dark dark:text-brand-gray-200 text-right">{value || '-'}</dd>
@@ -314,10 +317,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<'images' | 'video'>('images');
-  const [activeTab, setActiveTab] = useState<'overview' | 'report' | 'features'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'report' | 'features' | 'vahan' | 'aiReport'>('overview');
   const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState<boolean>(false);
+  const [aiInspectionReport, setAiInspectionReport] = useState<AIInspectionReportType | null>(null);
+  const [isGeneratingAIInspection, setIsGeneratingAIInspection] = useState(false);
+  const [aiInspectionError, setAiInspectionError] = useState<string | null>(null);
   const [showEMICalculator, setShowEMICalculator] = useState<boolean>(false);
   const [showSellerChat, setShowSellerChat] = useState(false);
   const [showTestDriveModal, setShowTestDriveModal] = useState(false);
@@ -416,7 +422,55 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     setProsAndCons(result);
     setIsGeneratingProsCons(false);
   };
-  
+
+  const handleGenerateAIInspection = async () => {
+    if (!safeVehicle.images || safeVehicle.images.length < 1) {
+      setAiInspectionError('At least 1 photo is required for AI inspection');
+      return;
+    }
+    
+    setIsGeneratingAIInspection(true);
+    setAiInspectionError(null);
+    
+    try {
+      const report = await generateAIInspection({
+        vehicleId: safeVehicle.id,
+        imageUrls: safeVehicle.images,
+        vehicleDetails: {
+          make: safeVehicle.make,
+          model: safeVehicle.model,
+          year: safeVehicle.year,
+          mileage: safeVehicle.mileage,
+          fuelType: safeVehicle.fuelType,
+          color: safeVehicle.color,
+        },
+      });
+      
+      setAiInspectionReport(report);
+      setActiveTab('aiReport');
+
+      const isListingSeller =
+        currentUser?.email &&
+        safeVehicle.sellerEmail &&
+        currentUser.email.toLowerCase().trim() === safeVehicle.sellerEmail.toLowerCase().trim();
+      if (isListingSeller && updateVehicle) {
+        await updateVehicle(
+          safeVehicle.id,
+          { aiInspectionReport: report },
+          { skipToast: true, successMessage: 'AI inspection report saved to your listing' },
+        );
+      }
+    } catch (error) {
+      console.error('AI Inspection failed:', error);
+      setAiInspectionError(error instanceof Error ? error.message : 'Failed to generate AI inspection');
+    } finally {
+      setIsGeneratingAIInspection(false);
+    }
+  };
+
+  // Use either the saved report or the locally generated one
+  const currentAIReport = safeVehicle.aiInspectionReport || aiInspectionReport;
+
   const handleRateSeller = (rating: number) => {
     onAddSellerRating(safeVehicle.sellerEmail, Number(rating));
     setShowSellerRatingSuccess(true);
@@ -492,6 +546,24 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const filteredRecommendations = useMemo(() => {
       return recommendations.filter(rec => rec.id !== safeVehicle.id).slice(0, 3);
   }, [recommendations, safeVehicle.id]);
+
+  const similarVehiclesForPricing = useMemo(() => {
+    const pool = [...(contextVehicles || []), ...recommendations];
+    const seen = new Set<number>();
+    return pool
+      .filter((v) => {
+        if (!v || v.id === safeVehicle.id || v.status !== 'published') return false;
+        if (seen.has(v.id)) return false;
+        seen.add(v.id);
+        return (
+          v.make === safeVehicle.make &&
+          v.model === safeVehicle.model &&
+          Math.abs(v.year - safeVehicle.year) <= 2
+        );
+      })
+      .slice(0, 20)
+      .map((v) => ({ price: v.price, year: v.year, mileage: v.mileage }));
+  }, [contextVehicles, recommendations, safeVehicle.id, safeVehicle.make, safeVehicle.model, safeVehicle.year]);
   
   // Track a view when the detail page is opened (only once per vehicle)
   useEffect(() => {
@@ -730,6 +802,48 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
                             )}
                           </button>
+                          {/* AI Report Tab - shows when report exists OR can be generated */}
+                          {currentAIReport ? (
+                            <button
+                              onClick={() => setActiveTab('aiReport')}
+                              className={`px-6 py-4 font-bold text-sm uppercase transition-colors relative ${
+                                activeTab === 'aiReport'
+                                  ? 'text-purple-600'
+                                  : 'text-gray-600 hover:text-gray-900'
+                              }`}
+                            >
+                              {t('vehicle.detail.tabs.aiReport', 'AI Report')}
+                              <span className="ml-1.5 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold align-middle">AI</span>
+                              {activeTab === 'aiReport' && (
+                                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
+                              )}
+                            </button>
+                          ) : safeVehicle.images && safeVehicle.images.length > 0 && (
+                            <button
+                              onClick={handleGenerateAIInspection}
+                              disabled={isGeneratingAIInspection}
+                              className={`px-6 py-4 font-bold text-sm uppercase transition-colors relative ${
+                                isGeneratingAIInspection
+                                  ? 'text-blue-400 cursor-wait'
+                                  : 'text-blue-600 hover:text-blue-800'
+                              }`}
+                            >
+                              {isGeneratingAIInspection ? (
+                                <span className="flex items-center gap-2">
+                                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                  </svg>
+                                  Analyzing...
+                                </span>
+                              ) : (
+                                <>
+                                  {t('vehicle.detail.tabs.runAiReport', 'Run AI Report')}
+                                  <span className="ml-1.5 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold align-middle">NEW</span>
+                                </>
+                              )}
+                            </button>
+                          )}
                           {safeVehicle.certifiedInspection && (
                             <button
                               onClick={() => setActiveTab('report')}
@@ -755,6 +869,19 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           >
                             {t('vehicle.detail.tabs.featureSpecs')}
                             {activeTab === 'features' && (
+                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => setActiveTab('vahan')}
+                            className={`px-6 py-4 font-bold text-sm uppercase transition-colors relative ${
+                              activeTab === 'vahan'
+                                ? 'text-purple-600'
+                                : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                          >
+                            {t('vehicle.detail.tabs.vahan')}
+                            {activeTab === 'vahan' && (
                               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
                             )}
                           </button>
@@ -899,6 +1026,67 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           </div>
                         )}
 
+                        {/* AI Inspection Report Tab */}
+                        {activeTab === 'aiReport' && currentAIReport && (
+                          <div className="p-6">
+                            <div className="flex items-center gap-3 mb-6">
+                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                                  {t('vehicle.detail.aiInspection', 'AI Photo Inspection')}
+                                </h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  {t('vehicle.detail.aiInspectionNote', 'Automated analysis based on uploaded photos')}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
+                              <div className="flex items-start gap-3">
+                                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                                <p className="text-sm text-blue-800 dark:text-blue-200">
+                                  {t('vehicle.detail.aiDisclaimer', 'This report is generated by AI based on uploaded photos. For a comprehensive evaluation, we recommend a physical inspection by a certified mechanic.')}
+                                </p>
+                              </div>
+                            </div>
+                            <AIInspectionReportComponent 
+                              report={currentAIReport} 
+                              onRequestPhysicalInspection={() => {
+                                alert('Physical inspection request feature coming soon!');
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* AI Inspection Error */}
+                        {activeTab === 'aiReport' && !currentAIReport && aiInspectionError && (
+                          <div className="p-6">
+                            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                              <div className="flex items-start gap-3">
+                                <svg className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                </svg>
+                                <div>
+                                  <p className="text-sm font-medium text-red-800 dark:text-red-200">AI Inspection Failed</p>
+                                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">{aiInspectionError}</p>
+                                  <button
+                                    onClick={handleGenerateAIInspection}
+                                    className="mt-3 text-sm font-medium text-red-700 hover:text-red-800 underline"
+                                  >
+                                    Try again
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Certified Physical Inspection Report Tab */}
                         {activeTab === 'report' && safeVehicle.certifiedInspection && (
                           <div className="p-6">
                             <CertifiedInspectionReport report={safeVehicle.certifiedInspection} />
@@ -974,6 +1162,200 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 )}
                               </div>
                             </div>
+                          </div>
+                        )}
+
+                        {activeTab === 'vahan' && (
+                          <div className="p-6 space-y-8">
+                            {/* Show login prompt for non-logged-in users */}
+                            {!currentUser ? (
+                              <div className="flex flex-col items-center justify-center py-12 px-6">
+                                <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mb-6">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                  </svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-2 text-center">
+                                  {t('vehicle.detail.vahan.loginRequired')}
+                                </h3>
+                                <p className="text-gray-600 text-center mb-6 max-w-md">
+                                  {t('vehicle.detail.vahan.loginDescription')}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => onStartChat(safeVehicle)}
+                                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-8 rounded-lg transition-colors flex items-center gap-2"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                                  </svg>
+                                  {t('vehicle.detail.vahan.loginButton')}
+                                </button>
+                              </div>
+                            ) : (
+                            <>
+                            {/* Vahan Header - Check if actually verified */}
+                            {(() => {
+                              const isVahanVerified = !!(safeVehicle as Vehicle & { vahanVerifiedAt?: string }).vahanVerifiedAt;
+                              return (
+                                <>
+                                  <div className="flex items-center gap-3 pb-4 border-b border-gray-200">
+                                    <div className={`flex items-center justify-center w-12 h-12 rounded-full ${isVahanVerified ? 'bg-green-100' : 'bg-amber-100'}`}>
+                                      {isVahanVerified ? (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" viewBox="0 0 20 20" fill="currentColor">
+                                          <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                        </svg>
+                                      ) : (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
+                                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                                    </div>
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <h3 className="text-xl font-semibold text-gray-900">
+                                          {t('vehicle.detail.vahan.title')}
+                                        </h3>
+                                        {isVahanVerified ? (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            {t('vehicle.detail.vahan.verified')}
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                            {t('vehicle.detail.vahan.notVerified')}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-sm text-gray-500">
+                                        {isVahanVerified 
+                                          ? t('vehicle.detail.vahan.subtitle') 
+                                          : t('vehicle.detail.vahan.sellerProvided')}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* Not Verified Warning Banner */}
+                                  {!isVahanVerified && (
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                      </svg>
+                                      <div>
+                                        <p className="text-sm font-medium text-amber-800">
+                                          {t('vehicle.detail.vahan.notVerifiedTitle')}
+                                        </p>
+                                        <p className="text-sm text-amber-700 mt-1">
+                                          {t('vehicle.detail.vahan.notVerifiedDescription')}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+
+                            {/* Registration Details */}
+                            <div>
+                              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" viewBox="0 0 20 20" fill="currentColor">
+                                  <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
+                                </svg>
+                                {t('vehicle.detail.vahan.registrationDetails')}
+                              </h4>
+                              {/* Check if seller has provided Vahan verification details */}
+                              {(() => {
+                                const extVehicle = safeVehicle as Vehicle & { registrationNumber?: string; engineNumber?: string; chassisNumber?: string };
+                                const hasVahanDetails = extVehicle.registrationNumber || extVehicle.engineNumber || extVehicle.chassisNumber;
+                                
+                                if (!hasVahanDetails) {
+                                  return (
+                                    <div className="bg-gray-100 border border-gray-200 rounded-lg p-6 text-center">
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                      <p className="text-gray-600 font-medium">{t('vehicle.detail.vahan.noDetailsProvided')}</p>
+                                      <p className="text-sm text-gray-500 mt-1">{t('vehicle.detail.vahan.sellerNotProvided')}</p>
+                                    </div>
+                                  );
+                                }
+                                
+                                return (
+                                  <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 bg-gray-50 rounded-lg p-4">
+                                    <SpecDetail 
+                                      label={t('vehicle.detail.vahan.registrationNumber')} 
+                                      value={extVehicle.registrationNumber || '-'} 
+                                    />
+                                    <SpecDetail 
+                                      label={t('vehicle.detail.vahan.registrationDate')} 
+                                      value={safeVehicle.registrationYear ? `${safeVehicle.registrationYear}` : '-'} 
+                                    />
+                                    <SpecDetail 
+                                      label={t('vehicle.detail.vahan.engineNumber')} 
+                                      value={extVehicle.engineNumber || '-'} 
+                                    />
+                                    <SpecDetail 
+                                      label={t('vehicle.detail.vahan.chassisNumber')} 
+                                      value={extVehicle.chassisNumber || '-'} 
+                                    />
+                                    <SpecDetail 
+                                      label={t('vehicle.detail.vahan.rtoOffice')} 
+                                      value={safeVehicle.rto || '-'} 
+                                    />
+                                    <SpecDetail 
+                                      label={t('vehicle.detail.vahan.registeredState')} 
+                                      value={safeVehicle.state || '-'} 
+                                    />
+                                  </dl>
+                                );
+                              })()}
+                            </div>
+
+                            {/* Ownership & Insurance Status */}
+                            <div>
+                              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                                </svg>
+                                {t('vehicle.detail.vahan.ownershipStatus')}
+                              </h4>
+                              <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 bg-gray-50 rounded-lg p-4">
+                                <SpecDetail label={t('vehicle.detail.vahan.numberOfOwners')} value={safeVehicle.noOfOwners ? `${safeVehicle.noOfOwners}${safeVehicle.noOfOwners === 1 ? 'st' : safeVehicle.noOfOwners === 2 ? 'nd' : safeVehicle.noOfOwners === 3 ? 'rd' : 'th'} Owner` : '-'} />
+                                <SpecDetail label={t('vehicle.detail.vahan.insuranceValidity')} value={(() => {
+                                  const insurance = safeVehicle.insuranceValidity;
+                                  if (!insurance || insurance.trim() === '') return t('vehicle.detail.insurance.notSpecified');
+                                  if (insurance.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                    const insuranceDate = new Date(insurance);
+                                    const now = new Date();
+                                    const isExpired = insuranceDate < now;
+                                    return (
+                                      <span className={isExpired ? 'text-red-600' : 'text-green-600'}>
+                                        {insuranceDate.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                        {isExpired ? ' (Expired)' : ' (Active)'}
+                                      </span>
+                                    );
+                                  }
+                                  return insurance;
+                                })()} />
+                                <SpecDetail label={t('vehicle.detail.vahan.fitnessStatus')} value={
+                                  <span className="text-green-600 font-medium">{t('vehicle.detail.vahan.fitnessValid')}</span>
+                                } />
+                                <SpecDetail label={t('vehicle.detail.vahan.hypothecation')} value={
+                                  <span className="text-gray-600">{t('vehicle.detail.vahan.noHypothecation')}</span>
+                                } />
+                              </dl>
+                            </div>
+
+                            {/* Disclaimer */}
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                              <p className="text-sm text-yellow-800">
+                                {t('vehicle.detail.vahan.disclaimer')}
+                              </p>
+                            </div>
+                            </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1180,6 +1562,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           <p className="text-base text-gray-500 mt-1">
                             {t('vehicle.detail.price.includesRcTransfer')}
                           </p>
+                        </div>
+
+                        <div className="mt-4">
+                          <PriceInsights
+                            vehicle={safeVehicle}
+                            similarVehicles={similarVehiclesForPricing}
+                          />
                         </div>
 
                         {/* EMI Details */}

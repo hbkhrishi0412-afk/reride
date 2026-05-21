@@ -2897,6 +2897,106 @@ app.post('/api/gemini', (req, res) => {
   });
 });
 
+// CarQuery vehicle specs proxy (avoids browser CORS on carqueryapi.com)
+app.get('/api/vehicle-specs', async (req, res) => {
+  const make = String(req.query.make || '').trim();
+  const model = String(req.query.model || '').trim();
+  const year = parseInt(String(req.query.year || ''), 10);
+
+  if (!make || !model || !Number.isFinite(year) || year < 1900) {
+    return res.status(400).json({
+      success: false,
+      reason: 'Query params make, model, and year are required',
+    });
+  }
+
+  try {
+    const { lookupVehicleSpecsFromCarQuery } = await import('./lib/carquerySpecs.ts');
+    const specs = await lookupVehicleSpecsFromCarQuery(make, model, year);
+    console.log(`🚗 GET /api/vehicle-specs — ${make} ${model} ${year} → ${specs ? 'hit' : 'miss'}`);
+    return res.json({ success: Boolean(specs), specs: specs ?? null });
+  } catch (error) {
+    console.error('CarQuery proxy error:', error);
+    return res.status(200).json({ success: false, specs: null, reason: 'CarQuery lookup failed' });
+  }
+});
+
+// AI vehicle photo inspection (dev mock — mirrors api/main.ts response shape)
+app.post('/api/ai-inspection', (req, res) => {
+  const { imageUrls, vehicleDetails } = req.body || {};
+
+  if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
+    return res.status(400).json({
+      success: false,
+      reason: 'At least one image URL is required for inspection',
+    });
+  }
+
+  const make = vehicleDetails?.make || 'Vehicle';
+  const model = vehicleDetails?.model || '';
+  const year = vehicleDetails?.year || new Date().getFullYear();
+  const imageCount = imageUrls.length;
+
+  const mockInspection = {
+    overallScore: 78,
+    confidenceScore: 62,
+    exterior: {
+      score: 80,
+      paintCondition: 'good',
+      bodyCondition: 'good',
+      summary: `Exterior of ${year} ${make} ${model} looks well maintained (dev mock).`,
+      findings: [],
+    },
+    interior: {
+      score: 76,
+      seatCondition: 'good',
+      dashboardCondition: 'good',
+      cleanlinessLevel: 'clean',
+      summary: 'Interior appears clean with normal wear for age (dev mock).',
+      findings: [],
+    },
+    tyres: {
+      score: 74,
+      estimatedTreadDepth: 'good',
+      mismatchedTyres: false,
+      brandVisible: null,
+      summary: 'Tyre tread appears adequate from photos (dev mock).',
+    },
+    photoQuality: {
+      overallScore: Math.min(90, 55 + imageCount * 5),
+      issues: imageCount < 6 ? ['too_far'] : [],
+      missingViews: imageCount < 6 ? ['interior_front', 'tyres'] : [],
+      recommendations: imageCount < 6
+        ? ['Add more angles: interior, engine bay, and tyre close-ups']
+        : ['Photo set is adequate for listing'],
+    },
+    highlights: [
+      `${imageCount} photo(s) analyzed`,
+      'Development mock — set GEMINI_API_KEY for real AI inspection in production',
+    ],
+    concerns: [],
+    buyerAdvisory: [
+      'This report was generated in local dev mode.',
+      'Always inspect the vehicle in person before purchase.',
+    ],
+    imageAnalysis: imageUrls.slice(0, 10).map((url, idx) => ({
+      imageIndex: idx,
+      detectedElements: ['vehicle body'],
+      issuesFound: 0,
+    })),
+  };
+
+  console.log(`🔍 POST /api/ai-inspection - Returning dev mock (${imageCount} image(s))`);
+
+  res.json({
+    success: true,
+    response: JSON.stringify(mockInspection),
+    result: JSON.stringify(mockInspection),
+    imagesProcessed: imageCount,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Import chat API and other optional modules (wrapped in async IIFE)
 // DISABLED: MongoDB-dependent chat modules not needed when using Firebase
 let chatRouter = null;
@@ -3472,6 +3572,93 @@ app.post('/api/content-reports', (req, res) => {
   res.json({ success: true });
 });
 
+// Image upload endpoint - uploads to Supabase Storage
+app.post('/api/upload-image', async (req, res) => {
+  console.log('📸 POST /api/upload-image - Processing image upload');
+  
+  try {
+    const { fileBase64, fileName, mimeType, folder } = req.body;
+    
+    if (!fileBase64) {
+      return res.status(400).json({ 
+        success: false, 
+        reason: 'Missing fileBase64 in request body' 
+      });
+    }
+    
+    // Import Supabase client
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('❌ Supabase credentials not configured');
+      return res.status(500).json({ 
+        success: false, 
+        reason: 'Storage not configured. Please set SUPABASE_SERVICE_ROLE_KEY.' 
+      });
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Convert base64 to buffer
+    const buffer = Buffer.from(fileBase64, 'base64');
+    
+    // Generate unique filename
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 12);
+    const ext = (fileName || 'image.jpg').split('.').pop() || 'jpg';
+    const uniqueFileName = `${timestamp}_${randomStr}.${ext}`;
+    const folderPath = folder || 'vehicles';
+    const filePath = `${folderPath}/${uniqueFileName}`;
+    
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from('Images')
+      .upload(filePath, buffer, {
+        contentType: mimeType || 'image/jpeg',
+        cacheControl: '3600',
+        upsert: false
+      });
+    
+    if (uploadError) {
+      console.error('❌ Supabase Storage upload error:', uploadError);
+      return res.status(500).json({ 
+        success: false, 
+        reason: `Upload failed: ${uploadError.message}` 
+      });
+    }
+    
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('Images')
+      .getPublicUrl(filePath);
+    
+    const publicUrl = urlData.publicUrl;
+    console.log(`✅ Image uploaded successfully: ${publicUrl}`);
+    
+    return res.json({
+      success: true,
+      url: publicUrl,
+      imageId: filePath
+    });
+    
+  } catch (error) {
+    console.error('❌ Upload error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      reason: error.message || 'Upload failed' 
+    });
+  }
+});
+
+// CSRF token endpoint (required for authenticated requests)
+app.get('/api/csrf-token', (req, res) => {
+  // In dev, return a mock CSRF token
+  const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
+  res.json({ token });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
@@ -3491,6 +3678,10 @@ app.get('/api/health', (req, res) => {
       notifications: '/api/notifications',
       payments: '/api/payments',
       gemini: '/api/gemini',
+      aiInspection: '/api/ai-inspection',
+      vehicleSpecs: '/api/vehicle-specs',
+      uploadImage: '/api/upload-image',
+      csrfToken: '/api/csrf-token',
       // chat: '/api/chat', // Disabled - Firebase handles chat in production
       health: '/api/health'
     }
@@ -3541,6 +3732,10 @@ server.listen(PORT, () => {
   console.log(`   - POST /api/payments?action=approve - Approve payment request`);
   console.log(`   - POST /api/payments?action=reject - Reject payment request`);
   console.log(`   - POST /api/gemini - AI/Gemini API (mock response in dev)`);
+  console.log(`   - POST /api/ai-inspection - AI vehicle photo inspection (mock in dev)`);
+  console.log(`   - GET  /api/vehicle-specs?make=&model=&year= - CarQuery specs proxy`);
+  console.log(`   - POST /api/upload-image - Upload image to Supabase Storage`);
+  console.log(`   - GET  /api/csrf-token - Get CSRF token for authenticated requests`);
   // console.log(`   - POST /api/chat - Send chat message (disabled - Firebase handles chat)`);
   // console.log(`   - GET  /api/chat/history - Get chat history (disabled - Firebase handles chat)`);
   // console.log(`   - GET  /api/chat/sessions - Get chat sessions (disabled - Firebase handles chat)`);

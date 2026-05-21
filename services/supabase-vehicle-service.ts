@@ -187,7 +187,10 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>): any {
     'distanceFromUser', 'photoQuality', 'hasMinimumPhotos',
     'descriptionQuality', 'activeBoosts', 'hideExactLocation',
     'offerEnabled', 'offerTitle', 'offerStartDate', 'offerEndDate', 'offerDateLabel',
-    'offerDescription', 'offerHighlight', 'offerDisclaimer'
+    'offerDescription', 'offerHighlight', 'offerDisclaimer',
+    // Vahan verification fields
+    'registrationNumber', 'engineNumber', 'chassisNumber', 'vahanVerifiedAt',
+    'aiInspectionReport',
   ];
   
   metadataFields.forEach(field => {

@@ -4,6 +4,8 @@ import { View as ViewEnum } from '../types';
 import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianStates, getDistrictsByState, getCarYears, getOwnershipOptions, ScrapedCarData } from '../utils/rerideScraper';
 import { sellCarAPI } from '../services/sellCarService';
 import { useCamera } from '../hooks/useMobileFeatures';
+import { fetchVehicleSpecs, cacheAISpecs } from '../services/vehicleSpecsService';
+import { getAiVehicleSuggestions } from '../services/geminiService';
 
 interface MobileSellCarPageProps {
   onNavigate: (view: ViewEnum) => void;
@@ -388,7 +390,10 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
     fuelType: '',
     transmission: '',
     condition: '',
-    expectedPrice: ''
+    expectedPrice: '',
+    // Vahan verification fields
+    engineNumber: '',
+    chassisNumber: ''
   });
   
   const [carData, setCarData] = useState<ScrapedCarData | null>(null);
@@ -403,7 +408,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
 
   const { capture, captureMultiple, compress, isCapturing } = useCamera();
 
-  const totalSteps = 9;
+  const totalSteps = 10;
   const indianStates = getIndianStates();
   const districtsForSelectedState = carDetails.state ? getDistrictsByState(carDetails.state) : [];
   const years = getCarYears();
@@ -450,6 +455,64 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
       setCarDetails(prev => ({ ...prev, variant: '' }));
     }
   }, [carDetails.model, carData]);
+
+  // Auto-fetch vehicle specs when make, model, and year are selected
+  const autoFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFetchedKey = useRef<string>('');
+  
+  useEffect(() => {
+    const { make, model, year } = carDetails;
+    
+    if (!make || !model || !year) return;
+    
+    const vehicleKey = `${make}_${model}_${year}`;
+    if (lastFetchedKey.current === vehicleKey) return;
+    
+    // Don't overwrite if user already selected values
+    if (carDetails.fuelType && carDetails.transmission) {
+      lastFetchedKey.current = vehicleKey;
+      return;
+    }
+    
+    if (autoFetchTimeoutRef.current) {
+      clearTimeout(autoFetchTimeoutRef.current);
+    }
+    
+    autoFetchTimeoutRef.current = setTimeout(async () => {
+      console.log('🚗 Mobile: Auto-fetching specs for:', { make, model, year });
+      lastFetchedKey.current = vehicleKey;
+      
+      try {
+        const specs = await fetchVehicleSpecs(make, model, parseInt(year, 10));
+        if (specs) {
+          setCarDetails(prev => ({
+            ...prev,
+            fuelType: prev.fuelType || specs.fuelType || '',
+            transmission: prev.transmission || specs.transmission || '',
+          }));
+          console.log('✅ Mobile: Auto-filled fuel/transmission:', specs.fuelType, specs.transmission);
+        } else {
+          const suggestions = await getAiVehicleSuggestions({ make, model, year: parseInt(year, 10) });
+          if (suggestions.structuredSpecs) {
+            setCarDetails(prev => ({
+              ...prev,
+              fuelType: prev.fuelType || suggestions.structuredSpecs?.fuelType || '',
+              transmission: prev.transmission || suggestions.structuredSpecs?.transmission || '',
+            }));
+            cacheAISpecs(make, model, parseInt(year, 10), suggestions.structuredSpecs as Record<string, string>);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to auto-fetch specs:', error);
+      }
+    }, 500);
+    
+    return () => {
+      if (autoFetchTimeoutRef.current) {
+        clearTimeout(autoFetchTimeoutRef.current);
+      }
+    };
+  }, [carDetails.make, carDetails.model, carDetails.year]);
 
   const handleNextStep = () => {
     prepareWizardStepChange();
@@ -617,7 +680,77 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
           </div>
         );
 
-      case 2: // Car Details - Make/Model
+      case 2: // Vahan Verification Details
+        return (
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Vehicle Verification Details</h2>
+            <p className="text-gray-600 mb-4">Enter details from your RC book for Vahan verification</p>
+            
+            {/* Info Banner */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+              <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="text-sm text-blue-800 font-medium">Why we need this?</p>
+                <p className="text-sm text-blue-700 mt-1">These details help buyers verify your vehicle authenticity through official Vahan records. Verified listings get more inquiries!</p>
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="sell-engine-number" className="block text-sm font-medium text-gray-700 mb-2">
+                Engine Number <span className="text-gray-400">(from RC book)</span>
+              </label>
+              <input
+                id="sell-engine-number"
+                type="text"
+                placeholder="e.g., K10B1234567"
+                value={carDetails.engineNumber}
+                onChange={(e) => setCarDetails(prev => ({ ...prev, engineNumber: e.target.value.toUpperCase() }))}
+                onFocus={(e) => {
+                  activateInputKeyboardPadding();
+                  scrollFieldIntoComfortableView(e.currentTarget);
+                }}
+                onBlur={deactivateInputKeyboardPadding}
+                className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
+                style={{ minHeight: '56px' }}
+                autoCapitalize="characters"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="sell-chassis-number" className="block text-sm font-medium text-gray-700 mb-2">
+                Chassis Number <span className="text-gray-400">(from RC book)</span>
+              </label>
+              <input
+                id="sell-chassis-number"
+                type="text"
+                placeholder="e.g., MA3EYUE1S00123456"
+                value={carDetails.chassisNumber}
+                onChange={(e) => setCarDetails(prev => ({ ...prev, chassisNumber: e.target.value.toUpperCase() }))}
+                onFocus={(e) => {
+                  activateInputKeyboardPadding();
+                  scrollFieldIntoComfortableView(e.currentTarget);
+                }}
+                onBlur={deactivateInputKeyboardPadding}
+                className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
+                style={{ minHeight: '56px' }}
+                autoCapitalize="characters"
+              />
+            </div>
+
+            {/* Skip Option */}
+            <button
+              type="button"
+              onClick={handleNextStep}
+              className="w-full text-center text-gray-500 text-sm py-2 hover:text-gray-700"
+            >
+              Skip for now (can add later)
+            </button>
+          </div>
+        );
+
+      case 3: // Car Details - Make/Model
         return (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Car Details</h2>
