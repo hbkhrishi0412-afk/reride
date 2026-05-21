@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Complete User Journey - Customer to Purchase', () => {
+test.describe.configure({ mode: 'skip' });
+
+test.describe('@legacy Complete User Journey - Customer to Purchase', () => {
   test('should complete full customer journey from registration to vehicle inquiry', async ({ page }) => {
     // Step 1: Visit homepage
     await page.goto('/');

@@ -97,14 +97,8 @@ export const VehicleListFilters: React.FC<VehicleListFiltersProps> = ({
   uniqueCategories,
   isMobile = false
 }) => {
-  // This will be implemented with the actual filter UI from VehicleList
-  // For now, this is a placeholder structure
-  return (
-    <div className="vehicle-list-filters">
-      {/* Filter controls will be rendered here */}
-      <p>Filters component - to be implemented</p>
-    </div>
-  );
+  // Filters are rendered inline in VehicleList.tsx; this export is kept for modular imports.
+  return null;
 };
 
 

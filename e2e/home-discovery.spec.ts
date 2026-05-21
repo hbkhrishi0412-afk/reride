@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { fetchPublishedVehicles, fetchSoldVehicle } from './helpers/catalog';
+import { fetchPublishedVehicles, ensureSoldVehicleForE2E } from './helpers/catalog';
 
 test.describe('Home discovery — geo & city chips', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,7 +7,7 @@ test.describe('Home discovery — geo & city chips', () => {
       localStorage.removeItem('reRideSelectedCity');
       localStorage.removeItem('reRideUserLocation');
     });
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
     await expect(page.getByTestId('popular-cities-chips')).toBeVisible({ timeout: 60_000 });
   });
 
@@ -18,21 +18,37 @@ test.describe('Home discovery — geo & city chips', () => {
   });
 
   test('All India chip navigates to used cars without locking a city', async ({ page }) => {
-    await page.getByTestId('popular-cities-chips').getByRole('button', { name: 'All India', exact: true }).click();
-    await expect(page).toHaveURL(/\/used-cars\/?$/);
+    const allIndia = page.getByTestId('popular-cities-chips').getByRole('button', { name: 'All India', exact: true });
+    await expect(allIndia).toBeVisible();
+    await Promise.all([
+      page.waitForURL(/\/used-cars\/?$/, { timeout: 30_000 }),
+      allIndia.click(),
+    ]);
     await expect(page.locator('[data-testid="vehicle-card"]').first()).toBeVisible({ timeout: 60_000 });
+  });
+
+  test('shows location banner on desktop home', async ({ page }) => {
+    const banner = page.getByTestId('home-location-banner');
+    await expect(banner).toBeVisible({ timeout: 30_000 });
+    await expect(banner.getByRole('button', { name: /Use my location/i })).toBeVisible();
+    await expect(banner.getByRole('button', { name: /Browse all India/i })).toBeVisible();
   });
 
   test('selecting a popular city chip filters the used cars list', async ({ page }) => {
     const mumbaiChip = page
       .getByTestId('popular-cities-chips')
       .getByRole('button', { name: /^Mumbai/i });
-    await mumbaiChip.click();
-    await expect(page).toHaveURL(/\/used-cars/);
-    const selectedCity = await page.evaluate(() => localStorage.getItem('reRideSelectedCity'));
-    expect(selectedCity?.toLowerCase()).toContain('mumbai');
+    await expect(mumbaiChip).toBeVisible();
+    await Promise.all([
+      page.waitForURL(/\/used-cars/, { timeout: 30_000 }),
+      mumbaiChip.click(),
+    ]);
+    await expect
+      .poll(async () => {
+        return page.evaluate(() => localStorage.getItem('reRideSelectedCity'));
+      })
+      .toMatch(/mumbai/i);
   });
-
 });
 
 test.describe('Vehicle detail — stock & contact CTAs', () => {
@@ -41,7 +57,7 @@ test.describe('Vehicle detail — stock & contact CTAs', () => {
     test.skip(published.length === 0, 'No published vehicles in catalog');
 
     const vehicle = published[0];
-    await page.goto(`/vehicle/${vehicle.id}`);
+    await page.goto(`/vehicle/${vehicle.id}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     await expect(page).toHaveURL(new RegExp(`/vehicle/${vehicle.id}`), { timeout: 15_000 });
 
     const detailBadge = page.getByTestId('listing-stock-badge').first();
@@ -51,10 +67,10 @@ test.describe('Vehicle detail — stock & contact CTAs', () => {
   });
 
   test('sold listing hides book test drive and marks stock sold', async ({ page, request }) => {
-    const sold = await fetchSoldVehicle(request);
-    test.skip(!sold, 'No sold vehicle in catalog — seed one in Supabase to exercise this path');
+    const sold = await ensureSoldVehicleForE2E(request);
+    test.skip(!sold, 'No sold vehicle in catalog — need at least one published vehicle to mark sold');
 
-    await page.goto(`/vehicle/${sold!.id}`);
+    await page.goto(`/vehicle/${sold!.id}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     await expect(page.getByTestId('listing-stock-badge').first()).toHaveAttribute('data-stock-status', 'sold', {
       timeout: 20_000,
     });
@@ -67,7 +83,7 @@ test.describe('Vehicle detail — stock & contact CTAs', () => {
     test.skip(published.length === 0, 'No published vehicles in catalog');
 
     const vehicle = published[0];
-    await page.goto(`/vehicle/${vehicle.id}`);
+    await page.goto(`/vehicle/${vehicle.id}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     await page.waitForSelector('[data-testid="listing-stock-badge"]', { timeout: 20_000 });
     await page.getByRole('button', { name: 'Chat with Seller' }).click();
     await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });

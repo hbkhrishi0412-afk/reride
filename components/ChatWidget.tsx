@@ -381,6 +381,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   // Handle minimize/maximize with animation
   const handleToggleMinimize = () => {
     if (!isMinimized) {
+      setUserManuallyClosed(true);
       setIsAnimating(true);
       setTimeout(() => {
         setIsMinimized(true);

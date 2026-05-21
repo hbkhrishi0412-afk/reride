@@ -123,12 +123,6 @@ const POPULAR_METRO_LOCATIONS: readonly { label: string; state: string; district
 const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [sellerType, setSellerType] = useState<'individual' | 'dealer'>('individual');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [, /* showPassword */ /* setShowPassword */] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  const [loginError, setLoginError] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [carDetails, setCarDetails] = useState({
     registration: '',
@@ -304,18 +298,6 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
   }, []);
 
   useEffect(() => {
-    const storageKey = sellerType === 'dealer' ? 'rememberedSellerEmail' : 'rememberedCustomerEmail';
-    const rememberedEmail = localStorage.getItem(storageKey);
-    if (rememberedEmail) {
-      setEmail(rememberedEmail);
-      setRememberMe(true);
-    } else {
-      setEmail('');
-      setRememberMe(false);
-    }
-  }, [sellerType]);
-
-  useEffect(() => {
     if (carData && carDetails.make) {
       const models = getModelsByMake(carDetails.make, carData);
       setAvailableModels(models.map(m => m.name));
@@ -413,53 +395,6 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
       setIsAnimating(false);
     }, 260);
   };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    if (!email || !password) {
-      setLoginError('Please enter both email and password');
-      return;
-    }
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(email.trim())) {
-      setLoginError('Please enter a valid email address.');
-      return;
-    }
-    setIsLoggingIn(true);
-    try {
-      const { authenticatedFetch } = await import('../utils/authenticatedFetch');
-      const response = await authenticatedFetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'login',
-          email: email.trim().toLowerCase(),
-          password,
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data?.success) {
-        setLoginError(data?.reason || 'Invalid email or password. Please try again.');
-        return;
-      }
-      if (data.accessToken) { try { localStorage.setItem('accessToken', data.accessToken); } catch { /* quota */ } }
-      if (data.refreshToken) { try { localStorage.setItem('refreshToken', data.refreshToken); } catch { /* quota */ } }
-      if (data.user) { try { localStorage.setItem('user', JSON.stringify(data.user)); } catch { /* quota */ } }
-      if (rememberMe) {
-        const storageKey = sellerType === 'dealer' ? 'rememberedSellerEmail' : 'rememberedCustomerEmail';
-        try { localStorage.setItem(storageKey, email); } catch { /* quota */ }
-      }
-      handleNextStep();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      setLoginError(`Login failed: ${message}`);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-  // Suppress unused lint for the login helper (used in dealer flow paths)
-  void handleLogin; void isLoggingIn; void loginError; void password; void setPassword;
 
   const validateRegistration = (reg: string): boolean => {
     const pattern = /^[A-Z]{2}[0-9]{1,2}[A-Z]{1,2}[0-9]{4}$/i;
@@ -721,7 +656,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
       <StepHeader
         eyebrow="Let's start"
         title="What's your car's registration number?"
-        subtitle="We'll auto-fetch make, model, year & variant when possible."
+        subtitle="Enter your plate number in Indian format. You'll confirm make, model, and year in the next steps."
         accent="orange"
         icon={
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -763,7 +698,9 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
             {registrationError}
           </p>
         )}
-        <p className="text-xs text-gray-500 mt-2">Format example: <span className="font-mono font-semibold">MH01AB1234</span> (no spaces)</p>
+        <p className="text-xs text-gray-500 mt-2">
+          Format example: <span className="font-mono font-semibold">MH01AB1234</span> (no spaces). We validate the format now; official RTO lookup may be added later.
+        </p>
       </div>
 
       <button

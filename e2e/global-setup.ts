@@ -1,4 +1,10 @@
 import { chromium, FullConfig } from '@playwright/test';
+import fs from 'fs/promises';
+import path from 'path';
+import { ensureSoldVehicleForE2E } from './helpers/catalog';
+import { E2E_TEST_USERS } from './fixtures/test-users';
+
+const SEED_STORAGE_PATH = path.join(process.cwd(), 'e2e/.auth/seed-storage.json');
 
 async function globalSetup(config: FullConfig) {
   console.log('🚀 Starting E2E Test Global Setup...');
@@ -14,6 +20,15 @@ async function globalSetup(config: FullConfig) {
     
     // Seed test data if needed
     await seedTestData(page);
+    await fs.mkdir(path.dirname(SEED_STORAGE_PATH), { recursive: true });
+    await page.context().storageState({ path: SEED_STORAGE_PATH });
+    await waitForDevApi();
+    const sold = await ensureSoldVehicleForE2E();
+    if (sold) {
+      console.log(`✅ E2E sold fixture ready (vehicle id: ${sold.id})`);
+    } else {
+      console.warn('⚠️ No sold vehicle seeded — sold listing E2E may skip');
+    }
     
   } catch (error) {
     console.error('❌ Global setup failed:', error);
@@ -25,39 +40,24 @@ async function globalSetup(config: FullConfig) {
   console.log('✅ Global setup completed');
 }
 
+async function waitForDevApi() {
+  const base = process.env.E2E_API_URL ?? 'http://127.0.0.1:3001';
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    try {
+      const res = await fetch(`${base}/api/health`);
+      if (res.ok) return;
+    } catch {
+      // API still starting
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error('Dev API did not become ready for E2E setup');
+}
+
 async function seedTestData(page: any) {
   console.log('🌱 Seeding test data...');
   
-  // Create test users in localStorage
-  const testUsers = [
-    {
-      id: 'test-admin-1',
-      email: 'admin@test.com',
-      password: 'password',
-      name: 'Test Admin',
-      role: 'admin',
-      status: 'active',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'test-seller-1',
-      email: 'seller@test.com',
-      password: 'password',
-      name: 'Test Seller',
-      role: 'seller',
-      status: 'active',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'test-customer-1',
-      email: 'customer@test.com',
-      password: 'password',
-      name: 'Test Customer',
-      role: 'customer',
-      status: 'active',
-      createdAt: new Date().toISOString()
-    }
-  ];
+  const testUsers = [...E2E_TEST_USERS];
 
   // Create test vehicles
   const testVehicles = [
@@ -139,6 +139,7 @@ async function seedTestData(page: any) {
   // Store test data in localStorage
   await page.evaluate(({ users, vehicles, conversations }) => {
     localStorage.setItem('reRideUsers', JSON.stringify(users));
+    localStorage.setItem('reRideUsers_prod', JSON.stringify(users));
     localStorage.setItem('reRideVehicles', JSON.stringify(vehicles));
     localStorage.setItem('reRideConversations', JSON.stringify(conversations));
   }, { users: testUsers, vehicles: testVehicles, conversations: testConversations });

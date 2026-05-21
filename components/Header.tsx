@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, memo, useRef, useMemo } from 'react';
+import React, { useState, useEffect, memo, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User, Notification, Toast as ToastType, Vehicle } from '../types';
 import { View as ViewEnum } from '../types';
@@ -181,6 +181,7 @@ const Header: React.FC<HeaderProps> = memo(({
                             {showHomeLocationActions ? (
                                 <div className="hidden md:flex items-center gap-2">
                                     <HomeLocationActionButtons
+                                        testId="home-location-banner"
                                         selectedCity={selectedCity}
                                         onBrowseAllIndia={onBrowseAllIndia!}
                                         onUseLocation={onUseMyLocation!}
@@ -237,6 +238,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                 </button>
                             ) : null}
                             <HomeLocationActionButtons
+                                testId="home-location-banner-mobile"
                                 selectedCity={selectedCity}
                                 onBrowseAllIndia={onBrowseAllIndia!}
                                 onUseLocation={onUseMyLocation!}

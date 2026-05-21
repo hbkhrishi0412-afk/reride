@@ -91,4 +91,5 @@ app/build/
 
 # Playwright and e2e output artifacts
 test-results/
+e2e/.auth/seed-storage.json
 playwright-report/

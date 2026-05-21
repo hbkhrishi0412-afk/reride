@@ -30,6 +30,9 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
 
   // Initialize portal target
@@ -56,14 +59,47 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Initialize WebSocket connection
+  const clearReconnectTimer = () => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  };
+
+  const closeActiveSocket = () => {
+    const active = socketRef.current;
+    if (active) {
+      active.onclose = null;
+      active.close();
+    }
+    socketRef.current = null;
+    setSocket(null);
+    setIsConnected(false);
+  };
+
+  // Initialize WebSocket connection (with automatic reconnect while chat is open)
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      clearReconnectTimer();
+      closeActiveSocket();
+      reconnectAttemptsRef.current = 0;
+      return;
+    }
 
     let cancelled = false;
-    let newSocket: WebSocket | null = null;
 
-    const run = async () => {
+    const scheduleReconnect = () => {
+      if (cancelled) return;
+      clearReconnectTimer();
+      const delay = Math.min(30_000, 1000 * 2 ** reconnectAttemptsRef.current);
+      reconnectAttemptsRef.current += 1;
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
+        void connect();
+      }, delay);
+    };
+
+    const connect = async () => {
       const isProd = process.env.NODE_ENV === 'production';
       if (!isProd) {
         const disable =
@@ -74,17 +110,21 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
         if (cancelled || !apiOk) return;
       }
 
-      // Local dev API is HTTP-only; avoid wss:// to localhost:3001 from an https WebView.
       const wsUrl = isProd
         ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//www.reride.co.in/chat`
         : `${getMobileLocalApiOrigin().replace(/^http/, 'ws')}/chat`;
 
       if (cancelled) return;
 
+      closeActiveSocket();
+
       const sock = new WebSocket(wsUrl);
-      newSocket = sock;
+      socketRef.current = sock;
+      setSocket(sock);
 
       sock.onopen = () => {
+        if (cancelled) return;
+        reconnectAttemptsRef.current = 0;
         setIsConnected(true);
         if (process.env.NODE_ENV === 'development') {
           console.log('🔧 SupportChat: WebSocket connected');
@@ -115,52 +155,51 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
       };
 
       sock.onmessage = (event) => {
-      let raw: string;
-      try {
-        raw = typeof event.data === 'string' ? event.data : String(event.data);
-      } catch {
-        return;
-      }
-      // Defer React updates off the WebSocket message task (avoids long "message" handler violations).
-      queueMicrotask(() => {
+        let raw: string;
         try {
-          const data = JSON.parse(raw) as {
-            type?: string;
-            id?: string;
-            text?: string;
-            sender?: string;
-            timestamp?: string;
-            isTyping?: boolean;
-            messages?: ChatMessage[];
-            sessionId?: string;
-          };
-
-          if (data.type === 'message') {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: data.id || `msg_${Date.now()}`,
-                text: data.text ?? '',
-                sender: (data.sender as ChatMessage['sender']) || 'bot',
-                timestamp: data.timestamp || new Date().toISOString(),
-                isRead: false,
-              },
-            ]);
-            setIsTyping(false);
-          } else if (data.type === 'typing') {
-            setIsTyping(data.isTyping || false);
-          } else if (data.type === 'history') {
-            if (Array.isArray(data.messages)) {
-              setMessages(data.messages);
-            }
-          } else if (data.type === 'session') {
-            setSessionId(data.sessionId ?? null);
-          }
-        } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+          raw = typeof event.data === 'string' ? event.data : String(event.data);
+        } catch {
+          return;
         }
-      });
-    };
+        queueMicrotask(() => {
+          try {
+            const data = JSON.parse(raw) as {
+              type?: string;
+              id?: string;
+              text?: string;
+              sender?: string;
+              timestamp?: string;
+              isTyping?: boolean;
+              messages?: ChatMessage[];
+              sessionId?: string;
+            };
+
+            if (data.type === 'message') {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: data.id || `msg_${Date.now()}`,
+                  text: data.text ?? '',
+                  sender: (data.sender as ChatMessage['sender']) || 'bot',
+                  timestamp: data.timestamp || new Date().toISOString(),
+                  isRead: false,
+                },
+              ]);
+              setIsTyping(false);
+            } else if (data.type === 'typing') {
+              setIsTyping(data.isTyping || false);
+            } else if (data.type === 'history') {
+              if (Array.isArray(data.messages)) {
+                setMessages(data.messages);
+              }
+            } else if (data.type === 'session') {
+              setSessionId(data.sessionId ?? null);
+            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        });
+      };
 
       sock.onerror = (error) => {
         console.error('WebSocket error:', error);
@@ -169,27 +208,27 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
 
       sock.onclose = () => {
         setIsConnected(false);
+        if (socketRef.current === sock) {
+          socketRef.current = null;
+          setSocket(null);
+        }
         if (process.env.NODE_ENV === 'development') {
           console.log('🔧 SupportChat: WebSocket disconnected');
         }
+        if (!cancelled) {
+          scheduleReconnect();
+        }
       };
-
-      if (!cancelled) {
-        setSocket(sock);
-      } else {
-        sock.close();
-      }
     };
 
-    void run();
-
-    // Load chat history from API
-    loadChatHistory();
+    void connect();
+    void loadChatHistory();
 
     return () => {
       cancelled = true;
-      newSocket?.close();
-      setSocket(null);
+      clearReconnectTimer();
+      closeActiveSocket();
+      reconnectAttemptsRef.current = 0;
     };
   }, [isOpen, currentUser]);
 
@@ -239,10 +278,9 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
   const handleClose = () => {
     setIsOpen(false);
     setIsMinimized(true);
-    if (socket) {
-      socket.close();
-      setSocket(null);
-    }
+    clearReconnectTimer();
+    closeActiveSocket();
+    reconnectAttemptsRef.current = 0;
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -262,9 +300,9 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
     };
     setMessages(prev => [...prev, userMessage]);
 
-    // Send via WebSocket if connected
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
+    const liveSocket = socketRef.current;
+    if (liveSocket && liveSocket.readyState === WebSocket.OPEN) {
+      liveSocket.send(JSON.stringify({
         type: 'message',
         text: messageText,
         userId: currentUser?.email || sessionId,

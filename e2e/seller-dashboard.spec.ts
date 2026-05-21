@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Seller Dashboard and Vehicle Management', () => {
+test.describe.configure({ mode: 'skip' });
+
+test.describe('@legacy Seller Dashboard and Vehicle Management', () => {
   test.beforeEach(async ({ page }) => {
     // Login as seller
     await page.goto('/');

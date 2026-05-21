@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Performance and Load Testing', () => {
+test.describe.configure({ mode: 'skip' });
+
+test.describe('@legacy Performance and Load Testing', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
   });

@@ -162,6 +162,17 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   onMarkAllAsReadBySeller,
 }) => {
   const { t } = useTranslation();
+  const notify = useCallback(
+    (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+      if (addToast) {
+        addToast(message, type);
+        return;
+      }
+      if (type === 'error') console.error(message);
+      else console.info(message);
+    },
+    [addToast],
+  );
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [messagesHubFilter, setMessagesHubFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
@@ -2383,7 +2394,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       
       const validation = validateImageFile(file);
       if (!validation.valid) {
-        alert(validation.error || 'Invalid image file');
+        notify(validation.error || 'Invalid image file', 'error');
         setIsUploadingImages(false);
         input.value = '';
         setMobileActivePhotoView(null);
@@ -2410,11 +2421,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         
         console.log(`✅ Uploaded ${mobileActivePhotoView} view photo`);
       } else {
-        alert('Failed to upload image. Please try again.');
+        notify('Failed to upload image. Please try again.', 'error');
       }
     } catch (error) {
       console.error("Error uploading checklist photo:", error);
-      alert('Failed to upload image. Please try again.');
+      notify('Failed to upload image. Please try again.', 'error');
     } finally {
       setIsUploadingImages(false);
       input.value = '';
@@ -2436,7 +2447,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       for (const file of files) {
         const validation = validateImageFile(file);
         if (!validation.valid) {
-          alert(validation.error || 'Invalid image file');
+          notify(validation.error || 'Invalid image file', 'error');
           if (input) input.value = '';
           setIsUploadingImages(false);
           return;
@@ -2457,7 +2468,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         const remainingSlots = maxImages - currentImages.length;
         
         if (remainingSlots <= 0) {
-          alert(`Maximum ${maxImages} images allowed. Please remove some images first.`);
+          notify(`Maximum ${maxImages} images allowed. Please remove some images first.`, 'info');
         } else {
           const imagesToAdd = successfulUrls.slice(0, remainingSlots);
           setAddFormData(prev => ({
@@ -2468,7 +2479,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       }
     } catch (error) {
       console.error('Error uploading images:', error);
-      alert('Failed to upload images. Please try again.');
+      notify('Failed to upload images. Please try again.', 'error');
     } finally {
       setIsUploadingImages(false);
       if (input) input.value = '';

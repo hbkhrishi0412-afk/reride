@@ -418,9 +418,22 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
 
   const handleGenerateProsCons = async () => {
     setIsGeneratingProsCons(true);
-    const result = await generateProsAndCons(safeVehicle);
-    setProsAndCons(result);
-    setIsGeneratingProsCons(false);
+    try {
+      const result = await generateProsAndCons(safeVehicle);
+      setProsAndCons(result);
+    } catch (error) {
+      console.error('Failed to generate pros/cons:', error);
+      setProsAndCons({
+        pros: [],
+        cons: [
+          error instanceof Error
+            ? error.message
+            : 'Could not generate suggestions. Please try again later.',
+        ],
+      });
+    } finally {
+      setIsGeneratingProsCons(false);
+    }
   };
 
   const handleGenerateAIInspection = async () => {

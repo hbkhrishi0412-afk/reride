@@ -437,6 +437,8 @@ const en = {
   'home.locationBanner.detectFailed':
     'Location not available. Please select a city or browse all of India.',
   'home.locationBanner.detected': 'Showing cars in {{city}}',
+  'home.locationBanner.changeLocation': 'Change location',
+  'mobile.home.cityNoListings': 'No cars in {{city}} yet. Showing listings across India.',
   'home.stats.cars': 'Cars',
   'home.stats.cities': 'Cities',
   'home.stats.checks': 'Verified',

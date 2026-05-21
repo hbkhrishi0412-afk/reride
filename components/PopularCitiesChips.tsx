@@ -33,7 +33,10 @@ export const PopularCitiesChips: React.FC<PopularCitiesChipsProps> = ({
       name,
       count: byName.get(name) ?? 0,
     }));
-    return [...withCounts].sort((a, b) => b.count - a.count);
+    return [...withCounts].sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return HOME_DISCOVERY_CITY_ORDER.indexOf(a.name) - HOME_DISCOVERY_CITY_ORDER.indexOf(b.name);
+    });
   }, [cities]);
 
   const chipBase =

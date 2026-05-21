@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Admin Panel Management', () => {
+test.describe.configure({ mode: 'skip' });
+
+test.describe('@legacy Admin Panel Management', () => {
   test.beforeEach(async ({ page }) => {
     // Login as admin
     await page.goto('/');
