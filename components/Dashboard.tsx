@@ -3,6 +3,13 @@ import { useTranslation } from 'react-i18next';
 import type { Vehicle, User, Conversation, VehicleData, ChatMessage, VehicleDocument } from '../types';
 import { View, VehicleCategory } from '../types';
 import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService';
+import {
+  fetchVehicleSpecs,
+  cacheAISpecs,
+  buildSpecFieldUpdates,
+  type VehicleSpecs,
+} from '../services/vehicleSpecsService';
+import { enhanceVehicleListing } from '../services/listingEnhancementService';
 import { getSafeImageSrc } from '../utils/imageUtils';
 import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
 import { formatSalesValue } from '../utils/numberUtils';
@@ -1132,11 +1139,121 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     const [isUploading, setIsUploading] = useState(false);
     const [isFeaturing, setIsFeaturing] = useState(false);
     
+    // Photo checklist state - tracks which specific views have been uploaded
+    type PhotoViewId = 'front' | 'rear' | 'left' | 'right' | 'interior' | 'tyres';
+    const [photoViewUploads, setPhotoViewUploads] = useState<Record<PhotoViewId, string | null>>({
+        front: null, rear: null, left: null, right: null, interior: null, tyres: null
+    });
+    const [activePhotoView, setActivePhotoView] = useState<PhotoViewId | null>(null);
+    const checklistFileInputRef = React.useRef<HTMLInputElement>(null);
+    
     const [aiSuggestions, setAiSuggestions] = useState<{
         structuredSpecs: Partial<Pick<Vehicle, 'engine' | 'transmission' | 'fuelType' | 'fuelEfficiency' | 'displacement' | 'groundClearance' | 'bootSpace'>>;
         featureSuggestions: Record<string, string[]>;
     } | null>(null);
     const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
+    
+    // Track the last vehicle specs fetched to avoid duplicate API calls
+    const lastFetchedVehicleKey = useRef<string>('');
+    const autoFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Auto-fetch vehicle specifications when Vehicle Overview is filled
+    useEffect(() => {
+        const { make, model, year } = formData;
+        
+        // Don't fetch if any required field is missing
+        if (!make || !model || !year) {
+            return;
+        }
+        
+        // Create a unique key for this vehicle
+        const vehicleKey = `${make}_${model}_${year}`;
+        
+        // Don't fetch if we already fetched for this vehicle
+        if (lastFetchedVehicleKey.current === vehicleKey) {
+            return;
+        }
+        
+        // Check if specs are already filled (user may have entered manually)
+        const hasExistingSpecs = !!(formData.engine || formData.displacement || formData.fuelEfficiency);
+        if (hasExistingSpecs && !editingVehicle) {
+            // User has already entered some specs, don't overwrite
+            lastFetchedVehicleKey.current = vehicleKey;
+            return;
+        }
+        
+        // Clear any pending timeout
+        if (autoFetchTimeoutRef.current) {
+            clearTimeout(autoFetchTimeoutRef.current);
+        }
+        
+        // Debounce the fetch to avoid too many API calls during rapid changes
+        autoFetchTimeoutRef.current = setTimeout(async () => {
+            console.log('🚗 Auto-fetching vehicle specs for:', { make, model, year });
+            lastFetchedVehicleKey.current = vehicleKey;
+            setIsGeneratingSuggestions(true);
+            
+            try {
+                // First try free API/local database
+                const specs = await fetchVehicleSpecs(make, model, year);
+                
+                const currentSpecs: Partial<VehicleSpecs> = {
+                    engine: formData.engine,
+                    transmission: formData.transmission,
+                    fuelType: formData.fuelType,
+                    fuelEfficiency: formData.fuelEfficiency,
+                    displacement: formData.displacement,
+                    groundClearance: formData.groundClearance,
+                    bootSpace: formData.bootSpace,
+                };
+
+                let updates = specs ? buildSpecFieldUpdates(currentSpecs, specs) : {};
+                if (Object.keys(updates).length > 0) {
+                    console.log('✅ Auto-fill specs from local/API:', updates);
+                    setFormData(prev => ({ ...prev, ...updates }));
+                    currentSpecs.engine = updates.engine ?? currentSpecs.engine;
+                    Object.assign(currentSpecs, updates);
+                }
+
+                if (!currentSpecs.engine?.trim()) {
+                    console.log('🤖 Falling back to Gemini AI for specs...');
+                    const suggestions = await getAiVehicleSuggestions({
+                        make,
+                        model,
+                        year,
+                        variant: formData.variant,
+                        category: formData.category,
+                    });
+
+                    if (suggestions.structuredSpecs) {
+                        setAiSuggestions(suggestions);
+                        const aiUpdates = buildSpecFieldUpdates(
+                            { ...currentSpecs, ...updates },
+                            suggestions.structuredSpecs,
+                        );
+                        if (Object.keys(aiUpdates).length > 0) {
+                            console.log('✅ Auto-filling from Gemini AI:', aiUpdates);
+                            setFormData(prev => ({ ...prev, ...aiUpdates }));
+                            cacheAISpecs(make, model, year, {
+                                ...updates,
+                                ...aiUpdates,
+                            } as VehicleSpecs);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Failed to auto-fetch vehicle specs:', error);
+            } finally {
+                setIsGeneratingSuggestions(false);
+            }
+        }, 800); // 800ms debounce delay
+        
+        return () => {
+            if (autoFetchTimeoutRef.current) {
+                clearTimeout(autoFetchTimeoutRef.current);
+            }
+        };
+    }, [formData.make, formData.model, formData.year, formData.variant]);
 
     // Ensure seller email is always set in form data
     useEffect(() => {
@@ -1249,53 +1366,67 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     }, [formData.category, vehicleData]);
 
     const handleGetAiSuggestions = async () => {
-        const { make, model, year, variant } = formData;
+        const { make, model, year, variant, category } = formData;
         if (!make || !model || !year) {
             alert('Please select a Make, Model, and Year first.');
             return;
         }
-        
+
         setIsGeneratingSuggestions(true);
         setAiSuggestions(null);
         try {
-            console.log('🤖 Fetching AI suggestions for:', { make, model, year, variant });
-            const suggestions = await getAiVehicleSuggestions({ make, model, year, variant });
-            console.log('📋 AI Suggestions received:', suggestions);
-            setAiSuggestions(suggestions);
+            const currentSpecs: Partial<VehicleSpecs> = {
+                engine: formData.engine,
+                transmission: formData.transmission,
+                fuelType: formData.fuelType,
+                fuelEfficiency: formData.fuelEfficiency,
+                displacement: formData.displacement,
+                groundClearance: formData.groundClearance,
+                bootSpace: formData.bootSpace,
+            };
 
-            // Auto-apply structured specs if the fields are empty
-            if (suggestions.structuredSpecs) {
-                const updates: Partial<Vehicle> = {};
-                for (const key in suggestions.structuredSpecs) {
-                    const specKey = key as keyof typeof suggestions.structuredSpecs;
-                    const currentValue = formData[specKey];
-                    const suggestedValue = suggestions.structuredSpecs[specKey];
-                    
-                    // Only apply if:
-                    // 1. Field is empty (empty string, null, undefined) OR equals 'N/A'
-                    // 2. Suggested value exists and is not 'N/A'
-                    const isEmpty = !currentValue || currentValue === '' || currentValue === 'N/A';
-                    const hasValidSuggestion = suggestedValue && suggestedValue !== 'N/A' && suggestedValue !== '';
-                    
-                    if (isEmpty && hasValidSuggestion) {
-                        updates[specKey] = suggestedValue as any;
-                        console.log(`✅ Will auto-fill ${specKey}: "${currentValue}" → "${suggestedValue}"`);
-                    } else {
-                        console.log(`⏭️ Skipping ${specKey}: isEmpty=${isEmpty}, hasValidSuggestion=${hasValidSuggestion}, current="${currentValue}", suggested="${suggestedValue}"`);
+            const localOrApi = await fetchVehicleSpecs(make, model, year);
+            let updates = localOrApi ? buildSpecFieldUpdates(currentSpecs, localOrApi) : {};
+            if (Object.keys(updates).length > 0) {
+                setFormData(prev => ({ ...prev, ...updates }));
+                Object.assign(currentSpecs, updates);
+            }
+
+            if (!currentSpecs.engine?.trim()) {
+                console.log('🤖 Fetching AI suggestions for:', { make, model, year, variant, category });
+                const suggestions = await getAiVehicleSuggestions({ make, model, year, variant, category });
+                setAiSuggestions(suggestions);
+
+                if (suggestions.structuredSpecs) {
+                    const aiUpdates = buildSpecFieldUpdates(currentSpecs, suggestions.structuredSpecs);
+                    if (Object.keys(aiUpdates).length > 0) {
+                        setFormData(prev => ({ ...prev, ...aiUpdates }));
+                        cacheAISpecs(make, model, year, { ...updates, ...aiUpdates } as VehicleSpecs);
+                        updates = { ...updates, ...aiUpdates };
                     }
                 }
-                if (Object.keys(updates).length > 0) {
-                    console.log('✅ Auto-filling Vehicle Specifications:', updates);
-                    setFormData(prev => ({ ...prev, ...updates }));
-                } else {
-                    console.log('⚠️ No updates to apply - fields may already have values or AI returned N/A');
+
+                const errList = suggestions.featureSuggestions?.Error;
+                if (!updates.engine?.trim() && errList?.length) {
+                    alert(errList[0]);
                 }
-            } else {
-                console.warn('⚠️ No structuredSpecs in AI response');
+            }
+
+            const filledAnySpec = Boolean(
+                updates.engine || updates.displacement || updates.fuelEfficiency || updates.groundClearance,
+            );
+            if (!filledAnySpec) {
+                alert('Could not find specifications for this vehicle. Try filling fields manually or check that the dev API server is running.');
             }
         } catch (error) {
-            console.error("❌ Failed to fetch AI suggestions:", error);
-            setAiSuggestions({ structuredSpecs: {}, featureSuggestions: { "Error": ["Could not fetch suggestions."] } });
+            console.error('❌ Failed to fetch vehicle specifications:', error);
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            if (msg.includes('AI_API_UNAVAILABLE')) {
+                alert('AI service is unavailable. Restart the dev server (npm run dev) and ensure GEMINI_API_KEY is set for AI fallback.');
+            } else {
+                alert(`Could not auto-fill specifications: ${msg}`);
+            }
+            setAiSuggestions({ structuredSpecs: {}, featureSuggestions: { Error: ['Could not fetch suggestions.'] } });
         } finally {
             setIsGeneratingSuggestions(false);
         }
@@ -1490,6 +1621,77 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
   
     const handleRemoveImageUrl = (urlToRemove: string) => {
       setFormData(prev => ({...prev, images: prev.images.filter(url => url !== urlToRemove)}));
+      // Also remove from photo view uploads if it matches
+      setPhotoViewUploads(prev => {
+        const updated = { ...prev };
+        (Object.keys(updated) as PhotoViewId[]).forEach(key => {
+          if (updated[key] === urlToRemove) {
+            updated[key] = null;
+          }
+        });
+        return updated;
+      });
+    };
+    
+    // Handle checklist photo view click - triggers upload for specific view
+    const handlePhotoViewClick = (viewId: PhotoViewId) => {
+      setActivePhotoView(viewId);
+      checklistFileInputRef.current?.click();
+    };
+    
+    // Handle checklist file upload
+    const handleChecklistFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const input = e.target;
+      if (!input.files || input.files.length === 0 || !activePhotoView) {
+        setActivePhotoView(null);
+        return;
+      }
+
+      setIsUploading(true);
+      const file = input.files[0]; // Only take the first file for checklist upload
+      
+      try {
+        const { uploadImages, validateImageFile } = await import('../services/imageUploadService');
+        
+        const validation = validateImageFile(file);
+        if (!validation.valid) {
+          alert(validation.error || 'Invalid image file');
+          setIsUploading(false);
+          input.value = '';
+          setActivePhotoView(null);
+          return;
+        }
+        
+        const uploadResults = await uploadImages([file], 'vehicles', seller?.email);
+        
+        if (uploadResults[0]?.success && uploadResults[0]?.url) {
+          const uploadedUrl = uploadResults[0].url;
+          
+          // Update photo view uploads
+          setPhotoViewUploads(prev => ({
+            ...prev,
+            [activePhotoView]: uploadedUrl
+          }));
+          
+          // Also add to main images array
+          const currentImages = formData.images || [];
+          const maxImages = 10;
+          if (currentImages.length < maxImages) {
+            setFormData(prev => ({ ...prev, images: [...prev.images, uploadedUrl] }));
+          }
+          
+          console.log(`✅ Uploaded ${activePhotoView} view photo`);
+        } else {
+          alert('Failed to upload image. Please try again.');
+        }
+      } catch (error) {
+        console.error("Error uploading checklist photo:", error);
+        alert('Failed to upload image. Please try again.');
+      } finally {
+        setIsUploading(false);
+        input.value = '';
+        setActivePhotoView(null);
+      }
     };
 
     const handleRemoveDocument = (urlToRemove: string) => {
@@ -1555,10 +1757,30 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         console.log('🔄 Sanitized form data:', sanitizedFormData);
         console.log('💰 Price check:', { original: formData.price, sanitized: sanitizedFormData.price, type: typeof sanitizedFormData.price });
         
+        const runEnhancement = async (base: typeof sanitizedFormData) => {
+            const result = await enhanceVehicleListing(
+                editingVehicle ? { ...editingVehicle, ...base } : base,
+                {
+                    runValidation: true,
+                    runAIInspection: Boolean(base.images && base.images.length >= 4),
+                    checkPhotoQuality: true,
+                    calculateListingScore: true,
+                },
+            );
+            if (!result.success) {
+                const messages = result.validation.errors.map((e) => e.message).join('\n');
+                alert(messages || 'Please fix validation errors before saving.');
+                return null;
+            }
+            return result.vehicle;
+        };
+
         if (editingVehicle) {
             console.log('✏️ Editing existing vehicle:', editingVehicle.id);
             try {
-                await Promise.resolve(onUpdateVehicle({ ...editingVehicle, ...sanitizedFormData }));
+                const enhanced = await runEnhancement(sanitizedFormData);
+                if (!enhanced) return;
+                await Promise.resolve(onUpdateVehicle(enhanced));
                 if (isFeaturing && !editingVehicle.isFeatured) {
                     await onFeatureListing(editingVehicle.id);
                 }
@@ -1573,7 +1795,9 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         console.log('📧 Seller email in sanitized data:', sanitizedFormData.sellerEmail);
         console.log('📧 Seller email from props:', seller.email);
         try {
-            await Promise.resolve(onAddVehicle(sanitizedFormData, isFeaturing));
+            const enhanced = await runEnhancement(sanitizedFormData);
+            if (!enhanced) return;
+            await Promise.resolve(onAddVehicle(enhanced, isFeaturing));
             onCancel();
         } catch (err) {
             console.error('Failed to add vehicle:', err);
@@ -1769,7 +1993,30 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 </div>
             </FormFieldset>
             
-            <FormFieldset title="Vehicle Specifications" step={2} description="Engine, transmission and performance details">
+            <FormFieldset 
+                title="Vehicle Specifications" 
+                step={2} 
+                description="Engine, transmission and performance details"
+                actions={
+                    <div className="flex items-center gap-2">
+                        {isGeneratingSuggestions && (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-reride-orange animate-pulse">
+                                <span className="w-3 h-3 border-2 border-dashed rounded-full animate-spin border-current" />
+                                Auto-filling specs...
+                            </span>
+                        )}
+                        {!isGeneratingSuggestions && formData.make && formData.model && formData.year && formData.engine && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                                Auto-filled
+                            </span>
+                        )}
+                        {aiButton}
+                    </div>
+                }
+            >
                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
                     <div>
                         <FormInput label="Engine" name="engine" value={formData.engine} onChange={handleChange} tooltip="e.g., 1.5L Petrol, 150kW Motor"/>
@@ -1830,7 +2077,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 </div>
             </FormFieldset>
             
-            <FormFieldset title="Media, Documents & Description" step={4} description="Photos sell cars — add at least 3 quality images">
+            <FormFieldset title="Media, Documents & Description" step={4} description="Photos sell cars — add at least 6 quality images for AI inspection">
                 <div className="space-y-6">
                     {/* IMAGES */}
                     <div>
@@ -1839,22 +2086,144 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                                 Images
                                 <span className="text-xs text-gray-500 ml-2 font-normal">(JPG or PNG, up to 10MB each)</span>
                             </label>
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                (formData.images?.length || 0) >= 3
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-amber-100 text-amber-700'
-                            }`}>
-                                {formData.images?.length || 0} / 3+ recommended
-                            </span>
+                            <div className="flex items-center gap-2">
+                                {(formData.images?.length || 0) >= 4 && (
+                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
+                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                        </svg>
+                                        AI Ready
+                                    </span>
+                                )}
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                    (formData.images?.length || 0) >= 6
+                                        ? 'bg-green-100 text-green-700'
+                                        : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                    {formData.images?.length || 0} / 6 recommended
+                                </span>
+                            </div>
                         </div>
+                        
+                        {/* AI Inspection Photo Checklist */}
+                        <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-xl p-4 mb-4 border border-blue-100">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-200">
+                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 text-sm">Photo Checklist for AI Inspection Report</h4>
+                                    <p className="text-xs text-gray-600">Upload these photos for an automatic AI condition report on your listing</p>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-6 gap-2">
+                                {[
+                                    { id: 'front' as PhotoViewId, label: 'Front', icon: '🚗', desc: 'Full front view' },
+                                    { id: 'rear' as PhotoViewId, label: 'Rear', icon: '🔙', desc: 'Full back view' },
+                                    { id: 'left' as PhotoViewId, label: 'Left Side', icon: '◀️', desc: 'Driver side' },
+                                    { id: 'right' as PhotoViewId, label: 'Right Side', icon: '▶️', desc: 'Passenger side' },
+                                    { id: 'interior' as PhotoViewId, label: 'Interior', icon: '🪑', desc: 'Dashboard & seats' },
+                                    { id: 'tyres' as PhotoViewId, label: 'Tyres', icon: '⚫', desc: 'Close-up shot' },
+                                ].map((item) => {
+                                    const uploadedUrl = photoViewUploads[item.id];
+                                    const isChecked = !!uploadedUrl;
+                                    const isLoading = isUploading && activePhotoView === item.id;
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={item.id}
+                                            onClick={() => !isLoading && handlePhotoViewClick(item.id)}
+                                            disabled={isLoading}
+                                            className={`relative flex flex-col items-center gap-1.5 p-3 rounded-xl text-center transition-all cursor-pointer hover:shadow-md ${
+                                                isChecked 
+                                                    ? 'bg-green-100 border-2 border-green-400 shadow-sm' 
+                                                    : 'bg-white border-2 border-gray-200 border-dashed hover:border-blue-400 hover:bg-blue-50'
+                                            } ${isLoading ? 'opacity-70' : ''}`}
+                                            title={isChecked ? `${item.label} uploaded - Click to replace` : `Click to upload ${item.label} photo`}
+                                        >
+                                            {isChecked && uploadedUrl ? (
+                                                <div className="relative w-10 h-10 rounded-lg overflow-hidden ring-2 ring-green-400">
+                                                    <img 
+                                                        src={uploadedUrl} 
+                                                        alt={item.label} 
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                    <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shadow-md">
+                                                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                            ) : isLoading ? (
+                                                <div className="w-10 h-10 flex items-center justify-center">
+                                                    <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                                    </svg>
+                                                </div>
+                                            ) : (
+                                                <span className="text-2xl">{item.icon}</span>
+                                            )}
+                                            <span className={`text-xs font-semibold ${isChecked ? 'text-green-700' : 'text-gray-700'}`}>{item.label}</span>
+                                            <span className="text-[10px] text-gray-500 leading-tight">{item.desc}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {/* Hidden file input for checklist uploads */}
+                            <input 
+                                ref={checklistFileInputRef}
+                                type="file" 
+                                className="sr-only" 
+                                accept="image/png, image/jpeg" 
+                                onChange={handleChecklistFileUpload}
+                            />
+                            
+                            {(() => {
+                                const uploadedViewCount = Object.values(photoViewUploads).filter(Boolean).length;
+                                return (
+                                    <div className="mt-4 flex items-center justify-between">
+                                        <div className="flex items-center gap-3 flex-1">
+                                            <div className="flex-1 h-2 bg-white rounded-full overflow-hidden border border-gray-200">
+                                                <div 
+                                                    className={`h-full rounded-full transition-all duration-500 ${
+                                                        uploadedViewCount >= 6 ? 'bg-gradient-to-r from-green-400 to-green-500' : 'bg-gradient-to-r from-blue-400 to-purple-500'
+                                                    }`}
+                                                    style={{ width: `${Math.min(100, (uploadedViewCount / 6) * 100)}%` }}
+                                                />
+                                            </div>
+                                            <span className="text-sm font-bold text-gray-700 whitespace-nowrap">
+                                                {uploadedViewCount}/6
+                                            </span>
+                                        </div>
+                                        {uploadedViewCount >= 4 ? (
+                                            <span className="ml-4 text-xs font-semibold text-green-600 flex items-center gap-1">
+                                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                </svg>
+                                                AI Inspection will be generated!
+                                            </span>
+                                        ) : (
+                                            <span className="ml-4 text-xs text-gray-500">
+                                                Add {4 - uploadedViewCount} more for AI report
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
                         <label
                             htmlFor="file-upload"
-                            className={`relative block cursor-pointer bg-gradient-to-b from-orange-50/40 to-white rounded-xl border-2 border-dashed border-gray-300 hover:border-reride-orange hover:bg-orange-50/60 transition-all duration-200 p-8 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            onDragOver={(e) => { e.preventDefault(); if (!isUploading) e.currentTarget.classList.add('border-reride-orange', 'bg-orange-50/80'); }}
-                            onDragLeave={(e) => { e.currentTarget.classList.remove('border-reride-orange', 'bg-orange-50/80'); }}
+                            className={`relative block cursor-pointer bg-orange-50 rounded-xl border-2 border-dashed border-orange-300 hover:border-reride-orange hover:bg-orange-100 hover:shadow-md transition-all duration-200 p-6 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            onDragOver={(e) => { e.preventDefault(); if (!isUploading) e.currentTarget.classList.add('border-reride-orange', 'bg-orange-100', 'shadow-lg'); }}
+                            onDragLeave={(e) => { e.currentTarget.classList.remove('border-reride-orange', 'bg-orange-100', 'shadow-lg'); }}
                             onDrop={(e) => {
                                 e.preventDefault();
-                                e.currentTarget.classList.remove('border-reride-orange', 'bg-orange-50/80');
+                                e.currentTarget.classList.remove('border-reride-orange', 'bg-orange-100', 'shadow-lg');
                                 if (isUploading) return;
                                 const files = e.dataTransfer.files;
                                 if (files && files.length > 0) {
@@ -1869,26 +2238,23 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             }}
                         >
                             <div className="flex flex-col items-center text-center">
-                                <div className="w-14 h-14 rounded-full bg-reride-orange-light flex items-center justify-center mb-3">
+                                <div className="w-16 h-16 rounded-full bg-reride-orange flex items-center justify-center mb-4 shadow-lg">
                                     {isUploading ? (
-                                        <svg className="animate-spin h-7 w-7 text-reride-orange" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                                         </svg>
                                     ) : (
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-reride-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                         </svg>
                                     )}
                                 </div>
-                                <p className="text-sm font-semibold text-reride-text-dark">
-                                    {isUploading ? 'Uploading…' : (
-                                        <>
-                                            <span className="text-reride-orange">Click to upload</span> or drag & drop
-                                        </>
-                                    )}
-                                </p>
-                                <p className="text-xs text-gray-500 mt-1">First image will be used as the cover photo</p>
+                                <div className="bg-reride-orange hover:bg-orange-600 text-white font-bold py-2.5 px-6 rounded-lg shadow-md mb-3 transition-colors">
+                                    {isUploading ? 'Uploading…' : 'Click to Upload Photos'}
+                                </div>
+                                <p className="text-sm text-gray-600">or drag & drop images here</p>
+                                <p className="text-xs text-gray-500 mt-1">JPG, PNG up to 10MB • First image = cover photo</p>
                             </div>
                             <input id="file-upload" type="file" className="sr-only" multiple accept="image/png, image/jpeg" onChange={(e) => handleFileUpload(e, 'image')} disabled={isUploading} />
                         </label>

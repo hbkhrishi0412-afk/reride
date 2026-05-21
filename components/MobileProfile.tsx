@@ -207,15 +207,15 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
       }
     } catch (error) {
       console.error('Failed to update password:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update password. Please try again.';
+      const rawError = error instanceof Error ? error.message : '';
       
       // Only show "session expired" if we're CERTAIN it's an authentication error
       // Check for explicit auth error messages from the API
-      const isAuthError = errorMessage.includes('Authentication expired') || 
-          errorMessage.includes('Unauthorized') || 
-          errorMessage.includes('401') ||
-          (errorMessage.includes('session has expired') && errorMessage.includes('log in again')) ||
-          (errorMessage.includes('Please log in again') && (errorMessage.includes('expired') || errorMessage.includes('401')));
+      const isAuthError = rawError.includes('Authentication expired') || 
+          rawError.includes('Unauthorized') || 
+          rawError.includes('401') ||
+          (rawError.includes('session has expired') && rawError.includes('log in again')) ||
+          (rawError.includes('Please log in again') && (rawError.includes('expired') || rawError.includes('401')));
       
       if (isAuthError) {
         // Only clear tokens if we're certain it's an auth issue
@@ -245,9 +245,9 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
           }
         }, 2000);
       } else {
-        // For other errors, show the actual error message
+        // Show user-friendly error message
         if (addToast) {
-          addToast(errorMessage, 'error');
+          addToast('Could not update password. Please try again.', 'error');
         }
       }
     } finally {
@@ -609,7 +609,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
               type="button"
               onClick={() => {
                 downloadProfileExport(currentUser);
-                addToast?.('Profile export downloaded', 'success');
+                addToast?.('Your profile data has been downloaded.', 'success');
               }}
               className="w-full py-2.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-800 border border-gray-200"
             >
@@ -630,7 +630,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
                   addToast?.(r.message || 'Your data has been anonymized.', 'success');
                   onLogout?.();
                 } else {
-                  addToast?.(r.reason || 'Request failed', 'error');
+                  addToast?.(r.reason || 'Could not process your request. Please try again.', 'error');
                 }
               }}
               className="w-full py-2.5 rounded-lg text-sm font-medium text-red-700 bg-red-50 border border-red-200"

@@ -1,10 +1,16 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { Vehicle } from '../types';
 import { getSupabaseClient } from '../lib/supabase.js';
 import {
   VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI,
   getSafeImageSrc,
 } from '../utils/imageUtils';
+import { 
+  enhanceVehicleListing, 
+  getListingImprovementSuggestions,
+  isListingReadyToPublish,
+  type ListingEnhancementResult 
+} from '../services/listingEnhancementService';
 
 interface EditVehicleModalProps {
     vehicle: Vehicle;
@@ -19,6 +25,27 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
     const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'media' | 'quality' | 'offer'>('basic');
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [enhancementResult, setEnhancementResult] = useState<ListingEnhancementResult | null>(null);
+    const [isEnhancing, setIsEnhancing] = useState(false);
+    const [showEnhancementSummary, setShowEnhancementSummary] = useState(false);
+    
+    // Photo checklist state
+    type PhotoViewId = 'front' | 'rear' | 'left' | 'right' | 'interior' | 'tyres';
+    const [editPhotoViewUploads, setEditPhotoViewUploads] = useState<Record<PhotoViewId, string | null>>({
+        front: null, rear: null, left: null, right: null, interior: null, tyres: null
+    });
+    const [editActivePhotoView, setEditActivePhotoView] = useState<PhotoViewId | null>(null);
+    const [isUploadingChecklist, setIsUploadingChecklist] = useState(false);
+    const editChecklistFileInputRef = React.useRef<HTMLInputElement>(null);
+    const enhancementTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (enhancementTimeoutRef.current) {
+                clearTimeout(enhancementTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const getStrictPreviewImageSrc = (src: string): string => {
         const safe = getSafeImageSrc(src, VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI);
@@ -217,6 +244,77 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
 
     const handleRemoveImageUrl = (urlToRemove: string) => {
         setFormData(prev => ({...prev, images: (prev.images || []).filter(url => url !== urlToRemove)}));
+        // Also remove from photo view uploads if it matches
+        setEditPhotoViewUploads(prev => {
+            const updated = { ...prev };
+            (Object.keys(updated) as PhotoViewId[]).forEach(key => {
+                if (updated[key] === urlToRemove) {
+                    updated[key] = null;
+                }
+            });
+            return updated;
+        });
+    };
+    
+    // Handle checklist photo view click
+    const handleEditPhotoViewClick = (viewId: PhotoViewId) => {
+        setEditActivePhotoView(viewId);
+        editChecklistFileInputRef.current?.click();
+    };
+    
+    // Handle checklist file upload
+    const handleEditChecklistFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const input = e.target;
+        if (!input.files || input.files.length === 0 || !editActivePhotoView) {
+            setEditActivePhotoView(null);
+            return;
+        }
+
+        setIsUploadingChecklist(true);
+        const file = input.files[0];
+        
+        try {
+            const { uploadImages, validateImageFile } = await import('../services/imageUploadService');
+            
+            const validation = validateImageFile(file);
+            if (!validation.valid) {
+                alert(validation.error || 'Invalid image file');
+                setIsUploadingChecklist(false);
+                input.value = '';
+                setEditActivePhotoView(null);
+                return;
+            }
+            
+            const uploadResults = await uploadImages([file], 'vehicles', vehicle.sellerEmail);
+            
+            if (uploadResults[0]?.success && uploadResults[0]?.url) {
+                const uploadedUrl = uploadResults[0].url;
+                
+                // Update photo view uploads
+                setEditPhotoViewUploads(prev => ({
+                    ...prev,
+                    [editActivePhotoView]: uploadedUrl
+                }));
+                
+                // Also add to main images array
+                const currentImages = formData.images || [];
+                const maxImages = 10;
+                if (currentImages.length < maxImages) {
+                    setFormData(prev => ({ ...prev, images: [...(prev.images || []), uploadedUrl] }));
+                }
+                
+                console.log(`✅ Uploaded ${editActivePhotoView} view photo`);
+            } else {
+                alert('Failed to upload image. Please try again.');
+            }
+        } catch (error) {
+            console.error("Error uploading checklist photo:", error);
+            alert('Failed to upload image. Please try again.');
+        } finally {
+            setIsUploadingChecklist(false);
+            input.value = '';
+            setEditActivePhotoView(null);
+        }
     };
 
     const validateForm = (): boolean => {
@@ -241,12 +339,61 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
         }
         
         setIsSubmitting(true);
+        setIsEnhancing(true);
+        
         try {
+            // Run enhancement pipeline (validation + AI inspection + quality scoring)
+            const result = await enhanceVehicleListing(formData, {
+                runValidation: true,
+                runAIInspection: formData.images && formData.images.length >= 4,
+                checkPhotoQuality: true,
+                calculateListingScore: true,
+            });
+            
+            setEnhancementResult(result);
+            setIsEnhancing(false);
+            
+            if (!result.success) {
+                // Show validation errors
+                const newErrors: Record<string, string> = {};
+                result.validation.errors.forEach(err => {
+                    newErrors[err.field] = err.message;
+                });
+                setErrors(newErrors);
+                setIsSubmitting(false);
+                return;
+            }
+            
+            // Show enhancement summary briefly if there are enhancements
+            if (result.enhancements.length > 0) {
+                setShowEnhancementSummary(true);
+                if (enhancementTimeoutRef.current) {
+                    clearTimeout(enhancementTimeoutRef.current);
+                }
+                enhancementTimeoutRef.current = setTimeout(async () => {
+                    enhancementTimeoutRef.current = null;
+                    setShowEnhancementSummary(false);
+                    await onSave(result.vehicle);
+                    setIsSubmitting(false);
+                }, 2000);
+            } else {
+                await onSave(result.vehicle);
+                setIsSubmitting(false);
+            }
+        } catch (error) {
+            console.error('Enhancement/save error:', error);
+            // Fallback to direct save if enhancement fails
             await onSave(formData);
-        } finally {
             setIsSubmitting(false);
         }
     };
+    
+    // Get listing readiness info
+    const listingReadiness = useMemo(() => isListingReadyToPublish(formData), [formData]);
+    const improvementSuggestions = useMemo(() => {
+        const validation = { isValid: true, errors: [], warnings: [] };
+        return getListingImprovementSuggestions(formData, validation);
+    }, [formData]);
 
     if (!vehicle) return null;
 
@@ -364,6 +511,83 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                     </div>
                                 </div>
 
+                                {/* Vahan Verification Details */}
+                                <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-gray-800 dark:to-gray-800 p-6 rounded-lg border border-purple-200 dark:border-purple-700">
+                                    <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-2 flex items-center gap-2">
+                                        <span>🔐</span> Vahan Verification Details
+                                    </h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                                        Provide these details for Vahan verification. This helps buyers verify your vehicle's authenticity.
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
+                                                Registration Number <span className="text-red-500">*</span>
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                name="registrationNumber" 
+                                                value={formData.registrationNumber || ''} 
+                                                onChange={handleChange}
+                                                placeholder="e.g., MH12AB1234"
+                                                className="mt-1 block w-full px-3 py-2 border border-purple-200 dark:border-purple-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent uppercase"
+                                                style={{ textTransform: 'uppercase' }}
+                                            />
+                                            <p className="mt-1 text-xs text-gray-500">Full registration number as on RC</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
+                                                Engine Number <span className="text-red-500">*</span>
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                name="engineNumber" 
+                                                value={formData.engineNumber || ''} 
+                                                onChange={handleChange}
+                                                placeholder="e.g., K12MN1234567"
+                                                className="mt-1 block w-full px-3 py-2 border border-purple-200 dark:border-purple-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent uppercase"
+                                                style={{ textTransform: 'uppercase' }}
+                                            />
+                                            <p className="mt-1 text-xs text-gray-500">Engine number from RC book</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
+                                                Chassis Number <span className="text-red-500">*</span>
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                name="chassisNumber" 
+                                                value={formData.chassisNumber || ''} 
+                                                onChange={handleChange}
+                                                placeholder="e.g., MA3EJKD1S00A06535"
+                                                className="mt-1 block w-full px-3 py-2 border border-purple-200 dark:border-purple-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent uppercase"
+                                                style={{ textTransform: 'uppercase' }}
+                                            />
+                                            <p className="mt-1 text-xs text-gray-500">Chassis number from RC book</p>
+                                        </div>
+                                    </div>
+                                    {formData.vahanVerifiedAt && (
+                                        <div className="mt-4 flex items-center gap-2 text-green-600 bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded-lg">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                            </svg>
+                                            <span className="text-sm font-medium">
+                                                Verified with Vahan on {new Date(formData.vahanVerifiedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {!formData.vahanVerifiedAt && formData.registrationNumber && formData.engineNumber && formData.chassisNumber && (
+                                        <div className="mt-4 flex items-center gap-2 text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-lg">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                            <span className="text-sm font-medium">
+                                                Verification pending - Details will be verified with Vahan
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
                                     <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-4 flex items-center gap-2">
                                         <span>📝</span> Description
@@ -406,6 +630,95 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                     <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-4 flex items-center gap-2">
                                         <span>📷</span> Vehicle Images
                                     </h3>
+                                    
+                                    {/* AI Inspection Photo Checklist */}
+                                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 mb-4 border border-blue-100 dark:border-blue-800">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className="w-6 h-6 rounded-md bg-blue-500 flex items-center justify-center">
+                                                <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                </svg>
+                                            </div>
+                                            <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">Photo Checklist for AI Inspection</span>
+                                            {Object.values(editPhotoViewUploads).filter(Boolean).length >= 4 && (
+                                                <span className="ml-auto text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">AI Ready!</span>
+                                            )}
+                                        </div>
+                                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                                            {[
+                                                { id: 'front' as PhotoViewId, label: 'Front', icon: '🚗' },
+                                                { id: 'rear' as PhotoViewId, label: 'Rear', icon: '🔙' },
+                                                { id: 'left' as PhotoViewId, label: 'Left Side', icon: '◀️' },
+                                                { id: 'right' as PhotoViewId, label: 'Right Side', icon: '▶️' },
+                                                { id: 'interior' as PhotoViewId, label: 'Interior', icon: '🪑' },
+                                                { id: 'tyres' as PhotoViewId, label: 'Tyres', icon: '⚫' },
+                                            ].map((item) => {
+                                                const uploadedUrl = editPhotoViewUploads[item.id];
+                                                const isChecked = !!uploadedUrl;
+                                                const isLoading = isUploadingChecklist && editActivePhotoView === item.id;
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        key={item.id}
+                                                        onClick={() => !isLoading && handleEditPhotoViewClick(item.id)}
+                                                        disabled={isLoading}
+                                                        className={`flex flex-col items-center gap-1 p-2 rounded-lg text-xs font-medium transition-all cursor-pointer hover:shadow-md ${
+                                                            isChecked 
+                                                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-2 border-green-300 dark:border-green-600' 
+                                                                : 'bg-white dark:bg-gray-800 text-gray-500 border-2 border-gray-200 dark:border-gray-600 border-dashed hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                                                        } ${isLoading ? 'opacity-70' : ''}`}
+                                                        title={isChecked ? `${item.label} uploaded - Click to replace` : `Click to upload ${item.label} photo`}
+                                                    >
+                                                        {isChecked && uploadedUrl ? (
+                                                            <div className="relative w-8 h-8 rounded overflow-hidden ring-2 ring-green-400">
+                                                                <img src={uploadedUrl} alt={item.label} className="w-full h-full object-cover" />
+                                                                <div className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                                                                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                                    </svg>
+                                                                </div>
+                                                            </div>
+                                                        ) : isLoading ? (
+                                                            <svg className="animate-spin h-5 w-5 text-blue-500" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                                            </svg>
+                                                        ) : (
+                                                            <span className="text-base">{item.icon}</span>
+                                                        )}
+                                                        <span className="truncate w-full text-center">{item.label}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        {/* Hidden file input for checklist uploads */}
+                                        <input 
+                                            ref={editChecklistFileInputRef}
+                                            type="file" 
+                                            className="sr-only" 
+                                            accept="image/png, image/jpeg" 
+                                            onChange={handleEditChecklistFileUpload}
+                                        />
+                                        {(() => {
+                                            const uploadedViewCount = Object.values(editPhotoViewUploads).filter(Boolean).length;
+                                            return (
+                                                <div className="mt-3 flex items-center gap-2">
+                                                    <div className="flex-1 h-1.5 bg-white dark:bg-gray-700 rounded-full overflow-hidden">
+                                                        <div 
+                                                            className={`h-full rounded-full transition-all duration-300 ${
+                                                                uploadedViewCount >= 6 ? 'bg-green-500' : 'bg-blue-500'
+                                                            }`}
+                                                            style={{ width: `${Math.min(100, (uploadedViewCount / 6) * 100)}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                                        {uploadedViewCount}/6
+                                                    </span>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+
                                     <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center hover:border-reride-orange transition-colors">
                                         <div className="flex flex-col items-center gap-4">
                                             <div className="w-12 h-12 bg-reride-orange/10 rounded-full flex items-center justify-center">
@@ -621,35 +934,130 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                         )}
                     </div>
 
+                    {/* Enhancement Summary Overlay */}
+                    {showEnhancementSummary && enhancementResult && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-xl">
+                            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl max-w-md mx-4">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                                        <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold text-gray-900 dark:text-white">Listing Enhanced</h3>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">Quality Score: {listingReadiness.qualityScore}/100</p>
+                                    </div>
+                                </div>
+                                {enhancementResult.enhancements.length > 0 && (
+                                    <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
+                                        {enhancementResult.enhancements.slice(0, 4).map((e, i) => (
+                                            <li key={i} className="flex items-start gap-2">
+                                                <span className="text-green-500 mt-0.5">✓</span>
+                                                <span>{e}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                                <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
+                                    <div className="w-4 h-4 border-2 border-reride-orange border-t-transparent rounded-full animate-spin"></div>
+                                    Saving...
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Sticky Footer */}
-                    <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 p-4 flex justify-between items-center">
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                            {Object.keys(errors).length > 0 && (
-                                <span className="text-red-500">Please fix {Object.keys(errors).length} error(s) before saving</span>
+                    <div className="sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 p-4">
+                        {/* Quality Score & Suggestions Row */}
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-4">
+                                {/* Quality Score */}
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">Listing Quality:</span>
+                                    <div className="flex items-center gap-1">
+                                        <div className="w-20 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                            <div 
+                                                className={`h-full rounded-full transition-all ${
+                                                    listingReadiness.qualityScore >= 70 ? 'bg-green-500' :
+                                                    listingReadiness.qualityScore >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                                                }`}
+                                                style={{ width: `${listingReadiness.qualityScore}%` }}
+                                            />
+                                        </div>
+                                        <span className={`text-xs font-medium ${
+                                            listingReadiness.qualityScore >= 70 ? 'text-green-600' :
+                                            listingReadiness.qualityScore >= 40 ? 'text-yellow-600' : 'text-red-600'
+                                        }`}>
+                                            {listingReadiness.qualityScore}/100
+                                        </span>
+                                    </div>
+                                </div>
+                                {/* Missing Fields */}
+                                {!listingReadiness.ready && (
+                                    <span className="text-xs text-red-500">
+                                        Missing: {listingReadiness.missingFields.join(', ')}
+                                    </span>
+                                )}
+                            </div>
+                            {/* AI Inspection Badge */}
+                            {formData.images && formData.images.length >= 4 && (
+                                <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">
+                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                    AI Inspection will run on save
+                                </div>
                             )}
                         </div>
-                        <div className="flex gap-3">
-                            <button 
-                                type="button" 
-                                onClick={onClose} 
-                                className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-reride-text-dark dark:text-white rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                type="submit" 
-                                disabled={isSubmitting || Object.keys(errors).length > 0}
-                                className="px-6 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        Saving...
-                                    </>
-                                ) : (
-                                    'Save Changes'
+                        
+                        {/* Improvement Suggestions */}
+                        {improvementSuggestions.length > 0 && (
+                            <div className="mb-3 p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                                <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                    </svg>
+                                    Tip: {improvementSuggestions[0]}
+                                </p>
+                            </div>
+                        )}
+                        
+                        {/* Action Buttons Row */}
+                        <div className="flex justify-between items-center">
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                                {Object.keys(errors).length > 0 && (
+                                    <span className="text-red-500">Please fix {Object.keys(errors).length} error(s) before saving</span>
                                 )}
-                            </button>
+                            </div>
+                            <div className="flex gap-3">
+                                <button 
+                                    type="button" 
+                                    onClick={onClose} 
+                                    className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-reride-text-dark dark:text-white rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit" 
+                                    disabled={isSubmitting || Object.keys(errors).length > 0 || !listingReadiness.ready}
+                                    className="px-6 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            {isEnhancing ? 'Analyzing...' : 'Saving...'}
+                                        </>
+                                    ) : (
+                                        <>
+                                            Save Changes
+                                            {formData.images && formData.images.length >= 4 && (
+                                                <span className="text-xs opacity-75">+ AI</span>
+                                            )}
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </form>

@@ -55,7 +55,8 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
         throw new Error(result.reason || t('auth.otp.error.sendFailed'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('auth.otp.error.sendFailed'));
+      console.error('OTP send failed:', err);
+      setError(t('auth.otp.error.sendFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -94,7 +95,8 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
         throw new Error(result.reason || t('auth.otp.error.invalidOtp'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('auth.otp.error.verifyFailed'));
+      console.error('OTP verify failed:', err);
+      setError(t('auth.otp.error.verifyFailed'));
     } finally {
       setIsLoading(false);
     }

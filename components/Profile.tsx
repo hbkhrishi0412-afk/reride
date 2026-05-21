@@ -506,13 +506,13 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
       setIsEditing(false);
     } catch (error) {
       console.error('Failed to save profile:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to save changes. Please try again.';
+      const rawError = error instanceof Error ? error.message : '';
       
       // Check if it's an authentication error
-      if (errorMessage.includes('Authentication expired') || errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
+      if (rawError.includes('Authentication expired') || rawError.includes('Unauthorized') || rawError.includes('401')) {
         setFormErrors(prev => ({ ...prev, general: 'Authentication expired. Please log in again and try again.' }));
       } else {
-        setFormErrors(prev => ({ ...prev, general: errorMessage }));
+        setFormErrors(prev => ({ ...prev, general: 'Failed to save changes. Please try again.' }));
       }
     } finally {
       setIsSaving(false);
@@ -577,15 +577,15 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
       }
     } catch (error) {
       console.error('Failed to update password:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update password. Please try again.';
+      const rawError = error instanceof Error ? error.message : '';
       
       // Only show "session expired" if we're CERTAIN it's an authentication error
       // Check for explicit auth error messages from the API
-      const isAuthError = errorMessage.includes('Authentication expired') || 
-          errorMessage.includes('Unauthorized') || 
-          errorMessage.includes('401') ||
-          (errorMessage.includes('session has expired') && errorMessage.includes('log in again')) ||
-          (errorMessage.includes('Please log in again') && (errorMessage.includes('expired') || errorMessage.includes('401')));
+      const isAuthError = rawError.includes('Authentication expired') || 
+          rawError.includes('Unauthorized') || 
+          rawError.includes('401') ||
+          (rawError.includes('session has expired') && rawError.includes('log in again')) ||
+          (rawError.includes('Please log in again') && (rawError.includes('expired') || rawError.includes('401')));
       
       if (isAuthError) {
         // Only clear tokens if we're certain it's an auth issue
@@ -613,8 +613,8 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
           }
         }, 2000);
       } else {
-        // For other errors, show the actual error message
-        setPasswordError(errorMessage);
+        // Show user-friendly error message
+        setPasswordError('Could not update password. Please try again.');
       }
     } finally {
       setIsChangingPassword(false);

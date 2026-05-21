@@ -21,9 +21,7 @@ import {
     RECENTLY_VIEWED_CHANGED_EVENT,
 } from '../utils/recentlyViewed';
 import { getPopularMakes } from '../utils/popularListings';
-import { HomeLocationBanner } from './HomeLocationBanner.js';
 import { PopularCitiesChips } from './PopularCitiesChips.js';
-
 // Adds an `is-visible` class to the target element (which already has the
 // `reveal-on-scroll` class) the first time it intersects the viewport.
 // Optional delay staggers grids/lists for a natural cascade.
@@ -80,6 +78,8 @@ interface HomeProps {
     selectedCity?: string;
     onBrowseAllIndia?: () => void;
     onUseMyLocation?: (city: string, locationLabel: string) => void;
+    userLocation?: string;
+    onOpenLocationPicker?: () => void;
     addToast?: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
@@ -100,6 +100,8 @@ const Home: React.FC<HomeProps> = ({
     selectedCity = '',
     onBrowseAllIndia,
     onUseMyLocation,
+    userLocation = '',
+    onOpenLocationPicker,
     addToast,
 }) => {
     const { t, i18n } = useTranslation();
@@ -1011,17 +1013,6 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             )}
-
-            {onBrowseAllIndia && onUseMyLocation ? (
-                <div className="px-4 -mt-6 mb-2 max-w-7xl mx-auto relative z-10">
-                    <HomeLocationBanner
-                        selectedCity={selectedCity}
-                        onBrowseAllIndia={onBrowseAllIndia}
-                        onUseLocation={onUseMyLocation}
-                        addToast={addToast}
-                    />
-                </div>
-            ) : null}
 
             {/* Featured Collection Section */}
             {featuredVehicles.length > 0 ? (

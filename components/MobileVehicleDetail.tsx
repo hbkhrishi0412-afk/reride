@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, ProsAndCons, User } from '../types';
+import type { Vehicle, ProsAndCons, User, AIInspectionReport as AIInspectionReportType } from '../types';
 import { generateProsAndCons } from '../services/geminiService';
+import { generateAIInspection } from '../services/aiInspectionService';
+import AIInspectionReportComponent from './AIInspectionReport';
 import { getFirstValidImage, getValidImages } from '../utils/imageUtils';
 import { MobileImageGallery } from './MobileImageGallery';
 import { MobileShareSheet } from './MobileShareSheet';
@@ -19,6 +21,8 @@ import { ListingStockBadge } from './ListingStockBadge.js';
 import { ListingTrustChips } from './ListingTrustChips.js';
 import { isListingAvailable } from '../utils/listingStock.js';
 import StarRating from './StarRating';
+import { useApp } from './AppProvider';
+import { PriceInsights } from './PriceInsights';
 
 interface MobileVehicleDetailProps {
   vehicle: Vehicle;
@@ -68,15 +72,19 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   onSelectVehicle
 }) => {
   const { t } = useTranslation();
+  const { updateVehicle, vehicles: contextVehicles } = useApp();
   const ratingSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [showEMICalculator, setShowEMICalculator] = useState(false);
   const [showTestDriveModal, setShowTestDriveModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'specs' | 'features'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'specs' | 'features' | 'vahan' | 'aiReport'>('overview');
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState(false);
+  const [aiInspectionReport, setAiInspectionReport] = useState<AIInspectionReportType | null>(null);
+  const [isGeneratingAIInspection, setIsGeneratingAIInspection] = useState(false);
+  const [aiInspectionError, setAiInspectionError] = useState<string | null>(null);
 
   const safeVehicle = useMemo(() => ({
     ...vehicle,
@@ -161,6 +169,49 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     }
   };
 
+  const handleGenerateAIInspection = async () => {
+    if (!safeVehicle.images || safeVehicle.images.length < 1) {
+      setAiInspectionError('At least 1 photo is required for AI inspection');
+      return;
+    }
+    setIsGeneratingAIInspection(true);
+    setAiInspectionError(null);
+    try {
+      const report = await generateAIInspection({
+        vehicleId: safeVehicle.id,
+        imageUrls: safeVehicle.images,
+        vehicleDetails: {
+          make: safeVehicle.make,
+          model: safeVehicle.model,
+          year: safeVehicle.year,
+          mileage: safeVehicle.mileage,
+          fuelType: safeVehicle.fuelType,
+          color: safeVehicle.color,
+        },
+      });
+      setAiInspectionReport(report);
+      setActiveTab('aiReport');
+
+      const isListingSeller =
+        currentUser?.email &&
+        safeVehicle.sellerEmail &&
+        currentUser.email.toLowerCase().trim() === safeVehicle.sellerEmail.toLowerCase().trim();
+      if (isListingSeller) {
+        await updateVehicle(
+          safeVehicle.id,
+          { aiInspectionReport: report },
+          { skipToast: true },
+        );
+      }
+    } catch (error) {
+      setAiInspectionError(error instanceof Error ? error.message : 'Failed to generate AI inspection');
+    } finally {
+      setIsGeneratingAIInspection(false);
+    }
+  };
+
+  const currentAIReport = safeVehicle.aiInspectionReport || aiInspectionReport;
+
   const handleChat = () => {
     onStartChat(safeVehicle);
   };
@@ -174,6 +225,24 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     return list.filter(rec => rec.id !== safeVehicle.id).slice(0, 3);
   }, [recommendations, safeVehicle.id]);
 
+  const similarVehiclesForPricing = useMemo(() => {
+    const pool = [...(contextVehicles || []), ...(recommendations || [])];
+    const seen = new Set<number>();
+    return pool
+      .filter((v) => {
+        if (!v || v.id === safeVehicle.id || v.status !== 'published') return false;
+        if (seen.has(v.id)) return false;
+        seen.add(v.id);
+        return (
+          v.make === safeVehicle.make &&
+          v.model === safeVehicle.model &&
+          Math.abs(v.year - safeVehicle.year) <= 2
+        );
+      })
+      .slice(0, 20)
+      .map((v) => ({ price: v.price, year: v.year, mileage: v.mileage }));
+  }, [contextVehicles, recommendations, safeVehicle.id, safeVehicle.make, safeVehicle.model, safeVehicle.year]);
+
   useEffect(() => {
     setActiveTab('overview');
     setShowGallery(false);
@@ -182,6 +251,9 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     setShowTestDriveModal(false);
     setProsAndCons(null);
     setIsGeneratingProsCons(false);
+    setAiInspectionReport(null);
+    setAiInspectionError(null);
+    setIsGeneratingAIInspection(false);
     scrollAppToTop();
     requestAnimationFrame(() => scrollAppToTop());
   }, [vehicle.id]);
@@ -498,23 +570,34 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           </div>
         </div>
 
+        <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
+          <PriceInsights
+            vehicle={safeVehicle}
+            similarVehicles={similarVehiclesForPricing}
+          />
+        </div>
+
         <MobileVehicleTrustStrip />
 
         {/* Additional Details Section */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <div className="flex border-b border-gray-200 mb-4">
-            {(['overview', 'specs', 'features'] as const).map((tab) => {
+          <div className="flex border-b border-gray-200 mb-4 overflow-x-auto scrollbar-hide">
+            {(['overview', 'specs', 'features', 'vahan', ...(currentAIReport ? (['aiReport'] as const) : [])] as const).map((tab) => {
               const label =
                 tab === 'overview'
                   ? t('vehicle.detail.tabs.overview')
                   : tab === 'specs'
                     ? t('vehicle.detail.tabs.featureSpecs')
-                    : t('vehicle.detail.tabs.features');
+                    : tab === 'vahan'
+                      ? t('vehicle.detail.tabs.vahan')
+                      : tab === 'aiReport'
+                        ? t('vehicle.detail.tabs.aiReport', 'AI Report')
+                        : t('vehicle.detail.tabs.features');
               return (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`flex-1 py-3 text-sm font-semibold uppercase ${
+                  className={`flex-1 py-3 text-sm font-semibold uppercase whitespace-nowrap px-2 ${
                     activeTab === tab
                       ? 'text-orange-500 border-b-2 border-orange-500'
                       : 'text-gray-600'
@@ -524,6 +607,18 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 </button>
               );
             })}
+            {!currentAIReport && safeVehicle.images && safeVehicle.images.length > 0 && (
+              <button
+                type="button"
+                onClick={handleGenerateAIInspection}
+                disabled={isGeneratingAIInspection}
+                className="flex-shrink-0 py-3 px-2 text-sm font-semibold uppercase whitespace-nowrap text-blue-600 disabled:text-blue-300"
+              >
+                {isGeneratingAIInspection
+                  ? t('vehicle.detail.ai.analyzing', 'Analyzing…')
+                  : t('vehicle.detail.tabs.runAiReport', 'AI')}
+              </button>
+            )}
           </div>
 
           <div>
@@ -589,6 +684,23 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               </div>
             )}
 
+            {activeTab === 'aiReport' && currentAIReport && (
+              <AIInspectionReportComponent report={currentAIReport} />
+            )}
+
+            {activeTab === 'aiReport' && !currentAIReport && aiInspectionError && (
+              <div className="space-y-3">
+                <p className="text-sm text-red-600">{aiInspectionError}</p>
+                <button
+                  type="button"
+                  onClick={handleGenerateAIInspection}
+                  className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl font-semibold"
+                >
+                  {t('vehicle.detail.ai.retry', 'Try again')}
+                </button>
+              </div>
+            )}
+
             {activeTab === 'specs' && (
               <div className="grid grid-cols-2 gap-4">
                 <SpecCard label={t('vehicle.year')} value={safeVehicle.year?.toString()} />
@@ -634,6 +746,175 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                   <p className="text-gray-500 text-center py-8">
                     {t('vehicle.detail.noFeaturesListed')}
                   </p>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'vahan' && (
+              <div className="space-y-6">
+                {/* Show login prompt for non-logged-in users */}
+                {!currentUser ? (
+                  <div className="flex flex-col items-center justify-center py-10 px-4">
+                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-2 text-center">
+                      {t('vehicle.detail.vahan.loginRequired')}
+                    </h3>
+                    <p className="text-sm text-gray-600 text-center mb-5">
+                      {t('vehicle.detail.vahan.loginDescription')}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={onRequestLogin}
+                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-6 rounded-lg transition-colors flex items-center gap-2 text-sm"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                      </svg>
+                      {t('vehicle.detail.vahan.loginButton')}
+                    </button>
+                  </div>
+                ) : (
+                <>
+                {/* Vahan Header - Check if actually verified */}
+                {(() => {
+                  const isVahanVerified = !!(safeVehicle as Vehicle & { vahanVerifiedAt?: string }).vahanVerifiedAt;
+                  return (
+                    <>
+                      <div className="flex items-center gap-3 pb-4 border-b border-gray-200">
+                        <div className={`flex items-center justify-center w-10 h-10 rounded-full ${isVahanVerified ? 'bg-green-100' : 'bg-amber-100'}`}>
+                          {isVahanVerified ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-600" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {t('vehicle.detail.vahan.title')}
+                            </h3>
+                            {isVahanVerified ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                {t('vehicle.detail.vahan.verified')}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                {t('vehicle.detail.vahan.notVerified')}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            {isVahanVerified 
+                              ? t('vehicle.detail.vahan.subtitle') 
+                              : t('vehicle.detail.vahan.sellerProvided')}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Not Verified Warning Banner */}
+                      {!isVahanVerified && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          <div>
+                            <p className="text-xs font-medium text-amber-800">
+                              {t('vehicle.detail.vahan.notVerifiedTitle')}
+                            </p>
+                            <p className="text-xs text-amber-700 mt-0.5">
+                              {t('vehicle.detail.vahan.notVerifiedDescription')}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
+                {/* Registration Details */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-600" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
+                    </svg>
+                    {t('vehicle.detail.vahan.registrationDetails')}
+                  </h4>
+                  {/* Check if seller has provided Vahan verification details */}
+                  {(() => {
+                    const extVehicle = safeVehicle as Vehicle & { registrationNumber?: string; engineNumber?: string; chassisNumber?: string };
+                    const hasVahanDetails = extVehicle.registrationNumber || extVehicle.engineNumber || extVehicle.chassisNumber;
+                    
+                    if (!hasVahanDetails) {
+                      return (
+                        <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 text-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <p className="text-gray-600 text-sm font-medium">{t('vehicle.detail.vahan.noDetailsProvided')}</p>
+                          <p className="text-xs text-gray-500 mt-1">{t('vehicle.detail.vahan.sellerNotProvided')}</p>
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <div className="grid grid-cols-2 gap-3">
+                        <SpecCard label={t('vehicle.detail.vahan.registrationNumber')} value={extVehicle.registrationNumber || '-'} />
+                        <SpecCard label={t('vehicle.detail.vahan.registrationDate')} value={safeVehicle.registrationYear?.toString() || '-'} />
+                        <SpecCard label={t('vehicle.detail.vahan.engineNumber')} value={extVehicle.engineNumber || '-'} />
+                        <SpecCard label={t('vehicle.detail.vahan.chassisNumber')} value={extVehicle.chassisNumber || '-'} />
+                        <SpecCard label={t('vehicle.detail.vahan.rtoOffice')} value={safeVehicle.rto || '-'} />
+                        <SpecCard label={t('vehicle.detail.vahan.registeredState')} value={safeVehicle.state || '-'} />
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Ownership & Insurance */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-600" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                    </svg>
+                    {t('vehicle.detail.vahan.ownershipStatus')}
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <SpecCard 
+                      label={t('vehicle.detail.vahan.numberOfOwners')} 
+                      value={safeVehicle.noOfOwners ? `${safeVehicle.noOfOwners}${safeVehicle.noOfOwners === 1 ? 'st' : safeVehicle.noOfOwners === 2 ? 'nd' : safeVehicle.noOfOwners === 3 ? 'rd' : 'th'} Owner` : '-'} 
+                    />
+                    <SpecCard 
+                      label={t('vehicle.detail.vahan.insuranceValidity')} 
+                      value={safeVehicle.insuranceValidity || t('vehicle.detail.insurance.notSpecified')} 
+                    />
+                    <SpecCard 
+                      label={t('vehicle.detail.vahan.fitnessStatus')} 
+                      value={t('vehicle.detail.vahan.fitnessValid')} 
+                    />
+                    <SpecCard 
+                      label={t('vehicle.detail.vahan.hypothecation')} 
+                      value={t('vehicle.detail.vahan.noHypothecation')} 
+                    />
+                  </div>
+                </div>
+
+                {/* Disclaimer */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 flex items-start gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-xs text-yellow-800">
+                    {t('vehicle.detail.vahan.disclaimer')}
+                  </p>
+                </div>
+                </>
                 )}
               </div>
             )}

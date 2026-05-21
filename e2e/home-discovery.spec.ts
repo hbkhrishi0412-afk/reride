@@ -4,7 +4,6 @@ import { fetchPublishedVehicles, fetchSoldVehicle } from './helpers/catalog';
 test.describe('Home discovery — geo & city chips', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
-      sessionStorage.removeItem('reRide_homeGeoBannerDismissed');
       localStorage.removeItem('reRideSelectedCity');
       localStorage.removeItem('reRideUserLocation');
     });
@@ -12,18 +11,14 @@ test.describe('Home discovery — geo & city chips', () => {
     await expect(page.getByTestId('popular-cities-chips')).toBeVisible({ timeout: 60_000 });
   });
 
-  test('shows popular city chips and location banner on desktop home', async ({ page }) => {
+  test('shows popular city chips on desktop home', async ({ page }) => {
     await expect(
       page.getByTestId('popular-cities-chips').getByRole('button', { name: 'All India', exact: true }),
     ).toBeVisible();
-    await expect(page.getByTestId('home-location-banner')).toBeVisible();
-    await expect(
-      page.getByRole('region', { name: 'Choose how to browse cars' }),
-    ).toContainText('Browse used cars across India');
   });
 
-  test('Browse all India from banner navigates to used cars without locking a city', async ({ page }) => {
-    await page.getByTestId('home-location-banner').getByRole('button', { name: 'Browse all India' }).click();
+  test('All India chip navigates to used cars without locking a city', async ({ page }) => {
+    await page.getByTestId('popular-cities-chips').getByRole('button', { name: 'All India', exact: true }).click();
     await expect(page).toHaveURL(/\/used-cars\/?$/);
     await expect(page.locator('[data-testid="vehicle-card"]').first()).toBeVisible({ timeout: 60_000 });
   });
@@ -38,13 +33,6 @@ test.describe('Home discovery — geo & city chips', () => {
     expect(selectedCity?.toLowerCase()).toContain('mumbai');
   });
 
-  test('Use my location grants geo and navigates to used cars', async ({ page, context }) => {
-    await context.grantPermissions(['geolocation']);
-    await context.setGeolocation({ latitude: 19.076, longitude: 72.8777 });
-    await page.getByTestId('home-location-banner').getByRole('button', { name: 'Use my location' }).click();
-    await expect(page).toHaveURL(/\/used-cars/, { timeout: 15_000 });
-    await expect(page.getByTestId('home-location-banner')).toBeHidden();
-  });
 });
 
 test.describe('Vehicle detail — stock & contact CTAs', () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, memo, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, memo, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User, Notification, Toast as ToastType, Vehicle } from '../types';
 import { View as ViewEnum } from '../types';
@@ -10,6 +10,8 @@ import SellerDropdown from './SellerDropdown';
 import LanguageSwitcher from './LanguageSwitcher';
 import { supportTelHref } from '../utils/whatsappShare.js';
 import { useIsMdUp } from '../hooks/useIsMdUp';
+import { HomeLocationActionButtons } from './HomeLocationActionButtons';
+import { primaryLocationLabel } from '../utils/cityMapping';
 
 interface HeaderProps {
     onNavigate: (view: ViewEnum, params?: { city?: string }) => void;
@@ -35,6 +37,9 @@ interface HeaderProps {
     onLocationChange: (location: string) => void;
     addToast: (message: string, type: ToastType['type']) => void;
     allVehicles: Vehicle[];
+    selectedCity?: string;
+    onBrowseAllIndia?: () => void;
+    onUseMyLocation?: (city: string, locationLabel: string) => void;
 }
 
 const Header: React.FC<HeaderProps> = memo(({
@@ -54,10 +59,18 @@ const Header: React.FC<HeaderProps> = memo(({
     userLocation,
     onLocationChange,
     addToast,
-    allVehicles
+    allVehicles,
+    isHomePage = false,
+    selectedCity = '',
+    onBrowseAllIndia,
+    onUseMyLocation,
 }) => {
     const { t } = useTranslation();
     const isMdUp = useIsMdUp();
+    const showHomeLocationActions = Boolean(isHomePage && onBrowseAllIndia && onUseMyLocation);
+    const locationDisplay =
+        selectedCity.trim() ||
+        (userLocation.trim() ? primaryLocationLabel(userLocation) || userLocation.trim() : '');
     const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -65,6 +78,12 @@ const Header: React.FC<HeaderProps> = memo(({
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
     const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
+
+    useEffect(() => {
+        const open = () => setIsLocationModalOpen(true);
+        window.addEventListener('reride:open-location-modal', open);
+        return () => window.removeEventListener('reride:open-location-modal', open);
+    }, []);
 
     const notificationsRef = useRef<HTMLDivElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
@@ -157,18 +176,20 @@ const Header: React.FC<HeaderProps> = memo(({
                                 <span className="font-medium text-sm">{t('header.trustedCustomers')}</span>
                             </span>
                         </div>
-                        <div className="flex items-center gap-4">
-                            {supportTel && (
-                            <a 
-                                href={supportTel} 
-                                className="flex items-center gap-1.5 font-semibold text-blue-600 hover:text-blue-700 transition-colors text-sm"
-                            >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                </svg>
-                                <span>{t('header.callUsAt')}</span>
-                            </a>
-                            )}
+                        <div className="flex items-center gap-3">
+                            {/* Location buttons for home page - shown in top bar */}
+                            {showHomeLocationActions ? (
+                                <div className="hidden md:flex items-center gap-2">
+                                    <HomeLocationActionButtons
+                                        selectedCity={selectedCity}
+                                        onBrowseAllIndia={onBrowseAllIndia!}
+                                        onUseLocation={onUseMyLocation!}
+                                        addToast={addToast}
+                                    />
+                                </div>
+                            ) : null}
+                            {/* Location selector for non-home pages */}
+                            {!isHomePage ? (
                             <button 
                                 type="button"
                                 onClick={() => setIsLocationModalOpen(true)}
@@ -178,7 +199,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                         setIsLocationModalOpen(true);
                                     }
                                 }}
-                                className="flex items-center gap-1.5 transition-colors font-medium text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 rounded-md notranslate" 
+                                className="flex items-center gap-1.5 transition-colors font-medium text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 rounded-md px-2 py-1 hover:bg-white/60 notranslate" 
                                 style={{ color: '#1E88E5' }}
                                 aria-label={t('a11y.chooseLocation')}
                                 title={t('a11y.chooseLocation')}
@@ -191,9 +212,70 @@ const Header: React.FC<HeaderProps> = memo(({
                                 </svg>
                                 {userLocation || t('header.selectLocation')}
                             </button>
+                            ) : null}
                         </div>
                     </div>
                 </div>
+
+                {showHomeLocationActions ? (
+                    <div className="md:hidden border-b border-gray-100 bg-gray-50" data-testid="header-mobile-home-location">
+                        <div className="max-w-7xl mx-auto px-4 py-2 flex flex-col items-end gap-1.5">
+                            {locationDisplay ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setIsLocationModalOpen(true)}
+                                    className="flex items-center gap-1 text-sm font-medium notranslate"
+                                    style={{ color: '#1E88E5' }}
+                                    data-no-translate
+                                    translate="no"
+                                >
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    {locationDisplay}
+                                </button>
+                            ) : null}
+                            <HomeLocationActionButtons
+                                selectedCity={selectedCity}
+                                onBrowseAllIndia={onBrowseAllIndia!}
+                                onUseLocation={onUseMyLocation!}
+                                addToast={addToast}
+                            />
+                        </div>
+                        <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-end gap-2 border-t border-gray-100 bg-white">
+                            <button onClick={onOpenCommandPalette} className="p-2 rounded-full" aria-label={t('common.search')}>
+                                <svg className="h-6 w-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </button>
+                            <button onClick={() => handleNavigate(ViewEnum.WISHLIST)} className="relative p-2 rounded-full" aria-label={t('nav.myWishlist')}>
+                                <svg className="h-6 w-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z" />
+                                </svg>
+                                {wishlistCount > 0 && (
+                                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-orange-500" aria-hidden />
+                                )}
+                            </button>
+                            <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="relative p-2 rounded-full" aria-label={t('nav.compare')}>
+                                <svg className="h-6 w-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                </svg>
+                                {compareCount > 0 && (
+                                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-blue-500" aria-hidden />
+                                )}
+                            </button>
+                            {!currentUser && !serviceProvider ? (
+                                <button
+                                    onClick={() => handleNavigate(ViewEnum.LOGIN_PORTAL)}
+                                    className="reride-button-primary text-sm px-4 py-2"
+                                >
+                                    {t('nav.login')}
+                                </button>
+                            ) : null}
+                        </div>
+                    </div>
+                ) : null}
 
                 {/* Premium Main Navigation */}
                 <div className="bg-white/90 backdrop-blur-sm">
@@ -214,14 +296,14 @@ const Header: React.FC<HeaderProps> = memo(({
                                     onCitySelect={(city) => {
                                         // Navigate to used cars with city filter
                                         if (process.env.NODE_ENV === 'development') {
-                                            console.log('🔵 Header: City selected from dropdown:', city);
+                                            console.log('ðŸ”µ Header: City selected from dropdown:', city);
                                         }
                                         // Ensure city is passed correctly
                                         onNavigate(ViewEnum.USED_CARS, { city: city || '' });
                                     }}
                                     onViewAllCars={() => {
                                         if (process.env.NODE_ENV === 'development') {
-                                            console.log('🔵 Header: View all cars clicked - clearing city filter');
+                                            console.log('ðŸ”µ Header: View all cars clicked - clearing city filter');
                                         }
                                         // Explicitly pass empty city to clear filter
                                         onNavigate(ViewEnum.USED_CARS, { city: '' });
@@ -521,6 +603,7 @@ const Header: React.FC<HeaderProps> = memo(({
                         </div>
                     </div>
                 </div>
+
 
                 {/* Mobile Menu */}
                 {isMobileMenuOpen && (
