@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { randomBytes, createHmac, randomInt } from 'crypto';
+import { randomBytes, createHmac, randomInt, timingSafeEqual } from 'crypto';
 import { PLAN_DETAILS } from '../constants/plans.js';
 import type { User as UserType, Vehicle as VehicleType, VerificationStatus } from '../types.js';
 import { VehicleCategory } from '../vehicle-category.js';
@@ -1559,7 +1559,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       if (!isPasswordValid && user.password && typeof user.password === 'string') {
         const stored = user.password;
         const looksBcrypt = /^\$2[abxy]\$/.test(stored);
-        if (!looksBcrypt && stored === sanitizedData.password) {
+        const plainBuf = Buffer.from(stored);
+        const inputBuf = Buffer.from(sanitizedData.password);
+        const plainMatches =
+          !looksBcrypt &&
+          plainBuf.length === inputBuf.length &&
+          timingSafeEqual(plainBuf, inputBuf);
+        if (plainMatches) {
           try {
             const hashedPassword = await hashPassword(sanitizedData.password);
             await supabaseUserService.update(normalizedEmail, {

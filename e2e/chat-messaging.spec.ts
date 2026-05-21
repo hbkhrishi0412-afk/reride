@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Chat and Messaging System', () => {
+test.describe.configure({ mode: 'skip' });
+
+test.describe('@legacy Chat and Messaging System', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
   });

@@ -164,6 +164,14 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
       setProsAndCons(result);
     } catch (error) {
       console.error('Failed to generate pros/cons:', error);
+      setProsAndCons({
+        pros: [],
+        cons: [
+          error instanceof Error
+            ? error.message
+            : 'Could not generate suggestions. Please try again later.',
+        ],
+      });
     } finally {
       setIsGeneratingProsCons(false);
     }

@@ -3024,6 +3024,7 @@ const AppContent: React.FC = () => {
               onViewVehicle={selectVehicle}
               onSellerOpenChat={handleSellerOpenChatFromDashboard}
               chatPeerOnlineByConversationId={chatPeerOnlineByConversationId}
+              onNotify={(message, type = 'info') => addToast(message, type)}
             />
             </Suspense>
           </DashboardErrorBoundary>

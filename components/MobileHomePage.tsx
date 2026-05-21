@@ -254,6 +254,24 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
     [publishedVehicles, storefrontAgg?.cities]
   );
 
+  const handleCityCardClick = useCallback(
+    (city: { name: string; total: number }) => {
+      if (city.total > 0) {
+        onSelectCity(city.name);
+        return;
+      }
+      (addToast || noopToast)(
+        t('mobile.home.cityNoListings', {
+          city: city.name,
+          defaultValue: `No cars in ${city.name} yet. Showing listings across India.`,
+        }),
+        'info',
+      );
+      onBrowseAllIndia?.();
+    },
+    [onSelectCity, onBrowseAllIndia, addToast, noopToast, t],
+  );
+
   const categoryCounts = useMemo(
     () =>
       publishedVehicles.reduce((acc, vehicle) => {
@@ -1142,7 +1160,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 key={city.name}
                 type="button"
                 aria-label={t('mobile.home.cityAria', { name: city.name, count: city.total })}
-                onClick={() => onSelectCity(city.name)}
+                onClick={() => handleCityCardClick(city)}
                 className="mc-card group relative flex-shrink-0 w-[156px] h-[184px] rounded-3xl bg-white overflow-hidden snap-start text-left transition-all duration-300 active:scale-[0.97] hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                 style={{
                   border: `1px solid ${accent.ring}`,

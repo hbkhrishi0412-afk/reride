@@ -23,6 +23,24 @@ import { ChatWidget } from './ChatWidget';
 // Removed blocking import - will lazy load location data when needed
 import { planService } from '../services/planService';
 import BulkUploadModal from './BulkUploadModal';
+
+export type DashboardNotifyFn = (
+  message: string,
+  type?: 'success' | 'error' | 'info' | 'warning',
+) => void;
+
+function dashboardNotify(
+  onNotify: DashboardNotifyFn | undefined,
+  message: string,
+  type: 'success' | 'error' | 'info' | 'warning' = 'info',
+) {
+  if (onNotify) {
+    onNotify(message, type);
+    return;
+  }
+  if (type === 'error') console.error(message);
+  else console.info(message);
+}
 import { getPlaceholderImage } from './vehicleData';
 import PricingGuidance from './PricingGuidance';
 // Removed unused OfferModal import
@@ -104,6 +122,8 @@ interface DashboardProps {
   chatPeerOnlineByConversationId?: Record<string, boolean>;
   /** Mobile seller dashboard uses this; desktop dashboard may ignore. */
   onSellerOpenChat?: (conversation: Conversation) => void;
+  /** Toast / snackbar feedback (replaces blocking alert dialogs). */
+  onNotify?: DashboardNotifyFn;
 }
 
 type DashboardView = 'overview' | 'listings' | 'form' | 'messages' | 'analytics' | 'salesHistory' | 'reports' | 'settings';
@@ -893,11 +913,21 @@ interface VehicleFormProps {
     onFeatureListing: (vehicleId: number) => Promise<void>;
     onCancel: () => void;
     vehicleData: VehicleData;
+    onNotify?: DashboardNotifyFn;
 }
 
 // Settings View Component for Bank Partner Selection
-const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealershipName: string; bio: string; logoUrl: string; partnerBanks?: string[] }) => void | Promise<void> }> = ({ seller, onUpdateSeller }) => {
+const SettingsView: React.FC<{
+  seller: User;
+  onUpdateSeller: (details: { dealershipName: string; bio: string; logoUrl: string; partnerBanks?: string[] }) => void | Promise<void>;
+  onNotify?: DashboardNotifyFn;
+}> = ({ seller, onUpdateSeller, onNotify }) => {
   const { t } = useTranslation();
+  const notify = useCallback(
+    (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') =>
+      dashboardNotify(onNotify, message, type),
+    [onNotify],
+  );
   const [selectedBanks, setSelectedBanks] = useState<string[]>(seller?.partnerBanks || []);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -963,7 +993,7 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
       console.error('Failed to save bank partners:', error);
-      alert(t('sellerDashboard.saveBanksFailed'));
+      notify(t('sellerDashboard.saveBanksFailed'), 'error');
     } finally {
       setIsSaving(false);
     }
@@ -1074,8 +1104,13 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
   );
 };
 
-const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVehicle, onUpdateVehicle, onCancel, vehicleData, seller, onFeatureListing, allVehicles }) => {
+const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVehicle, onUpdateVehicle, onCancel, vehicleData, seller, onFeatureListing, allVehicles, onNotify }) => {
     const { t } = useTranslation();
+    const notify = useCallback(
+      (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') =>
+        dashboardNotify(onNotify, message, type),
+      [onNotify],
+    );
     const [formData, setFormData] = useState(editingVehicle ? { 
         ...initialFormState, 
         ...editingVehicle, 
@@ -1121,6 +1156,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     const [indianStates, setIndianStates] = useState<Array<{name: string, code: string}>>([]);
     const [citiesByState, setCitiesByState] = useState<Record<string, string[]>>({});
     
+    const [documentType, setDocumentType] = useState<VehicleDocument['name']>('Registration Certificate (RC)');
     const [featureInput, setFeatureInput] = useState('');
     const [fixInput, setFixInput] = useState('');
     const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
@@ -1368,7 +1404,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     const handleGetAiSuggestions = async () => {
         const { make, model, year, variant, category } = formData;
         if (!make || !model || !year) {
-            alert('Please select a Make, Model, and Year first.');
+            notify('Please select a Make, Model, and Year first.');
             return;
         }
 
@@ -1408,7 +1444,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
 
                 const errList = suggestions.featureSuggestions?.Error;
                 if (!updates.engine?.trim() && errList?.length) {
-                    alert(errList[0]);
+                    notify(errList[0]);
                 }
             }
 
@@ -1416,15 +1452,15 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 updates.engine || updates.displacement || updates.fuelEfficiency || updates.groundClearance,
             );
             if (!filledAnySpec) {
-                alert('Could not find specifications for this vehicle. Try filling fields manually or check that the dev API server is running.');
+                notify('Could not find specifications for this vehicle. Try filling fields manually or check that the dev API server is running.');
             }
         } catch (error) {
             console.error('❌ Failed to fetch vehicle specifications:', error);
             const msg = error instanceof Error ? error.message : 'Unknown error';
             if (msg.includes('AI_API_UNAVAILABLE')) {
-                alert('AI service is unavailable. Restart the dev server (npm run dev) and ensure GEMINI_API_KEY is set for AI fallback.');
+                notify('AI service is unavailable. Restart the dev server (npm run dev) and ensure GEMINI_API_KEY is set for AI fallback.');
             } else {
-                alert(`Could not auto-fill specifications: ${msg}`);
+                notify(`Could not auto-fill specifications: ${msg}`);
             }
             setAiSuggestions({ structuredSpecs: {}, featureSuggestions: { Error: ['Could not fetch suggestions.'] } });
         } finally {
@@ -1546,7 +1582,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 if (type === 'image') {
                     const validation = validateImageFile(file);
                     if (!validation.valid) {
-                        alert(validation.error || 'Invalid image file');
+                        notify(validation.error || 'Invalid image file');
                         setIsUploading(false);
                         if (input) input.value = '';
                         return;
@@ -1563,7 +1599,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             if (failedUploads.length > 0) {
                 const errorMessage = failedUploads.map(r => r.error).join(', ');
                 console.error('❌ Image upload failed:', errorMessage);
-                alert(`Failed to upload ${failedUploads.length} file(s): ${errorMessage}`);
+                notify(`Failed to upload ${failedUploads.length} file(s): ${errorMessage}`);
                 setIsUploading(false);
                 if (input) input.value = '';
                 return;
@@ -1583,7 +1619,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     const remainingSlots = maxImages - currentImages.length;
                     
                     if (remainingSlots <= 0) {
-                        alert(`Maximum ${maxImages} images allowed per vehicle. Please remove some images before adding more.`);
+                        notify(`Maximum ${maxImages} images allowed per vehicle. Please remove some images before adding more.`);
                         setIsUploading(false);
                         if (input) input.value = '';
                         return;
@@ -1591,13 +1627,13 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     
                     const imagesToAdd = successfulUrls.slice(0, remainingSlots);
                     if (successfulUrls.length > remainingSlots) {
-                        alert(`Only ${remainingSlots} image(s) added. Maximum ${maxImages} images allowed per vehicle.`);
+                        notify(`Only ${remainingSlots} image(s) added. Maximum ${maxImages} images allowed per vehicle.`);
                     }
                     
                     setFormData(prev => ({ ...prev, images: [...prev.images, ...imagesToAdd] }));
                     console.log(`✅ Successfully uploaded ${imagesToAdd.length} image(s) (${currentImages.length + imagesToAdd.length}/${maxImages} total)`);
                 } else {
-                    const docType = (document.getElementById('document-type') as HTMLSelectElement).value as VehicleDocument['name'];
+                    const docType = documentType;
                     const newDocs: VehicleDocument[] = successfulUrls.map((url, idx) => ({ 
                         name: docType, 
                         url, 
@@ -1607,11 +1643,11 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 }
             } else {
                 console.warn('⚠️ No images were successfully uploaded');
-                alert('No images were uploaded. Please try again.');
+                notify('No images were uploaded. Please try again.');
             }
         } catch (error) { 
             console.error("Error uploading files:", error);
-            alert('Failed to upload files. Please try again.');
+            notify('Failed to upload files. Please try again.');
         } 
         finally {
             setIsUploading(false);
@@ -1655,7 +1691,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         
         const validation = validateImageFile(file);
         if (!validation.valid) {
-          alert(validation.error || 'Invalid image file');
+          notify(validation.error || 'Invalid image file');
           setIsUploading(false);
           input.value = '';
           setActivePhotoView(null);
@@ -1682,11 +1718,11 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
           
           console.log(`✅ Uploaded ${activePhotoView} view photo`);
         } else {
-          alert('Failed to upload image. Please try again.');
+          notify('Failed to upload image. Please try again.');
         }
       } catch (error) {
         console.error("Error uploading checklist photo:", error);
-        alert('Failed to upload image. Please try again.');
+        notify('Failed to upload image. Please try again.');
       } finally {
         setIsUploading(false);
         input.value = '';
@@ -1700,15 +1736,15 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
   
     const handleGenerateDescription = async () => {
       if (!formData.make || !formData.model || !formData.year) {
-        alert('Please enter Make, Model, and Year before generating a description.');
+        notify('Please enter Make, Model, and Year before generating a description.');
         return;
       }
       setIsGeneratingDesc(true);
       try {
         const description = await generateVehicleDescription(formData);
-        if (description.includes("Failed to generate")) alert(description);
+        if (description.includes("Failed to generate")) notify(description);
         else setFormData(prev => ({ ...prev, description }));
-      } catch (error) { console.error(error); alert('There was an error generating the description.'); }
+      } catch (error) { console.error(error); notify('There was an error generating the description.'); }
       finally { setIsGeneratingDesc(false); }
     };
 
@@ -1720,7 +1756,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         e.preventDefault();
         // Block new listings if plan is expired (allow editing existing vehicles)
         if (!editingVehicle && isPlanExpired) {
-            alert('Your subscription plan has expired. Please renew your plan to create new listings.');
+            notify('Your subscription plan has expired. Please renew your plan to create new listings.');
             return;
         }
         console.log('📝 Dashboard form submitted');
@@ -1733,13 +1769,13 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         const mileageValue = typeof formData.mileage === 'string' ? parseInt(formData.mileage, 10) : formData.mileage;
         
         if (!priceValue || isNaN(priceValue) || priceValue <= 0) {
-            alert('Please enter a valid price greater than 0');
+            notify('Please enter a valid price greater than 0');
             console.error('❌ Invalid price:', formData.price, '→', priceValue);
             return;
         }
         
         if (isNaN(mileageValue) || mileageValue < 0) {
-            alert('Please enter a valid mileage (km driven)');
+            notify('Please enter a valid mileage (km driven)');
             console.error('❌ Invalid mileage:', formData.mileage, '→', mileageValue);
             return;
         }
@@ -1769,7 +1805,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             );
             if (!result.success) {
                 const messages = result.validation.errors.map((e) => e.message).join('\n');
-                alert(messages || 'Please fix validation errors before saving.');
+                notify(messages || 'Please fix validation errors before saving.');
                 return null;
             }
             return result.vehicle;
@@ -2295,9 +2331,10 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             <select
                                 id="document-type"
                                 className="flex-grow p-3 border border-gray-200 rounded-lg bg-white text-reride-text-dark focus:outline-none focus:border-reride-orange transition"
+                                value={documentType}
+                                onChange={(e) => setDocumentType(e.target.value as VehicleDocument['name'])}
                                 onFocus={(e) => (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.15)')}
                                 onBlur={(e) => (e.currentTarget.style.boxShadow = '')}
-                                defaultValue="Registration Certificate (RC)"
                             >
                                 <option>Registration Certificate (RC)</option>
                                 <option>Insurance</option>
@@ -2951,7 +2988,12 @@ const ReportsView: React.FC<{
 
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat, onNotify }) => {
+  const notify = useCallback(
+    (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') =>
+      dashboardNotify(onNotify, message, type),
+    [onNotify],
+  );
   void onRequestCertification;
   void onSellerOpenChat;
 
@@ -3681,7 +3723,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       // Error is logged, but UI feedback should come from App.tsx via onMarkAsUnsold prop
       if (!onMarkAsUnsold) {
         // Only show alert if prop is not available (shouldn't happen in normal flow)
-        alert(error instanceof Error ? error.message : 'Failed to mark vehicle as unsold. Please try again.');
+        notify(error instanceof Error ? error.message : 'Failed to mark vehicle as unsold. Please try again.');
       }
     }
   };
@@ -3803,7 +3845,14 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('sellerDashboard.configError')}</h2>
           <p className="text-gray-600 mb-6">{t('sellerDashboard.configErrorBody')}</p>
           <button
-            onClick={() => window.location.reload()}
+            type="button"
+            onClick={() => {
+              try {
+                window.location.assign(window.location.pathname + window.location.search);
+              } catch {
+                window.location.reload();
+              }
+            }}
             className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
           >
             {t('sellerDashboard.reloadPage')}
@@ -4477,6 +4526,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             vehicleData={safeVehicleData} 
             onFeatureListing={onFeatureListing}
             allVehicles={allVehicles}
+            onNotify={onNotify}
         />;
       case 'messages':
         return (
@@ -4500,7 +4550,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             </div>
           );
         }
-        return <SettingsView seller={seller} onUpdateSeller={onUpdateSellerProfile} />;
+        return <SettingsView seller={seller} onUpdateSeller={onUpdateSellerProfile} onNotify={onNotify} />;
       case 'reports':
         return <ReportsView
                     reportedVehicles={safeReportedVehicles}
@@ -4713,7 +4763,14 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                       </h3>
                       <p className="text-gray-600 mb-4">{t('sellerDashboard.loadContentBody')}</p>
                       <button
-                        onClick={() => window.location.reload()}
+                        type="button"
+                        onClick={() => {
+                          try {
+                            window.location.assign(window.location.pathname + window.location.search);
+                          } catch {
+                            window.location.reload();
+                          }
+                        }}
                         className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
                       >
                         {t('sellerDashboard.refreshPage')}
@@ -4807,12 +4864,12 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 const { BOOST_PACKAGES } = await import('../constants/boost');
                 const pkg = BOOST_PACKAGES.find((p) => p.id === packageId);
                 if (!pkg) {
-                  alert('Unknown boost package. Please refresh and try again.');
+                  notify('Unknown boost package. Please refresh and try again.');
                   return;
                 }
                 const { openRazorpayBoostCheckout, isRazorpayConfiguredInClient } = await import('../services/razorpayPlanPayment');
                 if (!isRazorpayConfiguredInClient()) {
-                  alert('Online payments are not configured. Please contact support to boost listings.');
+                  notify('Online payments are not configured. Please contact support to boost listings.');
                   return;
                 }
                 razorpayProof = await new Promise((resolve, reject) => {
@@ -4829,12 +4886,12 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 });
               } catch (paymentError) {
                 const msg = paymentError instanceof Error ? paymentError.message : 'Payment failed. Please try again.';
-                alert(msg);
+                notify(msg);
                 return;
               }
 
               if (!razorpayProof) {
-                alert('Payment was not completed. Please try again.');
+                notify('Payment was not completed. Please try again.');
                 return;
               }
 
@@ -4866,19 +4923,19 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                       } else {
                         // API returned success but result indicates failure
                         const errorMsg = result?.message || result?.error || 'Failed to boost listing. Please try again.';
-                        alert(errorMsg);
+                        notify(errorMsg);
                         // Keep modal open so user can retry
                       }
                     } catch (jsonError) {
                       if (process.env.NODE_ENV === 'development') {
                         console.warn('⚠️ Failed to parse boost response:', jsonError);
                       }
-                      alert('Failed to process boost response. Please try again.');
+                      notify('Failed to process boost response. Please try again.');
                       // Keep modal open so user can retry
                     }
                   } else {
                     // Response OK but not JSON - unexpected format
-                    alert('Unexpected response format. Please try again.');
+                    notify('Unexpected response format. Please try again.');
                     // Keep modal open so user can retry
                   }
                 } else {
@@ -4890,13 +4947,13 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   } catch {
                     errorMsg += `Server returned status ${response.status}`;
                   }
-                  alert(errorMsg);
+                  notify(errorMsg);
                   // Keep modal open so user can retry
                 }
               } catch (error) {
                 // Network or other errors
                 const errorMsg = error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.';
-                alert(`Error boosting vehicle: ${errorMsg}`);
+                notify(`Error boosting vehicle: ${errorMsg}`);
                 if (process.env.NODE_ENV === 'development') {
                   console.error('❌ Error boosting vehicle:', error);
                 }

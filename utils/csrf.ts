@@ -4,7 +4,7 @@
  * and must be sent in X-CSRF-Token header for state-changing requests.
  */
 
-import { randomBytes } from 'crypto';
+import { randomBytes, timingSafeEqual } from 'crypto';
 
 const CSRF_COOKIE_NAME = 'reride_csrf';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
@@ -31,6 +31,14 @@ export function generateCsrfToken(): string {
  */
 export function validateCsrfToken(headerToken: string | undefined, cookieToken: string | undefined): boolean {
   if (!headerToken || !cookieToken) return false;
-  if (headerToken.length !== CSRF_TOKEN_BYTES * 2) return false;
-  return headerToken === cookieToken && /^[a-f0-9]+$/i.test(headerToken);
+  const expectedLen = CSRF_TOKEN_BYTES * 2;
+  if (headerToken.length !== expectedLen || cookieToken.length !== expectedLen) return false;
+  if (!/^[a-f0-9]+$/i.test(headerToken) || !/^[a-f0-9]+$/i.test(cookieToken)) return false;
+  try {
+    const a = Buffer.from(headerToken, 'utf8');
+    const b = Buffer.from(cookieToken, 'utf8');
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
 }

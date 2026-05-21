@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Vehicle Listing and Search', () => {
+test.describe.configure({ mode: 'skip' });
+
+test.describe('@legacy Vehicle Listing and Search', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
   });

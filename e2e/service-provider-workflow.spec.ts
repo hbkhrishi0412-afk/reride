@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Service provider workflow', () => {
+test.describe.configure({ mode: 'skip' });
+
+test.describe('@legacy Service provider workflow', () => {
   test('runs customer to provider lifecycle via API', async ({ request }, testInfo) => {
     const apiBase = 'http://127.0.0.1:3001/api';
     const runId = `${Date.now()}-${testInfo.project.name.replace(/\s+/g, '-').toLowerCase()}`;

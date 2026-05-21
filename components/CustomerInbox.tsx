@@ -62,8 +62,18 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read'>('all');
+  const [mobileShowsChat, setMobileShowsChat] = useState(false);
+  const [isInboxNarrow, setIsInboxNarrow] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const update = () => setIsInboxNarrow(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   const getSellerName = useCallback((sellerId: string) => {
     const seller = findUserByParticipantId(users, sellerId);
@@ -91,11 +101,14 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
 
   const handleSelectConversation = useCallback((conv: Conversation) => {
     setSelectedConv(conv);
+    if (isInboxNarrow) {
+      setMobileShowsChat(true);
+    }
     if (conv.isReadByCustomer === false) {
       onMarkAsRead(conv.id);
       onMarkMessagesAsRead(conv.id, 'customer');
     }
-  }, [onMarkAsRead, onMarkMessagesAsRead]);
+  }, [isInboxNarrow, onMarkAsRead, onMarkMessagesAsRead]);
 
   useEffect(() => {
     if (initialOpenConversationId) {
@@ -172,7 +185,11 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6 bg-white rounded-xl shadow-lg overflow-hidden h-[calc(100vh-220px)] min-h-[600px]">
           {/* Conversation List */}
-          <aside className="border-r border-gray-200 flex flex-col bg-gray-50">
+          <aside
+            className={`border-r border-gray-200 flex flex-col bg-gray-50 ${
+              isInboxNarrow && mobileShowsChat ? 'hidden' : 'flex'
+            } lg:flex`}
+          >
             {/* Search and Filter */}
             <div className="p-4 border-b border-gray-200 bg-white">
               <div className="relative mb-3">
@@ -353,8 +370,28 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
           </aside>
 
           {/* Chat View */}
-          <main className="flex flex-col bg-white">
+          <main
+            className={`flex-col bg-white ${
+              isInboxNarrow && !mobileShowsChat ? 'hidden' : 'flex'
+            } lg:flex`}
+          >
               {selectedConv ? (
+                <>
+                  {isInboxNarrow && (
+                    <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 bg-white lg:hidden">
+                      <button
+                        type="button"
+                        onClick={() => setMobileShowsChat(false)}
+                        className="inline-flex items-center gap-1 text-sm font-semibold text-orange-600 hover:text-orange-700"
+                        aria-label="Back to conversation list"
+                      >
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Messages
+                      </button>
+                    </div>
+                  )}
                   <InlineChat
                       conversation={selectedConv}
                       currentUserRole="customer"
@@ -384,6 +421,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                       onClearChat={onClearChat}
                       height="h-full"
                   />
+                </>
               ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-gradient-to-br from-gray-50 to-white">
                       <div className="w-32 h-32 bg-gradient-to-br from-orange-100 to-orange-50 rounded-full flex items-center justify-center mb-6">

@@ -272,6 +272,41 @@ function generateMockVehicles(count = 60) {
       features: []
     });
   }
+  // Stable sold fixture for E2E when Supabase is empty (mock-only dev)
+  list.push({
+    id: 99999,
+    make: 'Hyundai',
+    model: 'i20',
+    variant: 'Sportz',
+    year: 2019,
+    price: 620000,
+    mileage: 42000,
+    category: 'four-wheeler',
+    sellerEmail: 'seller@test.com',
+    status: 'sold',
+    listingStatus: 'sold',
+    soldAt: new Date().toISOString(),
+    isFeatured: false,
+    images: ['https://picsum.photos/800/600?random=99999'],
+    description: 'E2E fixture — sold listing',
+    engine: '1.2L',
+    fuelType: 'Petrol',
+    transmission: 'Manual',
+    fuelEfficiency: '18 kmpl',
+    color: 'White',
+    registrationYear: 2019,
+    insuranceValidity: '2026-01-01',
+    insuranceType: 'Comprehensive',
+    rto: 'MH-12',
+    city: 'Pune',
+    state: 'MH',
+    location: 'Pune, MH',
+    noOfOwners: 1,
+    displacement: '1197 cc',
+    groundClearance: '170 mm',
+    bootSpace: '311 litres',
+    features: ['Air Conditioning'],
+  });
   return list;
 }
 
@@ -521,6 +556,78 @@ async function fetchVehiclesFromSupabase() {
   }
 }
 
+/** Mark one catalog row sold (E2E + local QA). Returns mapped vehicle or null. */
+async function markVehicleSoldInSupabase(vehicleId) {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseKey || vehicleId == null) return null;
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const idStr = String(vehicleId);
+    const { data: row, error } = await supabase
+      .from('vehicles')
+      .update({
+        status: 'sold',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', idStr)
+      .select('*')
+      .maybeSingle();
+    if (error || !row) return null;
+    const id = Number(row.id) || 0;
+    const images = Array.isArray(row.images) ? row.images : [];
+    const imageUrls = images.map((img) => {
+      if (typeof img !== 'string' || !img.trim()) return null;
+      if (img.startsWith('http://') || img.startsWith('https://')) return img;
+      const path = img.includes('/') ? img : (id ? `vehicles/${id}/${img}` : `vehicles/${img}`);
+      return buildStoragePublicUrl(path) || img;
+    }).filter(Boolean);
+    return {
+      id,
+      make: row.make || '',
+      model: row.model || '',
+      variant: row.variant,
+      year: row.year || 0,
+      price: Number(row.price) || 0,
+      mileage: Number(row.mileage) || 0,
+      images: imageUrls,
+      features: row.features || [],
+      description: row.description || '',
+      sellerEmail: row.seller_email || '',
+      sellerName: row.seller_name,
+      engine: row.engine || '',
+      transmission: row.transmission || '',
+      fuelType: row.fuel_type || '',
+      fuelEfficiency: row.fuel_efficiency || '',
+      color: row.color || '',
+      status: 'sold',
+      listingStatus: 'sold',
+      soldAt: new Date().toISOString(),
+      isFeatured: !!row.is_featured,
+      views: row.views || 0,
+      inquiriesCount: row.inquiries_count || 0,
+      registrationYear: row.registration_year,
+      insuranceValidity: row.insurance_validity,
+      insuranceType: row.insurance_type,
+      rto: row.rto,
+      city: row.city,
+      state: row.state,
+      location: row.location,
+      noOfOwners: row.no_of_owners,
+      displacement: row.displacement,
+      groundClearance: row.ground_clearance,
+      bootSpace: row.boot_space,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      category: row.category || 'FOUR_WHEELER',
+    };
+  } catch (e) {
+    console.warn('markVehicleSoldInSupabase failed:', e?.message || e);
+    return null;
+  }
+}
+
 // Vehicle Data API endpoints
 app.get('/api/vehicles', async (req, res) => {
   const { type } = req.query;
@@ -557,7 +664,7 @@ app.get('/api/vehicles', async (req, res) => {
   }
 });
 
-app.post('/api/vehicles', (req, res) => {
+app.post('/api/vehicles', async (req, res) => {
   const { type, action } = req.query;
   
   if (type === 'data') {
@@ -693,21 +800,34 @@ app.post('/api/vehicles', (req, res) => {
 
   if (action === 'sold') {
     const { vehicleId } = req.body;
-    const vehicle = mockVehicles.find(v => v.id === vehicleId);
-    
+    const numericId = Number(vehicleId);
+
+    const supabaseVehicle = await markVehicleSoldInSupabase(vehicleId);
+    if (supabaseVehicle) {
+      const mockIdx = mockVehicles.findIndex((v) => v.id === numericId);
+      if (mockIdx !== -1) {
+        mockVehicles[mockIdx] = { ...mockVehicles[mockIdx], ...supabaseVehicle };
+      }
+      if (io) {
+        io.emit('vehicles:sold', { vehicle: supabaseVehicle });
+      }
+      return res.status(200).json({ success: true, vehicle: supabaseVehicle });
+    }
+
+    const vehicle = mockVehicles.find((v) => v.id === numericId);
+
     if (!vehicle) {
       return res.status(404).json({ success: false, reason: 'Vehicle not found' });
     }
-    
+
     vehicle.status = 'sold';
     vehicle.listingStatus = 'sold';
     vehicle.soldAt = new Date().toISOString();
-    
-    // Emit real-time update
+
     if (io) {
       io.emit('vehicles:sold', { vehicle });
     }
-    
+
     return res.status(200).json({ success: true, vehicle });
   }
 
@@ -1053,6 +1173,38 @@ app.delete('/api/vehicle-data-management', (req, res) => {
 
 // Mock users store for development
 let mockUsers = [];
+const E2E_DEV_MOCK_USERS = [
+  {
+    id: 'test-admin-1',
+    email: 'admin@test.com',
+    password: 'password',
+    name: 'Test Admin',
+    role: 'admin',
+    status: 'active',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'test-seller-1',
+    email: 'seller@test.com',
+    password: 'password',
+    name: 'Test Seller',
+    role: 'seller',
+    status: 'active',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'test-customer-1',
+    email: 'customer@test.com',
+    password: 'password',
+    name: 'Test Customer',
+    role: 'customer',
+    status: 'active',
+    createdAt: new Date().toISOString(),
+  },
+];
+for (const u of E2E_DEV_MOCK_USERS) {
+  if (!mockUsers.some((m) => m.email === u.email)) mockUsers.push({ ...u });
+}
 // Mock service providers store (keyed by uid)
 const mockServiceProviders = {};
 const mockProviderServices = {};
