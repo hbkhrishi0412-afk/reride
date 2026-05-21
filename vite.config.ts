@@ -12,6 +12,14 @@ const capacitor =
   process.env.CAPACITOR_BUILD === '1' || process.env.CAPACITOR_BUILD === 'true'
 
 export default defineConfig(({ mode }) => {
+  // Vercel Supabase integration injects SUPABASE_*; Vite client bundle needs VITE_SUPABASE_*.
+  if (process.env.SUPABASE_URL && !process.env.VITE_SUPABASE_URL) {
+    process.env.VITE_SUPABASE_URL = process.env.SUPABASE_URL
+  }
+  if (process.env.SUPABASE_ANON_KEY && !process.env.VITE_SUPABASE_ANON_KEY) {
+    process.env.VITE_SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
+  }
+
   const env = loadEnv(mode, process.cwd(), '')
   const localApiPort = String(
     env.VITE_LOCAL_API_PORT || process.env.VITE_LOCAL_API_PORT || '3001'

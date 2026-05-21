@@ -81,7 +81,7 @@ Vercel is the recommended deployment platform for this project.
 **Framework Preset:** Vite
 
 **Build Settings:**
-- **Build Command:** `npm run build`
+- **Build Command:** `npm run build:vercel` (maps Supabase integration env → `VITE_*` then builds)
 - **Output Directory:** `dist`
 - **Install Command:** `npm install`
 
@@ -538,6 +538,14 @@ npm run dev:api
 # Check logs
 vercel logs [deployment-url]
 ```
+
+### Build Failed: "Provisioning integrations failed" (Re-ride)
+
+The deploy stops in ~1s before `npm run build`. The **Supabase** integration on Vercel could not sync env vars.
+
+**Fix:** See [docs/VERCEL_SUPABASE_DEPLOY.md](docs/VERCEL_SUPABASE_DEPLOY.md) — reconnect integration to existing project `pqtrsoytudolnvuydvfo`, fix **Environment Variables** with "Needs attention", then **Redeploy**.
+
+This repo links that project in `supabase/config.toml` and uses `npm run build:vercel` so `SUPABASE_*` maps to `VITE_SUPABASE_*` after integration succeeds.
 
 ### Used-cars page shows "Unable to load vehicles"
 
