@@ -2,7 +2,7 @@
  * server/handlers/sell-car.ts — Sell car submission handler
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { USE_SUPABASE, adminRead, adminReadAll, adminCreate, adminUpdate, adminDelete, HandlerOptions, sanitizeObject, sanitizeString, requireAdmin } from './shared';
+import { USE_SUPABASE, adminRead, adminReadAll, adminCreate, adminUpdate, adminDelete, HandlerOptions, sanitizeObject, sanitizeString, requireAdmin } from './shared.js';
 
 export async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   if (!USE_SUPABASE) {

@@ -6,7 +6,7 @@ import {
   USE_SUPABASE, adminRead, DB_PATHS, HandlerOptions,
   supabaseUserService as userService,
   supabaseVehicleService as vehicleService,
-} from './shared';
+} from './shared.js';
 import { verifyToken, hashPassword, type TokenPayload } from '../../utils/security.js';
 import { logSecurity, logError, logInfo } from '../../utils/logger.js';
 import { VehicleCategory } from '../../vehicle-category.js';

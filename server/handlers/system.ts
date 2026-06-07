@@ -3,7 +3,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { logError } from '../../utils/logger.js';
-import { USE_SUPABASE, adminRead, adminCreate, adminUpdate, adminDelete, DB_PATHS, HandlerOptions } from './shared';
+import { USE_SUPABASE, adminRead, adminCreate, adminUpdate, adminDelete, DB_PATHS, HandlerOptions } from './shared.js';
 
 // ── Health (merged from health.ts) ─────────────────────────────────────────
 export async function handleHealth(_req: VercelRequest, res: VercelResponse) {
