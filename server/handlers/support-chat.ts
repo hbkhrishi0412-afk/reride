@@ -8,7 +8,7 @@ import { sanitizeString } from '../../utils/security.js';
 import { checkUpstashRateLimit } from '../../lib/rate-limit-upstash.js';
 import { supabaseSupportChatService } from '../../services/supabase-support-chat-service.js';
 import { generateBotResponse } from '../utils/support-bot-responses.js';
-import { USE_SUPABASE } from './shared.js';
+import { USE_SUPABASE } from '../handler-shared.js';
 
 const MAX_MESSAGE_LENGTH = 2000;
 

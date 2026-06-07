@@ -137,7 +137,6 @@ import {
   isCapacitorAppClient,
   refreshCookieMaxAgeSeconds,
 } from '../server/refresh-cookie.js';
-import { handleSellCar } from '../server/handlers/sell-car.js';
 
 // Allow larger JSON payloads for base64 image uploads (seller dashboard, chat attachments).
 // Vercel default parser limits are lower and can reject valid resized images before route logic runs.
@@ -923,6 +922,7 @@ async function mainHandler(
     } else if (pathname.includes('/content') || pathname.endsWith('/content')) {
       return await handleContent(req, res, handlerOptions);
     } else if (pathname.includes('/sell-car') || pathname.endsWith('/sell-car')) {
+      const { handleSellCar } = await import('../server/handlers/sell-car.js');
       return await handleSellCar(req, res, handlerOptions);
     } else if (pathname.includes('/payments') || pathname.endsWith('/payments') || pathname.includes('/plans') || pathname.endsWith('/plans') || pathname.includes('/business')) {
       return await handleBusiness(req, res, handlerOptions);

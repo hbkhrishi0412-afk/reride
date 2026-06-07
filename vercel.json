@@ -4,6 +4,14 @@
   "buildCommand": "npm run build:vercel",
   "outputDirectory": "dist",
   "framework": "vite",
+  "functions": {
+    "api/main.ts": {
+      "includeFiles": "server/**"
+    },
+    "api/send-sms-hook.ts": {
+      "includeFiles": "server/**"
+    }
+  },
   "headers": [
     {
       "source": "/.well-known/(.*)",

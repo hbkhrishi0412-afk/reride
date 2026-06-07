@@ -1,19 +1,19 @@
 /**
- * server/handlers/shared.ts — Shared utilities for all API handlers
+ * server/handler-shared.ts — Shared utilities for all API handlers
  *
- * Contains authentication, rate limiting, normalization helpers,
- * and common types used by every handler module.
+ * Lives in server/ (not server/handlers/) so Vercel @vercel/node resolves
+ * parent-directory imports when compiling extracted handler modules.
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import type { User as UserType, Vehicle as VehicleType } from '../../types.js';
-import { getSecurityConfig } from '../../utils/security-config.js';
-import { verifyToken } from '../../utils/security.js';
-import { logWarn } from '../../utils/logger.js';
-import { supabaseUserService } from '../../services/supabase-user-service.js';
-import { supabaseVehicleService } from '../../services/supabase-vehicle-service.js';
-import { supabaseConversationService } from '../../services/supabase-conversation-service.js';
-import { getSupabaseAdminClient } from '../../lib/supabase.js';
+import type { User as UserType, Vehicle as VehicleType } from '../types.js';
+import { getSecurityConfig } from '../utils/security-config.js';
+import { verifyToken } from '../utils/security.js';
+import { logWarn } from '../utils/logger.js';
+import { supabaseUserService } from '../services/supabase-user-service.js';
+import { supabaseVehicleService } from '../services/supabase-vehicle-service.js';
+import { supabaseConversationService } from '../services/supabase-conversation-service.js';
+import { getSupabaseAdminClient } from '../lib/supabase.js';
 import {
   adminRead,
   adminReadAll,
@@ -21,7 +21,7 @@ import {
   adminUpdate,
   adminDelete,
   DB_PATHS,
-} from '../../server/supabase-admin-db.js';
+} from './supabase-admin-db.js';
 import {
   hashPassword,
   validatePassword,
@@ -33,7 +33,7 @@ import {
   sanitizeString,
   validateEmail,
   refreshAccessToken,
-} from '../../utils/security.js';
+} from '../utils/security.js';
 
 // ── Re-exports for handler convenience ──────────────────────────────────────
 

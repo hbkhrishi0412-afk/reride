@@ -5,7 +5,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   USE_SUPABASE, adminRead, adminReadAll, adminCreate, adminUpdate, adminDelete,
   HandlerOptions, requireAuth, sanitizeString, type AuthResult,
-} from './shared.js';
+} from '../handler-shared.js';
 
 export async function handleContent(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   if (!USE_SUPABASE) {
