@@ -1,0 +1,41 @@
+---
+description: api/ folder — max 12 top-level route modules (files + folders)
+globs: api/**/*
+alwaysApply: false
+---
+
+# API routes — 12 entries maximum in `api/`
+
+**Hard limit:** The `api/` directory may have **at most 12 top-level items** (route files + folders combined). Do not add a 13th entry.
+
+## Current inventory (9 — three slots free)
+
+| # | Entry | Role |
+|---|--------|------|
+| 1 | `main.ts` | Vercel catch-all router (`/api/*` → here) |
+| 2 | `send-sms-hook.ts` | Dedicated webhook (`/api/send-sms-hook`) |
+| 3 | `auth.ts` | Auth helpers / route module (imported by main) |
+| 4 | `login.ts` | Login route module |
+| 5 | `services.ts` | Car-services catalog |
+| 6 | `service-providers.ts` | Provider CRUD + register |
+| 7 | `service-requests.ts` | Service requests |
+| 8 | `provider-services.ts` | Provider service listings |
+| 9 | `lib/` | Shared API-only helpers (e.g. password-reset email) |
+
+Support chat is handled by `server/handlers/support-chat.ts` (Supabase). Legacy `chat.js` / `chat-websocket.js` removed.
+
+## Rules
+
+1. **Before adding any new file or folder under `api/`**, confirm total top-level count stays ≤ 12.
+2. **New endpoints** → extend an existing route module or add handler logic under `server/handlers/` (outside `api/`).
+3. **Do not create `api/handlers/`** — use `server/handlers/` for extracted handlers (does not count toward the 12).
+4. **Prefer one catch-all** (`main.ts`) + a few domain modules over many thin Vercel functions.
+5. **Shared code** → `server/`, `lib/`, `services/` — not new top-level `api/*` files.
+
+## If you need a new API area
+
+- Merge into the closest existing module (`services.ts`, `service-requests.ts`, etc.), **or**
+- Replace/remove a deprecated module, **or**
+- Implement in `server/handlers/<domain>.ts` and wire from `main.ts` only.
+
+Never add `api/users.ts`, `api/vehicles.ts`, etc. as separate top-level entries unless something else was removed first.

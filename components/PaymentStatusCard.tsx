@@ -7,36 +7,38 @@ interface PaymentStatusCardProps {
 }
 
 const PaymentStatusCard: React.FC<PaymentStatusCardProps> = ({ currentUser }) => {
-  // Early return if currentUser or email is missing
-  if (!currentUser || !currentUser.email) {
-    return null;
-  }
-
+  const email = currentUser?.email ?? '';
   const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(email));
+  const [error, setError] = useState<string | null>(null);
 
   const loadPaymentStatus = async () => {
+    if (!email) return;
     try {
       setLoading(true);
-      // Add safety check for currentUser and email
-      if (!currentUser || !currentUser.email) {
-        console.warn('PaymentStatusCard: currentUser or email is missing');
-        return;
-      }
-      const request = await getPaymentRequestStatus(currentUser.email);
+      setError(null);
+      const request = await getPaymentRequestStatus(email);
       setPaymentRequest(request);
-    } catch (error) {
-      console.error('Error loading payment status:', error);
+    } catch (err) {
+      console.error('Error loading payment status:', err);
+      setError('Unable to load payment status. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (currentUser?.email) {
-      loadPaymentStatus();
+    if (!email) {
+      setLoading(false);
+      return;
     }
-  }, [currentUser?.email]);
+    void loadPaymentStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when seller email changes
+  }, [email]);
+
+  if (!email) {
+    return null;
+  }
 
   if (loading) {
     return (
@@ -49,8 +51,23 @@ const PaymentStatusCard: React.FC<PaymentStatusCardProps> = ({ currentUser }) =>
     );
   }
 
+  if (error) {
+    return (
+      <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-400">
+        <p className="text-sm text-red-700 mb-3">{error}</p>
+        <button
+          type="button"
+          onClick={() => void loadPaymentStatus()}
+          className="text-sm font-semibold text-reride-orange hover:underline"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   if (!paymentRequest) {
-    return null; // No pending payment request
+    return null;
   }
 
   const getStatusColor = (status: string) => {

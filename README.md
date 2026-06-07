@@ -61,7 +61,7 @@ Before you begin, ensure you have the following installed:
 
 3. **Set up environment variables**
    ```bash
-   cp env.example .env.local
+   cp .env.example .env.local
    ```
    Then edit `.env.local` with your configuration (see [Environment Setup](#environment-setup))
 
@@ -116,7 +116,7 @@ VITE_SENTRY_DSN=your_sentry_dsn_here
    - **anon public key** → `VITE_SUPABASE_ANON_KEY` and `SUPABASE_ANON_KEY`
    - **service_role key** → `SUPABASE_SERVICE_ROLE_KEY` (⚠️ Keep secret!)
 
-See `env.example` for detailed instructions.
+See `.env.example` for detailed instructions.
 
 ## Development
 

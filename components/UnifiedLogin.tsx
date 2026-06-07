@@ -10,6 +10,7 @@ import OTPLogin from './OTPLogin';
 import PasswordInput from './PasswordInput';
 import Logo from './Logo';
 import useIsMobileApp from '../hooks/useIsMobileApp';
+import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 import { clearSupabaseAuthStorage } from '../utils/authStorage';
 
 interface UnifiedLoginProps {
@@ -89,6 +90,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 }) => {
   const { t, i18n } = useTranslation();
   const { isMobileApp } = useIsMobileApp();
+  const keyboardInset = useVisualViewportBottomInset();
   const initialRole: UserRole | null =
     forcedRole ?? (allowedRoles.length === 1 ? (allowedRoles[0] as UserRole) : null);
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(initialRole);
@@ -870,7 +872,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             className="bg-white rounded-t-[1.75rem] rounded-b-none w-full border-t border-x border-gray-200/80 px-5 pt-7 min-h-[58vh] flex flex-col"
             style={{
               boxShadow: '0 -12px 48px -8px rgba(0, 0, 0, 0.45)',
-              paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 0px))',
+              paddingBottom: `max(1.5rem, env(safe-area-inset-bottom, 0px), ${keyboardInset}px)`,
             }}
           >
             {/* Logo and Title */}

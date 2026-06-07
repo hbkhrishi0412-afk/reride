@@ -4,7 +4,11 @@ import VehicleCard from './VehicleCard.js';
 import MobileVehicleCard from './MobileVehicleCard.js';
 import MobileMarketplaceFilterModal from './MobileMarketplaceFilterModal.js';
 import MobileSortSheet from './MobileSortSheet.js';
-import { MOBILE_PRICE_BUCKETS, vehicleMatchesPriceBuckets } from './mobileFilterTypes.js';
+import {
+  MOBILE_PRICE_BUCKETS,
+  vehicleMatchesPriceBuckets,
+  getMobileFilterCategoryActiveMap,
+} from './mobileFilterTypes.js';
 import type { MobileFilterCategoryId } from './mobileFilterTypes.js';
 import useIsMobileApp from '../hooks/useIsMobileApp.js';
 import type { Vehicle, VehicleCategory, SavedSearch, SearchFilters } from '../types.js';
@@ -1570,6 +1574,63 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     });
   }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, selectedPriceBuckets, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, yearFilter, yearBounds, sortOrder, isWishlistMode, wishlist, stateFilter, isStateFilterUserSet, selectedCity, aiSearchQuery]);
   
+  const committedFilterCategoryMap = useMemo(
+    () =>
+      getMobileFilterCategoryActiveMap({
+        categoryFilter,
+        makeFilter,
+        modelFilter,
+        priceRange,
+        mileageRange,
+        fuelTypeFilter,
+        transmissionFilter,
+        ownershipFilter,
+        selectedPriceBuckets,
+        yearFilter,
+        yearMin: yearBounds.min,
+        yearMax: yearBounds.max,
+        stateFilter,
+        isStateFilterUserSet,
+      }),
+    [
+      categoryFilter,
+      makeFilter,
+      modelFilter,
+      priceRange,
+      mileageRange,
+      fuelTypeFilter,
+      transmissionFilter,
+      ownershipFilter,
+      selectedPriceBuckets,
+      yearFilter,
+      yearBounds,
+      stateFilter,
+      isStateFilterUserSet,
+    ],
+  );
+
+  const tempFilterCategoryMap = useMemo(
+    () =>
+      getMobileFilterCategoryActiveMap({
+        categoryFilter: tempFilters.categoryFilter,
+        makeFilter: tempFilters.makeFilter,
+        modelFilter: tempFilters.modelFilter,
+        priceRange: tempFilters.priceRange,
+        mileageRange: tempFilters.mileageRange,
+        fuelTypeFilter: tempFilters.fuelTypeFilter,
+        transmissionFilter: tempFilters.transmissionFilter,
+        ownershipFilter: tempFilters.ownershipFilter,
+        selectedPriceBuckets: tempFilters.selectedPriceBuckets,
+        yearFilter: tempFilters.yearFilter,
+        yearMin: tempFilters.yearMin,
+        yearMax: tempFilters.yearMax,
+        stateFilter: tempFilters.stateFilter,
+        isStateFilterUserSet:
+          tempFilters.stateFilter === stateFilter ? isStateFilterUserSet : tempFilters.stateFilter.trim() !== '',
+      }),
+    [tempFilters, stateFilter, isStateFilterUserSet],
+  );
+
   const activeFilterCount = useMemo(() => {
     let count = 0;
     // Only count category filter if it's explicitly changed from the initial/default
@@ -1741,16 +1802,29 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     const rowCheckbox = (key: string, label: string, checked: boolean, onToggle: () => void) => (
       <label
         key={key}
-        className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50"
+        className={`flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50 ${
+          checked ? 'bg-orange-50' : ''
+        }`}
       >
         <input
           type="checkbox"
           checked={checked}
           onChange={onToggle}
           className="h-4 w-4 rounded border-gray-400 shrink-0"
-          style={{ accentColor: '#222222' }}
+          style={{ accentColor: '#EA580C' }}
         />
-        <span className="text-sm font-medium text-gray-900">{label}</span>
+        <span className={`text-sm font-medium ${checked ? 'text-gray-900 font-semibold' : 'text-gray-900'}`}>
+          {label}
+        </span>
+        {checked && (
+          <svg className="w-4 h-4 ml-auto text-orange-600 shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+            <path
+              fillRule="evenodd"
+              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+              clipRule="evenodd"
+            />
+          </svg>
+        )}
       </label>
     );
 
@@ -2413,12 +2487,21 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 { id: 'year' as const, label: t('listings.mobileFilter.chipYear'), onClick: () => handleOpenFilterModal('year') },
                 { id: 'fuel' as const, label: t('listings.mobileFilter.chipFuel'), onClick: () => handleOpenFilterModal('fuel') },
               ] as const
-            ).map((chip) => (
+            ).map((chip) => {
+              const chipCategoryActive =
+                chip.id !== 'filter' && chip.id !== 'sort'
+                  ? committedFilterCategoryMap[chip.id]
+                  : false;
+              return (
               <button
                 key={chip.id}
                 type="button"
                 onClick={chip.onClick}
-                className="relative flex-shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full bg-white border border-gray-800 text-sm font-semibold text-gray-900 active:scale-[0.98] transition-transform"
+                className={`relative flex-shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-sm font-semibold active:scale-[0.98] transition-transform ${
+                  chipCategoryActive
+                    ? 'bg-gray-900 text-white border border-gray-900'
+                    : 'bg-white border border-gray-800 text-gray-900'
+                }`}
               >
                 {chip.label}
                 {chip.id === 'filter' && activeFilterCount > 0 && (
@@ -2426,8 +2509,12 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     {activeFilterCount}
                   </span>
                 )}
+                {chipCategoryActive && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-orange-500 rounded-full border border-white" aria-hidden />
+                )}
               </button>
-            ))}
+            );
+            })}
           </div>
           <div className="flex items-center justify-between px-1">
             <div>
@@ -2558,6 +2645,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           onClose={handleCloseFilterModal}
           activeCategory={mobileFilterCategory}
           onActiveCategoryChange={setMobileFilterCategory}
+          categoryActiveMap={tempFilterCategoryMap}
           t={t}
           footer={
             <div className="flex items-stretch min-h-[56px]">

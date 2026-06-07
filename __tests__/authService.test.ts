@@ -31,6 +31,7 @@ const {
   sendOTP,
   verifyOTP,
   initializeRecaptcha,
+  resetOtpSessionForTests,
 } = authService;
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -50,6 +51,7 @@ const supabaseLibMock = jest.requireMock('../lib/supabase.js') as {
 describe('authService (Supabase)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetOtpSessionForTests();
     globalThis.__IMPORT_META__.env.VITE_OTP_SMS_PROVIDER = '';
     sessionStorage.clear();
     supabaseLibMock.getSupabaseClient.mockImplementation(() => ({

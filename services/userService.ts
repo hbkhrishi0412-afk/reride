@@ -16,6 +16,7 @@ import {
   getBrowserAccessTokenForApi,
   useHttpOnlyRefreshCookie,
 } from '../utils/authStorage';
+import { setNativeAccessToken, setNativeRefreshToken } from '../utils/nativeTokenStorage';
 
 // Fallback mock users for development only (no credentials stored in source)
 // In production, all users come from Supabase — these are never used.
@@ -87,7 +88,16 @@ const storeTokens = (accessToken: string, refreshToken?: string) => {
     return;
   }
   try {
-    if (useHttpOnlyRefreshCookie()) {
+    if (isCapacitorNative()) {
+      void setNativeAccessToken(accessToken);
+      if (refreshToken) void setNativeRefreshToken(refreshToken);
+      try {
+        localStorage.removeItem('reRideAccessToken');
+        localStorage.removeItem('reRideRefreshToken');
+      } catch {
+        /* ignore */
+      }
+    } else if (useHttpOnlyRefreshCookie()) {
       try {
         sessionStorage.setItem('reRideAccessToken', accessToken);
       } catch {

@@ -235,14 +235,16 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
   // Load chat history from API
   const loadChatHistory = async () => {
     try {
-      const userId = currentUser?.email || sessionId;
-      if (!userId) return;
-
       const { authenticatedFetch, publicApiFetch } = await import('../utils/apiFetch');
       const chatFetch = currentUser?.email ? authenticatedFetch : publicApiFetch;
-      const response = await chatFetch(
-        `/api/chat/history?userId=${encodeURIComponent(userId)}`,
-      );
+      const historyUrl = currentUser?.email
+        ? `/api/chat/history?userId=${encodeURIComponent(currentUser.email)}`
+        : sessionId
+          ? `/api/chat/history?sessionId=${encodeURIComponent(sessionId)}`
+          : null;
+      if (!historyUrl) return;
+
+      const response = await chatFetch(historyUrl);
       if (response.ok) {
         const data = await response.json();
         if (data.success && Array.isArray(data.messages)) {

@@ -14,6 +14,8 @@ import { ChatMessageImage } from './ChatMessageImage';
 import { ChatMessageVoice } from './ChatMessageVoice';
 import ReadReceiptIcon, { OfferMessage, TestDriveMessage } from './ReadReceiptIcon';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import { setHardwareBackHandler } from '../utils/hardwareBackRegistry';
+import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 
 interface MobileInboxProps {
   conversations: Conversation[];
@@ -107,12 +109,24 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const voiceRecorder = useVoiceRecorder();
+  const keyboardInset = useVisualViewportBottomInset();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const firstUnreadRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
   const touchEndX = useRef<number>(0);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const typingIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setHardwareBackHandler(() => {
+      if (selectedConv) {
+        setSelectedConv(null);
+        return true;
+      }
+      return false;
+    });
+    return () => setHardwareBackHandler(null);
+  }, [selectedConv]);
 
   const clearTypingIdleTimer = useCallback(() => {
     if (typingIdleTimerRef.current) {
@@ -654,7 +668,12 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
         </div>
 
         {/* Messenger-style composer */}
-        <div className="shrink-0 bg-white border-t border-black/[0.08] px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] safe-bottom">
+        <div
+          className="shrink-0 bg-white border-t border-black/[0.08] px-2 pt-2 safe-bottom"
+          style={{
+            paddingBottom: `max(0.75rem, env(safe-area-inset-bottom, 0px), ${keyboardInset}px)`,
+          }}
+        >
           <input
             ref={attachmentInputRef}
             type="file"

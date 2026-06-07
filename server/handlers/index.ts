@@ -1,9 +1,8 @@
 /**
  * server/handlers/index.ts — Barrel exports for all API handlers
  *
- * Extracted handlers are imported from their own files.
- * Remaining large handlers are still in main.ts and will be
- * extracted incrementally following the same pattern.
+ * Handlers live here (outside api/) so api/ stays at ≤12 top-level route modules.
+ * See .cursor/rules/api-routes-limit.mdc
  */
 
 // Shared utilities
@@ -15,9 +14,9 @@ export { handleAdmin, seedUsers, seedVehicles } from './admin';
 export { handleHealth, handleAI, handleSystem, handleUtils } from './system';
 export { handleContent } from './content';
 export { handleSellCar } from './sell-car';
+export { handleSupportChat } from './support-chat';
 
-// ── Remaining handlers (still in main.ts) ───────────────────────────────────
-// These are the largest handlers and should be extracted next:
+// ── Remaining handlers (still in main.ts — extract here, not into new api/ files) ──
 //
 // handleUsers       (~1837 lines) → api/handlers/users.ts
 // handleVehicles    (~1450 lines) → api/handlers/vehicles.ts

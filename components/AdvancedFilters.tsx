@@ -43,9 +43,6 @@ const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
     featuredOnly: false
   });
 
-  // Don't render on mobile app
-  if (isMobileApp) return null;
-
   // Extract unique values for filter options
   const filterOptions = useMemo(() => {
     const makes = new Set<string>();
@@ -154,6 +151,8 @@ const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
   React.useEffect(() => {
     onFilterChange(filteredVehicles);
   }, [filteredVehicles, onFilterChange]);
+
+  if (isMobileApp) return null;
 
   const handleFilterChange = (key: keyof FilterState, value: any) => {
     setFilters(prev => ({ ...prev, [key]: value }));

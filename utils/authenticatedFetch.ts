@@ -11,6 +11,12 @@ import {
   isApiRequestCrossOrigin,
   normalizeRerideApiHostToWww,
 } from './apiConfig';
+import {
+  setNativeAccessToken,
+  setNativeRefreshToken,
+  clearNativeTokens,
+  getNativeRefreshToken,
+} from './nativeTokenStorage';
 
 /** Single place: resolve + never emit apex `reride.co.in` (307 breaks CORS preflight). */
 function resolvedApiUrl(pathOrUrl: string): string {
@@ -129,8 +135,11 @@ const refreshToken = async (): Promise<string | null> => {
   isRefreshing = true;
   refreshPromise = (async (): Promise<string | null> => {
     try {
-      const refreshTokenValue =
+      let refreshTokenValue =
         typeof localStorage !== 'undefined' ? localStorage.getItem('reRideRefreshToken') : null;
+      if (!refreshTokenValue && isCapacitorNative()) {
+        refreshTokenValue = await getNativeRefreshToken();
+      }
       const cookieRefresh = useHttpOnlyRefreshCookie() && !refreshTokenValue;
 
       if (!refreshTokenValue && !cookieRefresh) {
@@ -193,7 +202,18 @@ const refreshToken = async (): Promise<string | null> => {
       const result = await response.json();
       
       if (result.success && result.accessToken) {
-        if (useHttpOnlyRefreshCookie()) {
+        if (isCapacitorNative()) {
+          await setNativeAccessToken(result.accessToken);
+          if (result.refreshToken) {
+            await setNativeRefreshToken(result.refreshToken);
+          }
+          try {
+            localStorage.removeItem('reRideAccessToken');
+            localStorage.removeItem('reRideRefreshToken');
+          } catch {
+            /* ignore */
+          }
+        } else if (useHttpOnlyRefreshCookie()) {
           try {
             sessionStorage.setItem('reRideAccessToken', result.accessToken);
             localStorage.removeItem('reRideAccessToken');
@@ -306,6 +326,7 @@ export async function postLogoutClearCookies(): Promise<void> {
  */
 const clearAuthTokens = (resetInvalidFlag: boolean = false) => {
   try {
+    void clearNativeTokens();
     if (useHttpOnlyRefreshCookie()) {
       void postLogoutClearCookies();
     }

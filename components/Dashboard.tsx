@@ -48,6 +48,7 @@ import PricingGuidance from './PricingGuidance';
 import BoostListingModal from './BoostListingModal';
 import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
+import { PaymentErrorBoundary } from './ErrorBoundaries';
 import { VehicleOfferBanner } from './VehicleOfferBanner';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
@@ -1122,16 +1123,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         sellerName: seller.name || seller.dealershipName || 'Seller'
     });
     
-    // Debug logging for form initialization
-    console.log('🔧 VehicleForm initialized:', {
-        editingVehicle: !!editingVehicle,
-        sellerEmail: seller.email,
-        formDataSellerEmail: formData.sellerEmail,
-        formDataMake: formData.make,
-        formDataModel: formData.model,
-        vehicleDataKeys: Object.keys(vehicleData),
-        vehicleDataStructure: vehicleData
-    });
 
     // Safety check for vehicleData
     const safeVehicleData = useMemo(() => {
@@ -3911,7 +3902,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               featuredListingsCount={safeSellerVehicles.filter(v => v && v.isFeatured).length}
               onNavigate={onNavigate}
             />
-            <PaymentStatusCard currentUser={seller} />
+            <PaymentErrorBoundary>
+              <PaymentStatusCard currentUser={seller} />
+            </PaymentErrorBoundary>
             <AiAssistant
               vehicles={activeListings}
               conversations={safeConversations.filter((c) =>

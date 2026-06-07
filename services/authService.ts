@@ -17,6 +17,11 @@ import { authenticatedFetch } from '../utils/authenticatedFetch';
 /** In-memory only (not persisted) — avoids storing the phone number in sessionStorage. */
 let pendingOtpPhoneForVerification: string | null = null;
 
+/** @internal Resets module OTP state between unit tests. */
+export function resetOtpSessionForTests(): void {
+  pendingOtpPhoneForVerification = null;
+}
+
 function isMessageBotOtpEnabled(): boolean {
   try {
     return import.meta.env.VITE_OTP_SMS_PROVIDER === 'messagebot';

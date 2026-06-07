@@ -35,3 +35,88 @@ export function vehicleMatchesPriceBuckets(
     return b ? price >= b.min && price <= b.max : false;
   });
 }
+
+export const MOBILE_FILTER_DEFAULTS = {
+  minPrice: 50_000,
+  maxPrice: 5_000_000,
+  minMileage: 0,
+  maxMileage: 200_000,
+} as const;
+
+export interface MobileFilterCategoryState {
+  categoryFilter: string;
+  makeFilter: string;
+  modelFilter: string;
+  priceRange: { min: number; max: number };
+  mileageRange: { min: number; max: number };
+  fuelTypeFilter: string;
+  transmissionFilter: string;
+  ownershipFilter: string;
+  selectedPriceBuckets: string[];
+  yearFilter: string;
+  yearMin: number | null;
+  yearMax: number | null;
+  stateFilter: string;
+  isStateFilterUserSet?: boolean;
+}
+
+/** Whether a filter sidebar category has a non-default selection applied. */
+export function isMobileFilterCategoryActive(
+  category: MobileFilterCategoryId,
+  filters: MobileFilterCategoryState,
+): boolean {
+  const { minPrice, maxPrice, minMileage, maxMileage } = MOBILE_FILTER_DEFAULTS;
+  switch (category) {
+    case 'price':
+      return (
+        filters.selectedPriceBuckets.length > 0 ||
+        filters.priceRange.min !== minPrice ||
+        filters.priceRange.max !== maxPrice
+      );
+    case 'brand':
+      return Boolean(filters.makeFilter?.trim() || filters.modelFilter?.trim());
+    case 'body':
+      return filters.categoryFilter !== 'ALL' && Boolean(filters.categoryFilter);
+    case 'year':
+      return (
+        (filters.yearFilter && filters.yearFilter !== '0') ||
+        filters.yearMin != null ||
+        filters.yearMax != null
+      );
+    case 'kms':
+      return filters.mileageRange.min !== minMileage || filters.mileageRange.max !== maxMileage;
+    case 'fuel':
+      return Boolean(filters.fuelTypeFilter?.trim());
+    case 'transmission':
+      return Boolean(filters.transmissionFilter?.trim());
+    case 'ownership':
+      return Boolean(filters.ownershipFilter);
+    case 'state':
+      return Boolean(filters.stateFilter?.trim() && filters.isStateFilterUserSet !== false);
+    default:
+      return false;
+  }
+}
+
+export function getMobileFilterCategoryActiveMap(
+  filters: MobileFilterCategoryState,
+): Record<MobileFilterCategoryId, boolean> {
+  const categories: MobileFilterCategoryId[] = [
+    'price',
+    'brand',
+    'body',
+    'year',
+    'kms',
+    'fuel',
+    'transmission',
+    'ownership',
+    'state',
+  ];
+  return categories.reduce(
+    (acc, id) => {
+      acc[id] = isMobileFilterCategoryActive(id, filters);
+      return acc;
+    },
+    {} as Record<MobileFilterCategoryId, boolean>,
+  );
+}

@@ -1,119 +1,48 @@
 import { test, expect } from '@playwright/test';
+import { VEHICLE_SEARCH_INPUT_ANY } from './helpers/listings';
 
-/**
- * Security Tests
- * Tests for XSS, CSRF, SQL injection, and other security vulnerabilities
- */
+const API_BASE = process.env.E2E_API_URL ?? 'http://127.0.0.1:3001';
 
-test.describe.configure({ mode: 'skip' });
-
-test.describe('@legacy Security Tests', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:5173');
+test.describe('Security smoke', () => {
+  test('admin vehicle export requires authentication', async ({ request }) => {
+    const res = await request.get(`${API_BASE}/api/vehicles?action=admin-all`);
+    expect([401, 403]).toContain(res.status());
+    const body = (await res.text()).toLowerCase();
+    expect(body).not.toContain('supabase_service_role');
+    expect(body).not.toContain('jwt_secret');
+    expect(body).not.toMatch(/"password"\s*:\s*"[^"]+"/);
   });
 
-  test('should prevent XSS in search input', async ({ page }) => {
-    // Try to inject script tag
-    const xssPayload = '<script>alert("XSS")</script>';
-    
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i]').first();
-    if (await searchInput.count() > 0) {
-      await searchInput.fill(xssPayload);
-      await searchInput.press('Enter');
-      
-      // Check that script tag is not executed
-      const alertHandled = await page.evaluate(() => {
-        return typeof window.alert === 'function';
-      });
-      
-      // Script should be sanitized, not executed
-      expect(alertHandled).toBe(true);
-      
-      // Check that script tag is escaped in DOM
-      const pageContent = await page.content();
-      expect(pageContent).not.toContain('<script>alert');
-    }
-  });
-
-  test('should sanitize user input in forms', async ({ page }) => {
-    // Navigate to registration if available
-    const registerLink = page.locator('a[href*="register"], a[href*="signup"], button:has-text("Register"), button:has-text("Sign Up")').first();
-    
-    if (await registerLink.count() > 0) {
-      await registerLink.click();
-      
-      // Try to inject HTML in name field
-      const maliciousInput = '<img src=x onerror=alert(1)>';
-      const nameInput = page.locator('input[name="name"], input[type="text"]').first();
-      
-      if (await nameInput.count() > 0) {
-        await nameInput.fill(maliciousInput);
-        
-        // Check that input is sanitized
-        const value = await nameInput.inputValue();
-        expect(value).not.toContain('<img');
-        expect(value).not.toContain('onerror');
+  test('public seller directory omits phone and password fields', async ({ request }) => {
+    const res = await request.get(`${API_BASE}/api/users?role=seller`);
+    expect(res.ok()).toBeTruthy();
+    const users = await res.json();
+    if (Array.isArray(users) && users.length > 0) {
+      for (const user of users) {
+        expect(user.mobile).toBeUndefined();
+        expect(user.password).toBeUndefined();
       }
     }
   });
 
-  test('should prevent SQL injection in search', async ({ page }) => {
-    // Try SQL injection payload
-    const sqlPayload = "'; DROP TABLE users; --";
-    
-    const searchInput = page.locator('input[type="search"], input[placeholder*="search" i]').first();
-    if (await searchInput.count() > 0) {
-      await searchInput.fill(sqlPayload);
-      await searchInput.press('Enter');
-      
-      // Wait for any response
-      await page.waitForTimeout(1000);
-      
-      // Application should still work (no crash)
-      const isPageLoaded = await page.evaluate(() => document.readyState === 'complete');
-      expect(isPageLoaded).toBe(true);
-    }
+  test('radius-search rejects invalid coordinates', async ({ request }) => {
+    const res = await request.get(
+      `${API_BASE}/api/vehicles?action=radius-search&lat=not-a-number&lng=0&radius=5`,
+    );
+    expect(res.status()).toBe(400);
   });
 
-  test('should have proper security headers', async ({ page }) => {
-    const response = await page.goto('http://localhost:5173');
-    
-    if (response) {
-      const headers = response.headers();
-      
-      // Check for security headers
-      expect(headers['x-content-type-options']).toBe('nosniff');
-      expect(headers['x-frame-options']).toBeDefined();
-      expect(headers['referrer-policy']).toBeDefined();
-    }
-  });
+  test('search input does not inject script tags on used cars', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('reRideSelectedCity');
+    });
+    await page.goto('/used-cars', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    const search = page.locator(VEHICLE_SEARCH_INPUT_ANY).first();
+    test.skip((await search.count()) === 0, 'No search input on used cars page');
 
-  test('should not expose secrets in error messages', async ({ page }) => {
-    // Try to trigger an error (e.g., invalid API call)
-    const response = await page.request.get('http://localhost:5173/api/invalid-endpoint');
-    
-    const body = await response.text();
-    const jsonBody = JSON.parse(body);
-    
-    // Error message should not contain secrets
-    const errorMessage = JSON.stringify(jsonBody).toLowerCase();
-    expect(errorMessage).not.toContain('supabase_service_role_key');
-    expect(errorMessage).not.toContain('jwt_secret');
-    expect(errorMessage).not.toContain('api_key');
-    expect(errorMessage).not.toContain('password');
+    const xssPayload = '<script>alert("XSS")</script>';
+    await search.fill(xssPayload);
+    const content = await page.content();
+    expect(content).not.toContain('<script>alert("XSS")</script>');
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-

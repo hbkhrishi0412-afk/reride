@@ -1,4 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+/**
+ * PROJECT RULE: api/ may have at most 12 top-level route modules (see .cursor/rules/api-routes-limit.mdc).
+ * Handler logic belongs in server/handlers/ — do NOT add new files under api/.
+ * This file is the Vercel catch-all router; keep extracting handlers out of here.
+ */
 import { randomBytes, createHmac, randomInt, timingSafeEqual } from 'crypto';
 import { PLAN_DETAILS } from '../constants/plans.js';
 import type { User as UserType, Vehicle as VehicleType, VerificationStatus } from '../types.js';
@@ -123,6 +128,7 @@ import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
 import { generateCsrfToken, validateCsrfToken, getCsrfCookieName, getCsrfHeaderName } from '../utils/csrf.js';
 import { getPublicAppOriginForPasswordReset, sendPasswordResetEmail } from './lib/send-password-reset-email.js';
 import { checkUpstashRateLimit } from '../lib/rate-limit-upstash.js';
+import { checkLoginAllowed, recordFailedLogin, clearLoginLockout } from '../lib/login-lockout.js';
 import { resolveEffectiveApiPathname } from '../utils/api-path-routing.js';
 import {
   appendRefreshTokenCookie,
@@ -131,6 +137,7 @@ import {
   isCapacitorAppClient,
   refreshCookieMaxAgeSeconds,
 } from '../server/refresh-cookie.js';
+import { handleSellCar } from '../server/handlers/sell-car.js';
 
 // Allow larger JSON payloads for base64 image uploads (seller dashboard, chat attachments).
 // Vercel default parser limits are lower and can reject valid resized images before route logic runs.
@@ -212,6 +219,15 @@ function normalizeUser(user: UserType | null | undefined): NormalizedUser | null
   );
 
   return normalized;
+}
+
+/** Public dealer/service-provider directory — omits phone; keep email for profile links. */
+function toPublicDirectoryUser(user: NormalizedUser): NormalizedUser {
+  const { mobile: _omitMobile, password: _omitPw, ...safe } = user as NormalizedUser & {
+    mobile?: string;
+    password?: string;
+  };
+  return safe as NormalizedUser;
 }
 
 // Authentication middleware
@@ -318,19 +334,39 @@ const authenticateRequestDual = async (req: VercelRequest): Promise<AuthResult> 
   }
 };
 
-const requireAdmin = (
+const requireAdmin = async (
   req: VercelRequest,
   res: VercelResponse,
   context: string
-): AuthResult | null => {
-  const auth = requireAuth(req, res, context);
-  if (!auth) {
+): Promise<AuthResult | null> => {
+  const auth = await authenticateRequestDual(req);
+  if (!auth.isValid) {
+    logWarn(`⚠️ ${context} - Authentication failed:`, auth.error);
+    res.status(401).json({
+      success: false,
+      reason: auth.error || 'Authentication required.',
+      error: 'Invalid or expired authentication token',
+    });
     return null;
   }
-  if (auth.user?.role !== 'admin') {
+
+  let role = auth.user?.role;
+  if (role !== 'admin' && auth.user?.email && USE_SUPABASE) {
+    try {
+      const dbUser = await userService.findByEmail(auth.user.email.toLowerCase().trim());
+      if (dbUser && normalizeUserRoleString(dbUser.role) === 'admin') {
+        role = 'admin';
+        auth.user = { ...auth.user!, role: 'admin' };
+      }
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  if (role !== 'admin') {
     res.status(403).json({
       success: false,
-      reason: 'Forbidden. Admin access required.'
+      reason: 'Forbidden. Admin access required.',
     });
     return null;
   }
@@ -924,10 +960,8 @@ async function mainHandler(
       const { handleServiceRequests } = await import('./service-requests.js');
       return await handleServiceRequests(req, res);
     } else if (pathname.includes('/chat') && !pathname.includes('/chat-websocket')) {
-      // Import and call chat handler
-      // @ts-ignore - chat.js is a JavaScript file
-      const { handleChat } = await import('./chat.js');
-      return await handleChat(req, res);
+      const { handleSupportChat } = await import('../server/handlers/support-chat.js');
+      return await handleSupportChat(req, res);
     } else if (pathname.includes('/audit-log') || pathname.endsWith('/audit-log')) {
       return await handleAuditLog(req, res, handlerOptions);
     } else if (pathname.includes('/settings') || pathname.endsWith('/settings')) {
@@ -1180,7 +1214,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
                   hasRole: !!user.role,
                 });
               }
-              return normalized;
+              return normalized ? toPublicDirectoryUser(normalized) : null;
             })
             .filter((u): u is NormalizedUser => u !== null);
           logInfo(
@@ -1209,7 +1243,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
                   id: user.id,
                 });
               }
-              return normalized;
+              return normalized ? toPublicDirectoryUser(normalized) : null;
             })
             .filter((u): u is NormalizedUser => u !== null);
           logInfo(
@@ -1391,6 +1425,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       // CRITICAL: Normalize email to lowercase for consistent database lookup
       // This MUST match the normalization used when saving users
       const normalizedEmail = sanitizedData.email.toLowerCase().trim();
+
+      const loginLock = await checkLoginAllowed(normalizedEmail);
+      if (!loginLock.allowed) {
+        return res.status(429).json({
+          success: false,
+          reason: loginLock.reason || 'Too many login attempts. Please try again later.',
+        });
+      }
       
       // Use Supabase for user lookup
       let user: UserType | null = null;
@@ -1514,6 +1556,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         }
         
         if (!user) {
+          await recordFailedLogin(normalizedEmail);
           // Don't reveal whether email exists or not (security best practice)
           return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
         }
@@ -1592,10 +1635,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           });
         }
         
+        await recordFailedLogin(normalizedEmail);
         return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
       }
-      
-      // CRITICAL FIX: Check if user is a service provider trying to login as regular seller
       // Service providers should only login through the service provider login page
       if (normalizeUserRoleString(user.role) === 'seller') {
         try {
@@ -1705,6 +1747,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         role: normalizedUser.role,
         userId: normalizedUser.id
       });
+
+      clearLoginLockout(normalizedEmail);
 
       const rtMax = refreshCookieMaxAgeSeconds();
       if (!isCapacitorAppClient(req)) {
@@ -1916,18 +1960,25 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         }
         
         logInfo('✅ Registration complete. User ID:', newUser.id);
+        const normalizedNewUser = normalizeUser(newUser);
+        if (!normalizedNewUser) {
+          return res.status(500).json({
+            success: false,
+            reason: 'Failed to process user data. Please try again.',
+          });
+        }
         const rtMaxReg = refreshCookieMaxAgeSeconds();
         if (!isCapacitorAppClient(req)) {
           appendRefreshTokenCookie(res, refreshToken, rtMaxReg);
           return res.status(201).json({
             success: true,
-            user: newUser,
+            user: normalizedNewUser,
             accessToken,
           });
         }
         return res.status(201).json({
           success: true,
-          user: newUser,
+          user: normalizedNewUser,
           accessToken,
           refreshToken,
         });
@@ -3945,7 +3996,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       if (req.method === 'POST') {
         try {
-      if (!requireAdmin(req, res, 'Vehicle data update')) {
+      if (!(await requireAdmin(req, res, 'Vehicle data update'))) {
         return;
       }
           const sbResult = await writeVehicleCatalogToSupabase(req.body);
@@ -4069,37 +4120,60 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
 
       if (action === 'radius-search' && req.query.lat && req.query.lng && req.query.radius) {
-        const allVehicles = await vehicleService.findByStatus('published', {
-          orderBy: 'created_at',
-          orderDirection: 'desc',
-          limit: 0
-        });
-        const nearbyVehicles = allVehicles.filter(vehicle => {
-          if (!vehicle.exactLocation?.lat || !vehicle.exactLocation?.lng) return false;
-          const distance = calculateDistance(
-            parseFloat(req.query.lat as string),
-            parseFloat(req.query.lng as string),
-            vehicle.exactLocation.lat,
-            vehicle.exactLocation.lng
-          );
-          return distance <= parseFloat(req.query.radius as string);
-        });
+        const lat = parseFloat(String(req.query.lat));
+        const lng = parseFloat(String(req.query.lng));
+        const radiusKm = parseFloat(String(req.query.radius));
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radiusKm)) {
+          return res.status(400).json({ success: false, reason: 'Invalid lat, lng, or radius.' });
+        }
+        const cappedRadius = Math.min(Math.max(radiusKm, 0.5), 50);
+        let nearbyVehicles: Awaited<ReturnType<typeof vehicleService.findWithinRadius>> | null = null;
+        if (typeof vehicleService.findWithinRadius === 'function') {
+          try {
+            nearbyVehicles = await vehicleService.findWithinRadius(lat, lng, cappedRadius, 100);
+          } catch (geoErr) {
+            console.warn('PostGIS radius search unavailable, falling back to in-memory filter:', geoErr);
+            nearbyVehicles = null;
+          }
+        }
+        if (nearbyVehicles === null) {
+          const publishedBatch = await vehicleService.findByStatus('published', {
+            orderBy: 'created_at',
+            orderDirection: 'desc',
+            limit: 500,
+          });
+          nearbyVehicles = publishedBatch
+            .filter((vehicle) => {
+              if (!vehicle.exactLocation?.lat || !vehicle.exactLocation?.lng) return false;
+              const distance = calculateDistance(lat, lng, vehicle.exactLocation.lat, vehicle.exactLocation.lng);
+              return distance <= cappedRadius;
+            })
+            .slice(0, 100);
+        }
         return res.status(200).json(nearbyVehicles);
       }
 
       // ADMIN ENDPOINT: Return all vehicles including unpublished/sold (requires admin auth)
       if (action === 'admin-all') {
-        // SECURITY: Verify Auth and Admin Role
-        const adminAuth = authenticateRequest(req);
+        const adminAuth = await authenticateRequestDual(req);
         if (!adminAuth.isValid) {
-          console.error('❌ Admin vehicles request failed: Authentication required');
-          return res.status(401).json({ success: false, reason: adminAuth.error });
+          return res.status(401).json({ success: false, reason: adminAuth.error || 'Authentication required' });
         }
-        if (adminAuth.user?.role !== 'admin') {
-          console.error('❌ Admin vehicles request failed: Admin role required', { role: adminAuth.user?.role });
-          return res.status(403).json({ 
-            success: false, 
-            reason: 'Forbidden. Admin access required to view all vehicles.' 
+        let adminRole = adminAuth.user?.role;
+        if (adminRole !== 'admin' && adminAuth.user?.email && USE_SUPABASE) {
+          try {
+            const dbUser = await userService.findByEmail(adminAuth.user.email.toLowerCase().trim());
+            if (dbUser && normalizeUserRoleString(dbUser.role) === 'admin') {
+              adminRole = 'admin';
+            }
+          } catch {
+            /* non-fatal */
+          }
+        }
+        if (adminRole !== 'admin') {
+          return res.status(403).json({
+            success: false,
+            reason: 'Forbidden. Admin access required to view all vehicles.',
           });
         }
         
@@ -4147,7 +4221,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         if (isProduction) {
           return res.status(403).json({ success: false, reason: 'Debug endpoint disabled in production' });
         }
-        const adminAuth = requireAdmin(req, res, 'Debug vehicles');
+        const adminAuth = await requireAdmin(req, res, 'Debug vehicles');
         if (!adminAuth) {
           return;
         }
@@ -5623,41 +5697,44 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   const { action } = req.query;
 
-  // SECURITY: Require authentication for all admin endpoints
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ 
-      success: false, 
+  // SECURITY: Require authentication for all admin endpoints (legacy JWT or Supabase)
+  const adminAuth = await authenticateRequestDual(req);
+  if (!adminAuth.isValid || !adminAuth.user) {
+    return res.status(401).json({
+      success: false,
       reason: 'Unauthorized. Admin endpoints require authentication.',
-      message: 'Please provide a valid JWT token in the Authorization header (Bearer token)'
+      message: 'Please provide a valid JWT token in the Authorization header (Bearer token)',
     });
   }
 
-  // Verify JWT token
-  const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-  let decoded: TokenPayload & { [key: string]: unknown };
-  try {
-    decoded = { ...verifyToken(token) } as TokenPayload & { [key: string]: unknown };
-  } catch (error) {
-    return res.status(401).json({ 
-      success: false, 
-      reason: 'Invalid or expired token.',
-      message: 'The provided authentication token is invalid or has expired. Please login again.'
-    });
+  let adminRole = adminAuth.user.role;
+  if (adminRole !== 'admin' && adminAuth.user.email && USE_SUPABASE) {
+    try {
+      const dbUser = await userService.findByEmail(adminAuth.user.email.toLowerCase().trim());
+      if (dbUser && normalizeUserRoleString(dbUser.role) === 'admin') {
+        adminRole = 'admin';
+      }
+    } catch {
+      /* non-fatal */
+    }
   }
 
-  // SECURITY: Verify user has admin role
-  if (decoded.role !== 'admin') {
-    return res.status(403).json({ 
-      success: false, 
+  if (adminRole !== 'admin') {
+    return res.status(403).json({
+      success: false,
       reason: 'Forbidden. Admin access required.',
       message: 'This endpoint requires administrator privileges. Your current role does not have access.',
-      userRole: decoded.role
+      userRole: adminAuth.user.role,
     });
   }
 
+  const decoded = {
+    userId: adminAuth.user.userId,
+    email: adminAuth.user.email,
+    role: 'admin' as const,
+  };
+
   // Log admin action for security auditing
-  // SECURITY: Always log admin actions for security monitoring
   logSecurity(`Admin action '${action}' accessed by user: ${decoded.email}`, { userId: decoded.userId, action });
 
   if (action === 'health') {
@@ -5946,9 +6023,11 @@ async function handleSeed(req: VercelRequest, res: VercelResponse, _options: Han
   const secretKey = req.headers['x-seed-secret'] || req.body?.secretKey;
   const validSecret = process.env.SEED_SECRET_KEY;
   const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  const isLocalDev =
+    process.env.NODE_ENV === 'development' && String(process.env.VERCEL || '') !== '1';
   
-  // In production, require valid secret key from environment
-  if (isProduction) {
+  // Require valid secret key everywhere except local dev
+  if (!isLocalDev) {
     if (!validSecret) {
       logError('❌ SEED_SECRET_KEY not configured in production');
       return res.status(503).json({
@@ -6048,7 +6127,7 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, _optio
 
     if (req.method === 'POST') {
       try {
-        if (!requireAdmin(req, res, 'Vehicle data update')) {
+        if (!(await requireAdmin(req, res, 'Vehicle data update'))) {
           return;
         }
         const sbResult = await writeVehicleCatalogToSupabase(req.body);
@@ -7229,7 +7308,7 @@ async function handleGetFAQs(req: VercelRequest, res: VercelResponse, faqsPath: 
 
 async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, faqsPath: string) {
   try {
-    const admin = requireAdmin(req, res, 'Create FAQ');
+    const admin = await requireAdmin(req, res, 'Create FAQ');
     if (!admin) {
       return;
     }
@@ -7269,7 +7348,7 @@ async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, faqsPath
 
 async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, faqsPath: string) {
   try {
-    const admin = requireAdmin(req, res, 'Update FAQ');
+    const admin = await requireAdmin(req, res, 'Update FAQ');
     if (!admin) {
       return;
     }
@@ -7312,7 +7391,7 @@ async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, faqsPath
 
 async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, faqsPath: string) {
   try {
-    const admin = requireAdmin(req, res, 'Delete FAQ');
+    const admin = await requireAdmin(req, res, 'Delete FAQ');
     if (!admin) {
       return;
     }
@@ -7650,213 +7729,6 @@ async function handleDeleteSupportTicket(
   }
 }
 
-// Sell Car handler - consolidates sell-car/index.ts
-async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
-  if (!USE_SUPABASE) {
-    return res.status(503).json({
-      success: false,
-      reason: 'Firebase is not configured. Please set Firebase environment variables.'
-    });
-  }
-
-  const { method } = req;
-
-  const submissionsPath = 'sell_car_submissions';
-
-  try {
-
-    switch (method) {
-      case 'GET':
-      case 'PUT':
-      case 'DELETE': {
-        const sellCarAdmin = requireAdmin(req, res, 'Sell car submissions');
-        if (!sellCarAdmin) {
-          return;
-        }
-        break;
-      }
-      default:
-        break;
-    }
-
-    switch (method) {
-      case 'POST':
-        const submissionData = {
-          ...req.body,
-          submittedAt: new Date().toISOString(),
-          status: 'pending'
-        };
-
-        const requiredFields = [
-          'registration', 'make', 'model', 'variant', 'year',
-          'state', 'district', 'noOfOwners', 'kilometers', 'fuelType',
-          'transmission', 'customerContact'
-        ];
-
-        const missingFields: string[] = [];
-        for (const field of requiredFields) {
-          if (!submissionData[field as keyof typeof submissionData]) {
-            missingFields.push(field);
-          }
-        }
-
-        if (missingFields.length > 0) {
-          return res.status(400).json({ 
-            error: `Missing required fields: ${missingFields.join(', ')}` 
-          });
-        }
-
-        // Check for existing submission
-        const existingSubmissions = await adminReadAll<Record<string, unknown>>(submissionsPath);
-        const existingSubmission = Object.values(existingSubmissions).find(
-          (sub: any) => sub.registration === submissionData.registration
-        );
-
-        if (existingSubmission) {
-          return res.status(409).json({ 
-            error: 'Car with this registration number already submitted' 
-          });
-        }
-
-        // Sanitize submission data
-        const sanitizedSubmissionData = await sanitizeObject(submissionData);
-        const submissionId = `submission_${Date.now()}`;
-        await adminCreate(submissionsPath, sanitizedSubmissionData, submissionId);
-        
-        res.status(201).json({
-          success: true,
-          id: submissionId,
-          message: 'Car submission received successfully'
-        });
-        break;
-
-      case 'GET':
-        const { page = 1, limit = 10, status: statusFilter, search } = req.query;
-        const pageNum = parseInt(String(page), 10) || 1;
-        const limitNum = parseInt(String(limit), 10) || 10;
-        
-        const allSubmissions = await adminReadAll<Record<string, unknown>>(submissionsPath);
-        // CRITICAL: Spread data first, then set id to preserve string ID from key
-        let submissions = Object.entries(allSubmissions).map(([id, data]) => ({ ...data, id }));
-        
-        // Filter by status
-        if (statusFilter && typeof statusFilter === 'string') {
-          const allowedStatuses = ['pending', 'approved', 'rejected', 'processing'];
-          if (allowedStatuses.includes(statusFilter.toLowerCase())) {
-            submissions = submissions.filter((sub: any) => sub.status === statusFilter);
-          }
-        }
-        
-        // Filter by search
-        if (search && typeof search === 'string') {
-          const sanitizedSearch = await sanitizeString(search);
-          const searchLower = sanitizedSearch.toLowerCase();
-          submissions = submissions.filter((sub: any) =>
-            (sub.registration as string)?.toLowerCase().includes(searchLower) ||
-            (sub.make as string)?.toLowerCase().includes(searchLower) ||
-            (sub.model as string)?.toLowerCase().includes(searchLower) ||
-            (sub.customerContact as string)?.toLowerCase().includes(searchLower) ||
-            String(sub.state || '').toLowerCase().includes(searchLower) ||
-            String(sub.district || '').toLowerCase().includes(searchLower)
-          );
-        }
-
-        // Sort by submittedAt descending
-        submissions = submissions.sort((a, b) => {
-          const aTime = (a as Record<string, unknown>).submittedAt ? new Date((a as Record<string, unknown>).submittedAt as string).getTime() : 0;
-          const bTime = (b as Record<string, unknown>).submittedAt ? new Date((b as Record<string, unknown>).submittedAt as string).getTime() : 0;
-          return bTime - aTime;
-        });
-
-        const total = submissions.length;
-        const skip = Math.max(0, (pageNum - 1) * limitNum);
-        const paginatedSubmissions = submissions.slice(skip, skip + limitNum);
-
-        res.status(200).json({
-          success: true,
-          data: paginatedSubmissions,
-          pagination: {
-            page: pageNum,
-            limit: limitNum,
-            total,
-            pages: Math.ceil(total / limitNum)
-          }
-        });
-        break;
-
-      case 'PUT':
-        const { id: submissionUpdateId, status: updateStatus, adminNotes, estimatedPrice } = req.body;
-        
-        if (!submissionUpdateId) {
-          return res.status(400).json({ error: 'Submission ID is required' });
-        }
-
-        const existing = await adminRead<Record<string, unknown>>(submissionsPath, String(submissionUpdateId));
-        if (!existing) {
-          return res.status(404).json({ error: 'Submission not found' });
-        }
-
-        interface SubmissionUpdateData {
-          status?: string;
-          adminNotes?: string;
-          estimatedPrice?: number;
-          updatedAt: string;
-        }
-        const submissionUpdates: SubmissionUpdateData = {
-          updatedAt: new Date().toISOString()
-        };
-        
-        // Validate and sanitize update fields
-        if (updateStatus && typeof updateStatus === 'string') {
-          const allowedStatuses = ['pending', 'approved', 'rejected', 'processing'];
-          if (allowedStatuses.includes(updateStatus.toLowerCase())) {
-            submissionUpdates.status = updateStatus;
-          }
-        }
-        if (adminNotes && typeof adminNotes === 'string') {
-          submissionUpdates.adminNotes = await sanitizeString(adminNotes);
-        }
-        if (estimatedPrice && typeof estimatedPrice === 'number') {
-          submissionUpdates.estimatedPrice = estimatedPrice;
-        }
-
-        await adminUpdate(submissionsPath, String(submissionUpdateId), submissionUpdates as unknown as Record<string, unknown>);
-
-        res.status(200).json({
-          success: true,
-          message: 'Submission updated successfully'
-        });
-        break;
-
-      case 'DELETE':
-        const { id: deleteId } = req.query;
-        
-        if (!deleteId) {
-          return res.status(400).json({ error: 'Submission ID is required' });
-        }
-
-        await adminDelete(submissionsPath, String(deleteId));
-
-        res.status(200).json({
-          success: true,
-          message: 'Submission deleted successfully'
-        });
-        break;
-
-      default:
-        res.setHeader('Allow', 'POST, GET, PUT, DELETE');
-        res.status(405).json({ error: `Method ${method} not allowed` });
-    }
-  } catch (error) {
-    console.error('❌ Sell Car API Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ 
-      error: 'Internal server error',
-      message: errorMessage
-    });
-  }
-}
-
 // ============================================================================
 // Platform Settings handler — reads/writes the single `platform_settings` row
 // (table created by scripts/add-platform-settings-and-audit-log.sql).
@@ -7915,7 +7787,7 @@ async function handlePlatformSettings(
     }
 
     if (req.method === 'PUT' || req.method === 'POST') {
-      const admin = requireAdmin(req, res, 'Update platform settings');
+      const admin = await requireAdmin(req, res, 'Update platform settings');
       if (!admin) return;
 
       const body = (req.body || {}) as Record<string, unknown>;
@@ -8007,7 +7879,7 @@ async function handleAuditLog(
   }
 
   try {
-    const admin = requireAdmin(req, res, 'Audit log');
+    const admin = await requireAdmin(req, res, 'Audit log');
     if (!admin) return;
 
     const supabase = getSupabaseAdminClient();
@@ -8496,7 +8368,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
       }
 
       try {
-        const approveAdmin = requireAdmin(req, res, 'Approve payment');
+        const approveAdmin = await requireAdmin(req, res, 'Approve payment');
         if (!approveAdmin) {
           return;
         }
@@ -8539,7 +8411,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
       }
 
       try {
-        const rejectAdmin = requireAdmin(req, res, 'Reject payment');
+        const rejectAdmin = await requireAdmin(req, res, 'Reject payment');
         if (!rejectAdmin) {
           return;
         }
@@ -8580,7 +8452,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
     // Get all payment requests
     if (req.method === 'GET') {
       try {
-        const listAdmin = requireAdmin(req, res, 'List payment requests');
+        const listAdmin = await requireAdmin(req, res, 'List payment requests');
         if (!listAdmin) {
           return;
         }
@@ -8910,6 +8782,10 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
 
       if (!message) {
         return res.status(400).json({ success: false, reason: 'Conversation ID and message are required' });
+      }
+
+      if (typeof message.text === 'string') {
+        message.text = await sanitizeString(message.text.slice(0, 4000));
       }
 
       try {
@@ -9476,10 +9352,13 @@ async function handleContentReports(
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
   }
+  const auth = await authenticateRequestDual(req);
+  if (!auth.isValid || !auth.user?.email) {
+    return res.status(401).json({ success: false, reason: 'Authentication required.' });
+  }
   try {
     const body = (req.body || {}) as Record<string, unknown>;
-    const reportedBy =
-      typeof body.reportedBy === 'string' ? body.reportedBy.slice(0, 255) : 'anonymous';
+    const reportedBy = auth.user.email.toLowerCase().trim();
     const targetType =
       typeof body.targetType === 'string' ? body.targetType.slice(0, 64) : '';
     const targetId =
@@ -9783,7 +9662,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
       }
 
       case 'POST': {
-        if (!requireAdmin(req, res, 'Create plan')) {
+        if (!(await requireAdmin(req, res, 'Create plan'))) {
           return;
         }
         const newPlanData = req.body || {};
@@ -9811,7 +9690,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
       }
 
       case 'PUT': {
-        if (!requireAdmin(req, res, 'Update plan')) {
+        if (!(await requireAdmin(req, res, 'Update plan'))) {
           return;
         }
         const { planId: updatePlanId, ...updateData } = req.body || {};
@@ -9849,7 +9728,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
       }
 
       case 'DELETE': {
-        if (!requireAdmin(req, res, 'Delete plan')) {
+        if (!(await requireAdmin(req, res, 'Delete plan'))) {
           return;
         }
         const { planId: deletePlanId } = req.query;

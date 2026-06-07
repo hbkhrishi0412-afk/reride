@@ -459,22 +459,16 @@ interface SellerProfilePageProps {
     onRequireLogin?: () => void;
 }
 
-const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles, onSelectVehicle, comparisonList, onToggleCompare, wishlist, onToggleWishlist, onBack, onViewSellerProfile, currentUser, onRequireLogin }) => {
-    // 🔴 GUARD CLAUSE: Prevent crash when seller data hasn't loaded yet
-    if (!seller) {
-        return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-reride-orange"></div>
-                <span className="ml-3 text-gray-600 dark:text-gray-300">Loading Seller Profile...</span>
-            </div>
-        );
-    }
-
+const SellerProfilePageContent: React.FC<SellerProfilePageProps & { seller: User }> = ({ seller, vehicles, onSelectVehicle, comparisonList, onToggleCompare, wishlist, onToggleWishlist, onBack, onViewSellerProfile, currentUser, onRequireLogin }) => {
     const [searchQuery, setSearchQuery] = useState('');
-    // NEW: Follow seller feature
     // Restore logged-in user from storage (used to gate owner-only views)
-    const storedUserJson = localStorage.getItem('reRideCurrentUser');
-    const storedUser: User | null = storedUserJson ? JSON.parse(storedUserJson) : null;
+    let storedUser: User | null = null;
+    try {
+      const storedUserJson = localStorage.getItem('reRideCurrentUser');
+      storedUser = storedUserJson ? JSON.parse(storedUserJson) : null;
+    } catch {
+      storedUser = null;
+    }
     const viewer = currentUser ?? storedUser;
     const currentUserId = viewer?.email || localStorage.getItem('currentUserEmail') || 'guest';
     const [isFollowing, setIsFollowing] = useState(() => isFollowingSeller(currentUserId as string, seller.email));
@@ -1030,6 +1024,18 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
             )}
         </div>
     );
+};
+
+const SellerProfilePage: React.FC<SellerProfilePageProps> = (props) => {
+  if (!props.seller) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-reride-orange"></div>
+        <span className="ml-3 text-gray-600 dark:text-gray-300">Loading Seller Profile...</span>
+      </div>
+    );
+  }
+  return <SellerProfilePageContent {...props} seller={props.seller} />;
 };
 
 export default SellerProfilePage;

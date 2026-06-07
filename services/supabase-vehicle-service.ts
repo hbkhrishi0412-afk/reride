@@ -785,5 +785,30 @@ export const supabaseVehicleService = {
     
     return (data || []).map(supabaseRowToVehicle);
   },
+
+  /**
+   * PostGIS radius search via `vehicles_within_radius` RPC.
+   * Requires scripts/migrations/add-support-chat-and-postgis.sql applied in Supabase.
+   */
+  async findWithinRadius(
+    lat: number,
+    lng: number,
+    radiusKm: number,
+    maxResults = 100,
+  ): Promise<Vehicle[]> {
+    const supabase = getSupabaseAdminClient();
+    const cappedRadius = Math.min(Math.max(radiusKm, 0.5), 50);
+    const cappedResults = Math.min(Math.max(maxResults, 1), 100);
+    const { data, error } = await supabase.rpc('vehicles_within_radius', {
+      center_lat: lat,
+      center_lng: lng,
+      radius_km: cappedRadius,
+      max_results: cappedResults,
+    });
+    if (error) {
+      throw new Error(`PostGIS radius search failed: ${error.message}`);
+    }
+    return (data ?? []).map(supabaseRowToVehicle);
+  },
 };
 

@@ -7,7 +7,7 @@ import type { ServiceProviderPayload } from '../services/supabase-service-provid
 import { applyCors } from '../lib/api-route-cors.js';
 import { sanitizeServiceCategories } from '../constants/serviceProviderCatalog.js';
 import { authenticateRequest } from './auth.js';
-import { hashPassword } from '../utils/security.js';
+import { hashPassword, validateEmail } from '../utils/security.js';
 
 function parseStringList(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -96,8 +96,14 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
         error: 'Missing required fields: name, email, password, phone, city',
       });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (!validateEmail(email)) {
+      return res.status(400).json({ error: 'Invalid email format.' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    if (!/^\+?[\d\s-]{10,15}$/.test(phone.replace(/\s/g, ''))) {
+      return res.status(400).json({ error: 'Invalid phone number format.' });
     }
 
     const supabase = getSupabaseAdminClient();
@@ -229,6 +235,10 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
     const scope = (req.query.scope as string) || 'mine';
 
     if (req.method === 'GET' && scope === 'all') {
+      const adminAuth = authenticateRequest(req);
+      if (!adminAuth.isValid || adminAuth.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin authentication required.' });
+      }
       const all = await supabaseServiceProviderService.findAll();
       return res.status(200).json(all);
     }

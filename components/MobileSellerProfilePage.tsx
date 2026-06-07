@@ -356,7 +356,7 @@ const MSP_STYLES = `
 /**
  * Mobile-Optimized Seller Profile Page (premium redesign).
  */
-export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = ({
+const MobileSellerProfilePageContent: React.FC<MobileSellerProfilePageProps & { seller: User }> = ({
   seller,
   vehicles,
   onSelectVehicle,
@@ -365,24 +365,18 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
   wishlist,
   onToggleWishlist,
   onBack,
-  onViewSellerProfile: _onViewSellerProfile, // reserved for future follow-modal UX
+  onViewSellerProfile: _onViewSellerProfile,
   currentUser,
   onRequireLogin,
 }) => {
-  if (!seller) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-600">Loading Seller Profile…</p>
-        </div>
-      </div>
-    );
-  }
-
   const [searchQuery, setSearchQuery] = useState('');
-  const storedUserJson = typeof window !== 'undefined' ? localStorage.getItem('reRideCurrentUser') : null;
-  const storedUser: User | null = storedUserJson ? JSON.parse(storedUserJson) : null;
+  let storedUser: User | null = null;
+  try {
+    const storedUserJson = typeof window !== 'undefined' ? localStorage.getItem('reRideCurrentUser') : null;
+    storedUser = storedUserJson ? JSON.parse(storedUserJson) : null;
+  } catch {
+    storedUser = null;
+  }
   const viewer = currentUser ?? storedUser;
   const currentUserId = viewer?.email || (typeof window !== 'undefined' ? localStorage.getItem('currentUserEmail') : null) || 'guest';
   const [isFollowing, setIsFollowing] = useState(() => isFollowingSeller(currentUserId as string, seller.email));
@@ -855,6 +849,20 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
 
     </div>
   );
+};
+
+export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (props) => {
+  if (!props.seller) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-600">Loading Seller Profile…</p>
+        </div>
+      </div>
+    );
+  }
+  return <MobileSellerProfilePageContent {...props} seller={props.seller} />;
 };
 
 export default MobileSellerProfilePage;

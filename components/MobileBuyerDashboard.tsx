@@ -137,17 +137,30 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
             <h1 className="text-2xl font-bold text-gray-900 mb-1">{t('nav.dashboard')}</h1>
             <p className="text-gray-600 text-sm">{t('buyerDashboard.mobile.subtitle')}</p>
           </div>
-          {onLogout && (
+          <div className="ml-4 flex items-center gap-1">
             <button
-              onClick={onLogout}
-              className="ml-4 p-2 text-gray-600 hover:text-red-600 active:opacity-70 transition-colors"
-              title={t('nav.logout')}
+              onClick={() => onNavigate(ViewEnum.PROFILE)}
+              className="p-2 text-gray-600 hover:text-orange-600 active:opacity-70 transition-colors"
+              title={t('nav.myProfile')}
+              aria-label={t('nav.myProfile')}
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
             </button>
-          )}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="p-2 text-gray-600 hover:text-red-600 active:opacity-70 transition-colors"
+                title={t('nav.logout')}
+                aria-label={t('nav.logout')}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

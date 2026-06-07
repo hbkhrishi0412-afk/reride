@@ -35,7 +35,9 @@ export async function dismissCookieBanner(page: Page) {
 }
 
 async function submitCredentialForm(page: Page, email: string, password: string) {
-  await page.locator('#email-address, input[name="email"]').first().fill(email);
+  const emailInput = page.locator('#email-address, input[name="email"], input[type="email"]').first();
+  await emailInput.waitFor({ state: 'visible', timeout: 60_000 });
+  await emailInput.fill(email);
   await page.locator('#password, input[name="password"]').first().fill(password);
   await page.locator('button[type="submit"]').first().click();
 }

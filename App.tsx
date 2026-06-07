@@ -21,6 +21,7 @@ import PWAInstallPrompt from './components/PWAInstallPrompt';
 import useIsMobileApp from './hooks/useIsMobileApp';
 import { isCapacitorNativeApp } from './utils/isCapacitorNative';
 import { setCapacitorAndroidBackHandler } from './utils/capacitorAndroidBack';
+import { tryHardwareBack } from './utils/hardwareBackRegistry';
 import ShareTargetHandler from './components/ShareTargetHandler';
 import OfflineIndicator from './components/OfflineIndicator';
 // Layout/utility components that are always needed - keep as eager imports
@@ -410,6 +411,9 @@ const MobileDashboard = React.lazy(() => import('./components/MobileDashboard'))
 const MobileVehicleDetail = React.lazy(() => import('./components/MobileVehicleDetail'));
 const MobileInbox = React.lazy(() => import('./components/MobileInbox'));
 const NotificationsPage = React.lazy(() => import('./components/NotificationsPage'));
+const MobileNotifications = React.lazy(() =>
+  import('./components/MobileNotifications').then((m) => ({ default: m.MobileNotifications }))
+);
 const MobileProfile = React.lazy(() => import('./components/MobileProfile'));
 const MobileWishlist = React.lazy(() => import('./components/MobileWishlist'));
 const MobileComparison = React.lazy(() => import('./components/MobileComparison'));
@@ -425,7 +429,6 @@ const TermsOfServicePage = React.lazy(() => import('./components/TermsOfServiceP
 const MobileTermsOfServicePage = React.lazy(() => import('./components/MobileTermsOfServicePage'));
 const MobileBuyerDashboard = React.lazy(() => import('./components/MobileBuyerDashboard'));
 const MobileDealerProfilesPage = React.lazy(() => import('./components/MobileDealerProfilesPage'));
-const MobileCityLandingPage = React.lazy(() => import('./components/MobileCityLandingPage'));
 const MobileHomePage = React.lazy(() => import('./components/MobileHomePage'));
 const ServiceCart = React.lazy(() => import('./components/ServiceCart'));
 
@@ -805,6 +808,9 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (!isCapacitorNativeApp()) return;
     setCapacitorAndroidBackHandler(() => {
+      if (tryHardwareBack()) {
+        return;
+      }
       if (currentView === ViewEnum.HOME) {
         const now = Date.now();
         const prev = lastHomeExitBackRef.current;
@@ -2147,6 +2153,29 @@ const AppContent: React.FC = () => {
         }
         
         if (!vehicleToDisplay) {
+          const pendingDetailId = (() => {
+            try {
+              const params = parseDeepLink();
+              if (params.view === ViewEnum.DETAIL && params.id != null) {
+                const id = typeof params.id === 'string' ? parseInt(params.id, 10) : Number(params.id);
+                return Number.isFinite(id) ? id : null;
+              }
+            } catch {
+              /* ignore */
+            }
+            return null;
+          })();
+          const catalogStillLoading = vehicles.length === 0 && (isLoading || pendingDetailId != null);
+          if (catalogStillLoading) {
+            return (
+              <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-reride-orange mx-auto mb-4" />
+                  <p className="text-gray-600">Loading vehicle details…</p>
+                </div>
+              </div>
+            );
+          }
           if (process.env.NODE_ENV === 'development') {
             logError('❌ App.tsx: No vehicle to display - showing error message');
           }
@@ -3509,6 +3538,16 @@ const AppContent: React.FC = () => {
         );
 
       case ViewEnum.CAR_SERVICE_DASHBOARD:
+        if (!serviceProvider) {
+          return (
+            <div className="min-h-[calc(100vh-140px)] flex items-center justify-center px-4">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-reride-orange mx-auto mb-3" />
+                <p className="text-gray-600 text-sm">Loading provider dashboard…</p>
+              </div>
+            </div>
+          );
+        }
         if (isMobileApp) {
           return (
             <MobileCarServiceDashboard
@@ -3534,7 +3573,7 @@ const AppContent: React.FC = () => {
         }
         return (
           <CarServiceDashboard
-            provider={serviceProvider as { name: string; email: string; phone: string; city: string } | null}
+            provider={serviceProvider as { name: string; email: string; phone: string; city: string }}
             onLogout={() => {
               handleLogoutAll();
               navigate(ViewEnum.HOME);
@@ -3705,23 +3744,9 @@ const AppContent: React.FC = () => {
         );
 
       case ViewEnum.CITY_LANDING:
-        if (isMobileApp) {
-          return (
-            <MobileCityLandingPage
-              city={selectedCity || ''}
-              vehicles={vehicles}
-              onSelectVehicle={selectVehicle}
-              onToggleWishlist={toggleWishlist}
-              onToggleCompare={toggleCompare}
-              wishlist={wishlist}
-              comparisonList={comparisonList}
-              onViewSellerProfile={openSellerProfileByEmail}
-            />
-          );
-        }
         return (
-          <CityLandingPage 
-            city={selectedCity}
+          <CityLandingPage
+            city={selectedCity || ''}
             vehicles={vehicles}
             onSelectVehicle={selectVehicle}
             onToggleWishlist={toggleWishlist}
@@ -3817,10 +3842,23 @@ const AppContent: React.FC = () => {
         );
 
       case ViewEnum.SELL_CAR_ADMIN:
-        return (
-          <SellCarAdmin 
+        return userHasAdminRole(currentUser) && currentUser ? (
+          <SellCarAdmin
             onNavigate={navigate}
           />
+        ) : (
+          <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-gray-600 mb-4">Access Denied</h2>
+              <p className="text-gray-500 mb-4">You need to be logged in as an admin to access this page.</p>
+              <button
+                onClick={() => navigate(ViewEnum.ADMIN_LOGIN)}
+                className="btn-brand-primary"
+              >
+                Login as Admin
+              </button>
+            </div>
+          </div>
         );
 
       case ViewEnum.NOTIFICATIONS_CENTER:
@@ -3850,24 +3888,34 @@ const AppContent: React.FC = () => {
           );
           return (
             <Suspense fallback={<LoadingSpinner />}>
-              <NotificationsPage
-                notifications={userNotifs}
-                vehicles={vehicles}
-                conversations={conversations}
-                onNotificationClick={handleNotificationClick}
-                onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
-                onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
-                onBack={() => goBack(ViewEnum.HOME)}
-                contentBottomPadding={isMobileApp}
-                profileMuteKeys={currentUser.notificationMuteKeys}
-                onPersistMuteKeys={
-                  currentUser.email
-                    ? async (keys) => {
-                        await updateUser(currentUser.email, { notificationMuteKeys: keys });
-                      }
-                    : undefined
-                }
-              />
+              {isMobileApp ? (
+                <MobileNotifications
+                  notifications={userNotifs}
+                  onNotificationClick={handleNotificationClick}
+                  onMarkAsRead={handleMarkNotificationsAsRead}
+                  onMarkAllAsRead={handleMarkAllNotificationsAsRead}
+                  onBack={() => goBack(ViewEnum.HOME)}
+                />
+              ) : (
+                <NotificationsPage
+                  notifications={userNotifs}
+                  vehicles={vehicles}
+                  conversations={conversations}
+                  onNotificationClick={handleNotificationClick}
+                  onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
+                  onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
+                  onBack={() => goBack(ViewEnum.HOME)}
+                  contentBottomPadding={isMobileApp}
+                  profileMuteKeys={currentUser.notificationMuteKeys}
+                  onPersistMuteKeys={
+                    currentUser.email
+                      ? async (keys) => {
+                          await updateUser(currentUser.email, { notificationMuteKeys: keys });
+                        }
+                      : undefined
+                  }
+                />
+              )}
             </Suspense>
           );
         }
@@ -4100,6 +4148,12 @@ const AppContent: React.FC = () => {
         return 'My Dashboard';
       case ViewEnum.BUYER_DASHBOARD:
         return 'My Account';
+      case ViewEnum.PROFILE:
+        return 'My Profile';
+      case ViewEnum.INBOX:
+        return 'Messages';
+      case ViewEnum.WISHLIST:
+        return 'Wishlist';
       case ViewEnum.ADMIN_PANEL:
         return 'Admin Panel';
       case ViewEnum.LOGIN_PORTAL:
@@ -4766,7 +4820,8 @@ const AppContent: React.FC = () => {
 
     // For ALL other views (Home, Browse, Detail, etc.), show mobile UI using MobileLayout
     // Hide header for HOME view since it has its own hero section
-    const shouldHideHeader = currentView === ViewEnum.HOME;
+    const shouldHideHeader =
+      currentView === ViewEnum.HOME || currentView === ViewEnum.PROFILE;
     // Vehicle detail: full-bleed listing UX (no tab bar) — matches native listing apps / reference
     const hideBottomNavOnDetail =
       currentView === ViewEnum.DETAIL || currentView === ViewEnum.NOTIFICATIONS_CENTER;

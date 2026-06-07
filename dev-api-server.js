@@ -628,9 +628,85 @@ async function markVehicleSoldInSupabase(vehicleId) {
   }
 }
 
+function toPublicDirectoryUser(user) {
+  const { mobile, password, ...safe } = user;
+  return safe;
+}
+
+function calculateDistanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function resolveAuthRole(req) {
+  const payload = getSupabaseJwtPayload(req.headers.authorization);
+  if (payload?.role) return payload.role;
+  const email = payload?.email ? String(payload.email).toLowerCase().trim() : '';
+  if (email) {
+    const user = mockUsers.find((u) => u.email === email);
+    if (user?.role) return user.role;
+  }
+  return null;
+}
+
 // Vehicle Data API endpoints
 app.get('/api/vehicles', async (req, res) => {
-  const { type } = req.query;
+  const { type, action } = req.query;
+
+  if (action === 'radius-search' && req.query.lat && req.query.lng && req.query.radius) {
+    const lat = parseFloat(String(req.query.lat));
+    const lng = parseFloat(String(req.query.lng));
+    const radiusKm = parseFloat(String(req.query.radius));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radiusKm)) {
+      return res.status(400).json({ success: false, reason: 'Invalid lat, lng, or radius.' });
+    }
+    const cappedRadius = Math.min(Math.max(radiusKm, 0.5), 50);
+    let nearby = null;
+    try {
+      const { supabaseVehicleService } = await import('./services/supabase-vehicle-service.ts');
+      nearby = await supabaseVehicleService.findWithinRadius(lat, lng, cappedRadius, 100);
+    } catch {
+      nearby = null;
+    }
+    if (nearby === null) {
+      const supabaseVehicles = await fetchVehiclesFromSupabase();
+      const list = supabaseVehicles && supabaseVehicles.length > 0 ? supabaseVehicles : mockVehicles;
+      nearby = list
+        .filter((v) => v.status === 'published')
+        .slice(0, 500)
+        .filter((v) => {
+          const loc = v.exactLocation;
+          if (!loc?.lat || !loc?.lng) return false;
+          return calculateDistanceKm(lat, lng, loc.lat, loc.lng) <= cappedRadius;
+        })
+        .slice(0, 100);
+    }
+    return res.json(nearby);
+  }
+
+  if (action === 'admin-all') {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, reason: 'Authentication required' });
+    }
+    const role = resolveAuthRole(req);
+    if (role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        reason: 'Forbidden. Admin access required to view all vehicles.',
+      });
+    }
+    const supabaseVehicles = await fetchVehiclesFromSupabase();
+    if (supabaseVehicles && supabaseVehicles.length > 0) {
+      return res.json(supabaseVehicles);
+    }
+    return res.json(mockVehicles);
+  }
 
   if (req.query.aggregate === 'storefront') {
     const supabaseVehicles = await fetchVehiclesFromSupabase();
@@ -1337,10 +1413,10 @@ app.get('/api/users', (req, res) => {
 
   // Mirror production public catalog (api/main.ts): role-scoped lists for dealer directory.
   if (role === 'seller' || role === 'service_provider') {
-    return res.json(mockUsers.filter((u) => u.role === role));
+    return res.json(mockUsers.filter((u) => u.role === role).map(toPublicDirectoryUser));
   }
   
-  res.json(mockUsers);
+  res.json(mockUsers.map((u) => toPublicDirectoryUser(u)));
 });
 
 // POST /api/users (login, register, etc.)
@@ -3147,6 +3223,17 @@ app.post('/api/ai-inspection', (req, res) => {
     imagesProcessed: imageCount,
     timestamp: new Date().toISOString(),
   });
+});
+
+// Support chat API (Supabase-backed — replaces legacy MongoDB api/chat.js)
+app.all(/^\/api\/chat(\/.*)?$/, async (req, res) => {
+  try {
+    const { handleSupportChat } = await import('./server/handlers/support-chat.ts');
+    await handleSupportChat({ ...req, url: req.originalUrl || req.url }, res);
+  } catch (error) {
+    console.warn('⚠️ Support chat API error:', error?.message || error);
+    res.status(500).json({ success: false, error: 'Support chat unavailable' });
+  }
 });
 
 // Import chat API and other optional modules (wrapped in async IIFE)

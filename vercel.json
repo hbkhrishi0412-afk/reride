@@ -6,6 +6,19 @@
   "framework": "vite",
   "headers": [
     {
+      "source": "/.well-known/(.*)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    },
+    {
       "source": "/assets/(.*)",
       "headers": [
         {
@@ -67,7 +80,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=7200"
+          "value": "public, max-age=0, must-revalidate"
         },
         {
           "key": "X-Frame-Options",

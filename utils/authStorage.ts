@@ -9,6 +9,7 @@
  */
 
 import { resolveApiUrl, isCapacitorNative, isApiRequestCrossOrigin } from './apiConfig';
+import { getNativeMemoryAccessToken } from './nativeTokenStorage';
 
 /** First-party web: refresh token is HttpOnly; Capacitor / cross-API-origin still use JSON + localStorage. */
 export function useHttpOnlyRefreshCookie(): boolean {
@@ -110,6 +111,14 @@ export function clearSupabaseAuthStorage(): void {
 
 function getCustomJwtFromBrowserStorage(): string | null {
   if (typeof window === 'undefined') return null;
+  if (isCapacitorNative()) {
+    const native = getNativeMemoryAccessToken();
+    if (native && looksLikeJwt(native.trim())) {
+      const exp = jwtExpSeconds(native.trim());
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (exp == null || exp > nowSec + 60) return native.trim();
+    }
+  }
   let custom: string | null = null;
   try {
     if (typeof sessionStorage !== 'undefined') {

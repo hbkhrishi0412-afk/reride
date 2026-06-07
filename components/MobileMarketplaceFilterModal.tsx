@@ -20,6 +20,8 @@ export interface MobileMarketplaceFilterModalProps {
   onClose: () => void;
   activeCategory: MobileFilterCategoryId;
   onActiveCategoryChange: (id: MobileFilterCategoryId) => void;
+  /** Categories with a non-default filter selection (shows dot on sidebar). */
+  categoryActiveMap?: Partial<Record<MobileFilterCategoryId, boolean>>;
   children: React.ReactNode;
   footer: React.ReactNode;
   t: TFunction;
@@ -33,6 +35,7 @@ export const MobileMarketplaceFilterModal: React.FC<MobileMarketplaceFilterModal
   onClose,
   activeCategory,
   onActiveCategoryChange,
+  categoryActiveMap = {},
   children,
   footer,
   t,
@@ -93,18 +96,29 @@ export const MobileMarketplaceFilterModal: React.FC<MobileMarketplaceFilterModal
           >
             {SIDEBAR_ITEMS.map((item) => {
               const active = activeCategory === item.id;
+              const hasSelection = Boolean(categoryActiveMap[item.id]);
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => onActiveCategoryChange(item.id)}
-                  className={`w-full text-left px-3 py-3.5 text-sm font-semibold leading-tight border-b border-gray-200/60 transition-colors ${
+                  className={`w-full text-left px-3 py-3.5 text-sm font-semibold leading-tight border-b border-gray-200/60 transition-colors flex items-center justify-between gap-2 ${
                     active
-                      ? 'bg-[#222222] text-white'
-                      : 'text-gray-800 active:bg-gray-200/80'
+                      ? 'bg-red-600 text-white border-l-4 border-red-400'
+                      : hasSelection
+                        ? 'bg-orange-50 text-gray-900 border-l-4 border-orange-500'
+                        : 'text-gray-800 active:bg-gray-200/80'
                   }`}
                 >
-                  {t(item.labelKey)}
+                  <span>{t(item.labelKey)}</span>
+                  {hasSelection && (
+                    <span
+                      className={`shrink-0 w-2 h-2 rounded-full ${
+                        active ? 'bg-white' : 'bg-orange-500'
+                      }`}
+                      aria-hidden
+                    />
+                  )}
                 </button>
               );
             })}

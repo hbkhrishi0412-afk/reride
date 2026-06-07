@@ -259,7 +259,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
     <div className="min-h-screen bg-gray-50 pb-24">
       {/* Header */}
       {onBack && (
-        <div className="bg-white border-b border-gray-200 p-4 flex items-center gap-3">
+        <div className="bg-white border-b border-gray-200 p-4 flex items-center gap-3 safe-top">
           <button
             onClick={onBack}
             className="p-2 -ml-2"

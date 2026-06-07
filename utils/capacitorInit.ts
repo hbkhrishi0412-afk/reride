@@ -5,11 +5,15 @@
 import { ensureRerideWebCanonicalHost, restoreOAuthRoleFromUrl, patchFetchForCapacitor } from './apiConfig';
 import { warmUpNativeGoogleSignIn } from './nativeGoogleSignIn';
 import { initNativeGoogleOAuthReturnHandler } from './oauthMobile';
+import { initUniversalLinksHandler } from './universalLinks';
 import { initCapacitorAndroidBack } from './capacitorAndroidBack';
+import { hydrateNativeTokensFromPreferences } from './nativeTokenStorage';
 
 ensureRerideWebCanonicalHost();
 restoreOAuthRoleFromUrl();
 patchFetchForCapacitor();
+void hydrateNativeTokensFromPreferences();
 initNativeGoogleOAuthReturnHandler();
+initUniversalLinksHandler();
 warmUpNativeGoogleSignIn();
 initCapacitorAndroidBack();

@@ -250,7 +250,7 @@ function pathToView(path: string): View {
   // Exact matches first
   if (normalizedPath === '/' || normalizedPath === '') return View.HOME;
   if (normalizedPath === '/used-cars') return View.USED_CARS;
-  if (normalizedPath === '/new-cars') return View.HOME;
+  if (normalizedPath === '/new-cars') return View.USED_CARS;
   if (normalizedPath === '/car-services') return View.CAR_SERVICES;
   if (normalizedPath === '/car-services/detail') return View.SERVICE_DETAIL;
   if (normalizedPath === '/car-services/login') return View.CAR_SERVICE_LOGIN;
@@ -4344,6 +4344,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Load conversations immediately when seller logs in
     const loadSellerConversations = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       try {
         const { getConversationsFromSupabase } = await import('../services/conversationService');
         
@@ -4440,6 +4441,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const normalizedCustomerEmail = currentUser.email.toLowerCase().trim();
 
     const loadCustomerConversations = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       try {
         const { getConversationsFromSupabase } = await import('../services/conversationService');
         const result = await getConversationsFromSupabase(normalizedCustomerEmail);
@@ -4491,6 +4493,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let inFlight = false;
 
     const syncOpenThread = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       if (cancelled || inFlight) return;
       inFlight = true;
       try {
@@ -4544,7 +4547,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     void syncOpenThread();
-    const interval = setInterval(syncOpenThread, 600);
+    const interval = setInterval(syncOpenThread, 1500);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -4559,6 +4562,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Load notifications immediately
     const loadNotifications = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       try {
         const { getNotificationsFromSupabase } = await import('../services/notificationService');
         const result = await getNotificationsFromSupabase(normalizedUserEmail);
@@ -5878,13 +5882,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         const sendResult = await realtimeChatService.sendMessage(conversationId, newMessage, userEmail, userRole);
 
-        if (!sendResult.success) {
-          console.error('❌ Failed to send message via real-time service:', sendResult.error);
-          addToast(t('toast.failedSendMessageConnection'), 'error');
-        } else if (!sendResult.persisted) {
+        if (!sendResult.success || !sendResult.persisted) {
           const retry = await addMessageWithSync(conversationId, newMessage);
           if (!retry.synced && !retry.queued) {
-            console.warn('⚠️ Message may not be persisted; queue:', conversationId);
+            console.error('❌ Failed to send message:', sendResult.error);
+            addToast(t('toast.failedSendMessageGeneric'), 'error');
           }
         }
 
@@ -5892,7 +5894,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // POST /api/notifications only allows creating rows for the authenticated user — do not duplicate here.
       } catch (error) {
         console.error('Error in sendMessage:', error);
-        addToast(t('toast.failedSendMessageGeneric'), 'error');
       }
     },
     sendMessageWithType: async (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => {
@@ -5982,16 +5983,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           normalizedUserEmail,
           userRole,
         );
-        if (!sendResult.success) {
-          addToast(t('toast.failedSendMessageConnection'), 'error');
-        } else if (!sendResult.persisted) {
-          await addMessageWithSync(conversationId, newMessage);
+        if (!sendResult.success || !sendResult.persisted) {
+          const retry = await addMessageWithSync(conversationId, newMessage);
+          if (!retry.synced && !retry.queued) {
+            console.error('❌ Failed to send message:', sendResult.error);
+            addToast(t('toast.failedSendMessageGeneric'), 'error');
+          }
         }
 
         // Recipient notifications are created server-side when the message is persisted (PUT /api/conversations).
       } catch (error) {
         console.error('Error in sendMessageWithType:', error);
-        addToast(t('toast.failedSendMessageGeneric'), 'error');
       }
     },
     markAsRead: (inboxMarkRead.fn = async (

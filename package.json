@@ -74,6 +74,7 @@
     "security:enable-compromised-password-protection": "node scripts/enable-compromised-password-protection.js"
   },
   "dependencies": {
+    "@aparajita/capacitor-secure-storage": "^7.1.6",
     "@capacitor-community/media": "^9.1.0",
     "@capacitor/app": "^8.0.1",
     "@capacitor/browser": "^8.0.2",
@@ -81,6 +82,7 @@
     "@capacitor/geolocation": "^8.2.0",
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.2.0",
+    "@capacitor/preferences": "^8.0.1",
     "@capacitor/push-notifications": "^8.0.3",
     "@capawesome/capacitor-google-sign-in": "^0.1.2",
     "@emotion/is-prop-valid": "^1.4.0",

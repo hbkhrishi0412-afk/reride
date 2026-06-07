@@ -297,9 +297,14 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                         onClick={() => { onNavigate(ViewEnum.SELLER_DASHBOARD); setShowMenu(false); }}
                       />
                     )}
+                    <MenuItem
+                      icon={<UserIcon />}
+                      label={t('nav.myProfile')}
+                      onClick={() => { onNavigate(ViewEnum.PROFILE); setShowMenu(false); }}
+                    />
                     {currentUser.role === 'customer' && (
                       <MenuItem
-                        icon={<UserIcon />}
+                        icon={<DashboardIcon />}
                         label={t('nav.myDashboard')}
                         onClick={() => { onNavigate(ViewEnum.BUYER_DASHBOARD); setShowMenu(false); }}
                       />

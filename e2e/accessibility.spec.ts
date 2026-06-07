@@ -1,119 +1,58 @@
 import { test, expect } from '@playwright/test';
-import { injectAxe, checkA11y } from 'axe-playwright';
+import { fetchPublishedVehicles } from './helpers/catalog';
 
-/**
- * Accessibility Tests
- * Tests for WCAG compliance and accessibility standards
- */
-
-test.describe.configure({ mode: 'skip' });
-
-test.describe('@legacy Accessibility Tests', () => {
+test.describe('Accessibility smoke', () => {
+  test.describe.configure({ mode: 'serial', timeout: 90_000 });
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:5173');
-    // Inject axe-core
-    await injectAxe(page);
-  });
-
-  test('homepage should be accessible', async ({ page }) => {
-    await checkA11y(page, undefined, {
-      detailedReport: true,
-      detailedReportOptions: { html: true },
+    await page.addInitScript(() => {
+      localStorage.removeItem('reRideSelectedCity');
     });
   });
 
-  test('should have proper heading hierarchy', async ({ page }) => {
-    const h1Count = await page.locator('h1').count();
-    expect(h1Count).toBeGreaterThanOrEqual(1);
-    expect(h1Count).toBeLessThanOrEqual(1); // Should have exactly one h1
-    
-    // Check that headings are in order (no h3 before h2, etc.)
-    const headings = await page.locator('h1, h2, h3, h4, h5, h6').all();
-    let lastLevel = 0;
-    
-    for (const heading of headings) {
-      const tagName = await heading.evaluate((el) => el.tagName.toLowerCase());
-      const level = parseInt(tagName.charAt(1));
-      
-      // Allow same level or one level deeper
-      expect(level).toBeLessThanOrEqual(lastLevel + 1);
-      lastLevel = level;
-    }
+  test('homepage exposes a primary heading', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await expect(page.getByTestId('popular-cities-chips')).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 30_000 });
   });
 
-  test('images should have alt text', async ({ page }) => {
-    const images = await page.locator('img').all();
-    
-    for (const img of images) {
-      const alt = await img.getAttribute('alt');
-      // Decorative images can have empty alt, but should be present
-      expect(alt).not.toBeNull();
-    }
+  test('vehicle detail exposes accessible seller actions', async ({ page, request }) => {
+    const published = await fetchPublishedVehicles(request);
+    test.skip(published.length === 0, 'No published vehicles in catalog');
+
+    await page.goto(`/vehicle/${published[0].id}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await expect(page.getByTestId('listing-stock-badge').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: /Chat with Seller/i }).first()).toBeVisible();
   });
 
-  test('forms should have labels', async ({ page }) => {
-    const inputs = await page.locator('input[type="text"], input[type="email"], input[type="password"], textarea').all();
-    
-    for (const input of inputs) {
-      const id = await input.getAttribute('id');
-      const ariaLabel = await input.getAttribute('aria-label');
-      const ariaLabelledBy = await input.getAttribute('aria-labelledby');
-      const placeholder = await input.getAttribute('placeholder');
-      
-      // Input should have at least one: id with label, aria-label, aria-labelledby, or placeholder
-      const hasLabel = id 
-        ? await page.locator(`label[for="${id}"]`).count() > 0
-        : false;
-      
-      const hasAccessibleName = hasLabel || ariaLabel || ariaLabelledBy || placeholder;
-      expect(hasAccessibleName).toBe(true);
-    }
+  test('login form email field has an accessible name', async ({ page }) => {
+    await page.goto('/login', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await page.getByRole('button', { name: /^Customer$/i }).click();
+    const email = page.locator('#email-address, input[name="email"]').first();
+    await expect(email).toBeVisible({ timeout: 30_000 });
+
+    const ariaLabel = await email.getAttribute('aria-label');
+    const id = await email.getAttribute('id');
+    const hasLabel = id ? (await page.locator(`label[for="${id}"]`).count()) > 0 : false;
+    expect(hasLabel || Boolean(ariaLabel)).toBe(true);
   });
 
-  test('should be keyboard navigable', async ({ page }) => {
-    // Tab through interactive elements
-    const interactiveElements = await page.locator('a, button, input, textarea, select, [tabindex]').all();
-    
-    expect(interactiveElements.length).toBeGreaterThan(0);
-    
-    // Check that focus is visible
+  test('keyboard tab moves focus away from body', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await expect(page.getByTestId('popular-cities-chips')).toBeVisible({ timeout: 60_000 });
     await page.keyboard.press('Tab');
-    const focusedElement = await page.evaluate(() => document.activeElement);
-    expect(focusedElement).not.toBeNull();
+    const tag = await page.evaluate(() => document.activeElement?.tagName ?? 'BODY');
+    expect(tag).not.toBe('BODY');
   });
 
-  test('should have sufficient color contrast', async ({ page }) => {
-    // This is a basic check - full contrast testing requires more complex setup
-    await checkA11y(page, undefined, {
-      axeOptions: {
-        rules: {
-          'color-contrast': { enabled: true },
-        },
-      },
-    });
-  });
+  test('vehicle detail images declare alt text', async ({ page, request }) => {
+    const published = await fetchPublishedVehicles(request);
+    test.skip(published.length === 0, 'No published vehicles in catalog');
 
-  test('should have skip links for navigation', async ({ page }) => {
-    // Check for skip to main content link
-    const skipLink = page.locator('a[href*="#main"], a:has-text("Skip"), [class*="skip"]').first();
-    
-    // Skip link is recommended but not required
-    if (await skipLink.count() > 0) {
-      await expect(skipLink).toBeVisible();
-    }
+    await page.goto(`/vehicle/${published[0].id}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await expect(page.getByTestId('listing-stock-badge').first()).toBeVisible({ timeout: 20_000 });
+    const img = page.locator('[data-testid="vehicle-image"], img').first();
+    await expect(img).toBeVisible({ timeout: 20_000 });
+    const alt = await img.getAttribute('alt');
+    expect(alt).not.toBeNull();
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-

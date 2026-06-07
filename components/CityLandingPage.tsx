@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react';
 import type { Vehicle } from '../types';
 import { getCityStats } from '../services/locationService';
+import { useIsMobileApp } from '../hooks/useIsMobileApp';
 import VehicleCard from './VehicleCard';
+import MobileVehicleCard from './MobileVehicleCard';
 
 interface CityLandingPageProps {
   city: string;
@@ -24,13 +26,24 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
   comparisonList,
   onViewSellerProfile,
 }) => {
+  const { isMobileApp } = useIsMobileApp();
   const cityStats = useMemo(() => getCityStats(vehicles, city), [vehicles, city]);
   const cityVehicles = useMemo(
-    () => vehicles.filter(v => v.city === city && v.status === 'published'),
-    [vehicles, city]
+    () => vehicles.filter((v) => v.city === city && v.status === 'published'),
+    [vehicles, city],
   );
 
   if (!cityStats) {
+    if (isMobileApp) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+          <div className="text-center">
+            <p className="text-gray-600 mb-2">No vehicles found in {city}</p>
+            <p className="text-sm text-gray-500">Check back later for listings</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="container mx-auto py-16 text-center">
         <h2 className="text-2xl font-bold text-gray-600">No vehicles found in {city}</h2>
@@ -39,9 +52,64 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
     );
   }
 
+  if (isMobileApp) {
+    return (
+      <div className="min-h-screen bg-gray-50 pb-24">
+        <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-4 py-8">
+          <h1 className="text-3xl font-bold mb-2">Used Cars in {city}</h1>
+          <p className="text-white/90 mb-4">
+            Find your perfect car from {cityStats.totalListings} quality listings
+          </p>
+          <div className="grid grid-cols-3 gap-4 mt-6">
+            <div>
+              <p className="text-2xl font-bold">{cityStats.totalListings}</p>
+              <p className="text-sm text-white/80">Listings</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold">
+                {cityStats.averagePrice ? `₹${Math.round(cityStats.averagePrice / 1000)}K` : 'N/A'}
+              </p>
+              <p className="text-sm text-white/80">Avg Price</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{cityStats.popularMakes?.length ?? 0}</p>
+              <p className="text-sm text-white/80">Brands</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">Available Vehicles</h2>
+            <p className="text-sm text-gray-600">{cityVehicles.length} results</p>
+          </div>
+
+          {cityVehicles.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-600">No vehicles found</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {cityVehicles.map((vehicle) => (
+                <MobileVehicleCard
+                  key={vehicle.id}
+                  vehicle={vehicle}
+                  onSelect={onSelectVehicle}
+                  isInWishlist={wishlist.includes(vehicle.id)}
+                  isInCompare={comparisonList.includes(vehicle.id)}
+                  onToggleWishlist={() => onToggleWishlist(vehicle.id)}
+                  onToggleCompare={() => onToggleCompare(vehicle.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto py-8">
-      {/* Hero Section */}
       <div className="bg-gradient-to-r from-reride-orange to-orange-600 text-white rounded-2xl p-8 mb-8 animate-fade-in">
         <h1 className="text-4xl font-bold mb-4">Used Cars in {city}</h1>
         <p className="text-xl mb-6">
@@ -63,7 +131,6 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
         </div>
       </div>
 
-      {/* Vehicles Grid */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-reride-text-dark mb-4">
           Latest Cars in {city}
@@ -72,7 +139,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
           Browse through our verified listings with quality checks and transparent pricing
         </p>
       </div>
-      
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {cityVehicles.map((vehicle) => (
           <VehicleCard
@@ -89,7 +156,6 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
         ))}
       </div>
 
-      {/* SEO Content */}
       <div className="mt-12 prose max-w-none">
         <h2 className="text-2xl font-bold text-reride-text-dark mb-4">
           Buy Used Cars in {city}
@@ -125,4 +191,3 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
 };
 
 export default CityLandingPage;
-
