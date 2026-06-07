@@ -115,12 +115,6 @@ type ProviderServiceApiRow = {
     includedServices?: ProviderIncludedServiceApiRow[];
 };
 
-type ProviderNameApiRow = {
-    id?: string;
-    uid?: string;
-    name?: string;
-};
-
 type ServiceCartPrefill = {
     serviceId?: string;
     serviceName?: string;
@@ -790,14 +784,11 @@ const ServiceCart: React.FC<Props> = ({
         const loadProvidersForNames = async () => {
             if (!isLoggedIn || activeTab !== 'track') return;
             try {
-                const resp = await authenticatedFetch('/api/service-providers?scope=all');
-                if (!resp.ok) return;
-                const data = await resp.json();
-                if (!Array.isArray(data)) return;
+                const { fetchPublicServiceProviderDirectory } = await import('../utils/serviceProviderDirectory');
+                const providers = await fetchPublicServiceProviderDirectory();
                 const next: Record<string, string> = {};
-                (data as ProviderNameApiRow[]).forEach((p) => {
-                    const id = p?.id || p?.uid;
-                    if (id) next[id] = p?.name || id;
+                providers.forEach((p) => {
+                    if (p.id) next[p.id] = p.name || p.id;
                 });
                 setProviderNameById(next);
             } catch {

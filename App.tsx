@@ -49,6 +49,11 @@ import { calculateDistance, getCityCoordinates, getUserLocation } from './servic
 import { logWarn, logDebug, logError, logInfo } from './utils/logger';
 import { currentUserForLocalSessionJson } from './utils/userLocalStorageSnapshot';
 import { authenticatedFetch } from './utils/authenticatedFetch';
+import {
+  fetchAdminServiceProviderDirectory,
+  fetchPublicServiceProviderDirectory,
+  type ServiceProviderDirectoryEntry,
+} from './utils/serviceProviderDirectory';
 import { buildVehicleMutationBody } from './utils/vehicleIdentity';
 import { computePageSeoMeta } from './utils/pageSeoMeta.js';
 import { openOrCreateVehicleConversation } from './utils/vehicleConversationFlow.js';
@@ -120,19 +125,6 @@ interface ServiceRequestPayload {
   couponCode?: string;
   total?: number;
   services?: Array<{ id: string; name: string; quantity?: number; price?: number }>;
-}
-
-interface ProviderResponse {
-  id?: string;
-  uid?: string;
-  email?: string;
-  name?: string;
-  city?: string;
-  location?: string;
-  state?: string;
-  district?: string;
-  serviceCategories?: string[];
-  rating?: number | string | null;
 }
 
 interface ApiResponse<T = unknown> {
@@ -1525,111 +1517,84 @@ const AppContent: React.FC = () => {
     };
   }, [addToast, currentUser, setNotifications]);
 
-  // Derive registered service providers (sellers) for the service cart
+  // Derive registered service providers for the service cart
+  const [serviceProviderBase, setServiceProviderBase] = React.useState<ServiceProviderDirectoryEntry[]>([]);
   const [serviceProviderOptions, setServiceProviderOptions] = React.useState<
     Array<{ id: string; name: string; city: string; distanceKm?: number; serviceCategories?: string[]; rating?: number }>
   >([]);
 
   React.useEffect(() => {
     let cancelled = false;
-    const run = async () => {
-      // Fetch actual service providers from API
+    const loadProviders = async () => {
+      const isAdmin = currentUser?.role === 'admin';
       try {
-        const providersResp = await authenticatedFetch('/api/service-providers?scope=all', {
-          method: 'GET',
-        });
-        if (providersResp.ok) {
-          const providers = await providersResp.json() as ProviderResponse[];
-          const base = providers
-            .map((p): ServiceProvider => {
-              const raw = p.rating;
-              const n = raw != null && raw !== '' ? (typeof raw === 'number' ? raw : Number(raw)) : NaN;
-              return {
-                id: p.id || p.uid || p.email || '',
-                name: p.name || 'Unknown',
-                city: p.city || p.location || 'Unknown',
-                state: p.state,
-                district: p.district,
-                serviceCategories: p.serviceCategories || [],
-                ...(Number.isFinite(n) ? { rating: n } : {}),
-              };
-            })
-            .filter((p): p is ServiceProvider => !!p.id && !!p.name);
-          
-          const userCity = selectedCity || userLocation || currentUser?.location || '';
-          const cityCoords = userCity ? await getCityCoordinates(userCity) : null;
-          const baseCoords = userCoords || cityCoords;
-
-          const enriched = await Promise.all(
-            base.map(async (p): Promise<ServiceProvider> => {
-              const providerCoords = p.city ? await getCityCoordinates(p.city) : null;
-              const distanceKm =
-                baseCoords && providerCoords ? calculateDistance(baseCoords, providerCoords) : undefined;
-              return { ...p, distanceKm };
-            })
-          );
-
-          if (!cancelled) {
-            const withIds = enriched.flatMap((p) =>
-              p.id
-                ? [
-                    {
-                      id: p.id,
-                      name: p.name,
-                      city: p.city,
-                      distanceKm: p.distanceKm,
-                      serviceCategories: p.serviceCategories,
-                      ...(p.rating != null && Number.isFinite(p.rating) ? { rating: p.rating } : {}),
-                    },
-                  ]
-                : [],
-            );
-            setServiceProviderOptions(withIds);
-          }
+        const directory = isAdmin
+          ? await fetchAdminServiceProviderDirectory()
+          : await fetchPublicServiceProviderDirectory();
+        if (!cancelled && directory.length > 0) {
+          setServiceProviderBase(directory);
           return;
         }
       } catch (error) {
         logWarn('Failed to fetch service providers, falling back to users:', error);
       }
-      
-      // Fallback to users if API fails
-      const base = (users || [])
-        .filter(u => u.role === 'seller')
-        .map(u => ({
-          id: u.id || u.email || u.name,
-          name: u.dealershipName || u.name,
-          city: u.location || 'Unknown',
-          serviceCategories: [],
-        }))
-        .filter(p => p.id && p.name);
+
+      if (cancelled) return;
+      const fallback: ServiceProviderDirectoryEntry[] = (users || [])
+        .filter((u) => u.role === 'seller' || u.role === 'service_provider')
+        .flatMap((u) => {
+          const id = u.id || u.email || u.name;
+          const name = u.dealershipName || u.name;
+          if (!id || !name) return [];
+          return [{ id, name, city: u.location || 'Unknown', serviceCategories: [] as string[] }];
+        });
+      setServiceProviderBase(fallback);
+    };
+    void loadProviders();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.role, users]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const enrichWithDistance = async () => {
+      if (serviceProviderBase.length === 0) {
+        if (!cancelled) setServiceProviderOptions([]);
+        return;
+      }
 
       const userCity = selectedCity || userLocation || currentUser?.location || '';
       const cityCoords = userCity ? await getCityCoordinates(userCity) : null;
       const baseCoords = userCoords || cityCoords;
 
       const enriched = await Promise.all(
-        base.map(async (p) => {
+        serviceProviderBase.map(async (p) => {
           const providerCoords = p.city ? await getCityCoordinates(p.city) : null;
           const distanceKm =
             baseCoords && providerCoords ? calculateDistance(baseCoords, providerCoords) : undefined;
           return { ...p, distanceKm };
-        })
+        }),
       );
 
       if (!cancelled) {
-        const withIds = enriched.flatMap((p) =>
-          p.id
-            ? [{ id: p.id, name: p.name, city: p.city, distanceKm: p.distanceKm, serviceCategories: p.serviceCategories }]
-            : [],
+        setServiceProviderOptions(
+          enriched.map((p) => ({
+            id: p.id,
+            name: p.name,
+            city: p.city,
+            distanceKm: p.distanceKm,
+            serviceCategories: p.serviceCategories,
+            ...(p.rating != null && Number.isFinite(p.rating) ? { rating: p.rating } : {}),
+          })),
         );
-        setServiceProviderOptions(withIds);
       }
     };
-    run();
+    void enrichWithDistance();
     return () => {
       cancelled = true;
     };
-  }, [users, selectedCity, userLocation, currentUser?.location, userCoords]);
+  }, [serviceProviderBase, selectedCity, userLocation, currentUser?.location, userCoords]);
 
   React.useEffect(() => {
     const handler = (ev: Event) => {
