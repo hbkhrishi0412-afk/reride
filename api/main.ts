@@ -4,7 +4,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  * Handler logic belongs in server/handlers/ — do NOT add new files under api/.
  * This file is the Vercel catch-all router; keep extracting handlers out of here.
  */
-import { randomBytes, createHmac, randomInt, timingSafeEqual } from 'crypto';
+import { randomBytes, createHmac, randomInt } from 'crypto';
 import { PLAN_DETAILS } from '../constants/plans.js';
 import type { User as UserType, Vehicle as VehicleType, VerificationStatus } from '../types.js';
 import { VehicleCategory } from '../vehicle-category.js';
@@ -123,7 +123,7 @@ import {
 import { isRefreshTokenRevoked, revokeRefreshToken } from '../lib/token-revocation.js';
 import { getSecurityConfig } from '../utils/security-config.js';
 import { attachApiCors } from '../utils/attach-api-cors.js';
-import { isAndroidWebViewAssetLoaderOrigin } from '../utils/cors-origin.js';
+import { shouldSkipCsrfForCapacitorNative } from '../utils/csrfCapacitorExempt.js';
 import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
 import { generateCsrfToken, validateCsrfToken, getCsrfCookieName, getCsrfHeaderName } from '../utils/csrf.js';
 import { getPublicAppOriginForPasswordReset, sendPasswordResetEmail } from './lib/send-password-reset-email.js';
@@ -255,7 +255,6 @@ const authenticateRequest = (req: VercelRequest): AuthResult => {
     
     // Check if JWT_SECRET is configured before attempting verification
     // Use getSecurityConfig().JWT.SECRET (same source as verifyToken) to ensure consistency
-    // This allows development fallback to work correctly
     const securityConfig = getSecurityConfig();
     const secret = securityConfig.JWT.SECRET;
     if (!secret) {
@@ -490,25 +489,6 @@ async function mainHandler(
       : Array.isArray(rawOrigin)
         ? rawOrigin[0]
         : undefined;
-  const isPackagedAndroidWebView = isAndroidWebViewAssetLoaderOrigin(originHeader);
-  // In production, only these origins are genuinely Capacitor native. Browser origins
-  // like http://localhost or http://127.0.0.1 are NOT native — any malicious tab at
-  // those origins could otherwise forge x-app-client: capacitor and bypass CSRF.
-  const isNativeCapacitorOrigin =
-    originHeader === 'https://localhost' || // Android (androidScheme: https)
-    originHeader === 'capacitor://localhost' || // iOS
-    originHeader === 'ionic://localhost' || // Legacy
-    isPackagedAndroidWebView;
-  // Dev-only origins (Vite dev server, emulator webview) — trusted ONLY outside of
-  // prod/staging so you can still run the mobile app locally.
-  const isDevCapacitorOrigin =
-    process.env.NODE_ENV !== 'production' &&
-    !process.env.VERCEL_ENV &&
-    (originHeader === 'https://127.0.0.1' ||
-      originHeader === 'http://localhost' ||
-      originHeader === 'http://127.0.0.1');
-  const isCapacitorApp = isNativeCapacitorOrigin || isDevCapacitorOrigin;
-
   // Handle CORS preflight (OPTIONS) and browser checks (HEAD)
   // This MUST be checked before any routing to prevent 405 errors
   if (req.method === 'OPTIONS' || req.method === 'HEAD') {
@@ -676,8 +656,10 @@ async function mainHandler(
       req.headers['x-app-client'] || req.headers['X-App-Client'] || '',
     ).toLowerCase();
     // Capacitor WebView (https://localhost) cannot send cross-site CSRF cookies; requests use JWT + this header.
-    const skipCsrfForCapacitorNative =
-      appClientHeader === 'capacitor' && Boolean(isCapacitorApp);
+    const skipCsrfForCapacitorNative = shouldSkipCsrfForCapacitorNative(
+      appClientHeader,
+      originHeader,
+    );
     const urlHasGemini =
       pathname.includes('/gemini') ||
       pathname.includes('/ai-inspection') ||
@@ -1470,14 +1452,16 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
 
       if (!user) {
-        // Auto-create test users if missing (local development only — never on Vercel)
+        // Opt-in local dev bootstrap — requires ALLOW_TEST_USER_BOOTSTRAP=true and TEST_BOOTSTRAP_PASSWORD in .env
         const allowTestUserBootstrap =
-          process.env.NODE_ENV === 'development' && String(process.env.VERCEL || '') !== '1';
+          process.env.ALLOW_TEST_USER_BOOTSTRAP === 'true' &&
+          process.env.NODE_ENV === 'development' &&
+          String(process.env.VERCEL || '') !== '1';
+        const bootstrapPassword = process.env.TEST_BOOTSTRAP_PASSWORD?.trim();
 
-        if (allowTestUserBootstrap) {
+        if (allowTestUserBootstrap && bootstrapPassword) {
           const testUsers = {
             'admin@test.com': {
-              password: 'password123',
               name: 'Admin User',
               mobile: '9876543210',
               location: 'Mumbai, Maharashtra',
@@ -1488,7 +1472,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
               featuredCredits: 100,
             },
             'seller@test.com': {
-              password: 'password123', // Updated to match common test password
               name: 'Prestige Motors',
               mobile: '+91-98765-43210',
               location: 'Delhi, NCR',
@@ -1504,7 +1487,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
               avatarUrl: 'https://i.pravatar.cc/150?u=seller@test.com',
             },
             'customer@test.com': {
-              password: 'password',
               name: 'Test Customer',
               mobile: '9876543212',
               location: 'Bangalore, Karnataka',
@@ -1529,11 +1511,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
               throw new Error('Supabase database is not available');
             }
             
-            const hashedPassword = await hashPassword(testUserConfig.password);
+            const hashedPassword = await hashPassword(bootstrapPassword);
             const newUser = await userService.create({
               email: normalizedEmail,
               ...testUserConfig,
-              password: hashedPassword, // Override with hashed password after spreading testUserConfig
+              password: hashedPassword,
               authProvider: 'email',
               createdAt: new Date().toISOString()
             });
@@ -1597,31 +1579,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         logWarn('⚠️ Password validation error (treating as invalid):', pwErr);
       }
 
-      // Legacy: some rows still store plain-text passwords (early seeds / imports). Bcrypt check
-      // always fails for those — migrate to bcrypt on successful match so production login works.
-      if (!isPasswordValid && user.password && typeof user.password === 'string') {
-        const stored = user.password;
-        const looksBcrypt = /^\$2[abxy]\$/.test(stored);
-        const plainBuf = Buffer.from(stored);
-        const inputBuf = Buffer.from(sanitizedData.password);
-        const plainMatches =
-          !looksBcrypt &&
-          plainBuf.length === inputBuf.length &&
-          timingSafeEqual(plainBuf, inputBuf);
-        if (plainMatches) {
-          try {
-            const hashedPassword = await hashPassword(sanitizedData.password);
-            await supabaseUserService.update(normalizedEmail, {
-              password: hashedPassword,
-              updatedAt: new Date().toISOString(),
-            });
-            user.password = hashedPassword;
-            isPasswordValid = true;
-            logInfo('✅ Migrated legacy plain-text password to bcrypt:', { email: normalizedEmail });
-          } catch (migErr) {
-            logError('❌ Failed to migrate legacy password hash:', migErr);
-          }
-        }
+      if (
+        !isPasswordValid &&
+        user.password &&
+        typeof user.password === 'string' &&
+        !/^\$2[abxy]\$/.test(user.password)
+      ) {
+        logWarn('⚠️ Login rejected: account has non-bcrypt password storage — user must reset password:', {
+          email: normalizedEmail,
+        });
       }
 
       if (!isPasswordValid) {
@@ -2423,7 +2389,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
     // Native app push token (FCM / APNs via Capacitor) — requires `push_device_tokens` table (see scripts/add-push-device-tokens.sql).
     if (action === 'save-push-token') {
-      const auth = authenticateRequest(req);
+      const auth = await authenticateRequestDual(req);
       if (!auth.isValid || !auth.user?.email) {
         return res.status(401).json({ success: false, reason: 'Authentication required.' });
       }

@@ -55,6 +55,8 @@
 	<string>ReRide needs photo library access to upload vehicle images.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>ReRide needs microphone access to send voice messages in chat.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>ReRide sends notifications about new messages, offers, and updates on your listings.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

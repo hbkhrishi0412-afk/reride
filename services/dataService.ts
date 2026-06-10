@@ -78,10 +78,11 @@ class DataService {
     // Higher priority for GET requests (read operations are more critical)
     const requestPriority = method === 'GET' ? Math.max(priority, 7) : priority;
 
-    // On Capacitor native, bypass the sequential queue for GET requests so the initial
-    // vehicles + users fetches run in parallel instead of serialized behind a 200ms delay.
-    // The queue was designed for rate-limit protection; mobile startup should not be throttled.
-    const bypassQueue = isCapacitorNative() && method === 'GET';
+    // Bypass the sequential queue for public read paths so vehicle catalog startup is not
+    // delayed behind other GETs (200ms gaps) or blocked by /users on first visit.
+    const bypassQueue =
+      method === 'GET' &&
+      (isCapacitorNative() || endpoint.includes('/vehicles'));
 
     const doRequest = async () => {
         let csrfHeader: string | undefined;
@@ -577,7 +578,30 @@ class DataService {
     } catch {
       /* ignore */
     }
-    return 80;
+    return 30;
+  }
+
+  /**
+   * Consume the boot-script prefetch (reride-boot.js) when the React app mounts.
+   * Returns null if unavailable, still in flight with no data, or invalid.
+   */
+  private async tryConsumeEarlyVehiclesPrefetch(): Promise<
+    Vehicle[] | { vehicles?: Vehicle[]; pagination?: { page?: number; limit?: number; total?: number; pages?: number; hasMore?: boolean } } | null
+  > {
+    if (typeof window === 'undefined') return null;
+    const early = (window as Window & { __RERIDE_EARLY_VEHICLES__?: Promise<unknown> }).__RERIDE_EARLY_VEHICLES__;
+    if (!early || typeof early.then !== 'function') return null;
+    try {
+      const raw = await early;
+      if (!raw) return null;
+      if (Array.isArray(raw)) return raw;
+      if (typeof raw === 'object' && raw !== null && 'vehicles' in raw) {
+        return raw as { vehicles?: Vehicle[]; pagination?: { page?: number; limit?: number; total?: number; pages?: number; hasMore?: boolean } };
+      }
+    } catch {
+      /* fall through to normal fetch */
+    }
+    return null;
   }
 
   /** Published list URL: native stays small pages; web uses chunked fetch + merge unless legacy env is set. */
@@ -706,7 +730,16 @@ class DataService {
         isNativeWebView,
         nativeVehiclesPageLimit
       );
-      const response = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint);
+      let response: Vehicle[] | { vehicles?: Vehicle[]; pagination?: any } | null = null;
+      if (!forceRefresh && !includeAllStatuses && !isNativeWebView) {
+        response = await this.tryConsumeEarlyVehiclesPrefetch();
+        if (response) {
+          console.log('✅ Used early vehicle prefetch from boot script');
+        }
+      }
+      if (!response) {
+        response = await this.makeApiRequest<Vehicle[] | { vehicles?: Vehicle[]; pagination?: any }>(endpoint);
+      }
       const shouldFastPaintFirstPage =
         !includeAllStatuses &&
         !isNativeWebView &&
@@ -1323,36 +1356,18 @@ class DataService {
   }
 
   private async getUsersLocal(): Promise<User[]> {
-    const fallbackUsers: User[] = [{
-      name: 'Demo User',
-      email: 'demo@reride.com',
-      mobile: '9876543210',
-      role: 'customer',
-      location: 'Mumbai',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-    }];
-
     let users = this.getLocalStorageData<User[]>('reRideUsers', []);
-    
+
     if (users.length === 0) {
       try {
-        // Try to load mock data first
         const mockUsers = await import('../mock-users.json');
         if (mockUsers.default && mockUsers.default.length > 0) {
           users = mockUsers.default as User[];
           this.setLocalStorageData('reRideUsers', users);
           console.log('✅ Loaded mock users data:', users.length, 'users');
-        } else {
-          // Fallback to constants if mock data not available
-          const { FALLBACK_USERS } = await import('../constants/fallback.js');
-          users = FALLBACK_USERS;
-          this.setLocalStorageData('reRideUsers', users);
         }
       } catch (error) {
-        console.log('⚠️ Could not load mock users, using fallback:', error);
-        users = fallbackUsers;
-        this.setLocalStorageData('reRideUsers', users);
+        console.log('⚠️ Could not load mock users:', error);
       }
     }
 
@@ -1378,8 +1393,11 @@ class DataService {
       
       return result;
     } catch (error) {
-      console.warn('API failed, falling back to local storage:', error);
-      return this.loginLocal(credentials);
+      const reason =
+        error instanceof Error
+          ? error.message
+          : 'Login failed. Please check your connection and try again.';
+      return { success: false, reason: reason || 'Login failed. Please check your connection and try again.' };
     }
   }
 
@@ -1436,8 +1454,11 @@ class DataService {
       
       return result;
     } catch (error) {
-      console.warn('API failed, falling back to local storage:', error);
-      return this.registerLocal(credentials);
+      const reason =
+        error instanceof Error
+          ? error.message
+          : 'Registration failed. Please check your connection and try again.';
+      return { success: false, reason: reason || 'Registration failed. Please check your connection and try again.' };
     }
   }
 

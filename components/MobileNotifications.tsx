@@ -8,6 +8,9 @@ interface MobileNotificationsProps {
   onMarkAsRead?: (ids: number[]) => void;
   onMarkAllAsRead?: () => void;
   onBack?: () => void;
+  isLoading?: boolean;
+  loadError?: string | null;
+  onRetryLoad?: () => void;
 }
 
 /**
@@ -22,7 +25,10 @@ export const MobileNotifications: React.FC<MobileNotificationsProps> = ({
   onNotificationClick,
   onMarkAsRead,
   onMarkAllAsRead,
-  onBack
+  onBack,
+  isLoading = false,
+  loadError = null,
+  onRetryLoad,
 }) => {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
@@ -134,7 +140,33 @@ export const MobileNotifications: React.FC<MobileNotificationsProps> = ({
       </div>
 
       {/* Notifications List */}
-      {filteredNotifications.length === 0 ? (
+      {isLoading ? (
+        <div className="p-4 space-y-3" aria-busy="true" aria-label="Loading notifications">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="bg-white rounded-xl p-4 border border-gray-100 flex gap-3">
+              <div className="w-10 h-10 rounded-full bg-gray-200 animate-pulse shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-full bg-gray-200 rounded animate-pulse" />
+                <div className="h-3 w-24 bg-gray-200 rounded animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : loadError ? (
+        <div className="text-center py-12 px-6">
+          <p className="text-gray-700 font-medium mb-2">Could not load notifications</p>
+          <p className="text-gray-500 text-sm mb-4">{loadError}</p>
+          {onRetryLoad ? (
+            <button
+              type="button"
+              onClick={onRetryLoad}
+              className="px-5 py-2.5 bg-orange-500 text-white rounded-xl font-semibold"
+            >
+              Retry
+            </button>
+          ) : null}
+        </div>
+      ) : filteredNotifications.length === 0 ? (
         <div className="text-center py-12">
           <svg
             className="w-16 h-16 text-gray-300 mx-auto mb-4"

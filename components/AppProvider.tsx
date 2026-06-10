@@ -18,6 +18,7 @@ import { getConversations, saveConversations } from '../services/chatService';
 import { putConversationOfferResponse } from '../services/conversationService';
 import {
   addMessageWithSync,
+  ensureSyncQueueOnlineListener,
   getSyncQueueStatus,
   processSyncQueue,
 } from '../services/syncService';
@@ -66,6 +67,7 @@ import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 import { sanitizePersistedChatMessage, supabaseRowToConversation } from '../services/supabase-conversation-service';
 import { emailToKey } from '../services/supabase-user-service';
 import { isCapacitorNative } from '../utils/apiConfig';
+import { getNativeMemoryRefreshToken } from '../utils/nativeTokenStorage';
 import { normalizeUserLocationForStorage } from '../utils/cityMapping';
 import {
   clearSupabaseAuthStorage,
@@ -76,17 +78,26 @@ import { getEffectiveMuteKeys, isStoryMuted } from '../utils/notificationMute';
 import { getSupabaseClient } from '../lib/supabase';
 import { syncServiceProviderOAuth, syncWithBackend } from '../services/supabase-auth-service';
 import type { Session } from '@supabase/supabase-js';
+import {
+  clearPersistedUserSession,
+  isPersistedSessionAuthenticated,
+  readPersistedUser,
+} from '../utils/validatePersistedSession';
 
 /** PostgREST realtime filter value: quote emails so `@` and special chars parse correctly. */
 function postgrestEqQuoted(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
-/** True if we can call refresh-token (JSON refresh in storage, or HttpOnly cookie + persisted user). */
+/** True if we can call refresh-token (native Keychain, JSON refresh, or HttpOnly cookie + persisted user). */
 function hasLikelyRefreshSource(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     if (localStorage.getItem('reRideRefreshToken')) return true;
+    if (isCapacitorNative()) {
+      if (getNativeMemoryRefreshToken()) return true;
+      if (localStorage.getItem('reRideCurrentUser')) return true;
+    }
     if (useHttpOnlyRefreshCookie() && localStorage.getItem('reRideCurrentUser')) return true;
   } catch {
     /* ignore */
@@ -172,7 +183,7 @@ function mergeVehicleCatalog(prev: Vehicle[], incoming: Vehicle[], isAdmin: bool
   if (normPrev.length === 0 || normIncoming.length >= normPrev.length) return normIncoming;
   if (isAdmin) return normIncoming;
   if (normPrev.length >= 5 && normIncoming.length <= 2) {
-    console.warn(
+    logWarn(
       `⚠️ Skipping vehicle state shrink (${normIncoming.length} vs ${normPrev.length} cached) — likely partial API response.`
     );
     return normPrev;
@@ -627,102 +638,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [vehiclesCatalogReady, setVehiclesCatalogReady] = useState<boolean>(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    // Check for existing logged-in user on app startup (safe for WebView/Capacitor)
-    if (typeof window === 'undefined' || typeof localStorage === 'undefined' || typeof sessionStorage === 'undefined') {
-      return null;
-    }
-    try {
-      const savedUser = localStorage.getItem('reRideCurrentUser');
-      const savedSession = sessionStorage.getItem('currentUser');
-      
-      if (savedUser) {
-        const user = JSON.parse(savedUser);
-        
-        // CRITICAL: Validate user object has required fields (especially role)
-        // Provide defaults for missing fields if possible
-        if (!user) {
-          logWarn('⚠️ Invalid user object in localStorage - user is null/undefined');
-          localStorage.removeItem('reRideCurrentUser');
-          if (savedSession) sessionStorage.removeItem('currentUser');
-          return null;
-        }
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const currentUserRef = useRef<User | null>(null);
+  currentUserRef.current = currentUser;
 
-        // Validate and fix missing email
-        if (!user.email || typeof user.email !== 'string') {
-          logWarn('⚠️ Invalid user object - missing or invalid email. Clearing user data.');
-          localStorage.removeItem('reRideCurrentUser');
-          if (savedSession) sessionStorage.removeItem('currentUser');
-          return null;
-        }
+  // Restore or reject persisted sessions (no optimistic auth UI before token validation).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!localStorage.getItem('reRideCurrentUser')) return;
 
-        // Validate and fix missing role - provide default if we can infer it
-        if (!user.role || typeof user.role !== 'string') {
-          // Try to infer role from other fields (e.g., has dealership = seller)
-          if (user.dealershipName) {
-            user.role = 'seller';
-            logDebug('🔧 Auto-assigned role "seller" based on dealershipName');
-          } else {
-            user.role = 'customer'; // Safe default
-            logDebug('🔧 Auto-assigned role "customer" as default');
-          }
-        }
-        
-        // Ensure role is a valid value (include service_provider — car-services accounts)
-        if (!['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(user.role)) {
-          logWarn('⚠️ Invalid role in user object:', user.role, '- defaulting to customer');
-          user.role = 'customer'; // Safe default instead of clearing
-          // Save corrected user back
-          try {
-            localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(user));
-          } catch (e) {
-            logWarn('Failed to save corrected user:', e);
-          }
-        }
-        
-        logInfo('🔄 Restoring logged-in user:', {
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          userId: user.id,
-          source: 'localStorage',
-          isProduction: !window.location.hostname.includes('localhost')
-        });
-        return user;
-      } else if (savedSession) {
-        // Fallback to sessionStorage if localStorage doesn't have user
-        const user = JSON.parse(savedSession);
-        if (
-          user &&
-          user.email &&
-          user.role &&
-          ['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(user.role)
-        ) {
-          logInfo('🔄 Restoring logged-in user from sessionStorage:', {
+    let cancelled = false;
+    void (async () => {
+      const authenticated = await isPersistedSessionAuthenticated();
+      if (cancelled) return;
+
+      if (authenticated) {
+        const user = readPersistedUser();
+        if (user) {
+          logInfo('🔄 Restoring logged-in user after session validation:', {
             name: user.name,
             email: user.email,
             role: user.role,
             userId: user.id,
-            source: 'sessionStorage'
           });
-          // Also restore to localStorage for consistency
-          localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(user));
-          return user;
+          setCurrentUser(user);
         }
+        return;
       }
-    } catch (error) {
-      logWarn('Failed to load user from localStorage:', error);
+
+      if (isDevelopmentEnvironment()) return;
+
+      logWarn('⚠️ Persisted session failed token validation — signing out');
+      setCurrentUser(null);
+      clearPersistedUserSession();
+      resetAuthFetchStateAfterLogout();
       try {
-        if (typeof localStorage !== 'undefined') localStorage.removeItem('reRideCurrentUser');
-        if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('currentUser');
-      } catch (_) {
-        // Ignore clear errors
+        const { logout: logoutService } = await import('../services/userService');
+        logoutService();
+      } catch (logoutError) {
+        logWarn('Session cleanup logout error:', logoutError);
       }
-    }
-    return null;
-  });
-  const currentUserRef = useRef<User | null>(null);
-  currentUserRef.current = currentUser;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    ensureSyncQueueOnlineListener();
+  }, []);
   const [comparisonList, setComparisonList] = useState<number[]>(() => {
     try {
       if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
@@ -1045,7 +1010,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       clearSupabaseAuthStorage();
 
-      // Clear tokens via logout service
+      try {
+        const { signOutGoogleNativeIfAvailable } = await import('../utils/nativeGoogleSignIn');
+        await signOutGoogleNativeIfAvailable();
+      } catch (googleSignOutError) {
+        logDebug('Native Google sign out skipped:', googleSignOutError);
+      }
+
+      // Clear tokens via logout service (includes Keychain / Keystore JWT pair on Capacitor)
       try {
         const { logout: logoutService } = await import('../services/userService');
         logoutService();
@@ -1106,6 +1078,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addToast(t('toast.loggedOut'), 'info');
     } catch (error) {
       logError('Error during logout:', error);
+      try {
+        const { signOutGoogleNativeIfAvailable } = await import('../utils/nativeGoogleSignIn');
+        await signOutGoogleNativeIfAvailable();
+      } catch {
+        /* ignore */
+      }
+      try {
+        const { logout: logoutService } = await import('../services/userService');
+        logoutService();
+      } catch {
+        /* ignore */
+      }
       // Even if there's an error, clear local state
       setCurrentUser(null);
       sessionStorage.removeItem('currentUser');
@@ -1652,7 +1636,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           eventPayloadUsers = updatedCachedUsers;
         }
       } catch (error) {
-        console.warn(`⚠️ Failed to sync ${cacheKey}:`, error);
+        logWarn(`⚠️ Failed to sync ${cacheKey}:`, error);
       }
     }
 
@@ -1672,7 +1656,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         window.dispatchEvent(new Event('storage'));
       }
     } catch (error) {
-      console.warn('⚠️ Failed to sync full users caches:', error);
+      logWarn('⚠️ Failed to sync full users caches:', error);
     }
   }, []);
 
@@ -1696,7 +1680,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         localStorage.setItem(cacheKey, JSON.stringify(updatedVehicles));
       } catch (error) {
-        console.warn(`⚠️ Failed to sync ${cacheKey}:`, error);
+        logWarn(`⚠️ Failed to sync ${cacheKey}:`, error);
       }
     }
 
@@ -1714,7 +1698,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     } catch (error) {
-      console.warn('⚠️ Failed to sync selectedVehicle cache:', error);
+      logWarn('⚠️ Failed to sync selectedVehicle cache:', error);
     }
   }, []);
 
@@ -1893,7 +1877,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               vehicleFound = true;
               setSelectedVehicle(vehicleToUse);
               if (process.env.NODE_ENV === 'development') {
-                console.log(
+                logInfo(
                   '🔧 Restored vehicle from sessionStorage during navigation:',
                   vehicleToUse.id,
                   vehicleToUse.make,
@@ -1902,7 +1886,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             }
           } catch (parseError) {
-            console.error('❌ Failed to parse vehicle from sessionStorage:', parseError);
+            logError('❌ Failed to parse vehicle from sessionStorage:', parseError);
             sessionStorage.removeItem('selectedVehicle');
           }
         }
@@ -1918,13 +1902,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             try {
               sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(detailVehicleParam));
               if (process.env.NODE_ENV === 'development') {
-                console.log(
+                logInfo(
                   '🔧 Applied detailVehicle param during navigation:',
                   detailVehicleParam.id
                 );
               }
             } catch (error) {
-              console.warn('⚠️ Failed to sync detail vehicle to sessionStorage:', error);
+              logWarn('⚠️ Failed to sync detail vehicle to sessionStorage:', error);
             }
           }
         }
@@ -1935,23 +1919,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(selectedVehicle));
             if (process.env.NODE_ENV === 'development') {
-              console.log('🔧 Synced vehicle from state to sessionStorage:', selectedVehicle.id);
+              logInfo('🔧 Synced vehicle from state to sessionStorage:', selectedVehicle.id);
             }
           } catch (error) {
-            console.warn('⚠️ Failed to sync vehicle to sessionStorage:', error);
+            logWarn('⚠️ Failed to sync vehicle to sessionStorage:', error);
           }
         }
 
         if (!vehicleFound && process.env.NODE_ENV === 'development') {
-          console.warn(
+          logWarn(
             '⚠️ Attempted to navigate to DETAIL view without a vehicle in sessionStorage, params, or state'
           );
-          console.warn('⚠️ Current selectedVehicle:', selectedVehicle);
-          console.warn('⚠️ SessionStorage value:', sessionStorage.getItem('selectedVehicle'));
+          logWarn('⚠️ Current selectedVehicle:', selectedVehicle);
+          logWarn('⚠️ SessionStorage value:', sessionStorage.getItem('selectedVehicle'));
         }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
-          console.error('❌ Error checking for vehicle during navigation:', error);
+          logError('❌ Error checking for vehicle during navigation:', error);
         }
       }
     }
@@ -1979,13 +1963,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (params && params.city !== undefined && params.city !== '') {
         // Set city filter when city is provided
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔵 AppProvider: Setting city filter to:', params.city);
+          logInfo('🔵 AppProvider: Setting city filter to:', params.city);
         }
         updateSelectedCity(params.city);
       } else {
         // Clear city filter when no city parameter or empty string (View all cars)
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔵 AppProvider: Clearing city filter');
+          logInfo('🔵 AppProvider: Clearing city filter');
         }
         updateSelectedCity('');
       }
@@ -1995,7 +1979,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // CRITICAL: Enhanced validation for seller dashboard access
     if (view === View.SELLER_DASHBOARD) {
       if (!currentUser) {
-        console.warn('⚠️ Attempted to access seller dashboard without logged-in user');
+        logWarn('⚠️ Attempted to access seller dashboard without logged-in user');
         if (currentView !== View.LOGIN_PORTAL && currentView !== View.SELLER_LOGIN) {
           setCurrentView(View.LOGIN_PORTAL);
         }
@@ -2004,7 +1988,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // Validate user has required fields
       if (!currentUser.email || !currentUser.role) {
-        console.error('❌ Invalid user object - missing email or role:', { 
+        logError('❌ Invalid user object - missing email or role:', { 
           hasEmail: !!currentUser.email, 
           hasRole: !!currentUser.role 
         });
@@ -2016,7 +2000,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // Check role specifically
       if (currentUser.role !== 'seller') {
-        console.warn('⚠️ Attempted to access seller dashboard with role:', currentUser.role);
+        logWarn('⚠️ Attempted to access seller dashboard with role:', currentUser.role);
         if (currentView !== View.LOGIN_PORTAL && currentView !== View.SELLER_LOGIN) {
           setCurrentView(View.LOGIN_PORTAL);
         }
@@ -2024,7 +2008,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       
       // All validation passed - navigate to seller dashboard
-      console.log('✅ Navigating to seller dashboard');
+      logInfo('✅ Navigating to seller dashboard');
       setCurrentView(View.SELLER_DASHBOARD);
     } else if (view === View.ADMIN_PANEL && !isAdminUserRole(currentUser?.role)) {
       if (currentView !== View.ADMIN_LOGIN) {
@@ -2038,7 +2022,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // For all other views including DETAIL, set the current view
       // DETAIL view will handle showing error if vehicle is missing
       if (process.env.NODE_ENV === 'development' && view === View.DETAIL) {
-        console.log('🎯 Setting currentView to DETAIL');
+        logInfo('🎯 Setting currentView to DETAIL');
       }
       setCurrentView(view);
     }
@@ -2256,7 +2240,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const loginViews = [View.LOGIN_PORTAL, View.SELLER_LOGIN, View.CUSTOMER_LOGIN, View.ADMIN_LOGIN];
       if (loginViews.includes(currentView)) {
         if (currentUser.role === 'seller' && currentView !== View.SELLER_DASHBOARD) {
-          console.log('🔄 Auto-navigating seller to dashboard from login view');
+          logInfo('🔄 Auto-navigating seller to dashboard from login view');
           setCurrentView(View.SELLER_DASHBOARD);
         } else if (isAdminUserRole(currentUser.role) && currentView !== View.ADMIN_PANEL) {
           setCurrentView(View.ADMIN_PANEL);
@@ -2548,7 +2532,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // CRITICAL: Listen for force loading completion event (safety mechanism)
   useEffect(() => {
     const handleForceLoadingComplete = () => {
-      console.warn('⚠️ Force loading complete event received, clearing loading state');
+      logWarn('⚠️ Force loading complete event received, clearing loading state');
       setIsLoading(false);
       // Removed toast notification - no longer needed since we show cached data immediately
     };
@@ -2656,23 +2640,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Fallback to currentUser if localStorage doesn't have it (shouldn't happen, but safe)
         const isAdmin = (userRole || currentUser?.role) === 'admin';
         
-        // AUTH: Ensure we have an access token before starting any production API calls.
-        // Without this, `dataService` may run with missing `reRideAccessToken` and fail the first requests.
-        if (typeof window !== 'undefined' && !isDevelopmentEnvironment()) {
-          try {
-            const hasAccessToken = !!getBrowserAccessTokenForApi();
-
-            if (!hasAccessToken && hasLikelyRefreshSource()) {
-              // Hard timeout so we don't block rendering too long.
-              await Promise.race([
-                refreshAuthToken(),
-                new Promise((resolve) => setTimeout(resolve, 2500)),
-              ]);
+        // AUTH: Rehydrate tokens in parallel — published vehicles are public and must not
+        // wait up to 2.5s behind refresh-token on first paint for new/returning visitors.
+        void (async () => {
+          if (typeof window !== 'undefined' && !isDevelopmentEnvironment()) {
+            try {
+              const hasAccessToken = !!getBrowserAccessTokenForApi();
+              if (!hasAccessToken && hasLikelyRefreshSource()) {
+                await Promise.race([
+                  refreshAuthToken(),
+                  new Promise((resolve) => setTimeout(resolve, 2500)),
+                ]);
+              }
+            } catch (error) {
+              logWarn('⚠️ Auth rehydration failed (non-critical):', error);
             }
-          } catch (error) {
-            logWarn('⚠️ Auth rehydration failed (non-critical):', error);
           }
-        }
+        })();
         
         // Keep UI responsive, but do not treat slow responses as empty data.
         const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number): Promise<T | null> => {
@@ -2691,10 +2675,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           `vehicles-${isAdmin ? 'admin' : 'user'}-init`,
           () => dataService.getVehicles(isAdmin)
         );
-        const usersRequest = deduplicateRequest(
-          'users',
-          () => dataService.getUsers()
-        );
+        const usersRequest = isAdmin
+          ? deduplicateRequest('users', () => dataService.getUsers())
+          : null;
 
         // Use the SAME deadline for both requests. Previously users used 3.5s vs vehicles 4.5s on web,
         // so users often timed out first; the .then ran with vehicles populated and usersData === null,
@@ -2710,7 +2693,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Swallow errors at this level so Promise.all always resolves.
         Promise.all([
           loadWithTimeout(vehicleRequest, parallelInitTimeoutMs).catch((e) => { logWarn('Failed to load vehicles:', e); return null; }),
-          loadWithTimeout(usersRequest, parallelInitTimeoutMs).catch((e) => { logWarn('Failed to load users:', e); return null; })
+          usersRequest
+            ? loadWithTimeout(usersRequest, parallelInitTimeoutMs).catch((e) => { logWarn('Failed to load users:', e); return null; })
+            : Promise.resolve(null),
         ]).then(([vehiclesData, usersData]) => {
           if (!isMounted) return;
           
@@ -2836,24 +2821,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   try {
                     const currentUsers = JSON.parse(currentUsersJson);
                     if (Array.isArray(currentUsers) && currentUsers.length > 0) {
-                      console.log(`✅ Using ${currentUsers.length} cached users (API returned empty in production)`);
+                      logInfo(`✅ Using ${currentUsers.length} cached users (API returned empty in production)`);
                       setUsers(currentUsers);
                     } else {
-                      console.log('ℹ️ API returned empty users array and cache is also empty (production mode)');
+                      logInfo('ℹ️ API returned empty users array and cache is also empty (production mode)');
                       // Preserve existing in-memory users if already present to avoid admin-panel flicker to empty.
                       setUsers(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
                     }
                   } catch (parseError) {
-                    console.warn('Failed to parse cached users in production:', parseError);
+                    logWarn('Failed to parse cached users in production:', parseError);
                     setUsers(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
                   }
                 } else {
-                  console.log('ℹ️ API returned empty users array and no cache available (production mode)');
+                  logInfo('ℹ️ API returned empty users array and no cache available (production mode)');
                   setUsers(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
                 }
               }
             }
-          } else if (usersData === null) {
+          } else if (usersData === null && usersRequest) {
             logWarn('⚠️ Users API response exceeded initial timeout. Keeping current users and waiting for response...');
             usersRequest.then((lateUsers) => {
               if (!isMounted || !Array.isArray(lateUsers)) return;
@@ -2871,7 +2856,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setIsLoading(false);
           }
         }).catch(error => {
-          console.warn('Background data refresh failed (using cache):', error);
+          logWarn('Background data refresh failed (using cache):', error);
           // If no cached data was available, stop loading even on error
           if (!hasCachedData && isMounted) {
             setIsLoading(false);
@@ -2894,6 +2879,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           // Load non-critical data in parallel (deferred)
           Promise.all([
+            // Seller directory — deferred for non-admin so /users does not delay vehicle catalog
+            (!isAdmin
+              ? (async () => {
+                  try {
+                    const deferredUsers = await deduplicateRequest('users', () => dataService.getUsers());
+                    if (!isMounted || !Array.isArray(deferredUsers) || deferredUsers.length === 0) return;
+                    setUsers(deferredUsers);
+                    logInfo(`✅ Deferred seller directory loaded: ${deferredUsers.length} users`);
+                  } catch (error) {
+                    logWarn('Failed to load deferred users:', error);
+                  }
+                })()
+              : Promise.resolve()),
+
             // FAQs
             (async () => {
               try {
@@ -2952,7 +2951,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 );
                 if (isMounted && vehicleDataData) setVehicleData(vehicleDataData);
               } catch (error) {
-                console.warn('Failed to load vehicle data:', error);
+                logWarn('Failed to load vehicle data:', error);
               }
             })(),
           
@@ -2964,10 +2963,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const cachedConversations = getConversations();
                 if (cachedConversations && cachedConversations.length > 0 && isMounted) {
                   setConversations(cachedConversations);
-                  console.log(`✅ Instantly loaded ${cachedConversations.length} cached conversations`);
+                  logInfo(`✅ Instantly loaded ${cachedConversations.length} cached conversations`);
                 }
               } catch (cacheError) {
-                console.warn('Failed to load cached conversations:', cacheError);
+                logWarn('Failed to load cached conversations:', cacheError);
               }
               
               // STEP 2: Fetch fresh conversations in background (non-blocking, with timeout)
@@ -3026,7 +3025,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
               }
             } catch (error) {
-              console.warn('Failed to load conversations:', error);
+              logWarn('Failed to load conversations:', error);
               if (isMounted) {
                 const localConversations = getConversations();
                 if (localConversations && localConversations.length > 0) {
@@ -3069,12 +3068,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   try {
                     persistReRideNotifications(result.data);
                   } catch (error) {
-                    console.warn('Failed to save notifications:', error);
+                    logWarn('Failed to save notifications:', error);
                   }
                 }
               }
             } catch (error) {
-              console.warn('Failed to load notifications:', error);
+              logWarn('Failed to load notifications:', error);
               if (isMounted) {
                 try {
                   const notificationsJson = readPersistedReRideNotifications();
@@ -3086,12 +3085,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           })()
           ]).catch(error => {
-            console.warn('Background data loading failed:', error);
+            logWarn('Background data loading failed:', error);
           });
         });
         
       } catch (error) {
-        console.error('AppProvider: Error loading initial data:', error);
+        logError('AppProvider: Error loading initial data:', error);
         if (isMounted) {
           // Ensure we have at least empty arrays
           setVehicles(prev => Array.isArray(prev) ? prev : []);
@@ -3370,7 +3369,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Do not toast on empty listings: zero published vehicles is valid (new seller, empty marketplace).
           // Misconfiguration is surfaced when the request fails (see rejected branch / 503 handling).
         } else if (vehiclesResult.status === 'rejected') {
-          console.warn('Failed to sync vehicles:', vehiclesResult.reason);
+          logWarn('Failed to sync vehicles:', vehiclesResult.reason);
           const reason = vehiclesResult.reason as any;
           const status = reason?.status ?? reason?.code;
           const message = reason instanceof Error ? reason.message : reason?.message ?? String(reason);
@@ -3387,19 +3386,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Update users if fetch succeeded
         if (usersResult.status === 'fulfilled' && Array.isArray(usersResult.value)) {
-          console.log(`✅ AppProvider: Setting ${usersResult.value.length} users in state`);
+          logInfo(`✅ AppProvider: Setting ${usersResult.value.length} users in state`);
           setUsers(usersResult.value);
           // For admin users, log if we got 0 users (might indicate an issue)
           if (currentUser?.role === 'admin' && usersResult.value.length === 0) {
-            console.warn('⚠️ AppProvider: Admin user fetched 0 users. This might indicate:');
-            console.warn('   1. No users exist in the database');
-            console.warn('   2. Authentication/authorization issue');
-            console.warn('   3. API returned empty array');
+            logWarn('⚠️ AppProvider: Admin user fetched 0 users. This might indicate:');
+            logWarn('   1. No users exist in the database');
+            logWarn('   2. Authentication/authorization issue');
+            logWarn('   3. API returned empty array');
           }
           // Do not toast on empty users: non-admins cannot list all users (GET /api/users returns 403),
           // so getUsers() legitimately resolves to []. Dealer enrichment uses currentUser + vehicles.
         } else if (usersResult.status === 'rejected') {
-          console.error('❌ AppProvider: Failed to sync users:', usersResult.reason);
+          logError('❌ AppProvider: Failed to sync users:', usersResult.reason);
           // For admin users, try to use cached data as fallback
           const reason = usersResult.reason as any;
           const status = reason?.status ?? reason?.code;
@@ -3419,17 +3418,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               try {
                 const parsed = JSON.parse(cachedUsers);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                  console.warn('⚠️ Using cached users data due to API failure');
+                  logWarn('⚠️ Using cached users data due to API failure');
                   setUsers(parsed);
                 }
               } catch (e) {
-                console.error('Failed to parse cached users:', e);
+                logError('Failed to parse cached users:', e);
               }
             }
           }
         }
       } catch (error) {
-        console.error('AppProvider: Failed to sync latest data after authentication:', error);
+        logError('AppProvider: Failed to sync latest data after authentication:', error);
         // Don't show toast on every error - only if critical
       } finally {
         if (isSubscribed) {
@@ -3521,7 +3520,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           requireInteraction: false
         }).catch(err => {
           if (process.env.NODE_ENV === 'development') {
-            console.warn('Failed to show browser notification:', err);
+            logWarn('Failed to show browser notification:', err);
           }
         });
       }
@@ -3547,7 +3546,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const processSync = async () => {
       // Prevent concurrent sync processing
       if (isProcessing) {
-        console.log('⏳ Sync already in progress, skipping...');
+        logInfo('⏳ Sync already in progress, skipping...');
         return;
       }
 
@@ -3556,27 +3555,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const queueStatus = getSyncQueueStatus();
         
         if (queueStatus.pending > 0) {
-          console.log(`🔄 Processing sync queue: ${queueStatus.pending} items pending`);
+          logInfo(`🔄 Processing sync queue: ${queueStatus.pending} items pending`);
           
           const result = await processSyncQueue();
           
           if (result.success > 0) {
-            console.log(`✅ Successfully synced ${result.success} items to Supabase`);
+            logInfo(`✅ Successfully synced ${result.success} items to Supabase`);
             if (process.env.NODE_ENV === 'development') {
               addToast(t('toast.syncedItemsCount', { count: result.success }), 'success');
             }
           }
           
           if (result.failed > 0) {
-            console.warn(`⚠️ Failed to sync ${result.failed} items after retries`);
+            logWarn(`⚠️ Failed to sync ${result.failed} items after retries`);
             const remainingStatus = getSyncQueueStatus();
             if (remainingStatus.pending > 0 && process.env.NODE_ENV === 'development') {
-              console.log(`⏳ ${remainingStatus.pending} items still pending sync`);
+              logInfo(`⏳ ${remainingStatus.pending} items still pending sync`);
             }
           }
         }
       } catch (error) {
-        console.error('Error processing sync queue:', error);
+        logError('Error processing sync queue:', error);
       } finally {
         isProcessing = false;
       }
@@ -3606,9 +3605,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           const newVehicleData = JSON.parse(e.newValue);
           setVehicleData(newVehicleData);
-          console.log('✅ Vehicle data synced from another tab');
+          logInfo('✅ Vehicle data synced from another tab');
         } catch (error) {
-          console.error('Failed to parse vehicle data from storage event:', error);
+          logError('Failed to parse vehicle data from storage event:', error);
         }
       }
     };
@@ -3617,7 +3616,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const handleVehicleDataUpdate = (e: CustomEvent) => {
       if (e.detail && e.detail.vehicleData) {
         setVehicleData(e.detail.vehicleData);
-        console.log('✅ Vehicle data synced from same tab');
+        logInfo('✅ Vehicle data synced from same tab');
       }
     };
 
@@ -3631,7 +3630,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (raw) admin = JSON.parse(raw)?.role === 'admin';
         } catch { /* ignore */ }
         setVehicles((prev) => mergeVehicleCatalog(prev, detail.vehicles, admin));
-        console.log('✅ Vehicle list updated from background refresh');
+        logInfo('✅ Vehicle list updated from background refresh');
       }
     };
 
@@ -3640,7 +3639,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const detail = (e as CustomEvent).detail;
       if (detail && Array.isArray(detail.users)) {
         setUsers(detail.users);
-        console.log('✅ User list updated from background refresh');
+        logInfo('✅ User list updated from background refresh');
       }
     };
 
@@ -3670,11 +3669,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .then((freshVehicles) => {
           if (Array.isArray(freshVehicles) && freshVehicles.length >= 0) {
             setVehicles((prev) => mergeVehicleCatalog(prev, freshVehicles, !!isAdmin));
-            console.log('✅ Vehicle list refreshed from API');
+            logInfo('✅ Vehicle list refreshed from API');
           }
         })
         .catch((err) => {
-          console.warn('Periodic vehicle list refresh failed:', err);
+          logWarn('Periodic vehicle list refresh failed:', err);
         });
     }, vehicleRefreshMs); // 1 minute on web, 3 minutes on native
 
@@ -3684,11 +3683,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .then((freshData) => {
           if (freshData) {
             setVehicleData(freshData);
-            console.log('✅ Vehicle data refreshed from API');
+            logInfo('✅ Vehicle data refreshed from API');
           }
         })
         .catch((error) => {
-          console.warn('Failed to refresh vehicle data:', error);
+          logWarn('Failed to refresh vehicle data:', error);
         });
     }, 5 * 60 * 1000); // 5 minutes
 
@@ -3872,7 +3871,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Join all conversations at once
     if (conversationIds.length > 0) {
-      console.log('🔧 Joining conversation rooms:', { count: conversationIds.length, conversationIds });
+      logInfo('🔧 Joining conversation rooms:', { count: conversationIds.length, conversationIds });
       realtimeChatService.joinAllConversations(conversationIds);
       if (process.env.NODE_ENV === 'development') {
         logDebug(`🔧 Auto-subscribed to ${conversationIds.length} conversation(s)`);
@@ -3918,7 +3917,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const activity = await buyerService.getBuyerActivity(currentUser.email);
         // Activity is automatically saved to localStorage by getBuyerActivity
         if (process.env.NODE_ENV === 'development') {
-          console.log('✅ Buyer activity loaded from database:', {
+          logInfo('✅ Buyer activity loaded from database:', {
             userId: activity.userId,
             recentlyViewedCount: activity.recentlyViewed.length,
             savedSearchesCount: activity.savedSearches.length
@@ -3944,18 +3943,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const userRole = currentUser.role as 'customer' | 'seller';
 
     // Connect to real-time chat service
-    console.log('🔧 AppProvider: Connecting to real-time chat service...', { userEmail, userRole });
+    logInfo('🔧 AppProvider: Connecting to real-time chat service...', { userEmail, userRole });
     realtimeChatService.connect(userEmail, userRole).then((connected) => {
       if (connected) {
-        console.log('✅ Real-time chat service connected successfully');
+        logInfo('✅ Real-time chat service connected successfully');
       } else {
         // Only show warning if connection actually failed (not just "not available")
         // The service now returns true even if WebSocket isn't available (messages still work)
-        console.log('ℹ️ Real-time chat: Using fallback mode (messages still work via API)');
+        logInfo('ℹ️ Real-time chat: Using fallback mode (messages still work via API)');
       }
     }).catch((error) => {
       // Don't show error toast - messages still work via API
-      console.warn('⚠️ Real-time chat connection issue (non-critical):', error);
+      logWarn('⚠️ Real-time chat connection issue (non-critical):', error);
       // Messages will still work via Supabase API, just not real-time
     });
     
@@ -3963,16 +3962,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Messages still work via API even if real-time connection fails
     realtimeChatService.onConnection((connected) => {
       if (connected) {
-        console.log('✅ Real-time chat connection established');
+        logInfo('✅ Real-time chat connection established');
       } else {
         // Don't show error - messages still work via API
-        console.log('ℹ️ Real-time chat disconnected (messages still work via API)');
+        logInfo('ℹ️ Real-time chat disconnected (messages still work via API)');
       }
     });
 
     // Setup message received callback
     realtimeChatService.onMessage((conversationId, message, conversationData) => {
-      console.log('📨 AppProvider: Received real-time message:', { 
+      logInfo('📨 AppProvider: Received real-time message:', { 
         conversationId, 
         messageId: message.id, 
         sender: message.sender,
@@ -3986,7 +3985,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Check if message already exists (prevent duplicates)
           const messageExists = existingConv.messages.some(m => m.id === message.id);
           if (messageExists) {
-            console.log('⚠️ Message already exists, skipping duplicate:', message.id);
+            logInfo('⚠️ Message already exists, skipping duplicate:', message.id);
             return prev; // Message already exists, no update needed
           }
           
@@ -4015,14 +4014,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             saveConversations(updated);
           } catch (error) {
-            console.error('Failed to save conversations to localStorage:', error);
+            logError('Failed to save conversations to localStorage:', error);
           }
           
-          console.log('✅ Message added to conversation:', { conversationId, messageId: message.id });
+          logInfo('✅ Message added to conversation:', { conversationId, messageId: message.id });
           return updated;
         } else {
           // Conversation doesn't exist in state - try to add it using conversationData from WebSocket
-          console.warn('⚠️ Received message for conversation not in state:', {
+          logWarn('⚠️ Received message for conversation not in state:', {
             conversationId,
             messageId: message.id,
             sender: message.sender,
@@ -4049,7 +4048,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               isFlagged: false
             };
             
-            console.log('✅ Adding conversation to state from WebSocket data:', {
+            logInfo('✅ Adding conversation to state from WebSocket data:', {
               conversationId,
               customerName: newConversation.customerName,
               sellerName: sellerName || 'N/A',
@@ -4066,7 +4065,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const updated = [...prev, newConversation];
               saveConversations(updated);
             } catch (error) {
-              console.error('Failed to save conversations to localStorage:', error);
+              logError('Failed to save conversations to localStorage:', error);
             }
             
             return [...prev, newConversation];
@@ -4074,7 +4073,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           // Fallback: Try to load conversation from database
           // CRITICAL: For sellers, we need to ensure they see conversations even if not in their initial load
-          console.log('🔄 Attempting to load conversation from database:', conversationId);
+          logInfo('🔄 Attempting to load conversation from database:', conversationId);
           (async () => {
             try {
               const { getConversationsFromSupabase } = await import('../services/conversationService');
@@ -4083,7 +4082,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const currentUserRole = currentUser?.role;
               
               if (!currentUserEmail || !currentUserRole) {
-                console.warn('⚠️ Cannot load conversation: missing user info');
+                logWarn('⚠️ Cannot load conversation: missing user info');
                 return;
               }
               
@@ -4102,7 +4101,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (!foundConv) {
                 try {
                   foundConv = await supabaseConversationService.findById(conversationId);
-                  console.log('🔍 Direct Supabase conversation lookup result:', {
+                  logInfo('🔍 Direct Supabase conversation lookup result:', {
                     found: !!foundConv,
                     conversationId,
                     sellerId: foundConv?.sellerId,
@@ -4110,7 +4109,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     role: currentUserRole,
                   });
                 } catch (error) {
-                  console.warn('⚠️ Direct lookup failed:', error);
+                  logWarn('⚠️ Direct lookup failed:', error);
                 }
               }
               
@@ -4120,7 +4119,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   const normalizedSellerEmail = (currentUserEmail || '').toLowerCase().trim();
                   const normalizedConvSellerId = (foundConv.sellerId || '').toLowerCase().trim();
                   if (normalizedConvSellerId !== normalizedSellerEmail) {
-                    console.warn('⚠️ Conversation sellerId mismatch:', {
+                    logWarn('⚠️ Conversation sellerId mismatch:', {
                       conversationId,
                       convSellerId: foundConv.sellerId,
                       currentUserEmail,
@@ -4149,7 +4148,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     const existingConv = prevState.find(c => c.id === conversationId);
                     const hasMessage = existingConv?.messages.some(m => m.id === message.id);
                     if (hasMessage) {
-                      console.log('✅ Message already in conversation, skipping update');
+                      logInfo('✅ Message already in conversation, skipping update');
                       return prevState;
                     }
                     // Update existing conversation with new message
@@ -4159,12 +4158,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     try {
                       saveConversations(updated);
                     } catch (error) {
-                      console.error('Failed to save conversations to localStorage:', error);
+                      logError('Failed to save conversations to localStorage:', error);
                     }
                     return updated;
                   }
                   // Add new conversation to seller's inbox
-                  console.log('✅ Adding conversation to seller inbox:', {
+                  logInfo('✅ Adding conversation to seller inbox:', {
                     conversationId,
                     sellerId: updatedConv.sellerId,
                     customerName: updatedConv.customerName,
@@ -4174,7 +4173,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   try {
                     saveConversations(updated);
                   } catch (error) {
-                    console.error('Failed to save conversations to localStorage:', error);
+                    logError('Failed to save conversations to localStorage:', error);
                   }
                   return updated;
                 });
@@ -4184,9 +4183,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   setActiveChat(updatedConv);
                 }
                 
-                console.log('✅ Loaded and added conversation from database:', conversationId);
+                logInfo('✅ Loaded and added conversation from database:', conversationId);
               } else {
-                console.error('❌ Conversation not found in database:', {
+                logError('❌ Conversation not found in database:', {
                   conversationId,
                   currentUserEmail,
                   currentUserRole,
@@ -4196,7 +4195,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 // or the sellerId doesn't match - log for debugging
               }
             } catch (error) {
-              console.error('❌ Failed to load conversation from database:', error);
+              logError('❌ Failed to load conversation from database:', error);
             }
           })();
           
@@ -4264,7 +4263,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           saveConversations(next);
         } catch (e) {
-          console.warn('saveConversations after read receipt failed', e);
+          logWarn('saveConversations after read receipt failed', e);
         }
         return next;
       });
@@ -4290,7 +4289,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Only add notification if it's for the current user
       if (normalizedNotificationRecipient === normalizedCurrentUserEmail) {
-        console.log('📬 AppProvider: Received real-time notification:', { 
+        logInfo('📬 AppProvider: Received real-time notification:', { 
           notificationId: notification.id, 
           recipientEmail: notification.recipientEmail 
         });
@@ -4299,7 +4298,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Check if notification already exists (prevent duplicates)
           const exists = prevNotifications.some(n => n.id === notification.id);
           if (exists) {
-            console.log('⚠️ Notification already exists, skipping duplicate:', notification.id);
+            logInfo('⚠️ Notification already exists, skipping duplicate:', notification.id);
             return prevNotifications;
           }
           
@@ -4309,14 +4308,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             persistReRideNotifications(updatedNotifications);
           } catch (error) {
-            console.error('Failed to save notifications to localStorage:', error);
+            logError('Failed to save notifications to localStorage:', error);
           }
           
-          console.log('✅ Real-time notification added to state:', notification.id);
+          logInfo('✅ Real-time notification added to state:', notification.id);
           return updatedNotifications;
         });
       } else {
-        console.log('⚠️ Notification not for current user, ignoring:', {
+        logInfo('⚠️ Notification not for current user, ignoring:', {
           notificationRecipient: notification.recipientEmail,
           currentUserEmail: currentUser?.email
         });
@@ -4352,7 +4351,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const result = await getConversationsFromSupabase(undefined, normalizedSellerEmail);
         
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔍 Loading seller conversations:', {
+          logInfo('🔍 Loading seller conversations:', {
             sellerEmail: currentUser.email,
             normalizedSellerEmail,
             resultSuccess: result.success,
@@ -4369,7 +4368,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }));
           
           if (process.env.NODE_ENV === 'development') {
-            console.log('🔍 Normalized conversations:', {
+            logInfo('🔍 Normalized conversations:', {
               count: normalizedConversations.length,
               conversations: normalizedConversations.map(c => ({
                 id: c.id,
@@ -4392,7 +4391,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
             
             if (hasNewConversations || hasUpdatedMessages || prev.length === 0) {
-              console.log('🔄 Refreshing seller conversations:', {
+              logInfo('🔄 Refreshing seller conversations:', {
                 newCount: normalizedConversations.length,
                 hasNew: hasNewConversations,
                 hasUpdated: hasUpdatedMessages,
@@ -4402,7 +4401,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               try {
                 saveConversations(normalizedConversations);
               } catch (error) {
-                console.error('Failed to save refreshed conversations:', error);
+                logError('Failed to save refreshed conversations:', error);
               }
               return normalizedConversations;
             }
@@ -4410,16 +4409,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return prev;
           });
         } else if (process.env.NODE_ENV === 'development') {
-          console.warn('⚠️ Failed to load seller conversations:', {
+          logWarn('⚠️ Failed to load seller conversations:', {
             success: result.success,
             error: result.error,
             sellerEmail: normalizedSellerEmail
           });
         }
       } catch (error) {
-        console.warn('⚠️ Failed to refresh seller conversations:', error);
+        logWarn('⚠️ Failed to refresh seller conversations:', error);
         if (process.env.NODE_ENV === 'development') {
-          console.error('Error details:', error);
+          logError('Error details:', error);
         }
       }
     };
@@ -4472,7 +4471,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       } catch (e) {
         if (process.env.NODE_ENV === 'development') {
-          console.warn('Failed to refresh customer conversations:', e);
+          logWarn('Failed to refresh customer conversations:', e);
         }
       }
     };
@@ -4577,7 +4576,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
             
             if (hasNewNotifications || hasUpdatedNotifications || prev.length === 0) {
-              console.log('🔄 Refreshing notifications:', {
+              logInfo('🔄 Refreshing notifications:', {
                 newCount: result.data!.length,
                 hasNew: hasNewNotifications,
                 hasUpdated: hasUpdatedNotifications
@@ -4585,7 +4584,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               try {
                 persistReRideNotifications(result.data!);
               } catch (error) {
-                console.warn('Failed to save notifications:', error);
+                logWarn('Failed to save notifications:', error);
               }
               return result.data!;
             }
@@ -4594,7 +4593,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
       } catch (error) {
-        console.warn('⚠️ Failed to refresh notifications:', error);
+        logWarn('⚠️ Failed to refresh notifications:', error);
       }
     };
     
@@ -4611,10 +4610,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // This ensures real-time message delivery works
   useEffect(() => {
     if (activeChat && currentUser) {
-      console.log('🔧 Active chat changed, joining conversation room:', activeChat.id);
+      logInfo('🔧 Active chat changed, joining conversation room:', activeChat.id);
       // Always try to join, even if not connected (will queue for when connection is ready)
       realtimeChatService.joinConversation(activeChat.id).catch(err => {
-        console.warn('⚠️ Failed to join conversation room:', err);
+        logWarn('⚠️ Failed to join conversation room:', err);
       });
     }
   }, [activeChat?.id, currentUser?.email]); // Join when chat opens or user changes
@@ -4656,17 +4655,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Add online/offline sync functionality
   useEffect(() => {
     const handleOnline = () => {
-      console.log('🔄 App came online, syncing data...');
+      logInfo('🔄 App came online, syncing data...');
+      void processSyncQueue();
       dataService.syncWhenOnline().then(() => {
-        console.log('✅ Data sync completed');
+        logInfo('✅ Data sync completed');
       }).catch((error) => {
-        console.warn('⚠️ Data sync failed:', error);
+        logWarn('⚠️ Data sync failed:', error);
         addToast(t('toast.dataSyncPartial'), 'warning');
       });
     };
 
     const handleOffline = () => {
-      console.log('📴 App went offline');
+      logInfo('📴 App went offline');
       addToast(t('toast.nowOffline'), 'info');
     };
 
@@ -4747,11 +4747,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast(successMessage ?? fallbackMessage, 'success');
       }
       if (process.env.NODE_ENV === 'development') {
-        console.log('✅ Vehicle updated via API:', result);
+        logInfo('✅ Vehicle updated via API:', result);
       }
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.error('❌ Failed to update vehicle:', error);
+        logError('❌ Failed to update vehicle:', error);
       }
       addToast(t('toast.vehicleUpdateFailed'), 'error');
     } finally {
@@ -4943,14 +4943,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Also update all user caches immediately
           syncAllUserCaches(refreshedUsers);
           
-          console.log('✅ Users list refreshed from API after verification update');
+          logInfo('✅ Users list refreshed from API after verification update');
         } catch (refreshError) {
-          console.warn('⚠️ Failed to refresh users list after update:', refreshError);
+          logWarn('⚠️ Failed to refresh users list after update:', refreshError);
           // Don't fail the update if refresh fails - the API update already succeeded
           // The error is logged but not thrown to prevent breaking the update flow
         }
       } catch (error) {
-        console.error('❌ Failed to sync user update to API:', error);
+        logError('❌ Failed to sync user update to API:', error);
         addToast(
           t('toast.vehicleSyncFailedDetail', {
             detail: error instanceof Error ? error.message : t('toast.unknownError'),
@@ -4998,7 +4998,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           if (!apiResult.success || !response.ok) {
             const errorReason = apiResult.reason || 'Unknown error';
-            console.error('❌ Failed to create user in Supabase:', errorReason);
+            logError('❌ Failed to create user in Supabase:', errorReason);
             addToast(t('toast.userCreateFailedDetail', { reason: errorReason }), 'error');
             // Don't create locally - Supabase creation failed
             throw new Error(errorReason);
@@ -5030,11 +5030,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               users.push(createdUser);
               localStorage.setItem('reRideUsers', JSON.stringify(users));
             } catch (localError) {
-              console.warn('⚠️ Failed to save user to localStorage:', localError);
+              logWarn('⚠️ Failed to save user to localStorage:', localError);
             }
           }
           
-          console.log('✅ User created and saved to Supabase:', createdUser.email);
+          logInfo('✅ User created and saved to Supabase:', createdUser.email);
           addToast(t('toast.userCreated', { name: createdUser.name }), 'success');
           
           // Log audit entry for user creation (inside try block where createdUser is in scope)
@@ -5042,7 +5042,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const entry = logAction(actor, 'Create User', createdUser.email, `Created user: ${createdUser.name} (${createdUser.role})`);
           setAuditLog(prev => [entry, ...prev]);
         } catch (apiError) {
-          console.error('❌ Error creating user in Supabase:', apiError);
+          logError('❌ Error creating user in Supabase:', apiError);
           const errorMsg = apiError instanceof Error ? apiError.message : 'Failed to create user';
           addToast(t('toast.userCreateFailedDetail', { reason: errorMsg }), 'error');
           // Don't create locally - Supabase creation failed
@@ -5051,7 +5051,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         return { success: true, reason: '' };
       } catch (error) {
-        console.error('Error creating user:', error);
+        logError('Error creating user:', error);
         return { success: false, reason: error instanceof Error ? error.message : 'Failed to create user.' };
       }
     },
@@ -5100,7 +5100,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           addToast(t('toast.userStatusToggled', { email }), 'success');
         } catch (error) {
-          console.error('Failed to toggle user status:', error);
+          logError('Failed to toggle user status:', error);
           addToast(t('toast.userStatusToggleFailed'), 'error');
         }
       },
@@ -5219,7 +5219,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             addToast(t('toast.featureVehicleFailed'), 'error');
           }
         } catch (error) {
-          console.error('Failed to toggle vehicle feature:', error);
+          logError('Failed to toggle vehicle feature:', error);
           addToast(t('toast.featureStatusFailed'), 'error');
         }
       },
@@ -5269,7 +5269,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           'success',
         );
       } catch (error) {
-        console.error('Failed to resolve flag:', error);
+        logError('Failed to resolve flag:', error);
         addToast(
           type === 'vehicle' ? t('toast.flagResolveFailedVehicle') : t('toast.flagResolveFailedConversation'),
           'error',
@@ -5353,7 +5353,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         addToast(t('toast.exportUsersSuccess', { count: users.length }), 'success');
       } catch (error) {
-        console.error('Export failed:', error);
+        logError('Export failed:', error);
         addToast(t('toast.exportFailed'), 'error');
       }
     },
@@ -5420,10 +5420,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 });
 
                 if (!updateResponse.ok) {
-                  console.warn(`Failed to update additional fields for ${userData.email}, but user was created`);
+                  logWarn(`Failed to update additional fields for ${userData.email}, but user was created`);
                 }
               } catch (updateError) {
-                console.warn(`Failed to update additional fields for ${userData.email}:`, updateError);
+                logWarn(`Failed to update additional fields for ${userData.email}:`, updateError);
                 // Don't throw - user was created successfully
               }
             }
@@ -5431,7 +5431,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             successCount++;
           } catch (error) {
             errorCount++;
-            console.error(`Failed to import user ${userData.name} (${userData.email}):`, error);
+            logError(`Failed to import user ${userData.name} (${userData.email}):`, error);
             throw error; // Re-throw to be caught by the modal
           }
         }
@@ -5453,7 +5453,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           addToast(t('toast.importUsersPartialWarning', { count: errorCount }), 'warning');
         }
       } catch (error) {
-        console.error('Import failed:', error);
+        logError('Import failed:', error);
         throw error; // Re-throw to be handled by the modal
       }
     },
@@ -5481,7 +5481,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         addToast(t('toast.exportVehiclesSuccess', { count: vehicles.length }), 'success');
       } catch (error) {
-        console.error('Export failed:', error);
+        logError('Export failed:', error);
         addToast(t('toast.exportFailed'), 'error');
       }
     },
@@ -5509,7 +5509,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             successCount++;
           } catch (error) {
             errorCount++;
-            console.error(`Failed to import vehicle ${vehicleData.make} ${vehicleData.model}:`, error);
+            logError(`Failed to import vehicle ${vehicleData.make} ${vehicleData.model}:`, error);
             throw error; // Re-throw to be caught by the modal
           }
         }
@@ -5532,7 +5532,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           addToast(t('toast.importVehiclesPartialWarning', { count: errorCount }), 'warning');
         }
       } catch (error) {
-        console.error('Import failed:', error);
+        logError('Import failed:', error);
         throw error; // Re-throw to be handled by the modal
       }
     },
@@ -5561,7 +5561,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         addToast(t('toast.exportSalesSuccess', { count: soldVehicles.length }), 'success');
       } catch (error) {
-        console.error('Export failed:', error);
+        logError('Export failed:', error);
         addToast(t('toast.exportFailed'), 'error');
       }
     },
@@ -5607,11 +5607,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAuditLog(prev => [entry, ...prev]);
 
         addToast(t('toast.vehicleDataUpdated'), 'success');
-        console.log('✅ Vehicle data updated via API:', newData);
+        logInfo('✅ Vehicle data updated via API:', newData);
       } catch (error) {
         // Error already handled with specific toast message in inner catch block (line 1908)
         // Only log here to avoid duplicate error toasts
-        console.error('❌ Failed to update vehicle data:', error);
+        logError('❌ Failed to update vehicle data:', error);
         // Don't show generic toast - inner catch already showed specific error message
         // Don't update local state - Supabase update failed
         throw error;
@@ -5645,7 +5645,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           user && user.email === email ? { ...user, isVerified: targetUser.isVerified } : user
         ) : []);
         syncUserCachesByEmail(email, { isVerified: targetUser.isVerified });
-        console.error('❌ Failed to persist isVerified to backend:', error);
+        logError('❌ Failed to persist isVerified to backend:', error);
         addToast(
           t('toast.verificationToggleFailed', { email }) ||
             `Failed to update verification status for ${email}. Please try again.`,
@@ -5666,7 +5666,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ) : []);
         addToast(t('toast.supportTicketUpdated'), 'success');
       } catch (error) {
-        console.error('Failed to update support ticket:', error);
+        logError('Failed to update support ticket:', error);
         addToast(t('toast.supportTicketUpdateFailed'), 'error');
         throw error;
       }
@@ -5692,7 +5692,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         addToast(t('toast.faqAdded'), 'success');
       } catch (error) {
-        console.error('❌ Failed to add FAQ to Supabase:', error);
+        logError('❌ Failed to add FAQ to Supabase:', error);
         addToast(t('toast.faqAddFailed'), 'error');
         // Don't add locally - Supabase creation failed
         throw error;
@@ -5725,7 +5725,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         addToast(t('toast.faqUpdated'), 'success');
       } catch (error) {
-        console.error('❌ Failed to update FAQ in Supabase:', error);
+        logError('❌ Failed to update FAQ in Supabase:', error);
         addToast(t('toast.faqUpdateFailed'), 'error');
         // Don't update locally - Supabase update failed
         throw error;
@@ -5749,7 +5749,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         addToast(t('toast.faqDeleted'), 'success');
       } catch (error) {
-        console.error('❌ Failed to delete FAQ from Supabase:', error);
+        logError('❌ Failed to delete FAQ from Supabase:', error);
         addToast(t('toast.faqDeleteFailed'), 'error');
         // Don't delete locally - Supabase delete failed
         throw error;
@@ -5783,7 +5783,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           'success',
         );
       } catch (error) {
-        console.error('Failed to update certification:', error);
+        logError('Failed to update certification:', error);
         addToast(t('toast.certificationUpdateFailed'), 'error');
       }
     },
@@ -5804,10 +5804,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addToast(t('toast.sellerRatingAdded'), 'success');
     },
     sendMessage: async (conversationId: string, message: string) => {
-      console.log('🔧 sendMessage called:', { conversationId, message, currentUser: currentUser?.email });
+      logInfo('🔧 sendMessage called:', { conversationId, message, currentUser: currentUser?.email });
       
       if (!currentUser) {
-        console.warn('⚠️ Cannot send message: no current user');
+        logWarn('⚠️ Cannot send message: no current user');
         addToast(t('toast.loginRequiredMessages'), 'error');
         return;
       }
@@ -5819,7 +5819,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Find conversation BEFORE updating state to avoid stale state issues
         const conversation = conversations.find(conv => conv.id === conversationId);
         if (!conversation) {
-          console.warn('⚠️ Conversation not found:', conversationId);
+          logWarn('⚠️ Conversation not found:', conversationId);
           addToast(t('toast.conversationNotFoundRefresh'), 'error');
           return;
         }
@@ -5855,7 +5855,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             saveConversations(updated);
           } catch (error) {
-            console.error('Failed to save conversations to localStorage:', error);
+            logError('Failed to save conversations to localStorage:', error);
           }
           
           // Update activeChat immediately for instant UI feedback
@@ -5872,7 +5872,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const userEmail = normalizedUserEmail;
         const userRole = currentUser.role as 'customer' | 'seller';
         
-        console.log('🔧 AppProvider: Sending message via realtimeChatService', { 
+        logInfo('🔧 AppProvider: Sending message via realtimeChatService', { 
           conversationId, 
           messageId: newMessage.id, 
           userEmail, 
@@ -5885,7 +5885,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!sendResult.success || !sendResult.persisted) {
           const retry = await addMessageWithSync(conversationId, newMessage);
           if (!retry.synced && !retry.queued) {
-            console.error('❌ Failed to send message:', sendResult.error);
+            logError('❌ Failed to send message:', sendResult.error);
             addToast(t('toast.failedSendMessageGeneric'), 'error');
           }
         }
@@ -5893,14 +5893,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Recipient notifications are created server-side in PUT /api/conversations (see api/main.ts).
         // POST /api/notifications only allows creating rows for the authenticated user — do not duplicate here.
       } catch (error) {
-        console.error('Error in sendMessage:', error);
+        logError('Error in sendMessage:', error);
       }
     },
     sendMessageWithType: async (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => {
-      console.log('🔧 sendMessageWithType called:', { conversationId, messageText, type, payload, currentUser: currentUser?.email });
+      logInfo('🔧 sendMessageWithType called:', { conversationId, messageText, type, payload, currentUser: currentUser?.email });
       
       if (!currentUser) {
-        console.warn('⚠️ Cannot send message: no current user');
+        logWarn('⚠️ Cannot send message: no current user');
         addToast(t('toast.loginRequiredMessages'), 'error');
         return;
       }
@@ -5912,7 +5912,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (conv) => conv && String(conv.id) === String(conversationId)
         );
         if (!conversation) {
-          console.warn('⚠️ Conversation not found:', conversationId);
+          logWarn('⚠️ Conversation not found:', conversationId);
           addToast(t('toast.conversationNotFoundRefresh'), 'error');
           return;
         }
@@ -5968,7 +5968,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             saveConversations(updated);
           } catch (error) {
-            console.error('Failed to save conversations to localStorage:', error);
+            logError('Failed to save conversations to localStorage:', error);
           }
           const updatedConversation = updated.find((conv) => String(conv.id) === String(conversationId));
           if (updatedConversation && activeChat && String(activeChat.id) === String(conversationId)) {
@@ -5986,14 +5986,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!sendResult.success || !sendResult.persisted) {
           const retry = await addMessageWithSync(conversationId, newMessage);
           if (!retry.synced && !retry.queued) {
-            console.error('❌ Failed to send message:', sendResult.error);
+            logError('❌ Failed to send message:', sendResult.error);
             addToast(t('toast.failedSendMessageGeneric'), 'error');
           }
         }
 
         // Recipient notifications are created server-side when the message is persisted (PUT /api/conversations).
       } catch (error) {
-        console.error('Error in sendMessageWithType:', error);
+        logError('Error in sendMessageWithType:', error);
       }
     },
     markAsRead: (inboxMarkRead.fn = async (
@@ -6059,7 +6059,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         })
         .catch((err) => {
-          console.warn('Persist mark-read failed (non-fatal):', err);
+          logWarn('Persist mark-read failed (non-fatal):', err);
           if (previousConversation) {
             setConversations((prev) =>
               Array.isArray(prev)
@@ -6118,7 +6118,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         })
         .catch((err) => {
-          console.warn('Persist mark-unread failed (non-fatal):', err);
+          logWarn('Persist mark-unread failed (non-fatal):', err);
           if (previousConversation) {
             setConversations((prev) =>
               Array.isArray(prev)
@@ -6162,7 +6162,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             saveConversations(next);
           } catch (e) {
-            console.error('saveConversations after clear failed', e);
+            logError('saveConversations after clear failed', e);
           }
           return next;
         });
@@ -6181,7 +6181,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           'success',
         );
       } catch (error) {
-        console.error('clearConversationMessages:', error);
+        logError('clearConversationMessages:', error);
         addToast(t('toast.failedSendMessageGeneric'), 'error');
       }
     },
@@ -6208,7 +6208,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveChat((prev) => (prev && String(prev.id) === String(conversationId) ? null : prev));
         addToast('Conversation deleted successfully.', 'success');
       } catch (error) {
-        console.error('deleteConversation:', error);
+        logError('deleteConversation:', error);
         addToast(t('toast.failedSendMessageGeneric'), 'error');
       }
     },
@@ -6274,28 +6274,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // Debug logging for partnerBanks updates
         if (safeUpdates.partnerBanks !== undefined) {
-          console.log('💳 Updating partnerBanks:', { email, partnerBanks: safeUpdates.partnerBanks, count: safeUpdates.partnerBanks?.length || 0 });
+          logInfo('💳 Updating partnerBanks:', { email, partnerBanks: safeUpdates.partnerBanks, count: safeUpdates.partnerBanks?.length || 0 });
         }
         
         // CRITICAL FIX: Update Supabase FIRST (real-time), then sync to local state/localStorage only on success
         // This ensures password changes are persisted to Supabase immediately, not just locally
         try {
-          console.log('📡 Sending user update request to API (real-time Supabase update)...', { email, hasPassword: !!updates.password });
+          logInfo('📡 Sending user update request to API (real-time Supabase update)...', { email, hasPassword: !!updates.password });
           
           // PROACTIVE TOKEN REFRESH: For critical operations like password updates, 
           // proactively refresh token before making the request to prevent session expiration errors
           if (updates.password) {
             try {
               const { refreshAccessToken } = await import('../services/userService');
-              console.log('🔄 Proactively refreshing token before password update...');
+              logInfo('🔄 Proactively refreshing token before password update...');
               const refreshResult = await refreshAccessToken();
               if (refreshResult.success && refreshResult.accessToken) {
-                console.log('✅ Token refreshed proactively before password update');
+                logInfo('✅ Token refreshed proactively before password update');
               } else {
-                console.warn('⚠️ Proactive token refresh failed, but continuing with request (will retry on 401)');
+                logWarn('⚠️ Proactive token refresh failed, but continuing with request (will retry on 401)');
               }
             } catch (refreshError) {
-              console.warn('⚠️ Error during proactive token refresh:', refreshError);
+              logWarn('⚠️ Error during proactive token refresh:', refreshError);
               // Continue with request - authenticatedFetch will handle 401 and retry
             }
           }
@@ -6310,19 +6310,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }),
           });
           
-          console.log('📥 API response received:', { status: response.status, ok: response.ok });
+          logInfo('📥 API response received:', { status: response.status, ok: response.ok });
           
           // Use the response handler for consistent error handling
           const { handleApiResponse } = await import('../utils/authenticatedFetch');
           const apiResult = await handleApiResponse(response);
           
           if (!apiResult.success) {
-            console.error('❌ API error response:', { status: response.status, error: apiResult.error, reason: apiResult.reason });
+            logError('❌ API error response:', { status: response.status, error: apiResult.error, reason: apiResult.reason });
             
             // Handle 401 Unauthorized - token refresh should have been attempted by authenticatedFetch
             // If we still get 401, it means token refresh failed - user needs to re-login
             if (response.status === 401) {
-              console.error('❌ 401 Unauthorized - Token refresh failed. Supabase update NOT saved.');
+              logError('❌ 401 Unauthorized - Token refresh failed. Supabase update NOT saved.');
               const errorReason = apiResult.reason || apiResult.error || 'Authentication expired';
               // Avoid duplicate "log in again" messages
               const cleanReason = errorReason.includes('log in again') 
@@ -6340,7 +6340,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             
             // Handle 500 Internal Server Error - server issue
             if (response.status === 500) {
-              console.error('❌ 500 Server Error - Supabase update failed.');
+              logError('❌ 500 Server Error - Supabase update failed.');
               if (updates.password) {
                 addToast(t('toast.passwordUpdateFailedServer'), 'error');
               } else {
@@ -6355,7 +6355,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           
           const result = apiResult.data || {};
-          console.log('✅ User updated in Supabase successfully:', { success: result?.success, hasUser: !!result?.user });
+          logInfo('✅ User updated in Supabase successfully:', { success: result?.success, hasUser: !!result?.user });
           
           // Supabase update succeeded - NOW update local state and localStorage
           if (result?.user) {
@@ -6382,7 +6382,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   // Explicitly ensure partnerBanks is included if it was in the update
                   if (safeUpdates.partnerBanks !== undefined) {
                     merged.partnerBanks = safeUpdates.partnerBanks;
-                    console.log('✅ Updated users array with partnerBanks:', { email, partnerBanks: merged.partnerBanks });
+                    logInfo('✅ Updated users array with partnerBanks:', { email, partnerBanks: merged.partnerBanks });
                   }
                   if (safeUpdates.notificationMuteKeys !== undefined) {
                     merged.notificationMuteKeys = safeUpdates.notificationMuteKeys;
@@ -6414,7 +6414,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(mergedUser));
                 sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(mergedUser));
               } catch (error) {
-                console.warn('Failed to update localStorage with API response:', error);
+                logWarn('Failed to update localStorage with API response:', error);
               }
             }
           } else {
@@ -6448,7 +6448,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(mergedUser));
                 sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(mergedUser));
               } catch (error) {
-                console.warn('Failed to update localStorage with fallback update:', error);
+                logWarn('Failed to update localStorage with fallback update:', error);
               }
             }
           }
@@ -6457,9 +6457,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             const { updateUser: updateUserService } = await import('../services/userService');
             await updateUserService({ email, ...safeUpdates });
-            console.log('✅ User updated in localStorage users array (after Supabase success)');
+            logInfo('✅ User updated in localStorage users array (after Supabase success)');
           } catch (localError) {
-            console.warn('⚠️ Failed to update user in localStorage users array:', localError);
+            logWarn('⚠️ Failed to update user in localStorage users array:', localError);
             // Try manual update as fallback
             try {
               const usersJson = localStorage.getItem('reRideUsers');
@@ -6471,10 +6471,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     : user
                 );
                 localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
-                console.log('✅ User updated in localStorage (manual fallback)');
+                logInfo('✅ User updated in localStorage (manual fallback)');
               }
             } catch (fallbackError) {
-              console.error('❌ Failed to update user in localStorage (fallback):', fallbackError);
+              logError('❌ Failed to update user in localStorage (fallback):', fallbackError);
             }
           }
 
@@ -6489,7 +6489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           
         } catch (apiError) {
-          console.error('❌ API error during user update - Supabase update FAILED:', apiError);
+          logError('❌ API error during user update - Supabase update FAILED:', apiError);
           
           // CRITICAL: Don't save locally when Supabase fails - user wants real-time updates
           // Only show error messages, don't update any local state
@@ -6504,7 +6504,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             
             // Check for database connection errors (503)
             if (errorMsg.includes('503') || errorMsg.includes('Database connection failed') || errorMsg.includes('SUPABASE')) {
-              console.error('❌ Supabase connection failed:', errorMsg);
+              logError('❌ Supabase connection failed:', errorMsg);
               if (updates.password) {
                 addToast(t('toast.passwordUpdateFailedSupabase'), 'error');
               } else {
@@ -6515,7 +6515,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 errorMsg.includes('Failed to fetch') ||
                 errorMsg.includes('CORS')) {
               // Network errors
-              console.error('❌ Network error updating user:', errorMsg);
+              logError('❌ Network error updating user:', errorMsg);
               if (updates.password) {
                 addToast(t('toast.passwordUpdateFailedNetwork'), 'error');
               } else {
@@ -6523,14 +6523,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             } else if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
               // 404 errors
-              console.error('❌ API endpoint not found:', errorMsg);
+              logError('❌ API endpoint not found:', errorMsg);
               if (updates.password) {
                 addToast(t('toast.passwordUpdateFailedNotFound'), 'error');
               } else {
                 addToast(t('toast.profileUpdateFailedNotFound'), 'error');
               }
             } else if (errorMsg.includes('400')) {
-              console.error('❌ Invalid profile data:', apiError);
+              logError('❌ Invalid profile data:', apiError);
               addToast(
                 t('toast.updateInvalidData', { detail: errorMsg.replace('400: ', '') }),
                 'error',
@@ -6538,7 +6538,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } else if (errorMsg.includes('Authentication failed') || errorMsg.includes('Please log in again') || errorMsg.includes('session has expired')) {
               // Authentication errors - already handled above, but catch here for safety
               // Avoid duplicate messages - check if we already showed an error
-              console.error('❌ Authentication error:', errorMsg);
+              logError('❌ Authentication error:', errorMsg);
               // Only show if not already handled by the 401 handler above
               if (!errorMsg.includes('401') && !errorMsg.includes('Unauthorized')) {
                 const cleanMsg = errorMsg.includes('log in again') 
@@ -6551,14 +6551,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
               }
             } else if (errorMsg.includes('500') || errorMsg.includes('Database error') || errorMsg.includes('Internal server') || errorMsg.includes('Server error')) {
-              console.error('❌ Server/Database error updating user:', apiError);
+              logError('❌ Server/Database error updating user:', apiError);
               if (updates.password) {
                 addToast(t('toast.passwordUpdateFailedServer'), 'error');
               } else {
                 addToast(t('toast.profileUpdateFailedServer'), 'error');
               }
             } else {
-              console.warn('⚠️ Failed to update profile in Supabase:', errorMsg);
+              logWarn('⚠️ Failed to update profile in Supabase:', errorMsg);
               // Format Supabase error for user display
               const displayError = formatSupabaseError(errorMsg);
               if (updates.password) {
@@ -6568,7 +6568,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             }
           } else {
-            console.warn('⚠️ Failed to update profile in Supabase - unknown error type');
+            logWarn('⚠️ Failed to update profile in Supabase - unknown error type');
             if (updates.password) {
               addToast(t('toast.passwordUpdateFailedCheckLogs'), 'error');
             } else {
@@ -6583,7 +6583,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch (error) {
         // Error already handled with specific toast messages in inner catch block
         // Only log here to avoid duplicate error toasts
-        console.error('Failed to update user:', error);
+        logError('Failed to update user:', error);
         // Don't show generic toast - inner catch already showed specific error message
       }
     },
@@ -6634,28 +6634,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setVehicles(prev => Array.isArray(prev) ? prev.filter(vehicle => vehicle && vehicle.id !== id) : []);
           syncVehicleCachesById(id, () => null);
           addToast(t('toast.vehicleDeletedSuccess'), 'success');
-          console.log('✅ Vehicle deleted via API:', result);
+          logInfo('✅ Vehicle deleted via API:', result);
         } else {
           addToast(t('toast.deleteVehicleFailed'), 'error');
         }
       } catch (error) {
-        console.error('❌ Failed to delete vehicle:', error);
+        logError('❌ Failed to delete vehicle:', error);
         addToast(t('toast.deleteVehicleFailedRetry'), 'error');
       }
     },
     selectVehicle: (vehicle: Vehicle) => {
       if (process.env.NODE_ENV === 'development') {
-        console.log('🚗 selectVehicle called for:', vehicle.id, vehicle.make, vehicle.model);
+        logInfo('🚗 selectVehicle called for:', vehicle.id, vehicle.make, vehicle.model);
       }
       
       // Validate vehicle object (id may arrive as string from some API paths)
       if (!vehicle || vehicle.id === undefined || vehicle.id === null) {
-        console.error('❌ selectVehicle called with invalid vehicle:', vehicle);
+        logError('❌ selectVehicle called with invalid vehicle:', vehicle);
         return;
       }
       const idNum = Number(vehicle.id);
       if (!Number.isFinite(idNum)) {
-        console.error('❌ selectVehicle: vehicle.id is not a valid number:', vehicle.id);
+        logError('❌ selectVehicle: vehicle.id is not a valid number:', vehicle.id);
         return;
       }
       const now = Date.now();
@@ -6692,12 +6692,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Verify it was stored correctly
         const verifyStored = sessionStorage.getItem('selectedVehicle');
         if (!verifyStored || verifyStored !== vehicleJson) {
-          console.warn('⚠️ Vehicle sessionStorage verification mismatch; continuing with in-memory state');
+          logWarn('⚠️ Vehicle sessionStorage verification mismatch; continuing with in-memory state');
         } else if (process.env.NODE_ENV === 'development') {
-          console.log('🚗 Vehicle stored and verified in sessionStorage:', vehicleForDetail.id, vehicleForDetail.make, vehicleForDetail.model);
+          logInfo('🚗 Vehicle stored and verified in sessionStorage:', vehicleForDetail.id, vehicleForDetail.make, vehicleForDetail.model);
         }
       } catch (error) {
-        console.error('❌ Failed to store vehicle in sessionStorage:', error);
+        logError('❌ Failed to store vehicle in sessionStorage:', error);
         // Continue: in-memory selectedVehicle still powers the detail screen; refresh may not restore.
       }
       
@@ -6706,7 +6706,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSelectedVehicle(vehicleForDetail);
       
       if (process.env.NODE_ENV === 'development') {
-        console.log('🚗 Navigating to DETAIL view with vehicle:', vehicleNorm.id, vehicleNorm.make, vehicleNorm.model);
+        logInfo('🚗 Navigating to DETAIL view with vehicle:', vehicleNorm.id, vehicleNorm.make, vehicleNorm.model);
       }
       
       // User-initiated open must never be dropped: location sync sets isHandlingPopStateRef for ~100ms

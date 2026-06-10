@@ -20,20 +20,9 @@ export const SECURITY_CONFIG = {
   // JWT Configuration
   JWT: {
     // Do not throw at module init — any read during bundle load would crash the serverless function.
-    // Use getSecurityConfig().JWT.SECRET (getter) for signing; it throws when JWT_SECRET is unset
-    // in any non-local-development environment (production, preview, staging).
+    // Use getSecurityConfig().JWT.SECRET (getter) for signing; it throws when JWT_SECRET is unset.
     get SECRET() {
-      const secret = process.env.JWT_SECRET?.trim();
-      if (secret) return secret;
-      // Only fall back to the dev-only secret on a developer's local machine or in Jest tests.
-      // Vercel preview/production never set NODE_ENV=development/test, so preview URLs cannot
-      // accidentally serve JWTs signed with a well-known key.
-      const isLocalDev =
-        (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') &&
-        !process.env.VERCEL_ENV &&
-        !process.env.VERCEL;
-      if (isLocalDev) return 'dev-only-secret-not-for-production';
-      return '';
+      return resolveJwtSecret(process.env.JWT_SECRET?.trim() || '');
     },
     // Token expiration times
     // Access tokens: shorter-lived for security (compromised tokens expire faster)
@@ -179,6 +168,23 @@ export const SECURITY_CONFIG = {
   }
 };
 
+/** True when running on Vercel (production, preview, or dev deployments). */
+function isDeployedEnvironment(): boolean {
+  return Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
+}
+
+/**
+ * Resolve JWT signing secret. No well-known fallback — prevents forged tokens on misconfigured deploys.
+ * Jest (NODE_ENV=test) uses an isolated test-only secret.
+ */
+function resolveJwtSecret(envSecret: string): string {
+  if (envSecret) return envSecret;
+  if (process.env.NODE_ENV === 'test') {
+    return 'jest-test-jwt-secret-do-not-use-in-deploy';
+  }
+  return '';
+}
+
 // Environment-specific overrides.
 // JWT_SECRET must be set in production for auth — but getSecurityConfig() must NOT throw at call time:
 // Vercel loads api/main.ts as one bundle; throwing here prevents the function from booting, so every
@@ -187,11 +193,6 @@ export const SECURITY_CONFIG = {
 export const getSecurityConfig = () => {
   const isProduction = process.env.NODE_ENV === 'production';
   const envSecret = process.env.JWT_SECRET?.trim() || '';
-  // Anything that's not explicit local-dev must have a real JWT_SECRET.
-  const isLocalDev =
-    (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') &&
-    !process.env.VERCEL_ENV &&
-    !process.env.VERCEL;
 
   const jwtStatic = SECURITY_CONFIG.JWT;
   return {
@@ -203,14 +204,12 @@ export const getSecurityConfig = () => {
       ISSUER: jwtStatic.ISSUER,
       AUDIENCE: jwtStatic.AUDIENCE,
       get SECRET(): string {
-        if (envSecret) return envSecret;
-        if (!isLocalDev) {
-          throw new Error(
-            'JWT_SECRET is required in this environment but is not set. ' +
-              'Configure JWT_SECRET in your environment (e.g. Vercel → Environment Variables → Production AND Preview).'
-          );
-        }
-        return 'dev-only-secret-not-for-production';
+        const secret = resolveJwtSecret(envSecret);
+        if (secret) return secret;
+        const hint = isDeployedEnvironment()
+          ? 'Configure JWT_SECRET in Vercel → Environment Variables (Production AND Preview).'
+          : 'Configure JWT_SECRET in .env (run: node scripts/generate-jwt-secret.js).';
+        throw new Error(`JWT_SECRET is required in this environment but is not set. ${hint}`);
       },
     },
     LOGGING: {

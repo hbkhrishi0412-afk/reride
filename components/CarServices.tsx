@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from '../lib/i18n';
 import { View as ViewEnum } from '../types';
 import { supportTelHref } from '../utils/whatsappShare.js';
+import { useIsMobileApp } from '../hooks/useIsMobileApp';
 
 interface CarServicesProps {
   onNavigate?: (view: ViewEnum) => void;
@@ -190,7 +191,14 @@ const TiltCard: React.FC<React.HTMLAttributes<HTMLDivElement> & { as?: 'div' | '
 
 const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
   const supportTel = supportTelHref();
+  const { isMobileApp } = useIsMobileApp();
   const { t, i18n: i18nFromHook } = useTranslation(undefined, { i18n });
+  const mobileBottomReserve = isMobileApp
+    ? 'calc(56px + env(safe-area-inset-bottom, 0px))'
+    : '0px';
+  const mobileScrollPadding = isMobileApp
+    ? `calc(5.5rem + 56px + env(safe-area-inset-bottom, 0px))`
+    : '5rem';
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const servicesSectionRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
@@ -292,7 +300,10 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div className="cs-root bg-slate-50 min-h-screen pb-20 lg:pb-0 overflow-x-hidden">
+    <div
+      className="cs-root bg-slate-50 min-h-screen lg:pb-0 overflow-x-hidden"
+      style={{ paddingBottom: mobileScrollPadding }}
+    >
       {/* Scoped premium styles */}
       <style>{`
         .cs-root { --cs-ink: #0b1020; }
@@ -592,6 +603,10 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
         }
         .cs-cta-btn:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 26px 50px -14px rgba(0,0,0,.4); }
 
+        @media (pointer: coarse) {
+          .cs-tilt { transform: none !important; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .cs-hero::before, .cs-orb, .cs-spark, .cs-hero-3d,
           .cs-step-ico, .cs-step-num::before, .cs-cta::before,
@@ -787,6 +802,7 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
                 key={category.slug}
                 as="button"
                 type="button"
+                aria-label={category.title}
                 onClick={(e: any) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -1030,6 +1046,31 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
           </div>
         </div>
       </section>
+
+      {isMobileApp && (
+        <div
+          className="lg:hidden fixed left-0 right-0 z-30 px-4 pointer-events-none"
+          style={{ bottom: mobileBottomReserve }}
+        >
+          <button
+            type="button"
+            onClick={handleBookService}
+            className="pointer-events-auto w-full cs-cta-btn px-6 py-3.5 rounded-2xl text-base font-bold shadow-lg"
+            style={{
+              background: 'linear-gradient(135deg,#4338ca,#7c3aed)',
+              color: 'white',
+            }}
+            aria-label={t('carServices.bookNow')}
+          >
+            <span className="inline-flex items-center justify-center gap-2 w-full">
+              {t('carServices.bookNow')}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

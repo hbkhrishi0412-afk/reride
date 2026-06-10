@@ -9,6 +9,7 @@ interface MobileLayoutProps {
   children: React.ReactNode;
   showHeader?: boolean;
   showBottomNav?: boolean;
+  showBrandBar?: boolean;
   headerTitle?: string;
   headerActions?: React.ReactNode;
   showBack?: boolean;
@@ -46,6 +47,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   children,
   showHeader = true,
   showBottomNav = true,
+  showBrandBar = true,
   headerTitle,
   headerActions,
   showBack = false,
@@ -68,7 +70,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   const [showMenu, setShowMenu] = useState(false);
   const shouldRenderHeader = showHeader || showMenu;
   const headerRowPx = showHeader ? 56 : 0;
-  const brandBarInnerPx = 48;
+  const brandBarInnerPx = showBrandBar ? 48 : 0;
 
   // Memoize computed styles to prevent recalculation
   const mainStyles = useMemo(() => {
@@ -112,19 +114,21 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
         background: 'transparent'
       } : {}}
     >
-      <MobileBrandTopBar
-        onNavigate={onNavigate}
-        wishlistCount={wishlistCount}
-        isHome={currentView === ViewEnum.HOME}
-        userLocation={userLocation}
-        selectedCity={selectedCity}
-        onOpenLocationPicker={onOpenLocationPicker}
-        onBrowseAllIndia={onBrowseAllIndia}
-        onUseMyLocation={onUseMyLocation}
-        addToast={addToast}
-        showLogin={!currentUser && !serviceProvider}
-        onLogin={() => onNavigate(ViewEnum.LOGIN_PORTAL)}
-      />
+      {showBrandBar && (
+        <MobileBrandTopBar
+          onNavigate={onNavigate}
+          wishlistCount={wishlistCount}
+          isHome={currentView === ViewEnum.HOME}
+          userLocation={userLocation}
+          selectedCity={selectedCity}
+          onOpenLocationPicker={onOpenLocationPicker}
+          onBrowseAllIndia={onBrowseAllIndia}
+          onUseMyLocation={onUseMyLocation}
+          addToast={addToast}
+          showLogin={!currentUser && !serviceProvider}
+          onLogin={() => onNavigate(ViewEnum.LOGIN_PORTAL)}
+        />
+      )}
       {shouldRenderHeader && (
         <MobileHeader
           onNavigate={onNavigate}

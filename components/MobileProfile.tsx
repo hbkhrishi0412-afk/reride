@@ -7,6 +7,7 @@ import { logout as rerideLogout } from '../services/userService';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
 import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
 import { downloadProfileExport, requestAccountDataAnonymization } from '../services/accountPrivacyService';
+import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 
 interface MobileProfileProps {
   currentUser: User;
@@ -64,6 +65,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const keyboardInset = useVisualViewportBottomInset();
 
   const handleInputChange = (field: keyof typeof formData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -256,7 +258,12 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div
+      className="min-h-screen bg-gray-50"
+      style={{
+        paddingBottom: `max(6rem, calc(6rem + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px))`,
+      }}
+    >
       {/* Header */}
       {onBack && (
         <div className="bg-white border-b border-gray-200 p-4 flex items-center gap-3 safe-top">

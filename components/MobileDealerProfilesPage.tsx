@@ -575,6 +575,7 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
   const [companyTypeFilter, setCompanyTypeFilter] = useState<CompanyType>('all');
   const [sellers, setSellers] = useState<User[]>(propSellers || []);
   const [isLoadingSellers, setIsLoadingSellers] = useState(!propSellers || propSellers.length === 0);
+  const [sellersLoadError, setSellersLoadError] = useState<string | null>(null);
   const [sellersWithCoords, setSellersWithCoords] = useState<Array<{ seller: User; coords: CompanyLocation | null }>>([]);
   const [mapBounds, setMapBounds] = useState<L.LatLngBounds | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]);
@@ -582,32 +583,46 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
   const [selectedDealerEmail, setSelectedDealerEmail] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  const fetchDealers = useCallback(async () => {
+    setIsLoadingSellers(true);
+    setSellersLoadError(null);
+    let fetchFailed = false;
+    try {
+      const [fetchedSellers, fetchedServices] = await Promise.all([
+        getSellers().catch(() => {
+          fetchFailed = true;
+          return [] as User[];
+        }),
+        getServiceProviders().catch(() => {
+          fetchFailed = true;
+          return [] as User[];
+        }),
+      ]);
+      const combined = [...fetchedSellers, ...fetchedServices].filter(
+        (u) => u.role === 'seller' || u.role === 'service_provider',
+      );
+      setSellers(combined);
+      if (fetchFailed && combined.length === 0) {
+        setSellersLoadError('Could not load dealers. Check your connection and try again.');
+      }
+    } catch (error) {
+      console.error('MobileDealerProfilesPage: Error fetching dealers:', error);
+      setSellers([]);
+      setSellersLoadError('Could not load dealers. Check your connection and try again.');
+    } finally {
+      setIsLoadingSellers(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!propSellers || propSellers.length === 0) {
-      const fetchDealers = async () => {
-        setIsLoadingSellers(true);
-        try {
-          const [fetchedSellers, fetchedServices] = await Promise.all([
-            getSellers().catch(() => [] as User[]),
-            getServiceProviders().catch(() => [] as User[]),
-          ]);
-          const combined = [...fetchedSellers, ...fetchedServices].filter(
-            (u) => u.role === 'seller' || u.role === 'service_provider'
-          );
-          setSellers(combined);
-        } catch (error) {
-          console.error('MobileDealerProfilesPage: Error fetching dealers:', error);
-          setSellers([]);
-        } finally {
-          setIsLoadingSellers(false);
-        }
-      };
-      fetchDealers();
+      void fetchDealers();
     } else {
       setSellers(propSellers);
       setIsLoadingSellers(false);
+      setSellersLoadError(null);
     }
-  }, [propSellers]);
+  }, [propSellers, fetchDealers]);
 
   useEffect(() => {
     const fetchCoords = async () => {
@@ -887,6 +902,18 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
                 <div key={i} className="mdp-skel rounded-xl h-24" />
               ))}
             </div>
+          </div>
+        ) : sellersLoadError && filteredSellers.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+            <p className="text-slate-900 font-bold">Could not load dealers</p>
+            <p className="text-xs text-slate-500 mt-1 max-w-xs">{sellersLoadError}</p>
+            <button
+              type="button"
+              onClick={() => void fetchDealers()}
+              className="mt-4 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold"
+            >
+              Retry
+            </button>
           </div>
         ) : filteredSellers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">

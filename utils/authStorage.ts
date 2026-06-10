@@ -10,6 +10,7 @@
 
 import { resolveApiUrl, isCapacitorNative, isApiRequestCrossOrigin } from './apiConfig';
 import { getNativeMemoryAccessToken } from './nativeTokenStorage';
+import { getCachedSupabaseAccessTokenSync } from './supabaseNativeAuthStorage';
 
 /** First-party web: refresh token is HttpOnly; Capacitor / cross-API-origin still use JSON + localStorage. */
 export function useHttpOnlyRefreshCookie(): boolean {
@@ -64,6 +65,10 @@ function tryParseAccessToken(raw: string | null): string | null {
  * Returns Supabase access_token from localStorage if present (any supported key shape).
  */
 export function getSupabaseAccessTokenFromStorage(): string | null {
+  if (isCapacitorNative()) {
+    const cached = getCachedSupabaseAccessTokenSync();
+    if (cached) return cached;
+  }
   if (typeof localStorage === 'undefined') return null;
   try {
     const direct =
@@ -89,23 +94,29 @@ export function getSupabaseAccessTokenFromStorage(): string | null {
  * which blocks logout; use `signOut({ scope: 'local' })` plus this as a safety net.
  */
 export function clearSupabaseAuthStorage(): void {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    const toRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-      if (key === 'sb-access-token' || key === 'supabase.auth.token') {
-        toRemove.push(key);
-        continue;
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const toRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (key === 'sb-access-token' || key === 'supabase.auth.token') {
+          toRemove.push(key);
+          continue;
+        }
+        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+          toRemove.push(key);
+        }
       }
-      if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-        toRemove.push(key);
-      }
+      toRemove.forEach((k) => localStorage.removeItem(k));
+    } catch {
+      /* ignore */
     }
-    toRemove.forEach((k) => localStorage.removeItem(k));
-  } catch {
-    /* ignore */
+  }
+  if (typeof window !== 'undefined') {
+    void import('./supabaseNativeAuthStorage').then(({ clearSupabaseSecureAuthStorage }) =>
+      clearSupabaseSecureAuthStorage(),
+    );
   }
 }
 

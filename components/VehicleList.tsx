@@ -16,6 +16,7 @@ import { VehicleCategory as CategoryEnum } from '../types.js';
 import { parseSearchQuery, getSearchSuggestions } from '../services/geminiService.js';
 import VehicleTile from './VehicleTile.js';
 import VehicleTileSkeleton from './VehicleTileSkeleton.js';
+import VirtualizedTileResults from './VehicleList/VirtualizedTileResults.js';
 import { saveSearch as saveBuyerSearch } from '../services/buyerService.js';
 import { getVehicleData } from '../services/vehicleDataService.js';
 import { logInfo, logError } from '../utils/logger.js';
@@ -57,6 +58,8 @@ interface VehicleListProps {
 
 // Base items per page - optimized for performance (10-12 vehicles per load)
 const BASE_ITEMS_PER_PAGE = 12;
+/** Desktop list (tile) view: virtualize rows once enough items are paginated in. */
+const VIRTUALIZE_TILE_THRESHOLD = 18;
 
 /** Scroll root id set on MobileLayout `<main>` — avoids walking the tree and fixes IO root when overflow is scrollable but heights match before paint. */
 const MOBILE_SCROLL_ROOT_ID = 'mobile-app-scroll-root';
@@ -2103,10 +2106,21 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {isLoading ? (
             Array.from({ length: 3 }).map((_, index) => <VehicleCardSkeleton key={index} />)
-          ) : processedVehicles.length > 0 ? (
-            processedVehicles.map(vehicle => (
-              <VehicleCard key={vehicle.id} vehicle={vehicle} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(vehicle.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(vehicle.id)} isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} />
-            ))
+          ) : paginatedVehicles.length > 0 ? (
+            <>
+              {paginatedVehicles.map(vehicle => (
+                <VehicleCard key={vehicle.id} vehicle={vehicle} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(vehicle.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(vehicle.id)} isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} />
+              ))}
+              {hasMore && (
+                <div ref={loadMoreRef} className="col-span-full flex justify-center py-6">
+                  {isLoadingMore ? (
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
+                  ) : (
+                    <div className="h-16" />
+                  )}
+                </div>
+              )}
+            </>
           ) : (
             <div className="col-span-full text-center py-16 bg-white rounded-xl shadow-soft-lg">
               <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">Your Wishlist is Empty</h3>
@@ -2827,50 +2841,64 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
               )
             ) : paginatedVehicles.length > 0 ? (
               <>
-                {paginatedVehicles.map(vehicle => {
-                  // Use MobileVehicleCard in mobile app mode
-                  if (isMobileApp) {
-                    return (
-                      <MobileVehicleCard
+                {!isMobileApp && viewMode === 'tile' && paginatedVehicles.length >= VIRTUALIZE_TILE_THRESHOLD ? (
+                  <div className="col-span-full w-full">
+                    <VirtualizedTileResults
+                      vehicles={paginatedVehicles}
+                      onSelectVehicle={onSelectVehicle}
+                      onToggleCompare={onToggleCompare}
+                      onToggleWishlist={onToggleWishlist}
+                      comparisonList={comparisonList}
+                      wishlist={wishlist}
+                      onViewSellerProfile={onViewSellerProfile}
+                    />
+                  </div>
+                ) : (
+                  paginatedVehicles.map(vehicle => {
+                    // Use MobileVehicleCard in mobile app mode
+                    if (isMobileApp) {
+                      return (
+                        <MobileVehicleCard
+                          key={vehicle.id}
+                          vehicle={vehicle}
+                          onSelect={onSelectVehicle}
+                          onToggleWishlist={onToggleWishlist}
+                          onToggleCompare={onToggleCompare}
+                          isInWishlist={wishlist.includes(vehicle.id)}
+                          isInCompare={comparisonList.includes(vehicle.id)}
+                          showActions={true}
+                        />
+                      );
+                    }
+
+                    // Desktop mode
+                    return viewMode === 'grid' ? (
+                      <VehicleCard
                         key={vehicle.id}
                         vehicle={vehicle}
                         onSelect={onSelectVehicle}
-                        onToggleWishlist={onToggleWishlist}
                         onToggleCompare={onToggleCompare}
+                        isSelectedForCompare={comparisonList.includes(vehicle.id)}
+                        onToggleWishlist={onToggleWishlist}
                         isInWishlist={wishlist.includes(vehicle.id)}
-                        isInCompare={comparisonList.includes(vehicle.id)}
-                        showActions={true}
+                        isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
+                        onViewSellerProfile={onViewSellerProfile}
+                      />
+                    ) : (
+                      <VehicleTile
+                        key={vehicle.id}
+                        vehicle={vehicle}
+                        onSelect={onSelectVehicle}
+                        onToggleCompare={onToggleCompare}
+                        isSelectedForCompare={comparisonList.includes(vehicle.id)}
+                        onToggleWishlist={onToggleWishlist}
+                        isInWishlist={wishlist.includes(vehicle.id)}
+                        isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
+                        onViewSellerProfile={onViewSellerProfile}
                       />
                     );
-                  }
-                  
-                  // Desktop mode
-                  return viewMode === 'grid' ? (
-                    <VehicleCard 
-                      key={vehicle.id} 
-                      vehicle={vehicle} 
-                      onSelect={onSelectVehicle} 
-                      onToggleCompare={onToggleCompare} 
-                      isSelectedForCompare={comparisonList.includes(vehicle.id)} 
-                      onToggleWishlist={onToggleWishlist} 
-                      isInWishlist={wishlist.includes(vehicle.id)} 
-                      isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} 
-                      onViewSellerProfile={onViewSellerProfile} 
-                    />
-                  ) : (
-                    <VehicleTile 
-                      key={vehicle.id} 
-                      vehicle={vehicle} 
-                      onSelect={onSelectVehicle} 
-                      onToggleCompare={onToggleCompare} 
-                      isSelectedForCompare={comparisonList.includes(vehicle.id)} 
-                      onToggleWishlist={onToggleWishlist} 
-                      isInWishlist={wishlist.includes(vehicle.id)} 
-                      isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} 
-                      onViewSellerProfile={onViewSellerProfile}
-                    />
-                  );
-                })}
+                  })
+                )}
                 {/* Infinite scroll trigger */}
                 {hasMore && (
                   <div ref={loadMoreRef} className="col-span-full flex justify-center py-8">

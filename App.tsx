@@ -39,6 +39,10 @@ import {
   normalizeInboxRole,
 } from './utils/conversationParticipants';
 import { parseDeepLink } from './utils/mobileFeatures';
+import {
+  applyNotificationDeepLinkUrl,
+  normalizeNativePushPayload,
+} from './utils/nativePushPayload';
 import { planService } from './services/planService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
@@ -1749,68 +1753,37 @@ const AppContent: React.FC = () => {
     handleDeepLink();
   }, [vehicles, setCurrentView, selectVehicle, routerLocation.pathname]);
 
-  // Restore persisted session on first load
+  // Session restore is owned by AppProvider (validatePersistedSession). Only redirect off login screens.
   useEffect(() => {
-    if (currentUser) {
-      return;
+    if (!currentUser) return;
+
+    const loginViews: ViewEnum[] = [
+      ViewEnum.LOGIN_PORTAL,
+      ViewEnum.CUSTOMER_LOGIN,
+      ViewEnum.SELLER_LOGIN,
+      ViewEnum.ADMIN_LOGIN,
+    ];
+
+    if (!loginViews.includes(currentView)) return;
+
+    switch (currentUser.role) {
+      case 'seller':
+        setCurrentView(ViewEnum.SELLER_DASHBOARD);
+        break;
+      case 'admin':
+        setCurrentView(ViewEnum.ADMIN_PANEL);
+        break;
+      case 'service_provider':
+        setCurrentView(ViewEnum.CAR_SERVICE_DASHBOARD);
+        break;
+      case 'finance_partner':
+        setCurrentView(ViewEnum.BUYER_DASHBOARD);
+        break;
+      default:
+        setCurrentView(ViewEnum.BUYER_DASHBOARD);
+        break;
     }
-
-    try {
-      const storedUser =
-        localStorage.getItem('reRideCurrentUser') ||
-        sessionStorage.getItem('currentUser');
-
-      if (!storedUser) {
-        return;
-      }
-
-      const parsedUser: User = JSON.parse(storedUser);
-      
-      // Validate stored user has required fields
-      if (!parsedUser?.email || !parsedUser?.role) {
-        localStorage.removeItem('reRideCurrentUser');
-        sessionStorage.removeItem('currentUser');
-        return;
-      }
-      
-      if (!['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(parsedUser.role)) {
-        localStorage.removeItem('reRideCurrentUser');
-        sessionStorage.removeItem('currentUser');
-        return;
-      }
-
-      setCurrentUser(parsedUser);
-
-      const loginViews: ViewEnum[] = [
-        ViewEnum.LOGIN_PORTAL,
-        ViewEnum.CUSTOMER_LOGIN,
-        ViewEnum.SELLER_LOGIN,
-        ViewEnum.ADMIN_LOGIN,
-      ];
-
-      if (loginViews.includes(currentView)) {
-        switch (parsedUser.role) {
-          case 'seller':
-            setCurrentView(ViewEnum.SELLER_DASHBOARD);
-            break;
-          case 'admin':
-            setCurrentView(ViewEnum.ADMIN_PANEL);
-            break;
-          case 'service_provider':
-            setCurrentView(ViewEnum.CAR_SERVICE_DASHBOARD);
-            break;
-          case 'finance_partner':
-            setCurrentView(ViewEnum.BUYER_DASHBOARD);
-            break;
-          default:
-            setCurrentView(ViewEnum.BUYER_DASHBOARD);
-            break;
-        }
-      }
-    } catch {
-      // Failed to restore session — ignore
-    }
-  }, [currentUser, currentView, setCurrentUser, setCurrentView]);
+  }, [currentUser, currentView, setCurrentView]);
 
   // Redirect logged-in users to their appropriate dashboard
   useEffect(() => {
@@ -1959,6 +1932,8 @@ const AppContent: React.FC = () => {
               selectedCity={selectedCity}
               onBrowseAllIndia={handleBrowseAllIndia}
               onUseMyLocation={handleHomeUseMyLocation}
+              isCatalogLoading={isLoading || (!vehiclesCatalogReady && vehicles.length === 0)}
+              onRetryCatalogLoad={() => void refreshVehicles()}
             />
           );
         }
@@ -2273,6 +2248,7 @@ const AppContent: React.FC = () => {
               currentUser={currentUser}
               onViewSellerProfile={openSellerProfileByEmail}
               onNavigate={navigate}
+              isCatalogLoading={isLoading || (!vehiclesCatalogReady && vehicles.length === 0)}
             />
           );
         }
@@ -3797,7 +3773,7 @@ const AppContent: React.FC = () => {
       case ViewEnum.SELL_CAR:
         if (isMobileApp) {
           return (
-            <MobileSellCarPage onNavigate={navigate} />
+            <MobileSellCarPage onNavigate={navigate} addToast={addToast} />
           );
         }
         return (
@@ -3860,6 +3836,7 @@ const AppContent: React.FC = () => {
                   onMarkAsRead={handleMarkNotificationsAsRead}
                   onMarkAllAsRead={handleMarkAllNotificationsAsRead}
                   onBack={() => goBack(ViewEnum.HOME)}
+                  isLoading={isLoading && userNotifs.length === 0}
                 />
               ) : (
                 <NotificationsPage
@@ -4035,6 +4012,56 @@ const AppContent: React.FC = () => {
       vehicles,
     ]
   );
+
+  useEffect(() => {
+    if (!isMobileApp) return;
+
+    const onNativePushTap = (event: Event) => {
+      const data = normalizeNativePushPayload(
+        (event as CustomEvent<Record<string, unknown>>).detail,
+      );
+
+      if (data.notificationId != null) {
+        const notification = notifications.find((n) => n.id === data.notificationId);
+        if (notification) {
+          handleNotificationClick(notification);
+          return;
+        }
+      }
+
+      if (data.url) {
+        applyNotificationDeepLinkUrl(data.url);
+        return;
+      }
+
+      if (data.vehicleId != null) {
+        const vehicle = vehicles.find((v) => Number(v.id) === data.vehicleId);
+        if (vehicle) {
+          selectVehicle(vehicle);
+          return;
+        }
+      }
+
+      if (data.view) {
+        const viewEnum = Object.values(ViewEnum).find((v) => v === data.view) as
+          | ViewEnum
+          | undefined;
+        if (viewEnum) {
+          navigate(viewEnum);
+        }
+      }
+    };
+
+    window.addEventListener('reride:native-push-tap', onNativePushTap);
+    return () => window.removeEventListener('reride:native-push-tap', onNativePushTap);
+  }, [
+    handleNotificationClick,
+    isMobileApp,
+    navigate,
+    notifications,
+    selectVehicle,
+    vehicles,
+  ]);
 
   const persistNotifications = React.useCallback((updated: Notification[]) => {
     try {
@@ -4785,11 +4812,24 @@ const AppContent: React.FC = () => {
 
     // For ALL other views (Home, Browse, Detail, etc.), show mobile UI using MobileLayout
     // Hide header for HOME view since it has its own hero section
+    const mobileAuthViews: ViewEnum[] = [
+      ViewEnum.LOGIN_PORTAL,
+      ViewEnum.CUSTOMER_LOGIN,
+      ViewEnum.SELLER_LOGIN,
+      ViewEnum.ADMIN_LOGIN,
+      ViewEnum.FORGOT_PASSWORD,
+      ViewEnum.CAR_SERVICE_LOGIN,
+    ];
+    const isMobileAuthView = mobileAuthViews.includes(currentView);
     const shouldHideHeader =
-      currentView === ViewEnum.HOME || currentView === ViewEnum.PROFILE;
+      currentView === ViewEnum.HOME ||
+      currentView === ViewEnum.PROFILE ||
+      isMobileAuthView;
     // Vehicle detail: full-bleed listing UX (no tab bar) — matches native listing apps / reference
     const hideBottomNavOnDetail =
-      currentView === ViewEnum.DETAIL || currentView === ViewEnum.NOTIFICATIONS_CENTER;
+      currentView === ViewEnum.DETAIL ||
+      currentView === ViewEnum.NOTIFICATIONS_CENTER ||
+      isMobileAuthView;
     return (
       <>
         <SEO {...seoMeta} />
@@ -4809,6 +4849,7 @@ const AppContent: React.FC = () => {
         <MobileLayout
           showHeader={!shouldHideHeader}
           showBottomNav={!hideBottomNavOnDetail}
+          showBrandBar={!isMobileAuthView}
           headerTitle={getPageTitle()}
           showBack={
             currentView === ViewEnum.DETAIL || currentView === ViewEnum.NOTIFICATIONS_CENTER

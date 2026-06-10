@@ -5,8 +5,7 @@
       "namespace": "android_app",
       "package_name": "com.reride.app",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_RELEASE_SHA256",
-        "REPLACE_WITH_DEBUG_SHA256"
+        "A3:37:D8:18:E1:D3:C9:09:70:40:CA:A9:B1:88:BB:6A:F3:D2:F4:90:BE:29:25:26:B3:47:53:D9:AB:00:D3:4B"
       ]
     }
   }

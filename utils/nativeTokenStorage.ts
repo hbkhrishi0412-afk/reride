@@ -83,6 +83,10 @@ export function getNativeMemoryAccessToken(): string | null {
   return memoryAccessToken;
 }
 
+export function getNativeMemoryRefreshToken(): string | null {
+  return memoryRefreshToken;
+}
+
 export async function setNativeAccessToken(token: string | null): Promise<void> {
   memoryAccessToken = token;
   await secureSet(ACCESS_KEY, token);

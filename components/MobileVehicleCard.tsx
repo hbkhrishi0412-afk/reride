@@ -35,6 +35,11 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
   const pointerStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
+  const imageAlt = useMemo(() => {
+    const label = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ').trim();
+    return label || 'Vehicle listing';
+  }, [vehicle.year, vehicle.make, vehicle.model]);
+
   const openDetails = useCallback(() => {
     suppressClickRef.current = true;
     window.setTimeout(() => {
@@ -184,7 +189,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
         {/* Native img matches MobileVehicleDetail — LazyImage + getOptimizedImageUrl can break Android WebView (AVIF/WebP, IO). */}
         <img
           src={imageSrc}
-          alt={`${vehicle.make} ${vehicle.model}`}
+          alt={imageAlt}
           className="absolute inset-0 h-full w-full object-cover"
           loading="lazy"
           decoding="async"

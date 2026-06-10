@@ -1280,14 +1280,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 const isUnread = !conv.isReadBySeller;
                 const initials = (conv.customerName || 'C').split(' ').map(s => s.charAt(0)).slice(0, 2).join('').toUpperCase();
                 return (
-                  <li
-                    key={conv.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSellerOpenChat?.(conv)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSellerOpenChat?.(conv); } }}
-                    className="relative px-4 py-3.5 active:bg-slate-50 transition-colors cursor-pointer"
-                  >
+                  <li key={conv.id} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => onSellerOpenChat?.(conv)}
+                      className="w-full text-left relative px-4 py-3.5 active:bg-slate-50 transition-colors cursor-pointer"
+                    >
                     {isUnread && (
                       <span
                         aria-hidden
@@ -1326,26 +1324,27 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                         </div>
                         <p className="text-[11px] text-slate-500 truncate mt-0.5 font-medium">{conv.vehicleName}</p>
                         <p className={`text-[12.5px] truncate mt-1 ${isUnread ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>{line}</p>
-                        {onSetConversationReadState && (
-                          <div className="mt-2 flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); onSetConversationReadState(conv.id, isUnread); }}
-                              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10.5px] font-semibold active:scale-95 transition-transform"
-                              style={{
-                                background: isUnread ? 'rgba(37,99,235,0.08)' : 'rgba(71,85,105,0.06)',
-                                color: isUnread ? '#1D4ED8' : '#475569'
-                              }}
-                            >
-                              {isUnread ? 'Mark read' : 'Mark unread'}
-                            </button>
-                          </div>
-                        )}
                       </div>
                       <span className="text-slate-300 mt-1 shrink-0">
                         <IconChevronRight size={16} stroke={2} />
                       </span>
                     </div>
+                    </button>
+                    {onSetConversationReadState && (
+                      <div className="px-4 pb-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onSetConversationReadState(conv.id, isUnread)}
+                          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10.5px] font-semibold active:scale-95 transition-transform"
+                          style={{
+                            background: isUnread ? 'rgba(37,99,235,0.08)' : 'rgba(71,85,105,0.06)',
+                            color: isUnread ? '#1D4ED8' : '#475569'
+                          }}
+                        >
+                          {isUnread ? 'Mark read' : 'Mark unread'}
+                        </button>
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -1636,15 +1635,13 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             </div>
             <ul className="space-y-2">
               {topVehicles.map((vehicle, idx) => (
-                <li
-                  key={vehicle.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onViewVehicle?.(vehicle)}
-                  onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && onViewVehicle) { e.preventDefault(); onViewVehicle(vehicle); } }}
-                  className="flex items-center gap-3 rounded-2xl p-3 cursor-pointer active:scale-[0.99] transition-transform"
-                  style={{ background: 'rgba(15,23,42,0.025)', border: '1px solid rgba(15,23,42,0.04)' }}
-                >
+                <li key={vehicle.id}>
+                  <button
+                    type="button"
+                    onClick={() => onViewVehicle?.(vehicle)}
+                    className="w-full flex items-center gap-3 rounded-2xl p-3 cursor-pointer active:scale-[0.99] transition-transform text-left"
+                    style={{ background: 'rgba(15,23,42,0.025)', border: '1px solid rgba(15,23,42,0.04)' }}
+                  >
                   <span
                     className="w-8 h-8 rounded-lg grid place-items-center text-[12px] font-bold tracking-tight shrink-0"
                     style={{
@@ -1674,6 +1671,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     </div>
                   </div>
                   <span className="text-slate-300 shrink-0"><IconChevronRight size={16} stroke={2} /></span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -2262,23 +2260,15 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 const m = meta(notification);
                 const isUnread = !notification.isRead;
                 return (
-                  <li
-                    key={notification.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      if (onNotificationClick) onNotificationClick(notification);
-                      if (isUnread && onMarkNotificationsAsRead) onMarkNotificationsAsRead([notification.id]);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
+                  <li key={notification.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
                         if (onNotificationClick) onNotificationClick(notification);
                         if (isUnread && onMarkNotificationsAsRead) onMarkNotificationsAsRead([notification.id]);
-                      }
-                    }}
-                    className="relative px-4 py-3.5 active:bg-slate-50 transition-colors cursor-pointer"
-                  >
+                      }}
+                      className="w-full text-left relative px-4 py-3.5 active:bg-slate-50 transition-colors cursor-pointer"
+                    >
                     {isUnread && (
                       <span
                         aria-hidden
@@ -2311,6 +2301,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                         </p>
                       </div>
                     </div>
+                    </button>
                   </li>
                 );
               })}
@@ -3952,14 +3943,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 return (
                   <label
                     key={bank}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleBankToggle(bank);
-                      }
-                    }}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();

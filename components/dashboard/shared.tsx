@@ -55,7 +55,7 @@ const ACCENT_TEXT: Record<NonNullable<StatCardProps['accent']>, string> = {
   rose: 'text-rose-600',
 };
 
-export const StatCard = memo(function StatCard({
+export const StatCard = memo(({
   label,
   value,
   sublabel,
@@ -67,7 +67,7 @@ export const StatCard = memo(function StatCard({
   ariaLabel,
   badge,
   className = '',
-}: StatCardProps) {
+}: StatCardProps) => {
   const Wrapper: React.ElementType = onClick ? 'button' : 'div';
   const padding = dense ? 'p-3 sm:p-4' : 'p-4 sm:p-5';
   const valueSize = dense ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl';
@@ -127,6 +127,7 @@ export const StatCard = memo(function StatCard({
     </Wrapper>
   );
 });
+StatCard.displayName = 'StatCard';
 
 /* -------------------------------------------------------------------------- */
 /*  StatCardGrid                                                              */

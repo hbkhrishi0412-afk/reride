@@ -2,6 +2,7 @@
 // Supabase client configuration for both client-side and server-side usage
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseAuthStorage } from '../utils/supabaseNativeAuthStorage';
 
 // Helper to detect if we're running on the server
 const isServerSide = typeof window === 'undefined';
@@ -148,6 +149,7 @@ export function getSupabaseClient(): SupabaseClient {
         autoRefreshToken: true,
         detectSessionInUrl: true,
         flowType: 'pkce',
+        storage: getSupabaseAuthStorage(),
       },
     });
   } catch (error) {

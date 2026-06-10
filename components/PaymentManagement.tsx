@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { PaymentRequest, User } from '../types';
 import { getPaymentRequests, approvePaymentRequest, rejectPaymentRequest } from '../services/paymentService';
+import { useApp } from './AppProvider';
 import {
     AdminPageIntro,
     AdminSegmentedTabs,
@@ -14,9 +15,12 @@ interface PaymentManagementProps {
 }
 
 const PaymentManagement: React.FC<PaymentManagementProps> = ({ currentUser }) => {
+  const { addToast } = useApp();
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   useEffect(() => {
     loadPaymentRequests();
@@ -29,6 +33,7 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({ currentUser }) =>
       setPaymentRequests(requests);
     } catch (error) {
       console.error('Error loading payment requests:', error);
+      addToast('Failed to load payment requests', 'error');
     } finally {
       setLoading(false);
     }
@@ -37,23 +42,40 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({ currentUser }) =>
   const handleApprove = async (paymentRequestId: string) => {
     try {
       await approvePaymentRequest(paymentRequestId, currentUser.email);
+      addToast('Payment request approved', 'success');
       await loadPaymentRequests();
     } catch (error) {
       console.error('Error approving payment request:', error);
-      alert('Failed to approve payment request');
+      addToast('Failed to approve payment request', 'error');
     }
   };
 
-  const handleReject = async (paymentRequestId: string) => {
-    const reason = prompt('Please provide a reason for rejection:');
-    if (!reason) return;
+  const startReject = (paymentRequestId: string) => {
+    setRejectingId(paymentRequestId);
+    setRejectReason('');
+  };
+
+  const cancelReject = () => {
+    setRejectingId(null);
+    setRejectReason('');
+  };
+
+  const handleReject = async () => {
+    if (!rejectingId) return;
+    const reason = rejectReason.trim();
+    if (!reason) {
+      addToast('Please provide a reason for rejection', 'info');
+      return;
+    }
 
     try {
-      await rejectPaymentRequest(paymentRequestId, currentUser.email, reason);
+      await rejectPaymentRequest(rejectingId, currentUser.email, reason);
+      addToast('Payment request rejected', 'success');
+      cancelReject();
       await loadPaymentRequests();
     } catch (error) {
       console.error('Error rejecting payment request:', error);
-      alert('Failed to reject payment request');
+      addToast('Failed to reject payment request', 'error');
     }
   };
 
@@ -176,7 +198,7 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({ currentUser }) =>
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleReject(request.id)}
+                            onClick={() => startReject(request.id)}
                             className="text-red-600 hover:text-red-800"
                           >
                             Reject
@@ -196,6 +218,48 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({ currentUser }) =>
             </table>
           </div>
         </AdminDataTableFrame>
+      )}
+
+      {rejectingId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reject-payment-title"
+        >
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h3 id="reject-payment-title" className="text-lg font-semibold text-slate-900">
+              Reject payment request
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Provide a reason the seller will see in their audit trail.
+            </p>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={4}
+              className="mt-4 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+              placeholder="Reason for rejection"
+              autoFocus
+            />
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={cancelReject}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleReject}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Reject request
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

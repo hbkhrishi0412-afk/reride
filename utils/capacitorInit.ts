@@ -8,11 +8,13 @@ import { initNativeGoogleOAuthReturnHandler } from './oauthMobile';
 import { initUniversalLinksHandler } from './universalLinks';
 import { initCapacitorAndroidBack } from './capacitorAndroidBack';
 import { hydrateNativeTokensFromPreferences } from './nativeTokenStorage';
+import { hydrateSupabaseAuthTokenCache } from './supabaseNativeAuthStorage';
 
 ensureRerideWebCanonicalHost();
 restoreOAuthRoleFromUrl();
 patchFetchForCapacitor();
 void hydrateNativeTokensFromPreferences();
+void hydrateSupabaseAuthTokenCache();
 initNativeGoogleOAuthReturnHandler();
 initUniversalLinksHandler();
 warmUpNativeGoogleSignIn();

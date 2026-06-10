@@ -444,28 +444,42 @@ self.addEventListener('notificationclick', (event) => {
     return;
   }
   
-  // Handle notification click - open app to relevant page
-  const notificationData = event.notification.data;
-  let url = '/';
-  
-  if (notificationData && notificationData.url) {
-    url = notificationData.url;
-  } else if (notificationData && notificationData.view) {
-    url = `/?view=${notificationData.view}`;
+  const notificationData = event.notification.data || {};
+  let url = notificationData.url || '/#/';
+
+  // Legacy query-string payloads from older builds
+  if (!url.includes('#') && notificationData.view) {
+    const view = String(notificationData.view).toUpperCase();
+    if (view === 'DETAIL' && notificationData.id != null) {
+      url = `/#/vehicle/${notificationData.id}`;
+    } else if (view === 'INBOX') {
+      url = '/#/inbox';
+    } else if (view === 'WISHLIST') {
+      url = '/#/wishlist';
+    } else {
+      url = '/#/';
+    }
   }
-  
+
+  const openUrl = url.startsWith('http')
+    ? url
+    : new URL(url, self.location.origin).href;
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
-        // If app is already open, focus it
         for (const client of clientList) {
-          if (client.url.includes(url) && 'focus' in client) {
+          if ('focus' in client) {
+            client.postMessage({
+              type: 'NOTIFICATION_CLICK',
+              notificationId: notificationData.notificationId,
+              url: url,
+            });
             return client.focus();
           }
         }
-        // Otherwise open new window
         if (clients.openWindow) {
-          return clients.openWindow(url);
+          return clients.openWindow(openUrl);
         }
       })
   );

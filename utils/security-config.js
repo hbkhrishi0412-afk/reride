@@ -21,14 +21,7 @@ const SECURITY_CONFIG = {
   JWT: {
     // Do not throw at read — module init must not crash. Use getSecurityConfig().JWT.SECRET for signing.
     get SECRET() {
-      const secret = (process.env.JWT_SECRET || '').trim();
-      if (secret) return secret;
-      const isLocalDev =
-        (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') &&
-        !process.env.VERCEL_ENV &&
-        !process.env.VERCEL;
-      if (isLocalDev) return 'dev-only-secret-not-for-production';
-      return '';
+      return resolveJwtSecret((process.env.JWT_SECRET || '').trim());
     },
     // Token expiration times
     // Access tokens: shorter-lived for security (compromised tokens expire faster)
@@ -153,13 +146,21 @@ const SECURITY_CONFIG = {
   }
 };
 
+function isDeployedEnvironment() {
+  return Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
+}
+
+function resolveJwtSecret(envSecret) {
+  if (envSecret) return envSecret;
+  if (process.env.NODE_ENV === 'test') {
+    return 'jest-test-jwt-secret-do-not-use-in-deploy';
+  }
+  return '';
+}
+
 export const getSecurityConfig = () => {
   const isProduction = process.env.NODE_ENV === 'production';
   const envSecret = (process.env.JWT_SECRET || '').trim();
-  const isLocalDev =
-    (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') &&
-    !process.env.VERCEL_ENV &&
-    !process.env.VERCEL;
 
   const jwtStatic = SECURITY_CONFIG.JWT;
   return {
@@ -171,14 +172,12 @@ export const getSecurityConfig = () => {
       ISSUER: jwtStatic.ISSUER,
       AUDIENCE: jwtStatic.AUDIENCE,
       get SECRET() {
-        if (envSecret) return envSecret;
-        if (!isLocalDev) {
-          throw new Error(
-            'JWT_SECRET is required in this environment but is not set. ' +
-              'Configure JWT_SECRET in your environment (e.g. Vercel → Environment Variables → Production AND Preview).'
-          );
-        }
-        return 'dev-only-secret-not-for-production';
+        const secret = resolveJwtSecret(envSecret);
+        if (secret) return secret;
+        const hint = isDeployedEnvironment()
+          ? 'Configure JWT_SECRET in Vercel → Environment Variables (Production AND Preview).'
+          : 'Configure JWT_SECRET in .env (run: node scripts/generate-jwt-secret.js).';
+        throw new Error(`JWT_SECRET is required in this environment but is not set. ${hint}`);
       },
     },
     LOGGING: {

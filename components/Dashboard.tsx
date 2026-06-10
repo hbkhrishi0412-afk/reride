@@ -666,6 +666,13 @@ const FormFieldset: React.FC<{
             <header
                 className="flex items-center gap-3 px-5 py-4 cursor-pointer select-none"
                 onClick={() => setIsOpen(!isOpen)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setIsOpen(!isOpen);
+                    }
+                }}
+                tabIndex={0}
                 role="button"
                 aria-expanded={isOpen}
             >

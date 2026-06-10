@@ -99,7 +99,8 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
       {/* Bottom nav: fixed content row (56px) + safe-area inset below — avoids squashing tabs on notched devices */}
       <nav 
         className="fixed bottom-0 left-0 right-0 z-40 box-border" 
-        data-testid="mobile-bottom-nav" 
+        data-testid="mobile-bottom-nav"
+        aria-label={t('nav.bottomNavigation', { defaultValue: 'Main navigation' })}
         style={{ 
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           paddingLeft: 'env(safe-area-inset-left, 0px)',
@@ -157,11 +158,18 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
               onNavigate(item.view);
             };
             
+            const tabLabel =
+              item.badge !== undefined && item.badge > 0
+                ? `${item.label}, ${item.badge} unread`
+                : item.label;
+
             return (
               <button
                 key={item.id}
                 onClick={handleClick}
                 type="button"
+                aria-label={tabLabel}
+                aria-current={isActive ? 'page' : undefined}
                 className="flex min-h-[48px] min-w-0 h-full flex-col items-center justify-center gap-0.5 relative group outline-none focus:outline-none focus-visible:outline-none touch-manipulation"
                 style={{ 
                   transition: 'color 0.25s ease, transform 0.2s ease',

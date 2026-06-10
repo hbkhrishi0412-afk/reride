@@ -69,6 +69,14 @@ export async function registerAndSyncNativePushToken(userEmail: string | undefin
       void PushNotifications.addListener('registrationError', (e) => {
         console.warn('[ReRide] Push registration error:', e.error);
       });
+      void PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+        const data = (action.notification?.data ?? {}) as Record<string, unknown>;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('reride:native-push-tap', { detail: data }),
+          );
+        }
+      });
     }
 
     await PushNotifications.register();

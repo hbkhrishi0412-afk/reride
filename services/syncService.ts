@@ -14,6 +14,8 @@ interface SyncQueueItem {
 const SYNC_QUEUE_KEY = 'reRideSyncQueue';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5000; // 5 seconds
+let queueProcessing = false;
+let onlineListenerInstalled = false;
 
 /**
  * Get sync queue from localStorage
@@ -64,14 +66,20 @@ function removeFromSyncQueue(itemId: string): void {
  * Process sync queue - retry failed syncs
  */
 export async function processSyncQueue(): Promise<{ success: number; failed: number }> {
+  if (queueProcessing) {
+    return { success: 0, failed: 0 };
+  }
+
   const queue = getSyncQueue();
   if (queue.length === 0) return { success: 0, failed: 0 };
 
+  queueProcessing = true;
   let success = 0;
   let failed = 0;
   const toRemove: string[] = [];
   const toRetry: SyncQueueItem[] = [];
 
+  try {
   for (const item of queue) {
     try {
       let syncSuccess = false;
@@ -143,6 +151,18 @@ export async function processSyncQueue(): Promise<{ success: number; failed: num
   saveSyncQueue(updatedQueue);
 
   return { success, failed };
+  } finally {
+    queueProcessing = false;
+  }
+}
+
+/** Flush the offline queue when connectivity returns. Idempotent. */
+export function ensureSyncQueueOnlineListener(): void {
+  if (typeof window === 'undefined' || onlineListenerInstalled) return;
+  onlineListenerInstalled = true;
+  window.addEventListener('online', () => {
+    void processSyncQueue();
+  });
 }
 
 /**

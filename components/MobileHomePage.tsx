@@ -4,7 +4,6 @@ import { View as ViewEnum, VehicleCategory, type Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
 import { matchesCity } from '../utils/cityMapping';
 import { countCityVehicles } from '../utils/storefrontDiscoveryCounts';
-import { FALLBACK_VEHICLES } from '../constants/fallback';
 import MobileVehicleCard from './MobileVehicleCard';
 import LazyImage from './LazyImage';
 
@@ -101,6 +100,10 @@ interface MobileHomePageProps {
   selectedCity?: string;
   onBrowseAllIndia?: () => void;
   onUseMyLocation?: (city: string, locationLabel: string) => void;
+  /** True while the vehicle catalog has not finished its first load. */
+  isCatalogLoading?: boolean;
+  /** Retry catalog fetch after a network/API failure. */
+  onRetryCatalogLoad?: () => void;
 }
 
 /**
@@ -133,6 +136,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   selectedCity = '',
   onBrowseAllIndia,
   onUseMyLocation,
+  isCatalogLoading = false,
+  onRetryCatalogLoad,
 }) => {
   const { t } = useTranslation();
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
@@ -462,10 +467,15 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       );
       if (nonSoldVehicles.length > 0) return nonSoldVehicles.slice(0, MAX_CAROUSEL);
 
-      return FALLBACK_VEHICLES.slice(0, 4);
+      return [];
     },
     [featuredVehicles, publishedVehicles, allVehicles]
   );
+
+  const showCatalogLoadError =
+    !isCatalogLoading &&
+    displayedFeaturedVehicles.length === 0 &&
+    allVehicles.length === 0;
 
   return (
     <div className="bg-gray-50">
@@ -725,7 +735,25 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       )}
 
       {/* Featured Vehicles Carousel */}
-      {displayedFeaturedVehicles.length > 0 ? (
+      {isCatalogLoading ? (
+        <div className="px-4 py-6 bg-white border-t border-gray-100" aria-busy="true" aria-label={t('home.featured.title')}>
+          <div className="h-5 w-40 bg-gray-200 rounded-lg animate-pulse mb-4" />
+          <div className="flex gap-4 overflow-hidden">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="flex-shrink-0 w-[85%] max-w-sm rounded-2xl border border-gray-100 overflow-hidden bg-gray-50"
+              >
+                <div className="aspect-[16/10] bg-gray-200 animate-pulse" />
+                <div className="p-4 space-y-2">
+                  <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse" />
+                  <div className="h-4 w-1/2 bg-gray-200 rounded animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : displayedFeaturedVehicles.length > 0 ? (
         <div ref={featuredRef} className="reveal-on-scroll px-4 py-6 bg-white border-t border-gray-100">
           <div className="flex items-end justify-between mb-4">
             <div className="space-y-1">
@@ -993,15 +1021,30 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       ) : (
         <div className="px-4 py-5 bg-white border-t border-gray-100">
           <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-4 text-center">
-            <p className="text-gray-800 font-semibold mb-1">{t('mobile.home.noFeatured')}</p>
+            <p className="text-gray-800 font-semibold mb-1">
+              {showCatalogLoadError ? t('toast.vehiclesLoadFailedShort') : t('mobile.home.noFeatured')}
+            </p>
             <p className="text-gray-500 text-sm mb-4">{t('mobile.home.browseHint')}</p>
-            <button
-              onClick={() => onNavigate(ViewEnum.USED_CARS)}
-              className="bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold active:scale-95 transition-transform w-full"
-              style={{ minHeight: '44px' }}
-            >
-              {t('mobile.home.browseAllCars')}
-            </button>
+            <div className="flex flex-col gap-2">
+              {showCatalogLoadError && onRetryCatalogLoad && (
+                <button
+                  type="button"
+                  onClick={() => onRetryCatalogLoad()}
+                  className="border border-orange-500 text-orange-600 px-4 py-2 rounded-lg font-semibold active:scale-95 transition-transform w-full"
+                  style={{ minHeight: '44px' }}
+                >
+                  {t('listings.retry')}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onNavigate(ViewEnum.USED_CARS)}
+                className="bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold active:scale-95 transition-transform w-full"
+                style={{ minHeight: '44px' }}
+              >
+                {t('mobile.home.browseAllCars')}
+              </button>
+            </div>
           </div>
         </div>
       )}

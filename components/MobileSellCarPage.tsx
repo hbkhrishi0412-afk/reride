@@ -9,6 +9,7 @@ import { getAiVehicleSuggestions } from '../services/geminiService';
 
 interface MobileSellCarPageProps {
   onNavigate: (view: ViewEnum) => void;
+  addToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
 interface MobilePickerListProps {
@@ -247,7 +248,7 @@ const MobilePickerList: React.FC<MobilePickerListProps> = ({
  * - Progress indicator
  * - Mobile camera integration ready
  */
-export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate }) => {
+export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate, addToast }) => {
   /** Last full window.innerHeight before keyboard — some WebViews resize but don’t fire visualViewport. */
   const baselineInnerHeightRef = useRef(
     typeof window !== 'undefined' ? window.innerHeight : 0,
@@ -403,12 +404,13 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
   const [registrationError, setRegistrationError] = useState('');
   const [customerContact, setCustomerContact] = useState('');
   const [contactError, setContactError] = useState('');
+  const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [vehicleImages, setVehicleImages] = useState<string[]>([]);
 
   const { capture, captureMultiple, compress, isCapturing } = useCamera();
 
-  const totalSteps = 10;
+  const totalSteps = 11;
   const indianStates = getIndianStates();
   const districtsForSelectedState = carDetails.state ? getDistrictsByState(carDetails.state) : [];
   const years = getCarYears();
@@ -542,6 +544,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
       return;
     }
     setContactError('');
+    setSubmitError('');
     setIsSubmitting(true);
     try {
       const result = await sellCarAPI.submitCarData({
@@ -563,11 +566,15 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
         setCurrentStep(8);
         resetSellCarScrollPositions();
       } else {
-        alert(result.error || result.message || 'Could not submit. Please try again.');
+        const message = result.error || result.message || 'Could not submit. Please try again.';
+        setSubmitError(message);
+        addToast?.(message, 'error');
       }
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : 'Could not submit. Please try again.');
+      const message = err instanceof Error ? err.message : 'Could not submit. Please try again.';
+      setSubmitError(message);
+      addToast?.(message, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -793,7 +800,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
           </div>
         );
 
-      case 3: // Location & Ownership
+      case 4: // Location & Ownership
         return (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Location & Ownership</h2>
@@ -826,7 +833,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
           </div>
         );
 
-      case 4: // Kilometers & Fuel
+      case 5: // Kilometers & Fuel
         return (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Usage & Fuel</h2>
@@ -857,7 +864,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
           </div>
         );
 
-      case 5: // Condition & Price
+      case 6: // Condition & Price
         return (
           <div className="space-y-4 pb-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Condition & Pricing</h2>
@@ -899,7 +906,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
           </div>
         );
 
-      case 6: // Photos
+      case 7: // Photos
         return (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Add Photos</h2>
@@ -992,7 +999,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
           </div>
         );
 
-      case 7: // Contact
+      case 8: // Contact
         return (
           <form
             id="mobile-sell-contact-form"
@@ -1041,7 +1048,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
           </form>
         );
 
-      case 8: // Success
+      case 9: // Success
         return (
           <div className="text-center py-8">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1090,7 +1097,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
         <h1 className="text-lg font-bold text-gray-900 flex-1">Sell Your Car</h1>
       </div>
 
-      {currentStep < 8 && (
+      {currentStep < 9 && (
         <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-600">Step {currentStep + 1} of {totalSteps - 1}</span>
@@ -1114,7 +1121,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
         {renderStep()}
       </div>
 
-      {currentStep > 0 && currentStep < 8 && (
+      {currentStep > 0 && currentStep < 9 && (
         <div className="relative z-20 shrink-0 border-t border-gray-200 bg-white px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_-4px_14px_rgba(0,0,0,0.06)]">
           {currentStep === 1 ? (
             <div className="space-y-2">
@@ -1136,16 +1143,23 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
                 Fill Details Manually
               </button>
             </div>
-          ) : currentStep === 7 ? (
-            <button
-              type="submit"
-              form="mobile-sell-contact-form"
-              disabled={isSubmitting}
-              className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
-              style={{ minHeight: '56px' }}
-            >
-              {isSubmitting ? 'Submitting…' : 'Submit'}
-            </button>
+          ) : currentStep === 8 ? (
+            <div className="space-y-2">
+              {submitError ? (
+                <p className="text-red-600 text-sm text-center px-1" role="alert">
+                  {submitError}
+                </p>
+              ) : null}
+              <button
+                type="submit"
+                form="mobile-sell-contact-form"
+                disabled={isSubmitting}
+                className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ minHeight: '56px' }}
+              >
+                {isSubmitting ? 'Submitting…' : 'Submit'}
+              </button>
+            </div>
           ) : (
             <button
               type="button"

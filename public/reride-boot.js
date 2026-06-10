@@ -160,48 +160,27 @@
     }
   } catch (e8) {}
 
-  // Prefetch API endpoints only in non-local web hosts.
+  // Start vehicle catalog fetch immediately (before React bundle) so first-time visitors
+  // see listings faster. dataService consumes window.__RERIDE_EARLY_VEHICLES__ on init.
   try {
     var h3 = window.location.hostname || '';
     var hl = h3.toLowerCase();
     var isLocalhost = h3 === 'localhost' || h3 === '127.0.0.1' || h3.indexOf('localhost') !== -1;
-    var isPackagedWebView =
-      hl === 'appassets.androidplatform.net' ||
-      hl.endsWith('.appassets.androidplatform.net') ||
-      (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-    if (!isLocalhost && !isPackagedWebView) {
-      window.addEventListener('load', function () {
-        setTimeout(function () {
-          var controller = new AbortController();
-          var timeoutId = setTimeout(function () {
-            controller.abort();
-          }, 2000);
-          fetch('/api/vehicles?limit=30&skipExpiryCheck=true', {
-            method: 'HEAD',
-            cache: 'default',
-            signal: controller.signal,
-          })
-            .then(function (response) {
-              clearTimeout(timeoutId);
-              if (!response.ok) return;
-              var link1 = document.createElement('link');
-              link1.rel = 'prefetch';
-              link1.href = '/api/vehicles?limit=30&skipExpiryCheck=true';
-              document.head.appendChild(link1);
-
-              var link2 = document.createElement('link');
-              link2.rel = 'prefetch';
-              link2.href = '/api/vehicles?limit=30&page=2&skipExpiryCheck=true';
-              document.head.appendChild(link2);
-
-              // Do not prefetch /api/users: non-admin sessions return 403 by design,
-              // which creates noisy console errors on seller/customer dashboards.
-            })
-            .catch(function () {
-              clearTimeout(timeoutId);
-            });
-        }, 2000);
-      });
+    if (!isLocalhost) {
+      var firstPageUrl = '/api/vehicles?limit=30&page=1&skipExpiryCheck=true';
+      window.__RERIDE_EARLY_VEHICLES__ = fetch(firstPageUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+        cache: 'default',
+      })
+        .then(function (response) {
+          if (!response.ok) return null;
+          return response.json();
+        })
+        .catch(function () {
+          return null;
+        });
     }
   } catch (e9) {}
 

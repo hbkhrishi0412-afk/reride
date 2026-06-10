@@ -13,6 +13,8 @@ interface MobileWishlistProps {
   currentUser: User | null;
   onViewSellerProfile?: (sellerEmail: string) => void;
   onNavigate?: (view: ViewEnum) => void;
+  /** True while the vehicle catalog is still hydrating saved wishlist ids. */
+  isCatalogLoading?: boolean;
 }
 
 /**
@@ -31,7 +33,8 @@ export const MobileWishlist: React.FC<MobileWishlistProps> = ({
   comparisonList,
   currentUser,
   onViewSellerProfile,
-  onNavigate
+  onNavigate,
+  isCatalogLoading = false,
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [swipedId, setSwipedId] = useState<number | null>(null);
@@ -62,6 +65,30 @@ export const MobileWishlist: React.FC<MobileWishlistProps> = ({
       setSwipedId(null);
     }
   };
+
+  const isHydratingWishlist =
+    isCatalogLoading && wishlist.length > 0 && wishlistVehicles.length === 0;
+
+  if (isHydratingWishlist) {
+    return (
+      <div className="min-h-screen bg-gray-50 pb-24" aria-busy="true" aria-label="Loading wishlist">
+        <div className="bg-white border-b border-gray-200 p-4">
+          <div className="h-6 w-40 bg-gray-200 rounded animate-pulse" />
+        </div>
+        <div className="p-4 space-y-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+              <div className="aspect-[16/10] bg-gray-200 animate-pulse" />
+              <div className="p-4 space-y-2">
+                <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse" />
+                <div className="h-4 w-1/2 bg-gray-200 rounded animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (wishlistVehicles.length === 0) {
     return (

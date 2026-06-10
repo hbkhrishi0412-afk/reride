@@ -7,6 +7,8 @@ import {
     PLATFORM_SUPPORT_PHONE_E164,
 } from '../utils/whatsappShare.js';
 import { CAR_SERVICE_OPTIONS } from '../constants/serviceProviderCatalog.js';
+import { useIsMobileApp } from '../hooks/useIsMobileApp';
+import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 
 type ServicePackage = {
     id: string;
@@ -333,6 +335,15 @@ const ServiceCart: React.FC<Props> = ({
     const [hasExplicitServiceSelection, setHasExplicitServiceSelection] = useState(false);
     /** True after "Pick items" with no parent line yet — cart can be empty without collapsing the sub-service panel. */
     const [inSubPickMode, setInSubPickMode] = useState(false);
+    const { isMobileApp } = useIsMobileApp();
+    const keyboardInset = useVisualViewportBottomInset();
+    const mobileBottomNavOffset = isMobileApp
+        ? 'calc(56px + env(safe-area-inset-bottom, 0px))'
+        : '0px';
+    const checkoutBarBottom = `calc(${mobileBottomNavOffset} + ${keyboardInset}px)`;
+    const mobileScrollPaddingBottom = isMobileApp
+        ? `calc(8rem + 56px + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)`
+        : `calc(7rem + ${keyboardInset}px)`;
 
     const resolveItemUnitPrice = useCallback((item: CartItem, providerId?: string): number | undefined => {
         const svcMeta = availableServicePackages.find((s) => s.id === item.serviceId);
@@ -1867,7 +1878,10 @@ const ServiceCart: React.FC<Props> = ({
                 </div>
             </section>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 max-lg:pb-28">
+            <div
+                className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 max-lg:pb-28"
+                style={{ paddingBottom: mobileScrollPaddingBottom }}
+            >
                 {/* Progress stepper */}
                 <nav aria-label="Booking progress" className="mb-5 sm:mb-7">
                     <ol className="flex items-stretch gap-2 sm:gap-3">
@@ -3109,8 +3123,11 @@ const ServiceCart: React.FC<Props> = ({
                     </div>
                 </div>
                 <div
-                    className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200/90 dark:border-slate-600 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_-8px_32px_rgba(0,0,0,0.08)]"
-                    style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))' }}
+                    className="lg:hidden fixed left-0 right-0 z-50 border-t border-slate-200/90 dark:border-slate-600 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_-8px_32px_rgba(0,0,0,0.08)]"
+                    style={{
+                        bottom: checkoutBarBottom,
+                        paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))',
+                    }}
                     role="region"
                     aria-label="Checkout and total"
                 >

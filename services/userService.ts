@@ -7,7 +7,9 @@ import { isCapacitorNative } from '../utils/apiConfig';
 import {
   authenticatedFetch,
   handleApiResponse,
+  isTokenLikelyValid,
   postLogoutClearCookies,
+  refreshAuthToken,
   resetAuthFetchStateAfterLogout,
 } from '../utils/authenticatedFetch';
 import {
@@ -16,54 +18,11 @@ import {
   getBrowserAccessTokenForApi,
   useHttpOnlyRefreshCookie,
 } from '../utils/authStorage';
-import { setNativeAccessToken, setNativeRefreshToken } from '../utils/nativeTokenStorage';
-
-// Fallback mock users for development only (no credentials stored in source)
-// In production, all users come from Supabase — these are never used.
-const FALLBACK_USERS: User[] = [
-  {
-    name: 'Demo Seller',
-    email: 'seller@test.com',
-    mobile: '+91-00000-00000',
-    role: 'seller',
-    location: 'Mumbai',
-    status: 'active',
-    createdAt: new Date().toISOString(),
-    dealershipName: 'Demo Motors',
-    isVerified: false,
-    subscriptionPlan: 'free',
-    featuredCredits: 0,
-    usedCertifications: 0
-  },
-  {
-    name: 'Demo Customer',
-    email: 'customer@test.com',
-    mobile: '+91-00000-00001',
-    role: 'customer',
-    location: 'Delhi',
-    status: 'active',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    name: 'Demo Admin',
-    email: 'admin@test.com',
-    mobile: '+91-00000-00002',
-    role: 'admin',
-    location: 'Bangalore',
-    status: 'active',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    name: 'Demo Service Provider',
-    email: 'provider@test.com',
-    mobile: '+91-98765-00000',
-    password: 'password123',
-    role: 'service_provider' as const,
-    location: 'Mumbai',
-    status: 'active',
-    createdAt: new Date().toISOString(),
-  },
-];
+import {
+  clearNativeTokens,
+  setNativeAccessToken,
+  setNativeRefreshToken,
+} from '../utils/nativeTokenStorage';
 
 // --- Request Deduplication ---
 // Track ongoing requests to prevent duplicate simultaneous requests
@@ -154,6 +113,7 @@ const clearTokens = () => {
     if (useHttpOnlyRefreshCookie()) {
       void postLogoutClearCookies();
     }
+    void clearNativeTokens();
     clearSessionStoredAccessToken();
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('reRideAccessToken');
@@ -325,25 +285,17 @@ const handleResponse = async (response: Response): Promise<any> => {
 
 export const getUsersLocal = async (): Promise<User[]> => {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-        return FALLBACK_USERS;
+        return [];
     }
     try {
-        let usersJson = localStorage.getItem('reRideUsers');
+        const usersJson = localStorage.getItem('reRideUsers');
         if (!usersJson || usersJson === '[]' || usersJson === 'null') {
-            const usersToStore = FALLBACK_USERS;
-            localStorage.setItem('reRideUsers', JSON.stringify(usersToStore));
-            usersJson = JSON.stringify(usersToStore);
-        } else {
-            const parsedUsers = JSON.parse(usersJson);
-            if (!Array.isArray(parsedUsers) || parsedUsers.length === 0) {
-                const usersToStore = FALLBACK_USERS;
-                localStorage.setItem('reRideUsers', JSON.stringify(usersToStore));
-                usersJson = JSON.stringify(usersToStore);
-            }
+            return [];
         }
-        return JSON.parse(usersJson);
+        const parsedUsers = JSON.parse(usersJson);
+        return Array.isArray(parsedUsers) ? parsedUsers : [];
     } catch {
-        return FALLBACK_USERS;
+        return [];
     }
 };
 
@@ -756,17 +708,8 @@ export const getUsers = async (role?: 'seller' | 'customer' | 'admin' | 'service
       }
       return users;
     }
-  } catch (error) {
-    // In production, return empty array instead of fallback users
-    if (!isDevelopment) {
-      return [];
-    }
-    // Last resort fallback only in development
-    const fallback = FALLBACK_USERS;
-    if (role) {
-      return fallback.filter(u => u.role === role);
-    }
-    return fallback;
+  } catch {
+    return [];
   }
 };
 
@@ -780,19 +723,10 @@ export const getServiceProviders = async (): Promise<User[]> => {
   return getUsers('service_provider');
 };
 export const updateUser = async (userData: Partial<User> & { email: string }): Promise<User> => {
-  // Always try API first for production, with fallback to local
   if (!isDevelopment) {
-    try {
-      return await updateUserApi(userData);
-    } catch (error) {
-      console.warn('API updateUser failed, falling back to local storage:', error);
-      // Fallback to local storage if API fails
-      return await updateUserLocal(userData);
-    }
-  } else {
-    // Development mode - use local storage
-    return await updateUserLocal(userData);
+    return await updateUserApi(userData);
   }
+  return await updateUserLocal(userData);
 };
 export const deleteUser = isDevelopment ? deleteUserLocal : deleteUserApi;
 export const login = async (credentials: { email?: string; password?: string; role?: string; [key: string]: unknown }): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string }> => {
@@ -903,8 +837,12 @@ export const register = async (credentials: { email?: string; password?: string;
         );
       }
       return result;
-    } catch {
-      return await registerLocal(credentials);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        reason: errorMessage || 'Registration failed. Please try again.',
+      };
     }
   } else {
     const out = await registerLocal(credentials);
@@ -925,70 +863,27 @@ const TOKEN_REFRESH_COOLDOWN = 5000; // 5 seconds cooldown between refresh attem
 
 export const refreshAccessToken = async (): Promise<{ success: boolean; accessToken?: string; reason?: string }> => {
   try {
-    // Prevent too frequent token refresh attempts
     const now = Date.now();
     if (now - lastTokenRefreshTime < TOKEN_REFRESH_COOLDOWN) {
+      const existing = getBrowserAccessTokenForApi();
+      if (existing && isTokenLikelyValid()) {
+        return { success: true, accessToken: existing };
+      }
       console.warn('⚠️ Token refresh cooldown active. Skipping refresh attempt.');
       return { success: false, reason: 'Token refresh cooldown active' };
     }
     lastTokenRefreshTime = now;
 
-    const legacyRefresh = localStorage.getItem('reRideRefreshToken');
-    const cookieRefresh = useHttpOnlyRefreshCookie();
-    if (!legacyRefresh && !cookieRefresh) {
-      return { success: false, reason: 'No refresh token available' };
+    // Single refresh implementation (native Keychain, HttpOnly cookie, legacy localStorage).
+    const accessToken = await refreshAuthToken();
+    if (accessToken) {
+      return { success: true, accessToken };
     }
 
-    const refreshBody = legacyRefresh
-      ? JSON.stringify({ action: 'refresh-token', refreshToken: legacyRefresh })
-      : JSON.stringify({ action: 'refresh-token' });
-
-    const response = await authenticatedFetch('/api/users', {
-      method: 'POST',
-      skipAuth: true,
-      body: refreshBody,
-    });
-
-    // FIX: Immediately clear bad tokens to stop the infinite loop
-    if (response.status === 401 || response.status === 400) {
-      console.warn('⚠️ Session expired. Clearing tokens to prevent loop.');
-      clearTokens(); 
-      return { success: false, reason: 'Session expired' };
-    }
-
-    // Handle rate limiting - don't retry immediately
-    if (response.status === 429) {
-      console.warn('⚠️ Rate limited during token refresh. Clearing tokens to prevent loop.');
-      clearTokens();
-      return { success: false, reason: 'Rate limited' };
-    }
-
-    // Handle service unavailable - don't retry
-    if (response.status === 503) {
-      console.warn('⚠️ Service unavailable during token refresh.');
-      return { success: false, reason: 'Service unavailable' };
-    }
-
-    if (!response.ok) {
-      throw new Error('Token refresh failed');
-    }
-
-    const parsed = await handleApiResponse<any>(response);
-    if (!parsed.success) {
-      return { success: false, reason: parsed.reason || parsed.error || 'Token refresh failed' };
-    }
-    const result = parsed.data || {};
-    
-    if (result.success && result.accessToken) {
-      storeTokens(result.accessToken, result.refreshToken || legacyRefresh || undefined);
-      return { success: true, accessToken: result.accessToken };
-    }
-
-    return { success: false, reason: 'Invalid refresh response' };
-  } catch (error) {
-    console.warn('Token refresh failed:', error);
-    // Optional: Clear tokens on network error to be safe
-    // clearTokens(); 
     return { success: false, reason: 'Token refresh failed' };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.warn('Token refresh failed:', errorMessage);
+    return { success: false, reason: errorMessage || 'Token refresh failed' };
   }
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { User, PlanDetails, SubscriptionPlan } from '../types';
 import { View as ViewEnum } from '../types';
 import { planService } from '../services/planService';
@@ -22,25 +22,34 @@ export const MobilePricingPage: React.FC<MobilePricingPageProps> = ({
 }) => {
   const [plans, setPlans] = useState<PlanDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const currentPlanId = currentUser?.subscriptionPlan;
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('pro');
   const [selectedAmount, setSelectedAmount] = useState(0);
 
-  useEffect(() => {
-    const loadPlans = async () => {
-      try {
-        const plansData = await planService.getAllPlans();
-        setPlans(plansData);
-      } catch (error) {
-        console.error('Failed to load plans:', error);
-        addToast('Could not load pricing plans. Please try again.', 'error');
-      } finally {
-        setIsLoading(false);
+  const loadPlans = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const plansData = await planService.getAllPlans();
+      setPlans(plansData);
+      if (plansData.length === 0) {
+        setLoadError('No pricing plans are available right now.');
       }
-    };
-    loadPlans();
+    } catch (error) {
+      console.error('Failed to load plans:', error);
+      const message = 'Could not load pricing plans. Please try again.';
+      setLoadError(message);
+      addToast(message, 'error');
+    } finally {
+      setIsLoading(false);
+    }
   }, [addToast]);
+
+  useEffect(() => {
+    void loadPlans();
+  }, [loadPlans]);
 
   const handlePlanSelect = async (planId: SubscriptionPlan) => {
     if (!currentUser || currentUser.role !== 'seller') {
@@ -65,8 +74,29 @@ export const MobilePricingPage: React.FC<MobilePricingPageProps> = ({
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center" aria-busy="true">
         <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (loadError || plans.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 pb-24 flex flex-col">
+        <div className="bg-white border-b border-gray-200 px-4 py-4">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Choose Your Plan</h1>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+          <p className="text-gray-800 font-medium mb-2">Plans unavailable</p>
+          <p className="text-gray-500 text-sm mb-6">{loadError || 'Please try again in a moment.'}</p>
+          <button
+            type="button"
+            onClick={() => void loadPlans()}
+            className="px-6 py-3 bg-orange-500 text-white rounded-xl font-semibold"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }

@@ -7,6 +7,7 @@ import React, { useEffect, useRef } from 'react';
 import { usePushNotifications, useAppBadge } from '../hooks/useMobileFeatures';
 import type { Notification } from '../types';
 import { getEffectiveMuteKeys, isStoryMuted } from '../utils/notificationMute';
+import { buildNotificationDeepLinkUrl } from '../utils/notificationDeepLink';
 
 interface MobilePushNotificationManagerProps {
   notifications: Notification[];
@@ -68,7 +69,6 @@ export const MobilePushNotificationManager: React.FC<MobilePushNotificationManag
         data: {
           notificationId: n.id,
           url: getNotificationUrl(n),
-          view: getNotificationView(n),
         },
         requireInteraction: false,
         vibrate: [200, 100, 200],
@@ -100,37 +100,8 @@ export const MobilePushNotificationManager: React.FC<MobilePushNotificationManag
   return null; // This component doesn't render anything
 };
 
-// Helper functions
 function getNotificationUrl(notification: Notification): string {
-  if (notification.vehicleId) {
-    return `/?view=DETAIL&id=${notification.vehicleId}`;
-  }
-  if (notification.type === 'message') {
-    return `/?view=INBOX`;
-  }
-  if (notification.targetType === 'price_drop') {
-    return `/?view=WISHLIST`;
-  }
-  if (notification.type === 'wishlist' || notification.type === 'price_drop') {
-    return `/?view=WISHLIST`;
-  }
-  return '/';
-}
-
-function getNotificationView(notification: Notification): string {
-  if (notification.vehicleId) {
-    return 'DETAIL';
-  }
-  if (notification.type === 'message') {
-    return 'INBOX';
-  }
-  if (notification.targetType === 'price_drop') {
-    return 'WISHLIST';
-  }
-  if (notification.type === 'wishlist' || notification.type === 'price_drop') {
-    return 'WISHLIST';
-  }
-  return 'HOME';
+  return buildNotificationDeepLinkUrl(notification);
 }
 
 export default MobilePushNotificationManager;

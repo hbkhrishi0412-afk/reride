@@ -25,8 +25,9 @@ function userIdFromBucketKey(key: string): string {
   if (!key.startsWith(BUCKET_PREFIX)) return '';
   const b = key.slice(BUCKET_PREFIX.length);
   try {
-    // eslint-disable-next-line deprecation/deprecation
-    return decodeURIComponent(escape(atob(b)));
+    const binary = atob(b);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
   } catch {
     return '';
   }

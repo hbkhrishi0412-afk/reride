@@ -8,7 +8,6 @@ jest.mock('../mock-vehicles.json', () => ({
 
 jest.mock('../constants.js', () => ({
   MOCK_VEHICLES: jest.fn(() => []),
-  FALLBACK_USERS: [],
 }), { virtual: true });
 
 describe('DataService', () => {
@@ -93,7 +92,7 @@ describe('DataService', () => {
           vehicles: mockVehicles,
           pagination: {
             page: 1,
-            limit: 80,
+            limit: 30,
             total: mockVehicles.length,
             pages: 1,
             hasMore: false,
@@ -169,6 +168,7 @@ describe('DataService', () => {
 
     beforeEach(() => {
       env.VITE_FORCE_API = 'true';
+      mockFetch.mockReset();
     });
 
     afterEach(() => {
@@ -176,15 +176,30 @@ describe('DataService', () => {
       mockFetch.mockReset();
     });
 
+    const mockFetchByUrl = (
+      handlers: Record<string, () => Promise<Response>>,
+      fallback?: () => Promise<Response>,
+    ) => {
+      mockFetch.mockImplementation((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        for (const [pattern, handler] of Object.entries(handlers)) {
+          if (url.includes(pattern)) {
+            return handler();
+          }
+        }
+        return (fallback ?? (() => Promise.resolve(createJsonResponse({ token: 'csrf-test' }))))();
+      });
+    };
+
     it('should login successfully with valid credentials', async () => {
       const mockUser: User = {
         name: 'Test User', email: 'test@test.com', mobile: '9876543210', role: 'customer',
         location: 'Mumbai', status: 'active', createdAt: new Date().toISOString(),
       };
 
-      mockFetch.mockImplementation(() =>
-        Promise.resolve(createJsonResponse({ success: true, user: mockUser })),
-      );
+      mockFetchByUrl({
+        '/api/users': () => Promise.resolve(createJsonResponse({ success: true, user: mockUser })),
+      });
 
       const result = await dataService.login({ email: 'test@test.com', password: 'password123' });
 
@@ -194,12 +209,39 @@ describe('DataService', () => {
     });
 
     it('should handle login failure', async () => {
-      mockFetch.mockResolvedValueOnce(createJsonResponse({ success: false, reason: 'Invalid credentials.' }));
+      mockFetchByUrl({
+        '/api/users': () =>
+          Promise.resolve(createJsonResponse({ success: false, reason: 'Invalid credentials.' })),
+      });
 
       const result = await dataService.login({ email: 'test@test.com', password: 'wrongpassword' });
 
       expect(result.success).toBe(false);
       expect(result.reason).toBe('Invalid credentials.');
+    });
+
+    it('should fail closed when login API throws instead of using local storage', async () => {
+      const localUser: User = {
+        name: 'Local Only',
+        email: 'test@test.com',
+        mobile: '9876543210',
+        role: 'customer',
+        location: 'Mumbai',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        password: 'password123',
+      };
+
+      localStorage.setItem('reRideUsers_prod', JSON.stringify([localUser]));
+      mockFetchByUrl({
+        '/api/users': () => Promise.reject(new Error('Network unavailable')),
+      });
+
+      const result = await dataService.login({ email: 'test@test.com', password: 'password123' });
+
+      expect(result.success).toBe(false);
+      expect(result.reason).toMatch(/Network unavailable|Unable to reach API server/);
+      expect(localStorage.getItem('reRideCurrentUser')).toBeNull();
     });
   });
 });
