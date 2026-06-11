@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
-import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { emailToKey, supabaseUserService } from '../services/supabase-user-service.js';
 import type { ServiceProviderPayload } from '../services/supabase-service-provider-service.js';

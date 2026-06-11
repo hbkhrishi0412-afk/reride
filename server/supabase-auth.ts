@@ -1,5 +1,5 @@
 // Server-side Supabase authentication helpers
-import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 
 /**
  * Verify Supabase JWT token from Authorization header

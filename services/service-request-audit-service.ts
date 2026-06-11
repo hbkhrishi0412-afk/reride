@@ -1,4 +1,4 @@
-import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 
 export type ServiceRequestAuditAction =
   | 'request_created'

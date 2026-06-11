@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 import { authenticateRequest } from './auth.js';
-import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import { applyCors } from '../lib/api-route-cors.js';
 import { isValidServiceType } from '../constants/serviceProviderCatalog.js';
 

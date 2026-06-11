@@ -7,7 +7,7 @@ import { supabaseServiceProviderService } from '../services/supabase-service-pro
 import { serviceRequestAuditService } from '../services/service-request-audit-service.js';
 import type { ServiceRequestPayload } from '../services/supabase-service-request-service.js';
 import { applyCors } from '../lib/api-route-cors.js';
-import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 
 /**
  * Customers and providers authenticate with either a Supabase session JWT or the legacy

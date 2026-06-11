@@ -1,4 +1,5 @@
-import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
+import { resolveSupabaseClient } from '../lib/resolveSupabaseClient.js';
 import { emailToKey } from './supabase-user-service.js';
 
 type SupabaseDb = ReturnType<typeof getSupabaseAdminClient>;
@@ -268,7 +269,7 @@ export const supabaseConversationService = {
     const clientProvidedId = conversationData.id?.trim() || '';
     const dbId = newConversationDbId();
 
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     const customerFk = await resolveUserTableId(supabase, conversationData.customerId);
     const sellerFk = await resolveUserTableId(supabase, conversationData.sellerId);
@@ -323,7 +324,7 @@ export const supabaseConversationService = {
 
   // Find conversation by ID
   async findById(id: string): Promise<Conversation | null> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     const trimmed = id.trim();
 
     if (isConversationUuid(trimmed)) {
@@ -378,7 +379,7 @@ export const supabaseConversationService = {
 
   // Get all conversations (used by admin; limit to avoid slow loads)
   async findAll(limitCount: number = 1000): Promise<Conversation[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     const { data, error } = await supabase
       .from('conversations')
@@ -399,7 +400,7 @@ export const supabaseConversationService = {
 
   // Update conversation
   async update(id: string, updates: Partial<Conversation>): Promise<void> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     let canonicalId = id.trim();
     if (!isConversationUuid(canonicalId)) {
@@ -513,7 +514,7 @@ export const supabaseConversationService = {
 
   // Delete conversation
   async delete(id: string): Promise<void> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     let canonicalId = id.trim();
     if (!isConversationUuid(canonicalId)) {
@@ -546,7 +547,7 @@ export const supabaseConversationService = {
 
   // Find conversations by customer ID
   async findByCustomerId(customerId: string): Promise<Conversation[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     const variants = await participantIdQueryValues(supabase, customerId);
     if (variants.length === 0) {
@@ -572,7 +573,7 @@ export const supabaseConversationService = {
 
   // Find conversations by seller ID
   async findBySellerId(sellerId: string): Promise<Conversation[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     // CRITICAL: Normalize sellerId for case-insensitive matching
     const normalizedSellerId = sellerId ? sellerId.toLowerCase().trim() : '';
@@ -622,7 +623,7 @@ export const supabaseConversationService = {
 
   // Find conversation by vehicle ID and customer ID
   async findByVehicleAndCustomer(vehicleId: number, customerId: string): Promise<Conversation | null> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     const variants = await participantIdQueryValues(supabase, customerId);
     if (variants.length === 0) {
       return null;

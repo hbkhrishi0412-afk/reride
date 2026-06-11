@@ -1,4 +1,5 @@
-import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
+import { resolveSupabaseClient } from '../lib/resolveSupabaseClient.js';
 import type { User } from '../types.js';
 import { isRerideStaffPick } from '../utils/staffPick.js';
 import { normalizeUserRoleString } from '../utils/user-role.js';
@@ -128,7 +129,7 @@ export const supabaseUserService = {
     
     let supabase;
     try {
-      supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+      supabase = await resolveSupabaseClient();
     } catch (clientError: any) {
       // CRITICAL: Catch service role key errors and provide helpful message
       if (clientError.message && clientError.message.includes('SUPABASE_SERVICE_ROLE_KEY')) {
@@ -193,7 +194,7 @@ export const supabaseUserService = {
     const normalizedEmail = email.toLowerCase().trim();
     const emailKey = emailToKey(normalizedEmail);
     
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     // Try to find by ID first (email key)
     let { data, error } = await supabase
@@ -223,7 +224,7 @@ export const supabaseUserService = {
 
   // Find user by ID
   async findById(id: string): Promise<User | null> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     const { data, error } = await supabase
       .from('users')
@@ -244,7 +245,7 @@ export const supabaseUserService = {
       return [];
     }
     
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     // Normalize emails and create email keys
     const normalizedEmails = emails.map(e => e.toLowerCase().trim());
@@ -289,7 +290,7 @@ export const supabaseUserService = {
       
       // CRITICAL: Catch service role key errors early and provide helpful diagnostics
       try {
-        supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+        supabase = await resolveSupabaseClient();
         
         if (isServerSide) {
           console.log('📊 findAll: Using Supabase Admin Client (server-side)');
@@ -467,7 +468,7 @@ export const supabaseUserService = {
       updates.email = updates.email.toLowerCase().trim();
     }
     
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     // First, get existing user to merge metadata properly
     // Try to find by ID first, then by email if not found
@@ -629,7 +630,7 @@ export const supabaseUserService = {
       updates.email = updates.email.toLowerCase().trim();
     }
     
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     // First, get existing user to merge metadata properly
     const { data: existingUser, error: fetchError } = await supabase
@@ -757,7 +758,7 @@ export const supabaseUserService = {
     const normalizedEmail = email.toLowerCase().trim();
     const emailKey = emailToKey(normalizedEmail);
     
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     const { error } = await supabase
       .from('users')
@@ -771,7 +772,7 @@ export const supabaseUserService = {
 
   // Find users by role
   async findByRole(role: 'customer' | 'seller' | 'admin' | 'service_provider'): Promise<User[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     // Supabase/PostgREST returns a default capped set if you don't paginate.
     // Use the same pagination strategy as `findAll()` to ensure we load every dealer.
@@ -807,7 +808,7 @@ export const supabaseUserService = {
 
   // Find users by status
   async findByStatus(status: 'active' | 'inactive'): Promise<User[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     const { data, error } = await supabase
       .from('users')

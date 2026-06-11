@@ -1,4 +1,5 @@
-import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
+import { resolveSupabaseClient } from '../lib/resolveSupabaseClient.js';
 import type { Vehicle } from '../types.js';
 import { VehicleCategory } from '../vehicle-category.js';
 import { CITY_MAPPING } from '../utils/cityMapping.js';
@@ -60,15 +61,8 @@ function processImageUrls(images: string[] | null | undefined, vehicleId?: numbe
     const filePath = resolvePath(image);
     if (!filePath) return '';
 
-    try {
-      const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-      const { data } = supabase.storage.from(SUPABASE_IMAGES_BUCKET).getPublicUrl(filePath);
-      if (data?.publicUrl) return data.publicUrl;
-    } catch (_) {
-      // Admin/client not available (e.g. serverless without keys)
-    }
-    const fallback = buildStoragePublicUrl(filePath);
-    return fallback || image;
+    const publicUrl = buildStoragePublicUrl(filePath);
+    return publicUrl || image;
   };
 
   try {
@@ -272,7 +266,7 @@ export const supabaseVehicleService = {
       id = Date.now() * 10000 + (vehicleNumericIdFallbackSeq++ % 10000);
     }
 
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     const row = vehicleToSupabaseRow({ ...vehicleData, id });
     
     const { data, error } = await supabase
@@ -292,7 +286,7 @@ export const supabaseVehicleService = {
   async findByPrimaryKey(primaryKey: string): Promise<Vehicle | null> {
     const pk = String(primaryKey || '').trim();
     if (!pk) return null;
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     const { data, error } = await supabase.from('vehicles').select('*').eq('id', pk).maybeSingle();
 
@@ -335,7 +329,7 @@ export const supabaseVehicleService = {
 
   // Get all vehicles
   async findAll(): Promise<Vehicle[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     // CRITICAL FIX: Handle pagination to fetch ALL vehicles (Supabase has 1000 row limit per query)
     // This ensures we get all vehicles even if there are more than 1000
@@ -392,7 +386,7 @@ export const supabaseVehicleService = {
     updates: Partial<Vehicle>,
     options?: { databaseId?: string },
   ): Promise<Vehicle> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     let primaryKey: string;
     if (typeof primaryKeyOrId === 'string') {
@@ -489,7 +483,7 @@ export const supabaseVehicleService = {
     if (!pk) {
       throw new Error('Failed to delete vehicle: missing id');
     }
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     // Best-effort: remove conversations for this listing so FKs that lack ON DELETE SET NULL cannot block the delete.
     const { error: convDelErr } = await supabase.from('conversations').delete().eq('vehicle_id', pk);
@@ -506,7 +500,7 @@ export const supabaseVehicleService = {
 
   // Find vehicles by seller email
   async findBySellerEmail(sellerEmail: string): Promise<Vehicle[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     const { data, error } = await supabase
       .from('vehicles')
@@ -528,7 +522,7 @@ export const supabaseVehicleService = {
     categories: Record<string, number>;
     cities: Record<string, number>;
   }> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     const categoryIds = [
       VehicleCategory.FOUR_WHEELER,
@@ -605,7 +599,7 @@ export const supabaseVehicleService = {
 
   // Count vehicles by status (much faster than fetching all and counting)
   async countByStatus(status: 'published' | 'unpublished' | 'sold'): Promise<number> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     const { count, error } = await supabase
       .from('vehicles')
@@ -626,7 +620,7 @@ export const supabaseVehicleService = {
     status: 'published' | 'unpublished' | 'sold',
     options?: { orderBy?: string; orderDirection?: 'asc' | 'desc'; limit?: number; offset?: number }
   ): Promise<Vehicle[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     // CRITICAL FIX: Add default limit to prevent timeout on large datasets
     // Default to 100 items per page if no limit specified
@@ -706,7 +700,7 @@ export const supabaseVehicleService = {
 
   // Find featured vehicles
   async findFeatured(): Promise<Vehicle[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     const { data, error } = await supabase
       .from('vehicles')
@@ -722,7 +716,7 @@ export const supabaseVehicleService = {
 
   // Find vehicles by category
   async findByCategory(category: string): Promise<Vehicle[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     const { data, error } = await supabase
       .from('vehicles')
@@ -738,7 +732,7 @@ export const supabaseVehicleService = {
 
   // Find vehicles by city
   async findByCity(city: string): Promise<Vehicle[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     const { data, error } = await supabase
       .from('vehicles')
@@ -754,7 +748,7 @@ export const supabaseVehicleService = {
 
   // Find vehicles by state
   async findByState(state: string): Promise<Vehicle[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     const { data, error } = await supabase
       .from('vehicles')
@@ -770,7 +764,7 @@ export const supabaseVehicleService = {
 
   // Find vehicles by city and status (optimized for city-stats endpoint)
   async findByCityAndStatus(city: string, status: 'published' | 'unpublished' | 'sold'): Promise<Vehicle[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     const { data, error } = await supabase
       .from('vehicles')

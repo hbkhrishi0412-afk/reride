@@ -1,4 +1,5 @@
-import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
+import { resolveSupabaseClient } from '../lib/resolveSupabaseClient.js';
 import { randomAlphanumeric } from '../utils/secureRandom.js';
 
 // Detect if we're in a server context (serverless function)
@@ -166,7 +167,7 @@ function serviceRequestToSupabaseRow(request: Partial<ServiceRequestPayload>): a
 export const supabaseServiceRequestService = {
   // Create a new service request
   async create(requestData: Omit<ServiceRequestPayload, 'id'> & { id?: string }): Promise<ServiceRequestPayload & { id: string }> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     // Generate ID if not provided
     const id = requestData.id || `sr_${Date.now()}_${randomAlphanumeric(9)}`;
@@ -214,7 +215,7 @@ export const supabaseServiceRequestService = {
 
   // Find service request by ID
   async findById(id: string): Promise<ServiceRequestPayload & { id: string } | null> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     const { data, error } = await supabase
       .from('service_requests')
@@ -231,7 +232,7 @@ export const supabaseServiceRequestService = {
 
   // Find all service requests
   async findAll(): Promise<(ServiceRequestPayload & { id: string })[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     const { data, error } = await supabase
       .from('service_requests')
@@ -246,7 +247,7 @@ export const supabaseServiceRequestService = {
 
   // Find service requests by status
   async findByStatus(status: string): Promise<(ServiceRequestPayload & { id: string })[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     const { data, error } = await supabase
       .from('service_requests')
@@ -262,7 +263,7 @@ export const supabaseServiceRequestService = {
 
   // Find service requests by provider ID
   async findByProviderId(providerId: string): Promise<(ServiceRequestPayload & { id: string })[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     const { data, error } = await supabase
       .from('service_requests')
@@ -278,7 +279,7 @@ export const supabaseServiceRequestService = {
 
   // Find service requests raised by customer ID
   async findByCustomerId(customerId: string): Promise<(ServiceRequestPayload & { id: string })[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     const [{ data: byUserId, error: errUser }, { data: byMeta, error: errMeta }] = await Promise.all([
       supabase.from('service_requests').select('*').eq('user_id', customerId),
@@ -301,7 +302,7 @@ export const supabaseServiceRequestService = {
 
   // Update service request
   async update(id: string, updates: Partial<ServiceRequestPayload>): Promise<void> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
     
     // First, get existing service request to merge metadata properly
     const { data: existingRequest, error: fetchError } = await supabase
@@ -353,7 +354,7 @@ export const supabaseServiceRequestService = {
 
   // Delete service request
   async delete(id: string): Promise<void> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    const supabase = await resolveSupabaseClient();
 
     const { error } = await supabase
       .from('service_requests')

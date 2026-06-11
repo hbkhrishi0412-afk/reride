@@ -2,7 +2,7 @@
 // Provides Firebase-like admin functions for Supabase operations
 // These functions use the admin client (service_role key) to bypass RLS policies
 
-import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // Database path mappings (Supabase uses tables, not paths)

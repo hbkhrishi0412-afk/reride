@@ -13,7 +13,7 @@ import { logWarn } from '../utils/logger.js';
 import { supabaseUserService } from '../services/supabase-user-service.js';
 import { supabaseVehicleService } from '../services/supabase-vehicle-service.js';
 import { supabaseConversationService } from '../services/supabase-conversation-service.js';
-import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import {
   adminRead,
   adminReadAll,

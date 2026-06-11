@@ -13,7 +13,7 @@ import { supabaseUserService } from '../services/supabase-user-service.js';
 import { supabaseVehicleService } from '../services/supabase-vehicle-service.js';
 import { supabaseConversationService } from '../services/supabase-conversation-service.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
-import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import { isRerideStaffPick } from '../utils/staffPick.js';
 import { userRolesEqual, normalizeUserRoleString } from '../utils/user-role.js';
 import { verifySupabaseToken } from '../server/supabase-auth.js';
