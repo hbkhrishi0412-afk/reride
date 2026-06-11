@@ -13,15 +13,19 @@ interface ListingStockBadgeProps {
   vehicle: Vehicle;
   className?: string;
   size?: 'sm' | 'md';
+  /** When true, omits the badge for published (in-stock) listings — used on browse cards. */
+  hideInStock?: boolean;
 }
 
 export const ListingStockBadge: React.FC<ListingStockBadgeProps> = ({
   vehicle,
   className = '',
   size = 'sm',
+  hideInStock = false,
 }) => {
   const { t } = useTranslation();
   const status = getListingStockStatus(vehicle);
+  if (hideInStock && status === 'in_stock') return null;
   const sizeClass = size === 'md' ? 'px-3 py-1 text-xs' : 'px-2 py-0.5 text-[10px]';
   const label =
     status === 'in_stock'

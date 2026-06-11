@@ -220,30 +220,25 @@ const Header: React.FC<HeaderProps> = memo(({
 
                 {showHomeLocationActions ? (
                     <div className="md:hidden border-b border-gray-100 bg-gray-50" data-testid="header-mobile-home-location">
-                        <div className="max-w-7xl mx-auto px-4 py-2 flex flex-col items-end gap-1.5">
-                            {locationDisplay ? (
-                                <button
-                                    type="button"
-                                    onClick={() => setIsLocationModalOpen(true)}
-                                    className="flex items-center gap-1 text-sm font-medium notranslate"
-                                    style={{ color: '#1E88E5' }}
-                                    data-no-translate
-                                    translate="no"
-                                >
-                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                    {locationDisplay}
-                                </button>
-                            ) : null}
-                            <HomeLocationActionButtons
-                                testId="home-location-banner-mobile"
-                                selectedCity={selectedCity}
-                                onBrowseAllIndia={onBrowseAllIndia!}
-                                onUseLocation={onUseMyLocation!}
-                                addToast={addToast}
-                            />
+                        <div className="max-w-7xl mx-auto px-4 py-2 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setIsLocationModalOpen(true)}
+                                className="flex items-center gap-1 text-sm font-medium notranslate"
+                                style={{ color: '#1E88E5' }}
+                                aria-label={t('a11y.chooseLocation')}
+                                data-no-translate
+                                translate="no"
+                            >
+                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                {locationDisplay || t('header.selectLocation')}
+                                <svg className="h-3 w-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
                         </div>
                         <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-end gap-2 border-t border-gray-100 bg-white">
                             <button onClick={onOpenCommandPalette} className="p-2 rounded-full" aria-label={t('common.search')}>

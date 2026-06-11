@@ -124,7 +124,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
         />
         {/* Stock + optional verified / featured badges — top left */}
         <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 items-start">
-        <ListingStockBadge vehicle={vehicle} />
+        <ListingStockBadge vehicle={vehicle} hideInStock />
         {showVerifiedListingBadge(vehicle) && (
           <div className="flex items-center gap-1.5 rounded-full bg-green-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-sm">
             <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden>

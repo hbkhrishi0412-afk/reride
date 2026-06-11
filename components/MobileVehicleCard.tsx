@@ -203,7 +203,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
         
         {/* Badges Overlay */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
-          <ListingStockBadge vehicle={vehicle} />
+          <ListingStockBadge vehicle={vehicle} hideInStock />
           {vehicle.isFeatured && (
             <span className="bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold">
               {t('vehicle.card.featured')}

@@ -29,12 +29,6 @@ interface MobileLayoutProps {
    * actively signed in).
    */
   serviceProvider?: { name?: string; email?: string } | null;
-  userLocation?: string;
-  selectedCity?: string;
-  onBrowseAllIndia?: () => void;
-  onUseMyLocation?: (city: string, locationLabel: string) => void;
-  onOpenLocationPicker?: () => void;
-  addToast?: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
 /**
@@ -60,12 +54,6 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   inboxCount = 0,
   unreadNotificationCount = 0,
   serviceProvider = null,
-  userLocation = '',
-  selectedCity = '',
-  onBrowseAllIndia,
-  onUseMyLocation,
-  onOpenLocationPicker,
-  addToast,
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const shouldRenderHeader = showHeader || showMenu;
@@ -118,13 +106,6 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
         <MobileBrandTopBar
           onNavigate={onNavigate}
           wishlistCount={wishlistCount}
-          isHome={currentView === ViewEnum.HOME}
-          userLocation={userLocation}
-          selectedCity={selectedCity}
-          onOpenLocationPicker={onOpenLocationPicker}
-          onBrowseAllIndia={onBrowseAllIndia}
-          onUseMyLocation={onUseMyLocation}
-          addToast={addToast}
           showLogin={!currentUser && !serviceProvider}
           onLogin={() => onNavigate(ViewEnum.LOGIN_PORTAL)}
         />

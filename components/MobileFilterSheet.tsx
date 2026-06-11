@@ -103,8 +103,8 @@ export const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({
           </button>
         </div>
 
-        {/* Content - Scrollable */}
-        <div className="flex-1 overflow-y-auto native-scroll px-4 py-4">
+        {/* Content - Scrollable (min-h-0 lets flex child shrink and scroll inside max-h sheet) */}
+        <div className="flex-1 min-h-0 overflow-y-auto native-scroll overscroll-contain px-4 py-4 pb-8">
           {children}
         </div>
 

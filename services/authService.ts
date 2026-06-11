@@ -13,6 +13,150 @@ import {
 import { getSupabaseClient } from '../lib/supabase.js';
 import type { User } from '../types.js';
 import { authenticatedFetch } from '../utils/authenticatedFetch.js';
+import { clearSupabaseAuthStorage } from '../utils/authStorage.js';
+
+export type GoogleOAuthRole = 'customer' | 'seller' | 'service_provider';
+
+const GOOGLE_SIGN_IN_TIMEOUT_MS = 65_000;
+
+export function persistGoogleOAuthRole(role: GoogleOAuthRole): void {
+  try {
+    sessionStorage.setItem('reride_oauth_role', role);
+    localStorage.setItem('reride_oauth_role', role);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearGoogleOAuthRole(): void {
+  try {
+    sessionStorage.removeItem('reride_oauth_role');
+    localStorage.removeItem('reride_oauth_role');
+  } catch {
+    /* ignore */
+  }
+}
+
+function extractGoogleRedirectUrl(result: Awaited<ReturnType<typeof supabaseGoogleSignIn>>): string | null {
+  const user = result.user;
+  if (
+    user &&
+    typeof user === 'object' &&
+    'redirectUrl' in user &&
+    typeof (user as { redirectUrl?: string }).redirectUrl === 'string'
+  ) {
+    return (user as { redirectUrl: string }).redirectUrl;
+  }
+  return null;
+}
+
+/** After native Google id-token sign-in, sync ReRide profile and invoke the right callback. */
+export async function completeGoogleSignInForRole(
+  role: GoogleOAuthRole,
+  handlers: {
+    onLogin: (user: User) => void;
+    onRegister?: (user: User) => void;
+    onServiceProviderLogin?: (provider: Record<string, unknown>) => void;
+  },
+  mode: 'login' | 'register' = 'login',
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const supabase = getSupabaseClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.user) {
+    return { ok: false, reason: 'Google sign-in did not create a session. Please try again.' };
+  }
+
+  if (role === 'service_provider') {
+    if (!handlers.onServiceProviderLogin) {
+      return { ok: false, reason: 'Service provider sign-in is not available here.' };
+    }
+    const spResult = await supabaseSyncServiceProviderOAuth(
+      session.user as unknown as Record<string, unknown>,
+    );
+    if (!spResult.success || !spResult.provider) {
+      return { ok: false, reason: spResult.reason || 'Google sign-in failed.' };
+    }
+    clearGoogleOAuthRole();
+    handlers.onServiceProviderLogin(spResult.provider);
+    return { ok: true };
+  }
+
+  if (role !== 'customer' && role !== 'seller') {
+    return { ok: false, reason: 'Google sign-in is not available for this account type.' };
+  }
+
+  const syncResult = await supabaseSyncWithBackend(
+    session.user as unknown as Record<string, unknown>,
+    role,
+    'google',
+  );
+  if (!syncResult.success || !syncResult.user) {
+    return { ok: false, reason: syncResult.reason || 'Google sign-in failed.' };
+  }
+
+  clearGoogleOAuthRole();
+  if (mode === 'register' && handlers.onRegister) {
+    handlers.onRegister(syncResult.user);
+  } else {
+    handlers.onLogin(syncResult.user);
+  }
+  return { ok: true };
+}
+
+/**
+ * Shared Google button flow for UnifiedLogin, Login, and CustomerLogin.
+ * Returns null on success or when browser OAuth was opened (AppProvider finishes the return).
+ */
+export async function runGoogleSignInButtonFlow(
+  role: GoogleOAuthRole,
+  handlers: {
+    onLogin: (user: User) => void;
+    onRegister?: (user: User) => void;
+    onServiceProviderLogin?: (provider: Record<string, unknown>) => void;
+  },
+  mode: 'login' | 'register' = 'login',
+): Promise<string | null> {
+  persistGoogleOAuthRole(role);
+
+  const result = await Promise.race([
+    supabaseGoogleSignIn(),
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Google sign-in timed out. Please try again.')), GOOGLE_SIGN_IN_TIMEOUT_MS);
+    }),
+  ]);
+
+  if (!result.success) {
+    clearGoogleOAuthRole();
+    return result.reason || 'Failed to sign in with Google';
+  }
+
+  const redirectUrl = extractGoogleRedirectUrl(result);
+  if (redirectUrl) {
+    window.location.replace(redirectUrl);
+    return null;
+  }
+
+  if (result.pendingExternalAuth) {
+    return null;
+  }
+
+  const completed = await completeGoogleSignInForRole(role, handlers, mode);
+  if (!completed.ok) {
+    try {
+      const supabase = getSupabaseClient();
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      /* ignore */
+    }
+    clearSupabaseAuthStorage();
+    clearGoogleOAuthRole();
+    return completed.reason;
+  }
+
+  return null;
+}
 
 /** In-memory only (not persisted) — avoids storing the phone number in sessionStorage. */
 let pendingOtpPhoneForVerification: string | null = null;
@@ -37,6 +181,7 @@ export const signInWithGoogle = async (): Promise<{
   user?: Record<string, unknown>;
   firebaseUser?: Record<string, unknown>; // kept for backward-compat callers
   reason?: string;
+  pendingExternalAuth?: boolean;
 }> => {
   const result = await supabaseGoogleSignIn();
   return {
@@ -44,6 +189,7 @@ export const signInWithGoogle = async (): Promise<{
     user: result.user,
     firebaseUser: result.user, // alias for callers that still reference firebaseUser
     reason: result.reason,
+    pendingExternalAuth: result.pendingExternalAuth,
   };
 };
 

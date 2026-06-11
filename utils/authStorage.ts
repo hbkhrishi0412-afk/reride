@@ -180,3 +180,30 @@ export function getBrowserAccessTokenForApi(): string | null {
     return null;
   }
 }
+
+/**
+ * Resolves a Supabase access token for API calls right after OAuth / id-token sign-in.
+ * On Capacitor, the token cache can lag behind `getSession()` while SecureStorage writes finish.
+ */
+export async function resolveSupabaseAccessTokenForApi(
+  maxWaitMs: number = 2500,
+): Promise<string | null> {
+  const immediate = getBrowserAccessTokenForApi();
+  if (immediate) return immediate;
+
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    try {
+      const { getSupabaseClient } = await import('../lib/supabase.js');
+      const { data } = await getSupabaseClient().auth.getSession();
+      const token = data.session?.access_token;
+      if (typeof token === 'string' && token.length > 10) {
+        return token;
+      }
+    } catch {
+      /* retry */
+    }
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  return getBrowserAccessTokenForApi();
+}

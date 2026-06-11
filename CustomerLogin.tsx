@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, User } from './types';
 import { login, register } from './services/userService';
-import { signInWithGoogle } from './services/authService';
+import { runGoogleSignInButtonFlow } from './services/authService';
 import { setRememberMePreference } from './utils/rememberMe';
 import OTPLogin from './components/OTPLogin';
 import PasswordInput from './components/PasswordInput';
@@ -75,38 +75,10 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
     setIsLoading(true);
 
     try {
-      try {
-        sessionStorage.setItem('reride_oauth_role', 'customer');
-        localStorage.setItem('reride_oauth_role', 'customer');
-      } catch {
-        /* ignore */
+      const flowError = await runGoogleSignInButtonFlow('customer', { onLogin });
+      if (flowError) {
+        throw new Error(flowError);
       }
-
-      const result = await signInWithGoogle();
-      const redirectUrl =
-        result.user &&
-        typeof result.user === 'object' &&
-        'redirectUrl' in result.user &&
-        typeof (result.user as { redirectUrl?: string }).redirectUrl === 'string'
-          ? (result.user as { redirectUrl: string }).redirectUrl
-          : null;
-
-      if (!result.success) {
-        try {
-          sessionStorage.removeItem('reride_oauth_role');
-          localStorage.removeItem('reride_oauth_role');
-        } catch {
-          /* ignore */
-        }
-        throw new Error(result.reason || 'Failed to sign in with Google');
-      }
-
-      if (redirectUrl) {
-        window.location.replace(redirectUrl);
-        return;
-      }
-
-      return;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
     } finally {

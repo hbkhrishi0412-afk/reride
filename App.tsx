@@ -4901,16 +4901,6 @@ const AppContent: React.FC = () => {
           inboxCount={unreadMessagesCount}
           unreadNotificationCount={unreadNotificationsCount}
           serviceProvider={serviceProvider}
-          userLocation={userLocation}
-          selectedCity={selectedCity}
-          onBrowseAllIndia={handleBrowseAllIndia}
-          onUseMyLocation={handleHomeUseMyLocation}
-          onOpenLocationPicker={() => {
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('reride:open-location-modal'));
-            }
-          }}
-          addToast={addToast}
         >
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>

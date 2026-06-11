@@ -5,11 +5,13 @@
  * are handled through Supabase Auth.
  */
 
+import { Capacitor } from '@capacitor/core';
 import { getSupabaseClient } from '../lib/supabase.js';
 import type { User as SupabaseAuthUser, Session } from '@supabase/supabase-js';
 import type { User } from '../types.js';
 import { formatSupabaseError } from '../utils/errorUtils.js';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
+import { resolveSupabaseAccessTokenForApi } from '../utils/authStorage.js';
 import {
   getNativeGoogleWebClientId,
   shouldTryNativeGoogleSignIn,
@@ -37,6 +39,10 @@ interface OAuthSignInResult extends AuthResult {
    * String: web OAuth URL to navigate to.
    */
   user?: { redirectUrl: string | null };
+  /** Present after native `signInWithIdToken` succeeds. */
+  session?: Session | null;
+  /** True when Chrome / Safari was opened — session is completed via deep link + AppProvider. */
+  pendingExternalAuth?: boolean;
 }
 
 interface CredentialSignInResult extends AuthResult {
@@ -130,6 +136,8 @@ function mapGoogleProviderError(message: string): string | undefined {
   return undefined;
 }
 
+const NATIVE_GOOGLE_SIGN_IN_TIMEOUT_MS = 60_000;
+
 export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
   try {
     const supabase = getSupabaseClient();
@@ -137,8 +145,17 @@ export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
 
     if (useExternalBrowser && shouldTryNativeGoogleSignIn()) {
       try {
-        const { idToken, accessToken } = await signInWithGoogleNative();
-        const { error } = await supabase.auth.signInWithIdToken({
+        const nativeSignIn = signInWithGoogleNative();
+        const { idToken, accessToken } = await Promise.race([
+          nativeSignIn,
+          new Promise<never>((_, reject) => {
+            setTimeout(
+              () => reject(new Error('Google sign-in timed out. Please try again.')),
+              NATIVE_GOOGLE_SIGN_IN_TIMEOUT_MS,
+            );
+          }),
+        ]);
+        const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: idToken,
           access_token: accessToken ?? undefined,
@@ -152,14 +169,14 @@ export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
               formatSupabaseError(error.message || 'Failed to sign in with Google'),
           };
         }
-        return { success: true, user: { redirectUrl: null } };
+        return { success: true, user: { redirectUrl: null }, session: data.session ?? null };
       } catch (nativeErr: unknown) {
         const name = nativeErr instanceof Error ? nativeErr.name : '';
         if (name === 'AbortError') {
           return { success: false, reason: 'Sign in was canceled' };
         }
         console.warn(
-          '[ReRide] Native Google Sign-In failed; falling back to browser OAuth. Client ID set:',
+          '[ReRide] Native Google Sign-In failed; falling back to Supabase browser OAuth. Client ID set:',
           !!getNativeGoogleWebClientId(),
           nativeErr,
         );
@@ -198,7 +215,7 @@ export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
 
     if (useExternalBrowser) {
       await openGoogleOAuthUrl(data.url);
-      return { success: true, user: { redirectUrl: null } };
+      return { success: true, user: { redirectUrl: null }, pendingExternalAuth: true };
     }
 
     return { success: true, user: { redirectUrl: data.url } };
@@ -516,6 +533,11 @@ export type ServiceProviderOAuthPayload = Record<string, unknown> & {
  * After Google (or other Supabase) sign-in as a service provider: ensure `service_providers`
  * row exists and return profile for the car-services dashboard.
  */
+async function oauthApiAuthHeaders(): Promise<Record<string, string>> {
+  const token = await resolveSupabaseAccessTokenForApi();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export const syncServiceProviderOAuth = async (
   supabaseUser: Record<string, unknown>,
 ): Promise<{ success: boolean; provider?: ServiceProviderOAuthPayload; reason?: string }> => {
@@ -524,6 +546,7 @@ export const syncServiceProviderOAuth = async (
 
     const response = await authenticatedFetch('/api/users', {
       method: 'POST',
+      headers: await oauthApiAuthHeaders(),
       body: JSON.stringify({
         action: 'oauth-service-provider',
         firebaseUid: supabaseUser.id,
@@ -577,6 +600,7 @@ export const syncWithBackend = async (
 
     const response = await authenticatedFetch('/api/users', {
       method: 'POST',
+      headers: await oauthApiAuthHeaders(),
       body: JSON.stringify({
         action: 'oauth-login',
         firebaseUid: supabaseUser.id, // API field name kept for backward compat

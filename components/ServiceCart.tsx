@@ -340,10 +340,6 @@ const ServiceCart: React.FC<Props> = ({
     const mobileBottomNavOffset = isMobileApp
         ? 'calc(56px + env(safe-area-inset-bottom, 0px))'
         : '0px';
-    const checkoutBarBottom = `calc(${mobileBottomNavOffset} + ${keyboardInset}px)`;
-    const mobileScrollPaddingBottom = isMobileApp
-        ? `calc(8rem + 56px + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)`
-        : `calc(7rem + ${keyboardInset}px)`;
 
     const resolveItemUnitPrice = useCallback((item: CartItem, providerId?: string): number | undefined => {
         const svcMeta = availableServicePackages.find((s) => s.id === item.serviceId);
@@ -818,6 +814,14 @@ const ServiceCart: React.FC<Props> = ({
     const [isPriceExpanded, setIsPriceExpanded] = useState(false);
     /** 1 = vehicle, services, provider. 2 = address, schedule, pay. */
     const [bookingFlowStep, setBookingFlowStep] = useState<1 | 2>(1);
+    const checkoutBarBottom = `calc(${mobileBottomNavOffset} + ${keyboardInset}px)`;
+    const mobileScrollPaddingBottom = isMobileApp
+        ? bookingFlowStep === 2
+            ? `calc(8rem + 56px + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)`
+            : `calc(2rem + 56px + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)`
+        : bookingFlowStep === 2
+            ? `calc(7rem + ${keyboardInset}px)`
+            : `calc(2rem + ${keyboardInset}px)`;
     const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
     const [addressForm, setAddressForm] = useState<Partial<Address>>({});
 
@@ -3122,6 +3126,7 @@ const ServiceCart: React.FC<Props> = ({
                         )}
                     </div>
                 </div>
+                {bookingFlowStep === 2 && (
                 <div
                     className="lg:hidden fixed left-0 right-0 z-50 border-t border-slate-200/90 dark:border-slate-600 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_-8px_32px_rgba(0,0,0,0.08)]"
                     style={{
@@ -3132,50 +3137,29 @@ const ServiceCart: React.FC<Props> = ({
                     aria-label="Checkout and total"
                 >
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-2 sm:gap-3 py-2.5">
-                        {bookingFlowStep === 1 ? (
-                            <>
-                                <div className="min-w-0 flex-1 text-xs text-slate-500 dark:text-slate-400">
-                                    Est. <span className="font-bold tabular-nums text-slate-900 dark:text-white">₹{totals.total.toLocaleString('en-IN')}</span>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (!canProceedToStep2) return;
-                                        setBookingFlowStep(2);
-                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                    }}
-                                    disabled={!canProceedToStep2}
-                                    className="shrink-0 min-w-[7.5rem] rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    Continue
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <div className="min-w-0 flex-1">
-                                    <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Total</div>
-                                    <div className="text-base font-bold tabular-nums text-slate-900 dark:text-white leading-tight">
-                                        ₹{totals.total.toLocaleString('en-IN')}
-                                    </div>
-                                </div>
-                                <a
-                                    href="#service-booking-payment-summary"
-                                    className="shrink-0 text-xs font-semibold text-blue-600 dark:text-blue-400 py-1"
-                                >
-                                    Breakdown
-                                </a>
-                                <button
-                                    type="button"
-                                    onClick={handleSubmit}
-                                    disabled={checkoutReadiness.length > 0}
-                                    className="shrink-0 min-w-[7.5rem] rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    Book
-                                </button>
-                            </>
-                        )}
+                        <div className="min-w-0 flex-1">
+                            <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Total</div>
+                            <div className="text-base font-bold tabular-nums text-slate-900 dark:text-white leading-tight">
+                                ₹{totals.total.toLocaleString('en-IN')}
+                            </div>
+                        </div>
+                        <a
+                            href="#service-booking-payment-summary"
+                            className="shrink-0 text-xs font-semibold text-blue-600 dark:text-blue-400 py-1"
+                        >
+                            Breakdown
+                        </a>
+                        <button
+                            type="button"
+                            onClick={handleSubmit}
+                            disabled={checkoutReadiness.length > 0}
+                            className="shrink-0 min-w-[7.5rem] rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            Book
+                        </button>
                     </div>
                 </div>
+                )}
             </div>
             </>
             )}

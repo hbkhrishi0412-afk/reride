@@ -102,19 +102,20 @@ export const MobileMarketplaceFilterModal: React.FC<MobileMarketplaceFilterModal
                   key={item.id}
                   type="button"
                   onClick={() => onActiveCategoryChange(item.id)}
+                  aria-current={active ? 'true' : undefined}
                   className={`w-full text-left px-3 py-3.5 text-sm font-semibold leading-tight border-b border-gray-200/60 transition-colors flex items-center justify-between gap-2 ${
                     active
-                      ? 'bg-red-600 text-white border-l-4 border-red-400'
+                      ? 'bg-[#222222] text-white border-l-4 border-orange-500'
                       : hasSelection
                         ? 'bg-orange-50 text-gray-900 border-l-4 border-orange-500'
-                        : 'text-gray-800 active:bg-gray-200/80'
+                        : 'text-gray-800 active:bg-gray-200/80 border-l-4 border-transparent'
                   }`}
                 >
                   <span>{t(item.labelKey)}</span>
                   {hasSelection && (
                     <span
                       className={`shrink-0 w-2 h-2 rounded-full ${
-                        active ? 'bg-white' : 'bg-orange-500'
+                        active ? 'bg-orange-400 ring-2 ring-white/80' : 'bg-orange-500'
                       }`}
                       aria-hidden
                     />

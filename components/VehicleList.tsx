@@ -1802,12 +1802,15 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       });
     };
 
+    const selectedRowClass = (selected: boolean) =>
+      selected
+        ? 'bg-orange-50 border-l-4 border-orange-500 pl-2'
+        : 'border-l-4 border-transparent pl-2';
+
     const rowCheckbox = (key: string, label: string, checked: boolean, onToggle: () => void) => (
       <label
         key={key}
-        className={`flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50 ${
-          checked ? 'bg-orange-50' : ''
-        }`}
+        className={`flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50 ${selectedRowClass(checked)}`}
       >
         <input
           type="checkbox"
@@ -1816,7 +1819,35 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           className="h-4 w-4 rounded border-gray-400 shrink-0"
           style={{ accentColor: '#EA580C' }}
         />
-        <span className={`text-sm font-medium ${checked ? 'text-gray-900 font-semibold' : 'text-gray-900'}`}>
+        <span className={`text-sm ${checked ? 'text-gray-900 font-semibold' : 'font-medium text-gray-900'}`}>
+          {label}
+        </span>
+        {checked && (
+          <svg className="w-4 h-4 ml-auto text-orange-600 shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+            <path
+              fillRule="evenodd"
+              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+              clipRule="evenodd"
+            />
+          </svg>
+        )}
+      </label>
+    );
+
+    const rowRadio = (key: string, label: string, checked: boolean, onSelect: () => void, groupName: string) => (
+      <label
+        key={key}
+        className={`flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50 ${selectedRowClass(checked)}`}
+      >
+        <input
+          type="radio"
+          name={groupName}
+          checked={checked}
+          onChange={onSelect}
+          className="h-4 w-4 shrink-0"
+          style={{ accentColor: '#EA580C' }}
+        />
+        <span className={`text-sm ${checked ? 'text-gray-900 font-semibold' : 'font-medium text-gray-900'}`}>
           {label}
         </span>
         {checked && (
@@ -1857,7 +1888,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 name="makeFilter"
                 value={tempFilters.makeFilter}
                 onChange={handleTempSelect}
-                className={formElementClass}
+                className={`${formElementClass}${tempFilters.makeFilter ? ' border-orange-500 ring-1 ring-orange-200' : ''}`}
               >
                 <option value="">{t('listings.mobileFilter.anyMake')}</option>
                 {tempUniqueMakes.map((make) => (
@@ -1877,7 +1908,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 value={tempFilters.modelFilter}
                 onChange={handleTempSelect}
                 disabled={!tempFilters.makeFilter || tempAvailableModels.length === 0}
-                className={formElementClass}
+                className={`${formElementClass}${tempFilters.modelFilter ? ' border-orange-500 ring-1 ring-orange-200' : ''}`}
               >
                 <option value="">{t('listings.mobileFilter.anyModel')}</option>
                 {tempAvailableModels.map((model) => (
@@ -1911,35 +1942,23 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       case 'year':
         return (
           <div className="pb-2 space-y-1">
-            <label className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50">
-              <input
-                type="radio"
-                name="m-year"
-                checked={tempFilters.yearFilter === '0'}
-                onChange={() => setTempFilters((p) => ({ ...p, yearFilter: '0', yearMin: null, yearMax: null }))}
-                className="h-4 w-4 shrink-0"
-                style={{ accentColor: '#222222' }}
-              />
-              <span className="text-sm font-medium text-gray-900">{t('listings.mobileFilter.anyYear')}</span>
-            </label>
-            {tempUniqueYears.map((year) => (
-              <label
-                key={year}
-                className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50"
-              >
-                <input
-                  type="radio"
-                  name="m-year"
-                  checked={tempFilters.yearFilter === String(year)}
-                  onChange={() =>
-                    setTempFilters((p) => ({ ...p, yearFilter: String(year), yearMin: null, yearMax: null }))
-                  }
-                  className="h-4 w-4 shrink-0"
-                  style={{ accentColor: '#222222' }}
-                />
-                <span className="text-sm font-medium text-gray-900">{year}</span>
-              </label>
-            ))}
+            {rowRadio(
+              'any-year',
+              t('listings.mobileFilter.anyYear'),
+              tempFilters.yearFilter === '0',
+              () => setTempFilters((p) => ({ ...p, yearFilter: '0', yearMin: null, yearMax: null })),
+              'm-year',
+            )}
+            {tempUniqueYears.map((year) =>
+              rowRadio(
+                `year-${year}`,
+                String(year),
+                tempFilters.yearFilter === String(year),
+                () =>
+                  setTempFilters((p) => ({ ...p, yearFilter: String(year), yearMin: null, yearMax: null })),
+                'm-year',
+              ),
+            )}
           </div>
         );
       case 'kms': {
@@ -1996,40 +2015,44 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       }
       case 'fuel':
         return (
-          <div className="pb-2">
-            <select
-              name="fuelTypeFilter"
-              value={tempFilters.fuelTypeFilter}
-              onChange={handleTempSelect}
-              className={formElementClass}
-            >
-              <option value="">{t('listings.mobileFilter.anyFuel')}</option>
-              {tempUniqueFuelTypes.map((fuel) => (
-                <option key={fuel} value={fuel}>
-                  {fuel}
-                </option>
-              ))}
-            </select>
+          <div className="pb-2 space-y-1">
+            {rowRadio(
+              'any-fuel',
+              t('listings.mobileFilter.anyFuel'),
+              !tempFilters.fuelTypeFilter?.trim(),
+              () => setTempFilters((p) => ({ ...p, fuelTypeFilter: '' })),
+              'm-fuel',
+            )}
+            {tempUniqueFuelTypes.map((fuel) =>
+              rowRadio(
+                `fuel-${fuel}`,
+                fuel,
+                tempFilters.fuelTypeFilter === fuel,
+                () => setTempFilters((p) => ({ ...p, fuelTypeFilter: fuel })),
+                'm-fuel',
+              ),
+            )}
           </div>
         );
       case 'transmission':
         return (
-          <div className="pb-2">
-            <select
-              name="transmissionFilter"
-              value={tempFilters.transmissionFilter}
-              onChange={(e) =>
-                setTempFilters((p) => ({ ...p, transmissionFilter: e.target.value }))
-              }
-              className={formElementClass}
-            >
-              <option value="">{t('listings.mobileFilter.anyTransmission')}</option>
-              {tempUniqueTransmissions.map((tr) => (
-                <option key={tr} value={tr}>
-                  {tr}
-                </option>
-              ))}
-            </select>
+          <div className="pb-2 space-y-1">
+            {rowRadio(
+              'any-transmission',
+              t('listings.mobileFilter.anyTransmission'),
+              !tempFilters.transmissionFilter?.trim(),
+              () => setTempFilters((p) => ({ ...p, transmissionFilter: '' })),
+              'm-transmission',
+            )}
+            {tempUniqueTransmissions.map((tr) =>
+              rowRadio(
+                `transmission-${tr}`,
+                tr,
+                tempFilters.transmissionFilter === tr,
+                () => setTempFilters((p) => ({ ...p, transmissionFilter: tr })),
+                'm-transmission',
+              ),
+            )}
           </div>
         );
       case 'ownership':
@@ -2042,22 +2065,15 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 { id: '2' as OwnershipFilterValue, label: t('listings.mobileFilter.owner2') },
                 { id: '3plus' as OwnershipFilterValue, label: t('listings.mobileFilter.owner3plus') },
               ] as const
-            ).map((opt) => (
-              <label
-                key={opt.id || 'any'}
-                className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50"
-              >
-                <input
-                  type="radio"
-                  name="m-ownership"
-                  checked={tempFilters.ownershipFilter === opt.id}
-                  onChange={() => setTempFilters((p) => ({ ...p, ownershipFilter: opt.id }))}
-                  className="h-4 w-4 shrink-0"
-                  style={{ accentColor: '#222222' }}
-                />
-                <span className="text-sm font-medium text-gray-900">{opt.label}</span>
-              </label>
-            ))}
+            ).map((opt) =>
+              rowRadio(
+                opt.id || 'any-ownership',
+                opt.label,
+                tempFilters.ownershipFilter === opt.id,
+                () => setTempFilters((p) => ({ ...p, ownershipFilter: opt.id })),
+                'm-ownership',
+              ),
+            )}
           </div>
         );
       case 'state':
@@ -2065,33 +2081,22 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         // Radio list matches year/ownership panels and stays inside the scrollable panel.
         return (
           <div className="pb-2 space-y-1">
-            <label className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50">
-              <input
-                type="radio"
-                name="m-state"
-                checked={!tempFilters.stateFilter?.trim()}
-                onChange={() => setTempFilters((p) => ({ ...p, stateFilter: '' }))}
-                className="h-4 w-4 shrink-0"
-                style={{ accentColor: '#222222' }}
-              />
-              <span className="text-sm font-medium text-gray-900">{t('listings.mobileFilter.anyState')}</span>
-            </label>
-            {uniqueStates.map((st) => (
-              <label
-                key={st.code}
-                className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50"
-              >
-                <input
-                  type="radio"
-                  name="m-state"
-                  checked={tempFilters.stateFilter === st.code}
-                  onChange={() => setTempFilters((p) => ({ ...p, stateFilter: st.code }))}
-                  className="h-4 w-4 shrink-0"
-                  style={{ accentColor: '#222222' }}
-                />
-                <span className="text-sm font-medium text-gray-900">{st.name}</span>
-              </label>
-            ))}
+            {rowRadio(
+              'any-state',
+              t('listings.mobileFilter.anyState'),
+              !tempFilters.stateFilter?.trim(),
+              () => setTempFilters((p) => ({ ...p, stateFilter: '' })),
+              'm-state',
+            )}
+            {uniqueStates.map((st) =>
+              rowRadio(
+                st.code,
+                st.name,
+                tempFilters.stateFilter === st.code,
+                () => setTempFilters((p) => ({ ...p, stateFilter: st.code })),
+                'm-state',
+              ),
+            )}
           </div>
         );
       default:
@@ -2506,25 +2511,33 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 chip.id !== 'filter' && chip.id !== 'sort'
                   ? committedFilterCategoryMap[chip.id]
                   : false;
+              const chipFilterActive = chip.id === 'filter' && activeFilterCount > 0;
+              const chipSortActive = chip.id === 'sort' && sortOrder !== 'YEAR_DESC';
+              const chipHighlighted = chipCategoryActive || chipFilterActive || chipSortActive;
               return (
               <button
                 key={chip.id}
                 type="button"
                 onClick={chip.onClick}
-                className={`relative flex-shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-sm font-semibold active:scale-[0.98] transition-transform ${
-                  chipCategoryActive
-                    ? 'bg-gray-900 text-white border border-gray-900'
-                    : 'bg-white border border-gray-800 text-gray-900'
+                aria-pressed={chipHighlighted}
+                className={`relative flex-shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-sm font-semibold active:scale-[0.98] transition-all ${
+                  chipHighlighted
+                    ? 'bg-[#222222] text-white border border-[#222222] shadow-sm'
+                    : 'bg-white border border-dashed border-gray-800 text-gray-900'
                 }`}
               >
                 {chip.label}
                 {chip.id === 'filter' && activeFilterCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full border-2 border-[#F5F5F5]">
+                  <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full border-2 ${
+                    chipFilterActive
+                      ? 'text-[#222222] bg-white border-white'
+                      : 'text-white bg-red-500 border-[#F5F5F5]'
+                  }`}>
                     {activeFilterCount}
                   </span>
                 )}
                 {chipCategoryActive && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-orange-500 rounded-full border border-white" aria-hidden />
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-orange-400 rounded-full border border-white" aria-hidden />
                 )}
               </button>
             );

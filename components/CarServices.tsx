@@ -193,11 +193,8 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
   const supportTel = supportTelHref();
   const { isMobileApp } = useIsMobileApp();
   const { t, i18n: i18nFromHook } = useTranslation(undefined, { i18n });
-  const mobileBottomReserve = isMobileApp
-    ? 'calc(56px + env(safe-area-inset-bottom, 0px))'
-    : '0px';
   const mobileScrollPadding = isMobileApp
-    ? `calc(5.5rem + 56px + env(safe-area-inset-bottom, 0px))`
+    ? 'calc(56px + env(safe-area-inset-bottom, 0px))'
     : '5rem';
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const servicesSectionRef = useRef<HTMLDivElement>(null);
@@ -1046,31 +1043,6 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
           </div>
         </div>
       </section>
-
-      {isMobileApp && (
-        <div
-          className="lg:hidden fixed left-0 right-0 z-30 px-4 pointer-events-none"
-          style={{ bottom: mobileBottomReserve }}
-        >
-          <button
-            type="button"
-            onClick={handleBookService}
-            className="pointer-events-auto w-full cs-cta-btn px-6 py-3.5 rounded-2xl text-base font-bold shadow-lg"
-            style={{
-              background: 'linear-gradient(135deg,#4338ca,#7c3aed)',
-              color: 'white',
-            }}
-            aria-label={t('carServices.bookNow')}
-          >
-            <span className="inline-flex items-center justify-center gap-2 w-full">
-              {t('carServices.bookNow')}
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </span>
-          </button>
-        </div>
-      )}
     </div>
   );
 };

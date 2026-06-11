@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense, laz
 import { useTranslation } from 'react-i18next';
 import { View as ViewEnum, VehicleCategory, type Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
-import { matchesCity } from '../utils/cityMapping';
+import { matchesCity, primaryLocationLabel } from '../utils/cityMapping';
 import { countCityVehicles } from '../utils/storefrontDiscoveryCounts';
 import MobileVehicleCard from './MobileVehicleCard';
 import LazyImage from './LazyImage';
@@ -27,34 +27,7 @@ import {
 } from '../utils/recentlyViewed';
 import { getPopularMakes } from '../utils/popularListings';
 import { PopularCitiesChips } from './PopularCitiesChips';
-
-// Adds the `is-visible` class once the element scrolls into view (one-shot).
-// Used in tandem with the `.reveal-on-scroll` CSS utility for a fade-up effect.
-const useRevealOnScroll = <T extends HTMLElement>(delayMs: number = 0) => {
-  const ref = useRef<T | null>(null);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    if (typeof IntersectionObserver === 'undefined') {
-      node.classList.add('is-visible');
-      return;
-    }
-    const obs = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            window.setTimeout(() => entry.target.classList.add('is-visible'), delayMs);
-            obs.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.12, rootMargin: '0px 0px -8% 0px' }
-    );
-    obs.observe(node);
-    return () => obs.disconnect();
-  }, [delayMs]);
-  return ref;
-};
+import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 
 
 // Rough EMI estimate: 5-year loan at ~10% APR, 20% down. Display-only.
@@ -135,7 +108,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   addToast,
   selectedCity = '',
   onBrowseAllIndia,
-  onUseMyLocation,
+  onUseMyLocation: _onUseMyLocation,
   isCatalogLoading = false,
   onRetryCatalogLoad,
 }) => {
@@ -143,6 +116,11 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
   const canUseLocationPicker = typeof onLocationChange === 'function';
+  const locationDisplay =
+    selectedCity.trim() ||
+    (userLocation?.trim()
+      ? primaryLocationLabel(userLocation) || userLocation.trim()
+      : '');
 
   useEffect(() => {
     if (!canUseLocationPicker) return;
@@ -512,6 +490,29 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         />
 
         <div className="relative">
+          {canUseLocationPicker ? (
+            <div className="flex justify-start mb-3 hero-rise hero-rise-1">
+              <button
+                type="button"
+                onClick={() => setIsLocationModalOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/25 px-3 py-1.5 text-white text-[12px] font-semibold active:scale-[0.98] transition-transform notranslate"
+                aria-label={t('a11y.chooseLocation')}
+                data-testid="mobile-home-location-pill"
+                data-no-translate
+                translate="no"
+              >
+                <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {locationDisplay || t('header.selectLocation')}
+                <svg className="h-3 w-3 shrink-0 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+          ) : null}
+
           <div className="flex justify-center mb-4 hero-rise hero-rise-1">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-white/15 backdrop-blur-md rounded-full border border-white/20">
               <span className="w-1.5 h-1.5 bg-green-400 rounded-full sparkle-pulse" />

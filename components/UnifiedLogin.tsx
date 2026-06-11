@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, User } from '../types';
 import { login, register } from '../services/userService';
-import { signInWithGoogle, syncWithBackend } from '../services/authService';
+import { runGoogleSignInButtonFlow } from '../services/authService';
 import { loginServiceProviderWithUsersTable } from '../services/serviceProviderLoginSupport';
 import { getSupabaseClient } from '../lib/supabase.js';
 import { setRememberMePreference } from '../utils/rememberMe';
@@ -184,6 +184,13 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     } catch {
       /* ignore */
     }
+  }, []);
+
+  // Clear a stuck spinner if browser OAuth returns to the app with an error.
+  useEffect(() => {
+    const onOAuthFailed = () => setIsLoading(false);
+    window.addEventListener('reride:oauth-failed', onOAuthFailed);
+    return () => window.removeEventListener('reride:oauth-failed', onOAuthFailed);
   }, []);
 
   const canUseGoogle =
@@ -421,48 +428,25 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       if (!selectedRole) {
         throw new Error(t('auth.error.selectAccountType'));
       }
-      // Google sign-in is not available for admin
       if (selectedRole === 'admin') {
         throw new Error(t('auth.error.googleNotAdmin'));
       }
 
-      try {
-        sessionStorage.setItem('reride_oauth_role', selectedRole);
-        localStorage.setItem('reride_oauth_role', selectedRole);
-      } catch {
-        /* ignore */
+      const flowError = await runGoogleSignInButtonFlow(
+        selectedRole,
+        {
+          onLogin,
+          onRegister,
+          onServiceProviderLogin,
+        },
+        mode,
+      );
+      if (flowError) {
+        throw new Error(flowError);
       }
-
-      const result = await signInWithGoogle();
-
-      // Supabase OAuth is redirect-based: API returns a URL to Google, not a user object.
-      const redirectUrl =
-        result.user &&
-        typeof result.user === 'object' &&
-        'redirectUrl' in result.user &&
-        typeof (result.user as { redirectUrl?: string }).redirectUrl === 'string'
-          ? (result.user as { redirectUrl: string }).redirectUrl
-          : null;
-
-      if (!result.success) {
-        try {
-          sessionStorage.removeItem('reride_oauth_role');
-          localStorage.removeItem('reride_oauth_role');
-        } catch {
-          /* ignore */
-        }
-        throw new Error(result.reason || t('auth.error.googleFailed'));
-      }
-
-      if (redirectUrl) {
-        // replace avoids a poisoned bfcache entry when returning from Google with ?code=
-        window.location.replace(redirectUrl);
-        return;
-      }
-
-      return;
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('auth.error.googleSignInFailed'));
+      const message = err instanceof Error ? err.message : t('auth.error.googleSignInFailed');
+      setError(message);
     } finally {
       setIsLoading(false);
     }

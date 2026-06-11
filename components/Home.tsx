@@ -22,37 +22,7 @@ import {
 } from '../utils/recentlyViewed';
 import { getPopularMakes } from '../utils/popularListings';
 import { PopularCitiesChips } from './PopularCitiesChips.js';
-// Adds an `is-visible` class to the target element (which already has the
-// `reveal-on-scroll` class) the first time it intersects the viewport.
-// Optional delay staggers grids/lists for a natural cascade.
-const useRevealOnScroll = <T extends HTMLElement>(delayMs: number = 0) => {
-    const ref = useRef<T | null>(null);
-    useEffect(() => {
-        const node = ref.current;
-        if (!node) return;
-        if (typeof IntersectionObserver === 'undefined') {
-            node.classList.add('is-visible');
-            return;
-        }
-        const observer = new IntersectionObserver(
-            (entries) => {
-                entries.forEach((entry) => {
-                    if (entry.isIntersecting) {
-                        const t = window.setTimeout(() => {
-                            entry.target.classList.add('is-visible');
-                        }, delayMs);
-                        observer.unobserve(entry.target);
-                        return () => window.clearTimeout(t);
-                    }
-                });
-            },
-            { threshold: 0.12, rootMargin: '0px 0px -8% 0px' }
-        );
-        observer.observe(node);
-        return () => observer.disconnect();
-    }, [delayMs]);
-    return ref;
-};
+import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 
 interface HomeProps {
     onSearch: (query: string) => void;
