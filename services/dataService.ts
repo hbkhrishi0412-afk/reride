@@ -618,7 +618,9 @@ class DataService {
     }
     const legacyFull =
       typeof import.meta !== 'undefined' &&
-      String((import.meta as any).env?.VITE_VEHICLES_LEGACY_FULL_FETCH || '').toLowerCase() === 'true';
+      String((import.meta as any).env?.VITE_VEHICLES_LEGACY_FULL_FETCH || '').toLowerCase() === 'true' &&
+      (import.meta as any).env?.MODE !== 'production' &&
+      (import.meta as any).env?.PROD !== true;
     if (legacyFull) {
       return '/vehicles?limit=0&skipExpiryCheck=true';
     }

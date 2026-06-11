@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ReRide — Launch QA Checklist</title>
+  <style>
+    :root {
+      --orange: #ff6b35;
+      --orange-dark: #ea580c;
+      --bg: #fafafa;
+      --card: #fff;
+      --text: #1a1a1a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --done: #16a34a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    header {
+      background: linear-gradient(135deg, var(--orange), #f97316);
+      color: #fff;
+      padding: 1.25rem 1rem 1rem;
+    }
+    header h1 { margin: 0 0 0.25rem; font-size: 1.35rem; }
+    header p { margin: 0; opacity: 0.95; font-size: 0.9rem; }
+    .wrap { max-width: 52rem; margin: 0 auto; padding: 1rem; }
+    .meta {
+      display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;
+      font-size: 0.85rem;
+    }
+    .meta label { display: flex; flex-direction: column; gap: 0.2rem; flex: 1; min-width: 10rem; }
+    .meta input {
+      padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: 8px;
+    }
+    .progress {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 0.85rem 1rem; margin-bottom: 1rem; position: sticky; top: 0; z-index: 2;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .progress strong { color: var(--orange-dark); }
+    .bar { height: 8px; background: #eee; border-radius: 99px; overflow: hidden; margin-top: 0.5rem; }
+    .bar > span { display: block; height: 100%; background: var(--orange); width: 0%; transition: width 0.2s; }
+    section {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 1rem; margin-bottom: 1rem;
+    }
+    section h2 {
+      margin: 0 0 0.75rem; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;
+    }
+    section h2 span { font-size: 0.75rem; font-weight: 600; color: var(--muted); }
+    .item {
+      display: flex; gap: 0.65rem; align-items: flex-start; padding: 0.55rem 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .item:last-child { border-bottom: none; }
+    .item input[type="checkbox"] {
+      width: 1.1rem; height: 1.1rem; margin-top: 0.15rem; accent-color: var(--orange);
+      flex-shrink: 0;
+    }
+    .item label { flex: 1; cursor: pointer; }
+    .item.done label { color: var(--muted); text-decoration: line-through; }
+    .item small { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 0.15rem; }
+    .fail { color: #b91c1c; font-weight: 600; font-size: 0.85rem; margin-top: 0.35rem; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0 2rem; }
+    button {
+      border: none; border-radius: 8px; padding: 0.55rem 0.9rem; font-weight: 600; cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .btn-primary { background: var(--orange); color: #fff; }
+    .btn-secondary { background: #fff; color: var(--text); border: 1px solid var(--border); }
+    @media print {
+      .actions, .progress { position: static; box-shadow: none; }
+      header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>ReRide — Launch QA Checklist</h1>
+      <p>One-page tester script · Web + Android + iPhone · Tick each box · Notes save automatically</p>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="meta">
+      <label>Tester name <input type="text" id="tester" placeholder="Your name" /></label>
+      <label>Date <input type="date" id="testDate" /></label>
+      <label>Build / version <input type="text" id="buildVer" placeholder="e.g. 1.0.16 (20)" value="1.0.16 (20)" /></label>
+      <label>Environment URL <input type="text" id="baseUrl" placeholder="https://www.reride.co.in" value="https://www.reride.co.in" /></label>
+    </div>
+
+    <div class="progress">
+      <div><strong id="pct">0%</strong> complete — <span id="counts">0 / 0</span> checks passed</div>
+      <div class="bar"><span id="bar"></span></div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn-primary" onclick="window.print()">Print / Save PDF</button>
+      <button type="button" class="btn-secondary" onclick="resetAll()">Reset all checks</button>
+    </div>
+
+    <section data-group="web">
+      <h2>Website (desktop browser) <span>Chrome / Edge</span></h2>
+      <div class="item" data-id="w1"><input type="checkbox" id="w1" /><label for="w1">Homepage loads in under 5 seconds<small>No blank white screen</small></label></div>
+      <div class="item" data-id="w2"><input type="checkbox" id="w2" /><label for="w2">Used cars page shows listings or a clear empty message<small>Not endless loading skeletons</small></label></div>
+      <div class="item" data-id="w3"><input type="checkbox" id="w3" /><label for="w3">Open a vehicle detail page — photos and price load<small></small></label></div>
+      <div class="item" data-id="w4"><input type="checkbox" id="w4" /><label for="w4">Bad URL shows “Page Not Found” (try /this-does-not-exist)<small>Must NOT silently show homepage</small></label></div>
+      <div class="item" data-id="w5"><input type="checkbox" id="w5" /><label for="w5">Sign up as new buyer — checkbox for Privacy + Terms is required<small></small></label></div>
+      <div class="item" data-id="w6"><input type="checkbox" id="w6" /><label for="w6">Email login and logout work<small></small></label></div>
+      <div class="item" data-id="w7"><input type="checkbox" id="w7" /><label for="w7">Google sign-in works (if enabled)<small></small></label></div>
+      <div class="item" data-id="w8"><input type="checkbox" id="w8" /><label for="w8">Wishlist add/remove works<small></small></label></div>
+      <div class="item" data-id="w9"><input type="checkbox" id="w9" /><label for="w9">Buyer inbox: send or view a message<small></small></label></div>
+      <div class="item" data-id="w10"><input type="checkbox" id="w10" /><label for="w10">Seller on desktop: opening /inbox redirects to seller dashboard messages<small></small></label></div>
+      <div class="item" data-id="w11"><input type="checkbox" id="w11" /><label for="w11">Profile → Delete my account works and signs user out<small>Permanent delete, not just hide</small></label></div>
+      <div class="item" data-id="w12"><input type="checkbox" id="w12" /><label for="w12">Privacy policy page loads from footer or profile<small>/privacy-policy</small></label></div>
+    </section>
+
+    <section data-group="mweb">
+      <h2>Mobile web (phone browser) <span>Safari / Chrome</span></h2>
+      <div class="item" data-id="m1"><input type="checkbox" id="m1" /><label for="m1">Homepage fits small screen — no overlapping text<small></small></label></div>
+      <div class="item" data-id="m2"><input type="checkbox" id="m2" /><label for="m2">Bottom navigation works (Home, Search, Messages, Profile)<small></small></label></div>
+      <div class="item" data-id="m3"><input type="checkbox" id="m3" /><label for="m3">Vehicle detail scrolls smoothly; images load<small></small></label></div>
+      <div class="item" data-id="m4"><input type="checkbox" id="m4" /><label for="m4">Sign up + login on phone browser<small></small></label></div>
+    </section>
+
+    <section data-group="android">
+      <h2>Android app <span>Physical device</span></h2>
+      <div class="item" data-id="a1"><input type="checkbox" id="a1" /><label for="a1">App opens without crash or blank WebView<small></small></label></div>
+      <div class="item" data-id="a2"><input type="checkbox" id="a2" /><label for="a2">Browse listings and open a vehicle<small></small></label></div>
+      <div class="item" data-id="a3"><input type="checkbox" id="a3" /><label for="a3">Sign up with terms checkbox; login; logout<small></small></label></div>
+      <div class="item" data-id="a4"><input type="checkbox" id="a4" /><label for="a4">Google sign-in (native or browser fallback)<small></small></label></div>
+      <div class="item" data-id="a5"><input type="checkbox" id="a5" /><label for="a5">Messages / inbox works for buyer and seller roles<small></small></label></div>
+      <div class="item" data-id="a6"><input type="checkbox" id="a6" /><label for="a6">Profile → Privacy policy opens in app<small></small></label></div>
+      <div class="item" data-id="a7"><input type="checkbox" id="a7" /><label for="a7">Profile → Delete my account works<small>App Store / Play requirement</small></label></div>
+      <div class="item" data-id="a8"><input type="checkbox" id="a8" /><label for="a8">https://www.reride.co.in/vehicle/… opens in app (App Link)<small>After release fingerprint in assetlinks.json</small></label></div>
+      <div class="item" data-id="a9"><input type="checkbox" id="a9" /><label for="a9">Location permission shows clear explanation when asked<small></small></label></div>
+      <div class="item" data-id="a10"><input type="checkbox" id="a10" /><label for="a10">Turn off Wi‑Fi mid-action — app shows error, does not freeze<small></small></label></div>
+    </section>
+
+    <section data-group="ios">
+      <h2>iPhone app <span>Physical device</span></h2>
+      <div class="item" data-id="i1"><input type="checkbox" id="i1" /><label for="i1">App opens without crash<small></small></label></div>
+      <div class="item" data-id="i2"><input type="checkbox" id="i2" /><label for="i2">Browse listings and vehicle detail<small></small></label></div>
+      <div class="item" data-id="i3"><input type="checkbox" id="i3" /><label for="i3">Sign up, login, logout<small></small></label></div>
+      <div class="item" data-id="i4"><input type="checkbox" id="i4" /><label for="i4">Privacy policy reachable in app<small></small></label></div>
+      <div class="item" data-id="i5"><input type="checkbox" id="i5" /><label for="i5">Delete my account works<small></small></label></div>
+      <div class="item" data-id="i6"><input type="checkbox" id="i6" /><label for="i6">Camera / photo permission text makes sense when listing a car<small></small></label></div>
+      <div class="item" data-id="i7"><input type="checkbox" id="i7" /><label for="i7">Universal link opens app (after TEAMID fixed in Apple file)<small></small></label></div>
+    </section>
+
+    <section data-group="security">
+      <h2>Security &amp; launch blockers <span>Founder / engineer</span></h2>
+      <div class="item" data-id="s1"><input type="checkbox" id="s1" /><label for="s1">Supabase SQL run: REVOKE SELECT (password) on users<small>scripts/revoke-users-password-from-anon.sql</small></label></div>
+      <div class="item" data-id="s2"><input type="checkbox" id="s2" /><label for="s2">Vercel Production has JWT_SECRET, SUPABASE_*, VITE_SUPABASE_*<small></small></label></div>
+      <div class="item" data-id="s3"><input type="checkbox" id="s3" /><label for="s3">Upstash Redis URL + token set in Vercel<small>Launch-day rate limiting</small></label></div>
+      <div class="item" data-id="s4"><input type="checkbox" id="s4" /><label for="s4">assetlinks.json includes release + debug fingerprints<small>npm run android:assetlinks:sync</small></label></div>
+      <div class="item" data-id="s5"><input type="checkbox" id="s5" /><label for="s5">Apple TEAMID replaced in apple-app-site-association<small></small></label></div>
+      <div class="item" data-id="s6"><input type="checkbox" id="s6" /><label for="s6">ALLOW_TEST_USER_BOOTSTRAP is NOT true in production<small></small></label></div>
+    </section>
+
+    <section>
+      <h2>Issues found</h2>
+      <textarea id="issues" rows="6" style="width:100%;padding:0.65rem;border:1px solid var(--border);border-radius:8px;font-family:inherit;" placeholder="List any bugs: what you did, what happened, which device/browser…"></textarea>
+    </section>
+  </div>
+
+  <script>
+    const STORAGE = 'reride-qa-launch-v1';
+    const boxes = [...document.querySelectorAll('section .item input[type="checkbox"]')];
+    const fields = ['tester', 'testDate', 'buildVer', 'baseUrl', 'issues'];
+
+    function load() {
+      try {
+        const raw = localStorage.getItem(STORAGE);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        boxes.forEach((cb) => { cb.checked = !!data.checks[cb.id]; });
+        fields.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el && data.meta[id] != null) el.value = data.meta[id];
+        });
+      } catch (_) {}
+      if (!document.getElementById('testDate').value) {
+        document.getElementById('testDate').value = new Date().toISOString().slice(0, 10);
+      }
+      updateUI();
+    }
+
+    function save() {
+      const checks = {};
+      boxes.forEach((cb) => { checks[cb.id] = cb.checked; });
+      const meta = {};
+      fields.forEach((id) => { meta[id] = document.getElementById(id).value; });
+      localStorage.setItem(STORAGE, JSON.stringify({ checks, meta }));
+      updateUI();
+    }
+
+    function updateUI() {
+      const done = boxes.filter((cb) => cb.checked).length;
+      const total = boxes.length;
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      document.getElementById('pct').textContent = pct + '%';
+      document.getElementById('counts').textContent = done + ' / ' + total;
+      document.getElementById('bar').style.width = pct + '%';
+      boxes.forEach((cb) => {
+        const row = cb.closest('.item');
+        if (row) row.classList.toggle('done', cb.checked);
+      });
+    }
+
+    function resetAll() {
+      if (!confirm('Clear all checkboxes and notes on this device?')) return;
+      localStorage.removeItem(STORAGE);
+      boxes.forEach((cb) => { cb.checked = false; });
+      document.getElementById('issues').value = '';
+      updateUI();
+    }
+
+    boxes.forEach((cb) => cb.addEventListener('change', save));
+    fields.forEach((id) => document.getElementById(id).addEventListener('input', save));
+    load();
+  </script>
+</body>
+</html>

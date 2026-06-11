@@ -1,9 +1,11 @@
 /**
- * Native token persistence — encrypted storage on iOS Keychain / Android Keystore.
- * Falls back to Capacitor Preferences on web and during one-time migration from legacy Preferences keys.
+ * Native token persistence — encrypted storage on iOS Keychain / Android Keystore where available,
+ * with an automatic fallback to Capacitor Preferences (see nativeKeyValueStorage) so iPhone (SPM) builds
+ * keep users signed in across restarts.
  */
 
 import { isCapacitorNativeApp as isCapacitorNative } from './isCapacitorNative.js';
+import { nativeKvGet, nativeKvRemove, nativeKvSet } from './nativeKeyValueStorage.js';
 
 const ACCESS_KEY = 'reRideAccessToken';
 const REFRESH_KEY = 'reRideRefreshToken';
@@ -12,11 +14,6 @@ let memoryAccessToken: string | null = null;
 let memoryRefreshToken: string | null = null;
 let hydrated = false;
 let migrationDone = false;
-
-async function secureStorage() {
-  const { SecureStorage } = await import('@aparajita/capacitor-secure-storage');
-  return SecureStorage;
-}
 
 async function legacyPreferences() {
   const { Preferences } = await import('@capacitor/preferences');
@@ -28,12 +25,15 @@ async function migrateFromLegacyPreferences(): Promise<void> {
   migrationDone = true;
   try {
     const P = await legacyPreferences();
-    const S = await secureStorage();
     for (const key of [ACCESS_KEY, REFRESH_KEY]) {
       const legacy = await P.get({ key });
       if (legacy.value) {
-        await S.setItem(key, legacy.value);
-        await P.remove({ key });
+        const backend = await nativeKvSet(key, legacy.value);
+        // Only clear the plaintext Preferences copy if it was promoted to a different (secure) store.
+        // When Preferences IS the active backend (iOS SPM), removing here would delete what we just wrote.
+        if (backend === 'secure') {
+          await P.remove({ key });
+        }
       }
     }
   } catch {
@@ -43,25 +43,15 @@ async function migrateFromLegacyPreferences(): Promise<void> {
 
 async function secureGet(key: string): Promise<string | null> {
   if (!isCapacitorNative()) return null;
-  try {
-    const S = await secureStorage();
-    return await S.getItem(key);
-  } catch {
-    return null;
-  }
+  return nativeKvGet(key);
 }
 
 async function secureSet(key: string, value: string | null): Promise<void> {
   if (!isCapacitorNative()) return;
-  try {
-    const S = await secureStorage();
-    if (value) {
-      await S.setItem(key, value);
-    } else {
-      await S.removeItem(key);
-    }
-  } catch {
-    /* ignore */
+  if (value) {
+    await nativeKvSet(key, value);
+  } else {
+    await nativeKvRemove(key);
   }
 }
 

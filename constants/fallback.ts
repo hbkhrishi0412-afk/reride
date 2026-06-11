@@ -52,7 +52,6 @@ export const FALLBACK_USERS: User[] = [
   {
     name: 'Demo Seller',
     email: 'demo@reride.com',
-    password: 'password',
     mobile: '555-123-4567',
     role: 'seller',
     location: 'Mumbai',

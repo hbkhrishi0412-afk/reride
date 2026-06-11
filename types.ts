@@ -508,6 +508,8 @@ export enum View {
   SELL_CAR_ADMIN = 'SELL_CAR_ADMIN',
   /** Full-screen activity feed (grouped notifications, mute) — not Messages. */
   NOTIFICATIONS_CENTER = 'NOTIFICATIONS_CENTER',
+  /** Unknown or invalid URL — show a friendly 404 instead of silently landing on Home. */
+  NOT_FOUND = 'NOT_FOUND',
 }
 
 export interface ProsAndCons {

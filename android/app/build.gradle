@@ -1,5 +1,12 @@
 apply plugin: 'com.android.application'
 
+// Release signing: android/keystore.properties (gitignored). Falls back to -PKEYSTORE_FILE Gradle props.
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.reride.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -22,7 +29,13 @@ android {
     }
     signingConfigs {
         release {
-            if (project.hasProperty('KEYSTORE_FILE')) {
+            if (keystorePropertiesFile.exists()) {
+                // storeFile path is relative to the android/ folder, e.g. app/reride-newrelease
+                storeFile rootProject.file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            } else if (project.hasProperty('KEYSTORE_FILE')) {
                 storeFile file(project.findProperty('KEYSTORE_FILE'))
                 storePassword project.findProperty('KEYSTORE_PASSWORD')
                 keyAlias project.findProperty('KEY_ALIAS')
@@ -37,7 +50,7 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            if (project.hasProperty('KEYSTORE_FILE')) {
+            if (keystorePropertiesFile.exists() || project.hasProperty('KEYSTORE_FILE')) {
                 signingConfig signingConfigs.release
             }
         }

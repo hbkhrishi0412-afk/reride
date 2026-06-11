@@ -2143,7 +2143,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             {[
               { key: 'edit', label: 'Edit profile', sub: 'Personal & dealership info', icon: <IconEdit size={16} stroke={2} />, tint: 'rgba(37,99,235,0.10)', color: '#2563EB', onClick: () => setIsEditingProfile(true), badge: undefined as undefined | number },
               { key: 'notifs', label: 'Notifications', sub: 'Activity & alerts', icon: <IconBell size={16} stroke={2} />, tint: 'rgba(255,107,53,0.10)', color: '#EA580C', onClick: () => setActiveTab('notifications'), badge: unreadNotifications.length },
-              { key: 'privacy', label: 'Privacy', sub: 'Account safety', icon: <IconShield size={16} stroke={2} />, tint: 'rgba(71,85,105,0.10)', color: '#475569', onClick: () => onNavigate(ViewEnum.SUPPORT) },
+              { key: 'privacy', label: 'Privacy', sub: 'Privacy policy', icon: <IconShield size={16} stroke={2} />, tint: 'rgba(71,85,105,0.10)', color: '#475569', onClick: () => onNavigate(ViewEnum.PRIVACY_POLICY) },
               { key: 'help', label: 'Help & support', sub: 'FAQ, contact us', icon: <IconChat size={16} stroke={2} />, tint: 'rgba(16,185,129,0.10)', color: '#047857', onClick: () => onNavigate(ViewEnum.SUPPORT) },
               ...(onLogout ? [{ key: 'logout', label: 'Log out', sub: 'End this session', icon: <IconArrowUpRight size={16} stroke={2} />, tint: 'rgba(220,38,38,0.10)', color: '#DC2626', onClick: () => onLogout() }] : [])
             ].map((row) => (
@@ -3863,7 +3863,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         icon: <IconShield size={16} stroke={2} />,
         tint: 'rgba(71,85,105,0.10)',
         color: '#475569',
-        onClick: () => onNavigate(ViewEnum.SUPPORT)
+        onClick: () => onNavigate(ViewEnum.PRIVACY_POLICY)
       },
       {
         key: 'help',

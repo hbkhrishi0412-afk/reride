@@ -253,7 +253,7 @@ export const OfferMessage: React.FC<{
                                     e.stopPropagation();
                                     setIsCounterModalOpen(true);
                                 }} 
-                                className="flex-1 text-sm bg-blue-500 text-white font-bold py-1.5 px-3 rounded-md hover:bg-blue-600 transition-colors"
+                                className="flex-1 text-sm bg-reride-orange text-white font-bold py-1.5 px-3 rounded-md hover:bg-reride-orange-hover transition-colors"
                             >
                                 Counter
                             </button>

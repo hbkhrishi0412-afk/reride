@@ -21,6 +21,7 @@
     "android:reinstall": "npm run android:bundle && cd android && gradlew.bat installDebug",
     "android:app-link-fingerprints": "node scripts/print-android-app-link-fingerprints.cjs",
     "android:app-link-fingerprints:release": "node scripts/print-android-app-link-fingerprints.cjs --release",
+    "android:assetlinks:sync": "node scripts/sync-assetlinks-fingerprints.cjs",
     "build:android:dev": "cross-env CAPACITOR_BUILD=1 vite build --mode development && node scripts/verify-build-output.cjs",
     "build:analyze": "ANALYZE=true vite build",
     "build:stats": "ANALYZE=true vite build",

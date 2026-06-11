@@ -244,38 +244,6 @@ export const getVehiclesApiPaginated = async (
   throw new Error('Invalid response format: expected object with vehicles property');
 };
 
-const getVehiclesApi = async (): Promise<Vehicle[]> => {
-  const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
-  // Use limit=0 to get all vehicles (backward compatible) or limit=50 for faster load
-  const response = await authenticatedFetch('/api/vehicles?limit=0', {
-    method: 'GET',
-  });
-  const result = await handleApiResponse<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(response);
-  
-  if (!result.success) {
-    throw new Error(result.reason || result.error || 'Failed to fetch vehicles');
-  }
-  
-  // Handle both array response (limit=0) and paginated response (limit>0)
-  let data: Vehicle[];
-  if (Array.isArray(result.data)) {
-    data = result.data;
-  } else if (result.data && typeof result.data === 'object' && 'vehicles' in result.data) {
-    data = result.data.vehicles || [];
-  } else {
-    throw new Error('Invalid response format: expected array or object with vehicles property');
-  }
-  
-  // Validate that all items are vehicles
-  if (!Array.isArray(data)) {
-    throw new Error('Invalid response format: expected array');
-  }
-
-  // Do not use strict `isVehicle` here — API rows may omit optional fields the guard requires,
-  // which would hide most listings on mobile after refresh (website still shows them).
-  return data;
-};
-
 const addVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {
   const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
   const response = await authenticatedFetch('/api/vehicles', {

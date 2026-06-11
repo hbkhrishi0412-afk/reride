@@ -1,11 +1,14 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.reride.app",
       "sha256_cert_fingerprints": [
-        "A3:37:D8:18:E1:D3:C9:09:70:40:CA:A9:B1:88:BB:6A:F3:D2:F4:90:BE:29:25:26:B3:47:53:D9:AB:00:D3:4B"
+        "A3:37:D8:18:E1:D3:C9:09:70:40:CA:A9:B1:88:BB:6A:F3:D2:F4:90:BE:29:25:26:B3:47:53:D9:AB:00:D3:4B",
+        "FE:D7:EF:82:55:AD:DA:D6:16:12:2E:0A:04:4E:06:3E:6B:9F:CE:15:5C:CB:C6:0D:32:69:FA:5C:1A:B4:ED:2F"
       ]
     }
   }

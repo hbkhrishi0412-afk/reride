@@ -1058,7 +1058,11 @@ async function mainHandler(
     }
     if (isGet && effectivePath.includes('/users') && !firstQueryParam(req.query?.action)) {
       res.setHeader('X-Error-Fallback', 'true');
-      return res.status(200).json([]);
+      return res.status(503).json({
+        success: false,
+        reason: 'User directory is temporarily unavailable. Please try again shortly.',
+        fallback: true,
+      });
     }
     if (isGet && effectivePath.includes('/vehicles')) {
       res.setHeader('X-Error-Fallback', 'true');
@@ -1069,7 +1073,11 @@ async function mainHandler(
           cities: {},
         });
       }
-      return res.status(200).json([]);
+      return res.status(503).json({
+        success: false,
+        reason: 'Vehicle listings are temporarily unavailable. Please try again shortly.',
+        fallback: true,
+      });
     }
     
     const message = errorToPublicMessage(error);
@@ -1544,29 +1552,24 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         }
       }
       
-      // Check if user has a password set (might be an OAuth user)
+      // OAuth/phone users without a password must use their original sign-in method.
+      // Never allow setting a password via the email/password login form (account takeover risk).
       if (!user.password) {
-        // Allow OAuth users to set a password during login
-        // Hash the provided password and update the user
-        try {
-          const hashedPassword = await hashPassword(sanitizedData.password);
-          await supabaseUserService.update(normalizedEmail, {
-            password: hashedPassword,
-            authProvider: user.authProvider === 'email' ? 'email' : user.authProvider, // Keep existing authProvider
-            updatedAt: new Date().toISOString()
-          });
-          
-          // Update the user object with the new password
-          user.password = hashedPassword;
-          
-          logInfo('✅ Password set for OAuth user during login:', normalizedEmail);
-        } catch (updateError) {
-          logError('❌ Failed to set password for OAuth user:', updateError);
-          return res.status(500).json({ 
-            success: false, 
-            reason: 'Failed to set password. Please try again or use your original sign-in method.' 
-          });
-        }
+        await recordFailedLogin(normalizedEmail);
+        const provider = String(user.authProvider || 'email').toLowerCase();
+        const methodHint =
+          provider === 'google'
+            ? 'Google'
+            : provider === 'phone'
+              ? 'phone OTP'
+              : 'your original sign-in method';
+        return res.status(401).json({
+          success: false,
+          reason:
+            provider !== 'email'
+              ? `This account uses ${methodHint} to sign in. Please use that method instead of email and password.`
+              : 'No password set for this account. Please use "Forgot password" or your original sign-in method.',
+        });
       }
       
       // Verify password using bcrypt (wrap to avoid 500 on invalid hash/corrupt data)
@@ -2350,35 +2353,34 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
     // REQUEST DATA DELETION (DPDP / Right to be Forgotten)
     if (action === 'request-data-deletion') {
-      const auth = authenticateRequest(req);
+      const auth = await authenticateRequestDual(req);
       if (!auth.isValid || !auth.user?.email) {
-        return res.status(401).json({ success: false, reason: 'Authentication required to request data deletion.' });
+        return res.status(401).json({ success: false, reason: 'Authentication required to delete your account.' });
       }
       try {
-        const email = auth.user.email.toLowerCase().trim();
-        const supabase = getSupabaseAdminClient();
-        const { data: existing } = await supabase.from('users').select('id').eq('email', email).single();
-        if (!existing) {
+        const normalizedEmail = auth.user.email.toLowerCase().trim();
+        const existingUser = await userService.findByEmail(normalizedEmail);
+        if (!existingUser) {
           return res.status(404).json({ success: false, reason: 'User not found.' });
         }
-        const deletedId = `deleted_${existing.id}_${Date.now()}`;
-        await supabase.from('users').update({
-          name: 'Deleted User',
-          email: deletedId,
-          mobile: null,
-          dealershipName: null,
-          bio: null,
-          avatar: null,
-          logo: null,
-          aadharCard: null,
-          panCard: null,
-          aadharNumber: null,
-          panNumber: null,
-          updatedAt: new Date().toISOString(),
-        }).eq('email', email);
+        await userService.delete(normalizedEmail);
+        try {
+          const supabaseAdmin = getSupabaseAdminClient();
+          const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+          if (!listError) {
+            const authUser = authUsers.users.find(
+              (u) => u.email?.toLowerCase().trim() === normalizedEmail,
+            );
+            if (authUser) {
+              await supabaseAdmin.auth.admin.deleteUser(authUser.id);
+            }
+          }
+        } catch (authDeleteError) {
+          logWarn('⚠️ request-data-deletion: auth user cleanup failed:', authDeleteError);
+        }
         return res.status(200).json({
           success: true,
-          message: 'Your data has been anonymized. You may need to log out and create a new account to use the service again.',
+          message: 'Your account has been permanently deleted.',
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -4324,8 +4326,14 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       const rawLimit = firstQueryParam(req.query.limit);
       const parsedLimit =
         rawLimit === undefined || rawLimit === '' ? 50 : parseInt(String(rawLimit), 10);
-      const limit = (Number.isNaN(parsedLimit) || parsedLimit < 0) ? 50 : parsedLimit;
+      let limit = (Number.isNaN(parsedLimit) || parsedLimit < 0) ? 50 : parsedLimit;
       const skipExpiryCheck = firstQueryParam(req.query.skipExpiryCheck) === 'true';
+      const isProductionEnv =
+        process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+      // In production, never load the entire catalog in one request (limit=0).
+      if (limit === 0 && isProductionEnv) {
+        limit = 80;
+      }
       
       let vehicles: VehicleType[];
       let totalVehiclesCount: number = 0;
@@ -9823,7 +9831,11 @@ export default async function handler(
 
         // Only safe for public GET /users lists — never return [] for POST /api/users (login/register).
         if (pathname.includes('/users') && req.method === 'GET') {
-          return res.status(200).json([]);
+          return res.status(503).json({
+            success: false,
+            reason: 'User directory is temporarily unavailable. Please try again shortly.',
+            fallback: true,
+          });
         }
         if (pathname.includes('/users') && (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE')) {
           return res.status(503).json({
@@ -9834,11 +9846,19 @@ export default async function handler(
         }
 
         if (pathname.includes('/vehicles')) {
-          return res.status(200).json([]);
+          return res.status(503).json({
+            success: false,
+            reason: 'Vehicle listings are temporarily unavailable. Please try again shortly.',
+            fallback: true,
+          });
         }
         
         if (pathname.includes('/faqs')) {
-          return res.status(200).json([]);
+          return res.status(503).json({
+            success: false,
+            reason: 'FAQs are temporarily unavailable. Please try again shortly.',
+            fallback: true,
+          });
         }
       }
       

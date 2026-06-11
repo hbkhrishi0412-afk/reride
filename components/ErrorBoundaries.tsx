@@ -100,7 +100,7 @@ class ErrorBoundary extends Component<Props, State> {
             <div className="mt-6 flex space-x-3">
               <button
                 onClick={() => window.location.reload()}
-                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 bg-reride-orange text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
                 Refresh Page
               </button>

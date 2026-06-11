@@ -308,9 +308,9 @@ function pathToView(path: string): View {
   }
   if (normalizedPath === '/city') return View.CITY_LANDING;
   if (normalizedPath === '/sell-car') return View.SELL_CAR;
-  
-  // Default fallback
-  return View.HOME;
+
+  // Unknown paths should show a 404 — not silently redirect to Home
+  return View.NOT_FOUND;
 }
 
 /** Email segment from /seller/:email (excludes /seller/dashboard). */

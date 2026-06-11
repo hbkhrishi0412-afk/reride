@@ -600,6 +600,11 @@ const en = {
   'auth.backToLogin': 'Back to Login',
   'auth.error.emailPasswordRequired': 'Please enter both email and password.',
   'auth.error.registerFieldsRequired': 'Please fill in all registration fields.',
+  'auth.error.mustAcceptTerms': 'Please accept the Privacy Policy and Terms of Service to create an account.',
+  'auth.termsPrefix': 'I agree to the',
+  'auth.privacyPolicy': 'Privacy Policy',
+  'auth.termsAnd': 'and',
+  'auth.termsOfService': 'Terms of Service',
   'auth.error.unknown': 'An unknown error occurred.',
   'auth.error.serviceProviderLogin':
     'Service providers must login through the Service Provider login page.',

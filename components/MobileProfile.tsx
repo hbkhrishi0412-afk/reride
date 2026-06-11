@@ -1,12 +1,13 @@
 import React, { useState, useRef } from 'react';
-import type { User } from '../types';
+import type { User, View } from '../types';
+import { View as ViewEnum } from '../types';
 import PasswordInput from './PasswordInput';
 import { isTokenLikelyValid, refreshAuthToken } from '../utils/authenticatedFetch.js';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 import { logout as rerideLogout } from '../services/userService';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
 import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
-import { downloadProfileExport, requestAccountDataAnonymization } from '../services/accountPrivacyService';
+import { downloadProfileExport, requestAccountDeletion } from '../services/accountPrivacyService';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 
 interface MobileProfileProps {
@@ -16,6 +17,7 @@ interface MobileProfileProps {
   onBack?: () => void;
   onLogout?: () => void;
   addToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
+  onNavigate?: (view: View) => void;
 }
 
 interface FormErrors {
@@ -39,7 +41,8 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   onUpdatePassword,
   onBack,
   onLogout,
-  addToast
+  addToast,
+  onNavigate,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
@@ -609,9 +612,16 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-900 mb-1">Data &amp; privacy</h3>
           <p className="text-xs text-gray-500 mb-3">
-            Download a copy of your profile or request anonymization of your account data (DPDP-style).
+            Download a copy of your profile, read our privacy policy, or permanently delete your account.
           </p>
           <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => onNavigate?.(ViewEnum.PRIVACY_POLICY)}
+              className="w-full py-2.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-800 border border-gray-200"
+            >
+              Privacy policy
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -627,22 +637,22 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
               onClick={async () => {
                 if (
                   !window.confirm(
-                    'Anonymize your account? You will be signed out and will need to register again to use ReRide.',
+                    'Permanently delete your account? This cannot be undone. You will be signed out immediately.',
                   )
                 ) {
                   return;
                 }
-                const r = await requestAccountDataAnonymization();
+                const r = await requestAccountDeletion(currentUser.email);
                 if (r.success) {
-                  addToast?.(r.message || 'Your data has been anonymized.', 'success');
+                  addToast?.(r.message || 'Your account has been deleted.', 'success');
                   onLogout?.();
                 } else {
-                  addToast?.(r.reason || 'Could not process your request. Please try again.', 'error');
+                  addToast?.(r.reason || 'Could not delete your account. Please try again.', 'error');
                 }
               }}
               className="w-full py-2.5 rounded-lg text-sm font-medium text-red-700 bg-red-50 border border-red-200"
             >
-              Request data deletion
+              Delete my account
             </button>
           </div>
         </div>

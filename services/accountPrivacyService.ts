@@ -19,10 +19,13 @@ export function downloadProfileExport(currentUser: User): void {
   URL.revokeObjectURL(url);
 }
 
-export async function requestAccountDataAnonymization(): Promise<{ success: boolean; message?: string; reason?: string }> {
+/** Permanently delete the signed-in user's account (required by Apple/Google app store rules). */
+export async function requestAccountDeletion(
+  email: string,
+): Promise<{ success: boolean; message?: string; reason?: string }> {
   const res = await authenticatedFetch('/api/users', {
-    method: 'POST',
-    body: JSON.stringify({ action: 'request-data-deletion' }),
+    method: 'DELETE',
+    body: JSON.stringify({ email }),
   });
   const data = (await res.json().catch(() => ({}))) as {
     success?: boolean;
@@ -30,8 +33,13 @@ export async function requestAccountDataAnonymization(): Promise<{ success: bool
     reason?: string;
   };
   return {
-    success: Boolean(data.success),
-    message: data.message,
+    success: res.ok && Boolean(data.success),
+    message: data.message || (res.ok ? 'Your account has been permanently deleted.' : undefined),
     reason: data.reason,
   };
+}
+
+/** @deprecated Use requestAccountDeletion — anonymization alone does not meet app store requirements. */
+export async function requestAccountDataAnonymization(): Promise<{ success: boolean; message?: string; reason?: string }> {
+  return { success: false, reason: 'Use requestAccountDeletion for full account removal.' };
 }

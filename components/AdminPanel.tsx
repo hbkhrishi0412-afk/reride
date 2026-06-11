@@ -2800,7 +2800,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 <button
                                     type="button"
                                     onClick={() => void handleSaveEditedTicket()}
-                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                                    className="px-4 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange-hover"
                                 >
                                     Save changes
                                 </button>
@@ -2998,7 +2998,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 </button>
                                 <button
                                     onClick={handleSaveFaq}
-                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                                    className="px-4 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange-hover"
                                 >
                                     Save FAQ
                                 </button>
@@ -3050,7 +3050,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 </button>
                                 <button
                                     onClick={handleSaveFaq}
-                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                                    className="px-4 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange-hover"
                                 >
                                     Save Changes
                                 </button>

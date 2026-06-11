@@ -21,6 +21,11 @@ function findKeytool() {
     const candidate = path.join(process.env.JAVA_HOME, 'bin', process.platform === 'win32' ? 'keytool.exe' : 'keytool');
     if (fs.existsSync(candidate)) return candidate;
   }
+  const studioJbr =
+    process.platform === 'win32'
+      ? 'C:\\Program Files\\Android\\Android Studio\\jbr\\bin\\keytool.exe'
+      : '/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/keytool';
+  if (fs.existsSync(studioJbr)) return studioJbr;
   return 'keytool';
 }
 
@@ -41,11 +46,13 @@ try {
   let storepass;
 
   if (isRelease) {
-    keystore = process.env.ANDROID_KEYSTORE_PATH;
-    alias = process.env.ANDROID_KEYSTORE_ALIAS;
-    storepass = process.env.ANDROID_KEYSTORE_PASSWORD;
+    keystore = process.env.ANDROID_KEYSTORE_PATH || process.env.KEYSTORE_FILE;
+    alias = process.env.ANDROID_KEYSTORE_ALIAS || process.env.KEY_ALIAS;
+    storepass = process.env.ANDROID_KEYSTORE_PASSWORD || process.env.KEYSTORE_PASSWORD;
     if (!keystore || !alias || !storepass) {
-      console.error('Set ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_ALIAS, ANDROID_KEYSTORE_PASSWORD for --release');
+      console.error(
+        'Set KEYSTORE_FILE, KEY_ALIAS, KEYSTORE_PASSWORD (Gradle) or ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_ALIAS, ANDROID_KEYSTORE_PASSWORD for --release',
+      );
       process.exit(1);
     }
   } else {

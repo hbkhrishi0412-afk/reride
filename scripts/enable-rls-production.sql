@@ -165,6 +165,10 @@ USING (
   OR (SELECT auth.uid())::text = id
 );
 
+-- Column-level protection: VITE_SUPABASE_ANON_KEY is in every client bundle.
+-- RLS controls rows; REVOKE prevents direct PostgREST reads of password hashes.
+REVOKE SELECT (password) ON public.users FROM anon, authenticated;
+
 -- ============================================================================
 -- 2. VEHICLES
 --    - anon: read published

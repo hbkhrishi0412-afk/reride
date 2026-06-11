@@ -1,9 +1,11 @@
 /**
- * Supabase Auth session storage on Capacitor: encrypted Keychain / Keystore instead of WebView localStorage.
- * Web builds continue to use localStorage (browser default).
+ * Supabase Auth session storage on Capacitor: encrypted Keychain / Keystore where available, with an
+ * automatic fallback to Capacitor Preferences (see nativeKeyValueStorage). Web builds continue to use
+ * localStorage (browser default).
  */
 import type { SupportedStorage } from '@supabase/supabase-js';
 import { isCapacitorNativeApp as isCapacitorNative } from './isCapacitorNative.js';
+import { nativeKvGet, nativeKvRemove, nativeKvSet } from './nativeKeyValueStorage.js';
 
 const LEGACY_SUPABASE_KEYS = ['sb-access-token', 'supabase.auth.token'] as const;
 
@@ -48,30 +50,15 @@ function supabaseAuthKeyFromProjectUrl(): string | null {
   }
 }
 
-async function secureStorage() {
-  const { SecureStorage } = await import('@aparajita/capacitor-secure-storage');
-  return SecureStorage;
-}
-
 async function secureGet(key: string): Promise<string | null> {
-  try {
-    const S = await secureStorage();
-    return await S.getItem(key);
-  } catch {
-    return null;
-  }
+  return nativeKvGet(key);
 }
 
 async function secureSet(key: string, value: string | null): Promise<void> {
-  try {
-    const S = await secureStorage();
-    if (value) {
-      await S.setItem(key, value);
-    } else {
-      await S.removeItem(key);
-    }
-  } catch {
-    /* ignore */
+  if (value) {
+    await nativeKvSet(key, value);
+  } else {
+    await nativeKvRemove(key);
   }
 }
 

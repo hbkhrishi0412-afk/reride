@@ -1395,31 +1395,27 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="p-6">
                   <h3 className="text-sm font-semibold text-gray-900 mb-1">Data &amp; Privacy</h3>
-                  <p className="text-sm text-gray-500 mb-4">You can request deletion of your personal data. This will anonymize your account and you will need to sign up again to use the service.</p>
+                  <p className="text-sm text-gray-500 mb-4">You can permanently delete your account and sign-in. This cannot be undone.</p>
                   <button
                     type="button"
                     onClick={async () => {
-                      if (!window.confirm('Are you sure? Your profile data will be permanently anonymized and you will be logged out.')) return;
+                      if (!window.confirm('Permanently delete your account? This cannot be undone. You will be signed out immediately.')) return;
                       try {
-                        const { authenticatedFetch } = await import('../utils/authenticatedFetch');
-                        const res = await authenticatedFetch('/api/users', {
-                          method: 'POST',
-                          body: JSON.stringify({ action: 'request-data-deletion' }),
-                        });
-                        const data = await res.json();
-                        if (data.success) {
-                          alert(data.message || 'Data deletion request completed.');
+                        const { requestAccountDeletion } = await import('../services/accountPrivacyService');
+                        const result = await requestAccountDeletion(currentUser.email);
+                        if (result.success) {
+                          alert(result.message || 'Your account has been deleted.');
                           window.location.href = '/';
                         } else {
-                          alert(data.reason || 'Request failed.');
+                          alert(result.reason || 'Could not delete your account. Please try again.');
                         }
-                      } catch (e) {
-                        alert('Request failed. Please try again.');
+                      } catch {
+                        alert('Could not delete your account. Please try again.');
                       }
                     }}
                     className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500"
                   >
-                    Request data deletion
+                    Delete my account
                   </button>
                 </div>
               </div>

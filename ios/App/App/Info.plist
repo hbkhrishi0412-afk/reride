@@ -49,10 +49,14 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>ReRide uses your location to set your city for nearby vehicle listings.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>ReRide uses your location to set your city for nearby vehicle listings.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>ReRide needs camera access to capture photos when listing your vehicle for sale.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>ReRide needs photo library access to upload vehicle images.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>ReRide needs permission to save images such as QR codes to your photo library.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>ReRide needs microphone access to send voice messages in chat.</string>
 	<key>NSUserNotificationsUsageDescription</key>

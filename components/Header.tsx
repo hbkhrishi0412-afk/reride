@@ -327,13 +327,13 @@ const Header: React.FC<HeaderProps> = memo(({
                                 />
                                 <button 
                                     onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} 
-                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
+                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
                                 >
                                     {t('nav.carServices')}
                                 </button>
                                 <button 
                                     onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} 
-                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
+                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
                                 >
                                     {t('nav.dealers')}
                                 </button>
@@ -346,7 +346,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                     <button
                                         type="button"
                                         onClick={() => setIsMoreMenuOpen((p) => !p)}
-                                        className="inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl px-4 font-semibold text-gray-700 transition-all duration-300 hover:-translate-y-0.5 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 text-[15px]"
+                                        className="inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl px-4 font-semibold text-gray-700 transition-all duration-300 hover:-translate-y-0.5 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange text-[15px]"
                                         aria-expanded={isMoreMenuOpen}
                                         aria-haspopup="menu"
                                     >
@@ -371,7 +371,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                                 type="button"
                                                 role="menuitem"
                                                 onClick={() => handleNavigate(ViewEnum.SUPPORT)}
-                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600"
+                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
                                             >
                                                 {t('nav.support')}
                                             </button>
@@ -379,7 +379,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                                 type="button"
                                                 role="menuitem"
                                                 onClick={() => handleNavigate(ViewEnum.SAFETY_CENTER)}
-                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600"
+                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
                                             >
                                                 {t('footer.safety')}
                                             </button>
@@ -387,7 +387,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                                 type="button"
                                                 role="menuitem"
                                                 onClick={() => handleNavigate(ViewEnum.ABOUT_US)}
-                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600"
+                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
                                             >
                                                 {t('nav.aboutUs')}
                                             </button>
@@ -400,13 +400,13 @@ const Header: React.FC<HeaderProps> = memo(({
                             {/* Right Side Actions */}
                             <div className="hidden md:flex items-center gap-3">
                                 <LanguageSwitcher />
-                                <button onClick={onOpenCommandPalette} className="p-2 hover:bg-white rounded-full transition-colors">
+                                <button onClick={onOpenCommandPalette} className="p-2 hover:bg-white rounded-full transition-colors" aria-label={t('common.search')}>
                                     <svg className="h-6 w-6 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                     </svg>
                                 </button>
                                 
-                                <button onClick={() => handleNavigate(ViewEnum.WISHLIST)} className="relative p-2 rounded-full transition-colors" style={{ backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(30, 136, 229, 0.1)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                <button onClick={() => handleNavigate(ViewEnum.WISHLIST)} className="relative p-2 rounded-full transition-colors" style={{ backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(30, 136, 229, 0.1)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'} aria-label={t('nav.myWishlist')}>
                                     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#1A1A1A' }}>
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z" />
                                     </svg>
@@ -417,7 +417,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                     )}
                                 </button>
 
-                                <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="relative p-2 rounded-full transition-colors" style={{ backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(30, 136, 229, 0.1)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="relative p-2 rounded-full transition-colors" style={{ backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(30, 136, 229, 0.1)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'} aria-label={t('nav.compare')}>
                                     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#1A1A1A' }}>
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                                     </svg>

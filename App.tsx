@@ -801,6 +801,20 @@ const AppContent: React.FC = () => {
     }
   }, [currentView]);
 
+  // Desktop sellers opening /inbox should land on dashboard messages, not the buyer-only inbox.
+  useEffect(() => {
+    if (currentView !== ViewEnum.INBOX) return;
+    if (isMobileApp || isCapacitorNativeApp()) return;
+    if (!currentUser?.email) return;
+    if (normalizeInboxRole(currentUser.role) !== 'seller') return;
+    try {
+      sessionStorage.setItem('reride_seller_open_inquiries', '1');
+    } catch {
+      /* ignore */
+    }
+    navigate(ViewEnum.SELLER_DASHBOARD);
+  }, [currentView, currentUser, isMobileApp, navigate]);
+
   useEffect(() => {
     if (!isCapacitorNativeApp()) return;
     setCapacitorAndroidBackHandler(() => {
@@ -1987,6 +2001,8 @@ const AppContent: React.FC = () => {
               }
             }}
             addToast={addToast}
+            isCatalogLoading={isLoading || (!vehiclesCatalogReady && vehicles.length === 0)}
+            onRetryCatalogLoad={() => void refreshVehicles()}
           />
         );
 
@@ -3184,6 +3200,7 @@ const AppContent: React.FC = () => {
               onBack={() => goBack(ViewEnum.HOME)}
               onLogout={handleLogoutAll}
               addToast={addToast}
+              onNavigate={navigate}
             />
           );
         }
@@ -3696,6 +3713,23 @@ const AppContent: React.FC = () => {
             comparisonList={comparisonList}
             onViewSellerProfile={openSellerProfileByEmail}
           />
+        );
+
+      case ViewEnum.NOT_FOUND:
+        return (
+          <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
+            <div className="text-center px-4">
+              <h2 className="text-2xl font-bold text-gray-600 mb-4">Page Not Found</h2>
+              <p className="text-gray-500 mb-4">The page you&apos;re looking for doesn&apos;t exist.</p>
+              <button
+                type="button"
+                onClick={() => navigate(ViewEnum.HOME)}
+                className="btn-brand-primary"
+              >
+                Go Home
+              </button>
+            </div>
+          </div>
         );
 
       case ViewEnum.LOGIN_PORTAL:

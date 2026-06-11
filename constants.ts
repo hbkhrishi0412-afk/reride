@@ -131,7 +131,6 @@ export const getFallbackUsers = (): User[] => [
     {
         name: 'Prestige Motors',
         email: 'seller@test.com',
-        password: 'password',
         mobile: '+91-98765-43210',
         role: 'seller',
         location: 'Mumbai',
@@ -149,7 +148,6 @@ export const getFallbackUsers = (): User[] => [
     {
         name: 'Mock Customer',
         email: 'customer@test.com',
-        password: 'password',
         mobile: '555-987-6543',
         role: 'customer',
         location: 'Delhi',
@@ -160,7 +158,6 @@ export const getFallbackUsers = (): User[] => [
     {
         name: 'Mock Admin',
         email: 'admin@test.com',
-        password: 'password',
         mobile: '111-222-3333',
         role: 'admin',
         location: 'Bangalore',

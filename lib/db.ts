@@ -1,4 +1,4 @@
-
+/** @deprecated Legacy MongoDB connection — production API uses Supabase. Kept for migration/seed scripts only. */
 
 import mongoose from 'mongoose';
 import type { Mongoose } from 'mongoose';

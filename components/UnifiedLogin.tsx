@@ -102,6 +102,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -335,6 +336,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         result = await login({ email, password, role: selectedRole });
       } else {
         if (!name || !mobile || !email || !password) throw new Error(t('auth.error.registerFieldsRequired'));
+        if (!acceptedTerms) throw new Error(t('auth.error.mustAcceptTerms'));
         // Service provider signup uses extended fields on the car-services page
         if (selectedRole === 'service_provider') {
           try {
@@ -413,6 +415,9 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     setIsLoading(true);
 
     try {
+      if (mode === 'register' && !acceptedTerms) {
+        throw new Error(t('auth.error.mustAcceptTerms'));
+      }
       if (!selectedRole) {
         throw new Error(t('auth.error.selectAccountType'));
       }
@@ -468,7 +473,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     setName('');
     setMobile('');
     setPassword('');
-    setMode(prev => prev === 'login' ? 'register' : 'login');
+    setMode(prev => {
+      const next = prev === 'login' ? 'register' : 'login';
+      if (next === 'login') setAcceptedTerms(false);
+      return next;
+    });
   };
 
   const handleRoleChange = (role: UserRole) => {
@@ -981,6 +990,35 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               </div>
             )}
 
+            {!isLogin && (
+              <label className="flex items-start gap-2 text-sm text-gray-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded shrink-0"
+                />
+                <span>
+                  {t('auth.termsPrefix')}{' '}
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(View.PRIVACY_POLICY)}
+                    className="text-orange-600 hover:underline font-medium"
+                  >
+                    {t('auth.privacyPolicy')}
+                  </button>{' '}
+                  {t('auth.termsAnd')}{' '}
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(View.TERMS_OF_SERVICE)}
+                    className="text-orange-600 hover:underline font-medium"
+                  >
+                    {t('auth.termsOfService')}
+                  </button>
+                </span>
+              </label>
+            )}
+
             {error && (
               <div className="bg-red-50 border-l-4 border-red-500 rounded-md p-3">
                 <div className="flex">
@@ -1373,6 +1411,35 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   {t('auth.forgotPassword')}
                 </button>
               </div>
+            )}
+
+            {!isLogin && (
+              <label className="flex items-start gap-2 text-sm text-gray-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded shrink-0"
+                />
+                <span>
+                  {t('auth.termsPrefix')}{' '}
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(View.PRIVACY_POLICY)}
+                    className="text-orange-600 hover:underline font-medium"
+                  >
+                    {t('auth.privacyPolicy')}
+                  </button>{' '}
+                  {t('auth.termsAnd')}{' '}
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(View.TERMS_OF_SERVICE)}
+                    className="text-orange-600 hover:underline font-medium"
+                  >
+                    {t('auth.termsOfService')}
+                  </button>
+                </span>
+              </label>
             )}
 
             {error && (

@@ -81,6 +81,9 @@ interface HomeProps {
     userLocation?: string;
     onOpenLocationPicker?: () => void;
     addToast?: (message: string, type: 'success' | 'error' | 'info') => void;
+    /** True while the vehicle catalog is still loading — avoids infinite skeletons when the catalog is empty. */
+    isCatalogLoading?: boolean;
+    onRetryCatalogLoad?: () => void;
 }
 
 const Home: React.FC<HomeProps> = ({ 
@@ -103,6 +106,8 @@ const Home: React.FC<HomeProps> = ({
     userLocation = '',
     onOpenLocationPicker,
     addToast,
+    isCatalogLoading = false,
+    onRetryCatalogLoad,
 }) => {
     const { t, i18n } = useTranslation();
     const [searchQuery, setSearchQuery] = useState('');
@@ -399,7 +404,11 @@ const Home: React.FC<HomeProps> = ({
         return Math.round(emi / 100) * 100;
     };
 
-    const showSkeletons = featuredVehicles.length === 0 && recommendations.length === 0 && recentVehicles.length === 0;
+    const showSkeletons =
+        isCatalogLoading &&
+        featuredVehicles.length === 0 &&
+        recommendations.length === 0 &&
+        recentVehicles.length === 0;
 
     const testimonialItems = useMemo(
         () => [
@@ -473,19 +482,20 @@ const Home: React.FC<HomeProps> = ({
                 >
                     <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center gap-3">
                         <div className="hidden sm:flex items-center gap-2 font-semibold text-gray-900 text-sm tracking-tight">
-                            <span className="inline-block w-6 h-6 rounded-md bg-gradient-to-br from-purple-600 to-pink-500"></span>
+                            <span className="inline-block w-6 h-6 rounded-md bg-gradient-to-br from-reride-orange to-orange-400"></span>
                             ReRide
                         </div>
-                        <div className="flex-1 flex items-center gap-2 bg-gray-50 hover:bg-white border border-gray-200 hover:border-purple-400 rounded-full px-4 py-2 transition-colors focus-within:border-purple-500 focus-within:bg-white">
+                        <div className="flex-1 flex items-center gap-2 bg-gray-50 hover:bg-white border border-gray-200 hover:border-orange-300 rounded-full px-4 py-2 transition-colors focus-within:border-reride-orange focus-within:bg-white">
                             <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                             <input
-                                type="text"
+                                type="search"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                                 placeholder={t('search.placeholderHero')}
+                                aria-label={t('common.search')}
                                 className="flex-1 bg-transparent outline-none text-[14px] text-gray-800 placeholder-gray-400"
                                 style={{ fontFamily: "'Poppins', sans-serif" }}
                             />
@@ -498,7 +508,7 @@ const Home: React.FC<HomeProps> = ({
                                     className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
                                         isListening
                                             ? 'bg-red-50 text-red-500 ring-2 ring-red-400/50 animate-pulse'
-                                            : 'text-gray-400 hover:text-purple-600 hover:bg-purple-50'
+                                            : 'text-gray-400 hover:text-reride-orange hover:bg-orange-50'
                                     }`}
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -655,7 +665,7 @@ const Home: React.FC<HomeProps> = ({
                                     className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
                                         isListening
                                             ? 'bg-red-50 text-red-500 ring-2 ring-red-400/50 animate-pulse'
-                                            : 'text-gray-400 hover:text-purple-600 hover:bg-purple-50'
+                                            : 'text-gray-400 hover:text-reride-orange hover:bg-orange-50'
                                     }`}
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1176,7 +1186,7 @@ const Home: React.FC<HomeProps> = ({
                 <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50/60">
                     <div className="max-w-3xl mx-auto">
                         <div className="text-center">
-                            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl mb-5 shadow-md">
+                            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-reride-orange to-orange-400 rounded-2xl mb-5 shadow-md">
                                 <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                 </svg>
@@ -1187,7 +1197,7 @@ const Home: React.FC<HomeProps> = ({
                             </p>
                             <button 
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-7 py-3.5 rounded-full font-semibold text-base inline-flex items-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg"
+                                className="btn-brand-primary px-7 py-3.5 rounded-full font-semibold text-base inline-flex items-center gap-2 shadow-md hover:shadow-lg"
                             >
                                 {t('home.featured.browseAll')}
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1633,7 +1643,7 @@ const Home: React.FC<HomeProps> = ({
                     <div className="flex flex-wrap items-center justify-center gap-3">
                         <button
                             onClick={() => onNavigate(ViewEnum.SELL_CAR)}
-                            className="inline-flex items-center gap-2 px-7 py-3 rounded-full bg-purple-700 text-white font-semibold text-sm shadow-md hover:bg-purple-800 hover:shadow-lg transition-all"
+                            className="inline-flex items-center gap-2 px-7 py-3 rounded-full bg-reride-orange text-white font-semibold text-sm shadow-md hover:bg-orange-600 hover:shadow-lg transition-all"
                         >
                             {t('home.sell.watchHow')}
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
