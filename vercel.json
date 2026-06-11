@@ -6,10 +6,10 @@
   "framework": "vite",
   "functions": {
     "api/main.ts": {
-      "includeFiles": "server/**"
+      "includeFiles": "server/**,lib/**,utils/supabaseNativeAuthStorage.ts,utils/isCapacitorNative.ts"
     },
     "api/send-sms-hook.ts": {
-      "includeFiles": "server/**"
+      "includeFiles": "server/**,lib/**,utils/supabaseNativeAuthStorage.ts,utils/isCapacitorNative.ts"
     }
   },
   "headers": [

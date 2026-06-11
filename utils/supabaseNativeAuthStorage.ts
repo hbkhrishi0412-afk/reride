@@ -3,7 +3,7 @@
  * Web builds continue to use localStorage (browser default).
  */
 import type { SupportedStorage } from '@supabase/supabase-js';
-import { isCapacitorNativeApp as isCapacitorNative } from './isCapacitorNative';
+import { isCapacitorNativeApp as isCapacitorNative } from './isCapacitorNative.js';
 
 const LEGACY_SUPABASE_KEYS = ['sb-access-token', 'supabase.auth.token'] as const;
 
