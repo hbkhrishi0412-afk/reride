@@ -13,6 +13,7 @@ import { formatSupabaseError } from '../utils/errorUtils.js';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 import { resolveSupabaseAccessTokenForApi } from '../utils/authStorage.js';
 import {
+  formatNativeGoogleSignInError,
   getNativeGoogleWebClientId,
   shouldTryNativeGoogleSignIn,
   signInWithGoogleNative,
@@ -133,6 +134,18 @@ function mapGoogleProviderError(message: string): string | undefined {
   if (m.includes('access_denied') || m.includes('user denied')) {
     return 'Sign in was canceled.';
   }
+  if (m.includes('nonce')) {
+    return (
+      'Google Sign-In nonce mismatch. In Supabase → Authentication → Providers → Google enable ' +
+      '"Skip nonce check", then try again.'
+    );
+  }
+  if (m.includes('bad id token') || m.includes('invalid id token')) {
+    return (
+      'Google token was rejected. Confirm the Web + Android OAuth client IDs are listed in ' +
+      'Supabase → Authentication → Providers → Google and rebuild the app.'
+    );
+  }
   return undefined;
 }
 
@@ -175,9 +188,15 @@ export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
         if (name === 'AbortError') {
           return { success: false, reason: 'Sign in was canceled' };
         }
+        const formatted = formatNativeGoogleSignInError(nativeErr);
+        // When a Web client ID is configured we expect native sign-in on Android/iOS.
+        // Browser OAuth in embedded WebViews is blocked by Google; Custom Tab fallback is unreliable.
+        if (getNativeGoogleWebClientId()) {
+          console.warn('[ReRide] Native Google Sign-In failed:', nativeErr);
+          return { success: false, reason: formatted };
+        }
         console.warn(
-          '[ReRide] Native Google Sign-In failed; falling back to Supabase browser OAuth. Client ID set:',
-          !!getNativeGoogleWebClientId(),
+          '[ReRide] Native Google Sign-In failed; falling back to Supabase browser OAuth.',
           nativeErr,
         );
       }
@@ -533,20 +552,36 @@ export type ServiceProviderOAuthPayload = Record<string, unknown> & {
  * After Google (or other Supabase) sign-in as a service provider: ensure `service_providers`
  * row exists and return profile for the car-services dashboard.
  */
-async function oauthApiAuthHeaders(): Promise<Record<string, string>> {
-  const token = await resolveSupabaseAccessTokenForApi();
+const OAUTH_API_FETCH_TIMEOUT_MS = 30_000;
+
+async function oauthApiAuthHeaders(accessTokenOverride?: string): Promise<Record<string, string>> {
+  const token =
+    (typeof accessTokenOverride === 'string' && accessTokenOverride.length > 10
+      ? accessTokenOverride
+      : null) || (await resolveSupabaseAccessTokenForApi());
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function oauthFetchSignal(): AbortSignal {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(OAUTH_API_FETCH_TIMEOUT_MS);
+  }
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), OAUTH_API_FETCH_TIMEOUT_MS);
+  return controller.signal;
 }
 
 export const syncServiceProviderOAuth = async (
   supabaseUser: Record<string, unknown>,
+  accessTokenOverride?: string,
 ): Promise<{ success: boolean; provider?: ServiceProviderOAuthPayload; reason?: string }> => {
   try {
     const metadata = (supabaseUser.user_metadata ?? {}) as Record<string, unknown>;
 
     const response = await authenticatedFetch('/api/users', {
       method: 'POST',
-      headers: await oauthApiAuthHeaders(),
+      headers: await oauthApiAuthHeaders(accessTokenOverride),
+      signal: oauthFetchSignal(),
       body: JSON.stringify({
         action: 'oauth-service-provider',
         firebaseUid: supabaseUser.id,
@@ -580,7 +615,10 @@ export const syncServiceProviderOAuth = async (
       return { success: false, reason: 'Service provider profile missing from server response.' };
     }
     return { success: true, provider: body.provider };
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { success: false, reason: 'Signing in took too long. Check your connection and try again.' };
+    }
     return { success: false, reason: 'Failed to sync service provider profile' };
   }
 };
@@ -589,6 +627,7 @@ export const syncWithBackend = async (
   supabaseUser: Record<string, unknown>,
   role: 'customer' | 'seller',
   authProvider: 'google' | 'phone' | 'email',
+  accessTokenOverride?: string,
 ): Promise<BackendSyncResult> => {
   try {
     const metadata = (supabaseUser.user_metadata ?? {}) as Record<string, unknown>;
@@ -600,7 +639,8 @@ export const syncWithBackend = async (
 
     const response = await authenticatedFetch('/api/users', {
       method: 'POST',
-      headers: await oauthApiAuthHeaders(),
+      headers: await oauthApiAuthHeaders(accessTokenOverride),
+      signal: oauthFetchSignal(),
       body: JSON.stringify({
         action: 'oauth-login',
         firebaseUid: supabaseUser.id, // API field name kept for backward compat
@@ -628,6 +668,9 @@ export const syncWithBackend = async (
     }
     return parsed.data as BackendSyncResult;
   } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { success: false, reason: 'Signing in took too long. Check your connection and try again.' };
+    }
     return { success: false, reason: 'Failed to sync with backend' };
   }
 };

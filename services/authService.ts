@@ -5,6 +5,7 @@
  * Provides Google sign-in, OTP, and backend sync helpers.
  */
 
+import type { Session } from '@supabase/supabase-js';
 import {
   signInWithGoogle as supabaseGoogleSignIn,
   syncServiceProviderOAuth as supabaseSyncServiceProviderOAuth,
@@ -13,11 +14,34 @@ import {
 import { getSupabaseClient } from '../lib/supabase.js';
 import type { User } from '../types.js';
 import { authenticatedFetch } from '../utils/authenticatedFetch.js';
-import { clearSupabaseAuthStorage } from '../utils/authStorage.js';
+import { clearSupabaseAuthStorage, resolveSupabaseAccessTokenForApi } from '../utils/authStorage.js';
 
 export type GoogleOAuthRole = 'customer' | 'seller' | 'service_provider';
 
 const GOOGLE_SIGN_IN_TIMEOUT_MS = 65_000;
+const GOOGLE_BACKEND_SYNC_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
+async function resolveSessionForGoogleSync(
+  sessionFromSignIn?: Session | null,
+): Promise<Session | null> {
+  if (sessionFromSignIn?.user) return sessionFromSignIn;
+  const supabase = getSupabaseClient();
+  const { data } = await supabase.auth.getSession();
+  if (data.session?.user) return data.session;
+  const token = await resolveSupabaseAccessTokenForApi(4000);
+  if (!token) return null;
+  const { data: retry } = await supabase.auth.getSession();
+  return retry.session ?? null;
+}
 
 export function persistGoogleOAuthRole(role: GoogleOAuthRole): void {
   try {
@@ -59,21 +83,24 @@ export async function completeGoogleSignInForRole(
     onServiceProviderLogin?: (provider: Record<string, unknown>) => void;
   },
   mode: 'login' | 'register' = 'login',
+  sessionFromSignIn?: Session | null,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
-  const supabase = getSupabaseClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const session = await resolveSessionForGoogleSync(sessionFromSignIn);
   if (!session?.user) {
     return { ok: false, reason: 'Google sign-in did not create a session. Please try again.' };
   }
+
+  const accessToken = session.access_token;
+  const supabaseUser = session.user as unknown as Record<string, unknown>;
 
   if (role === 'service_provider') {
     if (!handlers.onServiceProviderLogin) {
       return { ok: false, reason: 'Service provider sign-in is not available here.' };
     }
-    const spResult = await supabaseSyncServiceProviderOAuth(
-      session.user as unknown as Record<string, unknown>,
+    const spResult = await withTimeout(
+      supabaseSyncServiceProviderOAuth(supabaseUser, accessToken),
+      GOOGLE_BACKEND_SYNC_TIMEOUT_MS,
+      'Signing in took too long. Check your connection and try again.',
     );
     if (!spResult.success || !spResult.provider) {
       return { ok: false, reason: spResult.reason || 'Google sign-in failed.' };
@@ -87,10 +114,10 @@ export async function completeGoogleSignInForRole(
     return { ok: false, reason: 'Google sign-in is not available for this account type.' };
   }
 
-  const syncResult = await supabaseSyncWithBackend(
-    session.user as unknown as Record<string, unknown>,
-    role,
-    'google',
+  const syncResult = await withTimeout(
+    supabaseSyncWithBackend(supabaseUser, role, 'google', accessToken),
+    GOOGLE_BACKEND_SYNC_TIMEOUT_MS,
+    'Signing in took too long. Check your connection and try again.',
   );
   if (!syncResult.success || !syncResult.user) {
     return { ok: false, reason: syncResult.reason || 'Google sign-in failed.' };
@@ -142,7 +169,12 @@ export async function runGoogleSignInButtonFlow(
     return null;
   }
 
-  const completed = await completeGoogleSignInForRole(role, handlers, mode);
+  const completed = await completeGoogleSignInForRole(
+    role,
+    handlers,
+    mode,
+    result.session ?? null,
+  );
   if (!completed.ok) {
     try {
       const supabase = getSupabaseClient();
@@ -182,6 +214,7 @@ export const signInWithGoogle = async (): Promise<{
   firebaseUser?: Record<string, unknown>; // kept for backward-compat callers
   reason?: string;
   pendingExternalAuth?: boolean;
+  session?: Session | null;
 }> => {
   const result = await supabaseGoogleSignIn();
   return {
@@ -190,6 +223,7 @@ export const signInWithGoogle = async (): Promise<{
     firebaseUser: result.user, // alias for callers that still reference firebaseUser
     reason: result.reason,
     pendingExternalAuth: result.pendingExternalAuth,
+    session: result.session ?? null,
   };
 };
 

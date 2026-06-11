@@ -70,6 +70,40 @@ function isUserCanceledError(e: unknown): boolean {
   return msg.includes('cancel') || msg.includes('canceled') || msg.includes('cancelled');
 }
 
+/** Maps Credential Manager / Play Services errors to actionable copy for the login UI. */
+export function formatNativeGoogleSignInError(err: unknown): string {
+  const o = err && typeof err === 'object' ? (err as { code?: string | number; message?: string }) : null;
+  const code = String(o?.code ?? '');
+  const msg = (o?.message || (err instanceof Error ? err.message : '') || '').toLowerCase();
+
+  if (code === '10' || msg.includes('developer_error') || msg.includes('developer error')) {
+    return (
+      'Google Sign-In is not configured for this app build. In Google Cloud Console add an Android OAuth ' +
+      'client for package com.reride.app with your debug/release SHA-1, list the Web + Android client IDs in ' +
+      'Supabase → Authentication → Providers → Google, then rebuild the app (npm run android:bundle).'
+    );
+  }
+  if (code === '7' || msg.includes('network')) {
+    return 'Network error during Google Sign-In. Check your connection and try again.';
+  }
+  if (code === '8' || msg.includes('internal')) {
+    return 'Google Sign-In is temporarily unavailable. Update Google Play Services and try again.';
+  }
+  if (msg.includes('nonce')) {
+    return (
+      'Google Sign-In nonce mismatch. In Supabase → Authentication → Providers → Google enable ' +
+      '"Skip nonce check" (or align nonce in your Google provider settings), then try again.'
+    );
+  }
+  if (msg.includes('id token') || msg.includes('id_token')) {
+    return 'Google did not return a valid sign-in token. Confirm VITE_GOOGLE_WEB_CLIENT_ID matches your Google Cloud Web OAuth client and rebuild the app.';
+  }
+  if (err instanceof Error && err.message.trim()) {
+    return err.message;
+  }
+  return 'Google Sign-In failed. Confirm Google Cloud + Supabase Google provider settings, then rebuild the app.';
+}
+
 /**
  * Presents the system Google account picker and returns ID (and optional access) tokens.
  */

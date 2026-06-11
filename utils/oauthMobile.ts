@@ -75,6 +75,14 @@ function dispatchOAuthFailed(message: string): void {
   }
 }
 
+function dispatchOAuthComplete(): void {
+  try {
+    window.dispatchEvent(new CustomEvent('reride:oauth-complete'));
+  } catch {
+    /* ignore */
+  }
+}
+
 async function closeOAuthBrowser(): Promise<void> {
   try {
     const { Browser } = await import('@capacitor/browser');
@@ -122,7 +130,9 @@ async function handleOAuthReturnUrl(url: string): Promise<void> {
         error.message || 'Could not finish Google sign-in. Try again or use email sign-in.',
       );
       lastHandledOAuthUrl = '';
+      return;
     }
+    dispatchOAuthComplete();
   } catch (e) {
     console.warn('[ReRide OAuth] exchangeCodeForSession failed:', e);
     dispatchOAuthFailed(

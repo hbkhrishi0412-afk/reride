@@ -1363,6 +1363,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 window.dispatchEvent(
                   new CustomEvent('reride:service-provider-oauth', { detail: result.provider }),
                 );
+                window.dispatchEvent(new CustomEvent('reride:oauth-complete'));
               } catch {
                 /* ignore */
               }
@@ -1371,6 +1372,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               addToast(result.reason || t('toast.googleSignInFailed'), 'error');
               await supabase.auth.signOut({ scope: 'local' });
               clearSupabaseAuthStorage();
+              try {
+                window.dispatchEvent(
+                  new CustomEvent('reride:oauth-failed', {
+                    detail: { message: result.reason || t('toast.googleSignInFailed') },
+                  }),
+                );
+              } catch {
+                /* ignore */
+              }
             }
             return;
           }
@@ -1382,11 +1392,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           );
           if (result.success && result.user) {
             handleLogin(result.user);
+            try {
+              window.dispatchEvent(new CustomEvent('reride:oauth-complete'));
+            } catch {
+              /* ignore */
+            }
           } else {
             googleOAuthSyncDoneRef.current = false;
             addToast(result.reason || t('toast.googleSignInFailed'), 'error');
             await supabase.auth.signOut({ scope: 'local' });
             clearSupabaseAuthStorage();
+            try {
+              window.dispatchEvent(
+                new CustomEvent('reride:oauth-failed', {
+                  detail: { message: result.reason || t('toast.googleSignInFailed') },
+                }),
+              );
+            } catch {
+              /* ignore */
+            }
           }
         } catch (e) {
           googleOAuthSyncDoneRef.current = false;
@@ -1394,6 +1418,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           addToast(t('toast.googleSignInFailed'), 'error');
           await supabase.auth.signOut({ scope: 'local' });
           clearSupabaseAuthStorage();
+          try {
+            window.dispatchEvent(
+              new CustomEvent('reride:oauth-failed', { detail: { message: t('toast.googleSignInFailed') } }),
+            );
+          } catch {
+            /* ignore */
+          }
         }
       } finally {
         oauthGoogleProfileSyncInFlightUidRef.current = null;

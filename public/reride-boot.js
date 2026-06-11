@@ -1,4 +1,34 @@
 (function () {
+  // Capacitor WebView: unregister stale service workers and clear caches.
+  // The PWA service worker is disabled for Capacitor builds, but a previously
+  // installed SW can persist across APK updates and serve stale chunks.
+  try {
+    var h0 = location.hostname;
+    var p0 = location.protocol;
+    var port0 = location.port || '';
+    var devPorts0 = ['5173', '4173', '3000', '8080'];
+    var isCap =
+      (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ||
+      h0 === 'appassets.androidplatform.net' ||
+      (typeof h0 === 'string' && h0.endsWith('.appassets.androidplatform.net')) ||
+      (h0 === 'localhost' && (p0 === 'capacitor:' || p0 === 'ionic:' || (p0 === 'https:' && devPorts0.indexOf(port0) === -1)));
+
+    if (isCap && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        var hadSW = false;
+        regs.forEach(function (r) { hadSW = true; r.unregister(); });
+        if (typeof caches !== 'undefined' && caches.keys) {
+          caches.keys().then(function (names) {
+            names.forEach(function (n) { caches.delete(n); });
+            if (hadSW) location.reload();
+          });
+        } else if (hadSW) {
+          location.reload();
+        }
+      });
+    }
+  } catch (eSw) {}
+
   // OAuth PKCE verifier is stored per-origin. Never redirect apex->www on ?code= or ?error=.
   try {
     var h = (location.hostname || '').toLowerCase();
