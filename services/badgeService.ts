@@ -1,4 +1,4 @@
-import type { User, Vehicle, Badge } from '../types';
+import type { User, Vehicle, Badge } from '../types.js';
 
 export const getSellerBadges = (seller: User, allSellerVehicles: Vehicle[]): Badge[] => {
     const badges: Badge[] = [];

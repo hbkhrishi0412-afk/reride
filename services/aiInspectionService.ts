@@ -12,8 +12,8 @@ import type {
   AITyreAnalysis,
   AIPhotoQualityAssessment,
   AIInspectionFinding
-} from '../types';
-import { authenticatedFetch } from '../utils/authenticatedFetch';
+} from '../types.js';
+import { authenticatedFetch } from '../utils/authenticatedFetch.js';
 
 const SchemaType = {
   ARRAY: 'ARRAY',

@@ -1,5 +1,5 @@
-import type { VehicleData } from '../types';
-import { VEHICLE_DATA_LIGHT, loadFullVehicleData } from '../components/vehicleDataLight';
+import type { VehicleData } from '../types.js';
+import { VEHICLE_DATA_LIGHT, loadFullVehicleData } from '../components/vehicleDataLight.js';
 
 // Lightweight vehicle data service
 class VehicleDataService {

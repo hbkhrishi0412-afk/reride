@@ -4,9 +4,9 @@
  * This service wraps vehicle creation/updates to automatically apply all production features
  */
 
-import type { Vehicle, AIInspectionReport } from '../types';
-import { validateVehicleListing, type ValidationResult } from '../utils/validation';
-import { generateAIInspection, checkPhotoQuality } from './aiInspectionService';
+import type { Vehicle, AIInspectionReport } from '../types.js';
+import { validateVehicleListing, type ValidationResult } from '../utils/validation.js';
+import { generateAIInspection, checkPhotoQuality } from './aiInspectionService.js';
 
 // Enhancement result type
 export interface ListingEnhancementResult {

@@ -6,14 +6,14 @@
  */
 
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import type { Conversation, ChatMessage, Notification } from '../types';
-import { getSupabaseClient } from '../lib/supabase';
-import { addMessageToConversation, saveConversationToSupabase } from './conversationService';
+import type { Conversation, ChatMessage, Notification } from '../types.js';
+import { getSupabaseClient } from '../lib/supabase.js';
+import { addMessageToConversation, saveConversationToSupabase } from './conversationService.js';
 import {
   getMobileLocalApiOrigin,
   isLocalDevApiReachable,
   isLocalSocketIoEnvironment,
-} from '../utils/apiConfig';
+} from '../utils/apiConfig.js';
 
 interface SocketInstance {
   on(event: string, callback: (data: any) => void): void;

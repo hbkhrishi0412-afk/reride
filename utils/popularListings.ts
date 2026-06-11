@@ -16,7 +16,7 @@
  *     always an exact match for at least one row in the catalog. That's
  *     what makes the downstream deep-link filter deterministic.
  */
-import type { Vehicle } from '../types';
+import type { Vehicle } from '../types.js';
 
 export interface PopularMake {
     name: string;

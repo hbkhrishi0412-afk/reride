@@ -21,7 +21,7 @@ import {
   translateText,
   getCachedTranslation,
   isAutoTranslatableLanguage,
-} from './dynamicTranslate';
+} from './dynamicTranslate.js';
 
 /**
  * Entire subtree rejected (scripts, SVG internals, embeds).

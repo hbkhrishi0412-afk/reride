@@ -4,8 +4,8 @@ import type {
   FollowedSeller,
   Vehicle,
   SearchFilters,
-} from '../types';
-import { vehicleMatchesSearchFilters } from './savedSearchMatch';
+} from '../types.js';
+import { vehicleMatchesSearchFilters } from './savedSearchMatch.js';
 
 // ============================================
 // SAVED SEARCHES

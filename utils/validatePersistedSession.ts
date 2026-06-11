@@ -1,11 +1,11 @@
-import type { User } from '../types';
-import { getSupabaseClient } from '../lib/supabase';
-import { getBrowserAccessTokenForApi } from './authStorage';
-import { isTokenLikelyValid, refreshAuthToken } from './authenticatedFetch';
-import { isDevelopmentEnvironment } from './environment';
-import { isCapacitorNative } from './apiConfig';
-import { getNativeMemoryRefreshToken } from './nativeTokenStorage';
-import { useHttpOnlyRefreshCookie } from './authStorage';
+import type { User } from '../types.js';
+import { getSupabaseClient } from '../lib/supabase.js';
+import { getBrowserAccessTokenForApi } from './authStorage.js';
+import { isTokenLikelyValid, refreshAuthToken } from './authenticatedFetch.js';
+import { isDevelopmentEnvironment } from './environment.js';
+import { isCapacitorNative } from './apiConfig.js';
+import { getNativeMemoryRefreshToken } from './nativeTokenStorage.js';
+import { useHttpOnlyRefreshCookie } from './authStorage.js';
 
 const VALID_ROLES = ['customer', 'seller', 'admin', 'service_provider', 'finance_partner'] as const;
 

@@ -1,4 +1,4 @@
-import type { User } from '../types';
+import type { User } from '../types.js';
 
 /** Non-null when the seller has a usable public average rating (1–5). */
 export function getPublicDealerRating(seller: User): { average: number; count?: number } | null {

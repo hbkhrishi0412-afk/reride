@@ -3,8 +3,8 @@
  * Comprehensive validation for vehicle listings, user data, and form inputs
  */
 
-import type { Vehicle, User } from '../types';
-import { VehicleCategory } from '../vehicle-category';
+import type { Vehicle, User } from '../types.js';
+import { VehicleCategory } from '../vehicle-category.js';
 
 // Validation result type
 export interface ValidationResult {

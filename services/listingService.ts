@@ -1,4 +1,4 @@
-import type { Vehicle, ListingStats } from '../types';
+import type { Vehicle, ListingStats } from '../types.js';
 
 // Listing expiry configuration (60 days)
 export const LISTING_EXPIRY_DAYS = 60;

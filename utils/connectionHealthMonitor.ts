@@ -3,7 +3,7 @@
  * Monitors MongoDB connection health and provides status updates
  */
 
-import { publicApiFetch } from './apiFetch';
+import { publicApiFetch } from './apiFetch.js';
 
 export interface ConnectionHealth {
   status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';

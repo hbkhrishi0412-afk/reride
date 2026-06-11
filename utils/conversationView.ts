@@ -1,4 +1,4 @@
-import type { ChatMessage, Conversation } from '../types';
+import type { ChatMessage, Conversation } from '../types.js';
 
 /**
  * Messages hidden for one party after "Clear history" until they send/receive new ones.

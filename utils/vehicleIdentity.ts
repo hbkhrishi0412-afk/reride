@@ -4,7 +4,7 @@
  * numeric `Vehicle.id` (parsed number or deterministic hash for UUID rows).
  */
 
-import type { Vehicle } from '../types';
+import type { Vehicle } from '../types.js';
 
 export const VEHICLE_LIST_CACHE_VERSION = 3;
 export const VEHICLE_LIST_CACHE_VERSION_KEY = 'reRideVehicleListSchemaVersion';

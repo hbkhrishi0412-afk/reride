@@ -1,7 +1,7 @@
-import type { User } from '../types';
-import { getBrowserAccessTokenForApi } from '../utils/authStorage';
-import { authenticatedFetch } from '../utils/authenticatedFetch';
-import { login } from './userService';
+import type { User } from '../types.js';
+import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
+import { authenticatedFetch } from '../utils/authenticatedFetch.js';
+import { login } from './userService.js';
 
 /**
  * Build a minimal car-services dashboard profile from a `users` row when

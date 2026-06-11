@@ -1,5 +1,5 @@
-import type { ChatMessage } from '../types';
-import i18n from '../lib/i18n';
+import type { ChatMessage } from '../types.js';
+import i18n from '../lib/i18n.js';
 
 /** One-line preview for thread lists (Messenger-style). */
 export function getThreadLastMessagePreview(

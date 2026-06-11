@@ -1,5 +1,5 @@
 // Utility function to enrich vehicle data with seller information
-import { Vehicle, User } from '../types';
+import { Vehicle, User } from '../types.js';
 
 /**
  * Enriches vehicle data with seller information from users array

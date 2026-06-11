@@ -6,10 +6,10 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
-import { toastEn, toastHi, toastTe, toastTa } from './toastStrings';
-import { installDynamicTranslation } from './dynamicTranslate';
-import { installDOMAutoTranslation } from './domAutoTranslate';
-import { installDocumentLocaleSync } from './documentLocaleSync';
+import { toastEn, toastHi, toastTe, toastTa } from './toastStrings.js';
+import { installDynamicTranslation } from './dynamicTranslate.js';
+import { installDOMAutoTranslation } from './domAutoTranslate.js';
+import { installDocumentLocaleSync } from './documentLocaleSync.js';
 
 const en = {
   'app.name': 'ReRide',

@@ -1,9 +1,9 @@
-import type { Conversation } from '../types';
+import type { Conversation } from '../types.js';
 import {
   conversationBelongsToCustomer,
   conversationBelongsToSeller,
   normalizeInboxRole,
-} from './conversationParticipants';
+} from './conversationParticipants.js';
 
 /**
  * Unread **threads** (conversations) for the current user — used for header / tab badges.

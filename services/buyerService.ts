@@ -1,14 +1,14 @@
-import type { SavedSearch, BuyerActivity, Vehicle } from '../types';
-import { saveBuyerActivityToSupabase, getBuyerActivityFromSupabase } from './buyerActivityService';
-import { saveBuyerActivityWithSync } from './syncService';
-import { vehicleMatchesSearchFilters } from './savedSearchMatch';
+import type { SavedSearch, BuyerActivity, Vehicle } from '../types.js';
+import { saveBuyerActivityToSupabase, getBuyerActivityFromSupabase } from './buyerActivityService.js';
+import { saveBuyerActivityWithSync } from './syncService.js';
+import { vehicleMatchesSearchFilters } from './savedSearchMatch.js';
 import {
   saveSearch as engagementSaveSearch,
   getSavedSearches as engagementGetSavedSearches,
   deleteSavedSearch as engagementDeleteSavedSearch,
   updateSavedSearch as engagementUpdateSavedSearch,
   importSavedSearchIfNewForUser,
-} from './buyerEngagementService';
+} from './buyerEngagementService.js';
 
 const LEGACY_SAVED_KEY_PREFIX = 'savedSearches_';
 

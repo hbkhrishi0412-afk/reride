@@ -1,4 +1,4 @@
-import type { ChatMessage } from '../types';
+import type { ChatMessage } from '../types.js';
 
 /** True if this row should use offer UI / offer-response handling (type may be missing in older DB rows). */
 export function isOfferChatMessage(msg: Pick<ChatMessage, 'type' | 'payload' | 'text'>): boolean {

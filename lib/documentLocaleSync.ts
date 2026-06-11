@@ -15,7 +15,7 @@ import {
   translateText,
   getCachedTranslation,
   isAutoTranslatableLanguage,
-} from './dynamicTranslate';
+} from './dynamicTranslate.js';
 
 const HTML_LANG = new Set(['en', 'hi', 'te', 'ta']);
 

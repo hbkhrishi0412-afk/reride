@@ -3,20 +3,20 @@
  * Handles JWT tokens, token refresh, CSRF token, and session cookies
  */
 
-import { logInfo, logWarn, logError } from './logger';
-import { formatSupabaseError } from './errorUtils';
+import { logInfo, logWarn, logError } from './logger.js';
+import { formatSupabaseError } from './errorUtils.js';
 import {
   resolveApiUrl,
   isCapacitorNative,
   isApiRequestCrossOrigin,
   normalizeRerideApiHostToWww,
-} from './apiConfig';
+} from './apiConfig.js';
 import {
   setNativeAccessToken,
   setNativeRefreshToken,
   clearNativeTokens,
   getNativeRefreshToken,
-} from './nativeTokenStorage';
+} from './nativeTokenStorage.js';
 
 /** Single place: resolve + never emit apex `reride.co.in` (307 breaks CORS preflight). */
 function resolvedApiUrl(pathOrUrl: string): string {
@@ -26,7 +26,7 @@ import {
   getBrowserAccessTokenForApi,
   useHttpOnlyRefreshCookie,
   clearSessionStoredAccessToken,
-} from './authStorage';
+} from './authStorage.js';
 
 interface FetchOptions extends RequestInit {
   skipAuth?: boolean; // Skip authentication for public endpoints

@@ -1,4 +1,4 @@
-import type { Notification } from '../types';
+import type { Notification } from '../types.js';
 
 /**
  * Hash-route deep links for HashRouter / Capacitor WebView.

@@ -1,4 +1,4 @@
-import type { User } from '../types';
+import type { User } from '../types.js';
 
 /**
  * Strip password (and anything that should not sit in localStorage) before persisting current user.

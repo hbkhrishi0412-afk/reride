@@ -6,10 +6,10 @@
   "framework": "vite",
   "functions": {
     "api/main.ts": {
-      "includeFiles": "{server,lib}/**"
+      "includeFiles": "{server,lib,utils,services}/**"
     },
     "api/send-sms-hook.ts": {
-      "includeFiles": "{server,lib}/**"
+      "includeFiles": "{server,lib,utils,services}/**"
     }
   },
   "headers": [

@@ -3,7 +3,7 @@
  * Requires `.well-known` files on the web host and associated-domains / intent-filters in native projects.
  */
 import { App } from '@capacitor/app';
-import { isCapacitorNative } from './apiConfig';
+import { isCapacitorNative } from './apiConfig.js';
 
 const UNIVERSAL_LINK_HOSTS = new Set(['www.reride.co.in', 'reride.co.in']);
 

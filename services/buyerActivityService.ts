@@ -1,6 +1,6 @@
-import type { BuyerActivity } from '../types';
-import { queueRequest } from '../utils/requestQueue';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import type { BuyerActivity } from '../types.js';
+import { queueRequest } from '../utils/requestQueue.js';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 
 /**
  * Save buyer activity to Supabase

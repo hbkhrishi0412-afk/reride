@@ -1,4 +1,4 @@
-import type { Vehicle, ListingLifecycle, ListingRefresh } from '../types';
+import type { Vehicle, ListingLifecycle, ListingRefresh } from '../types.js';
 
 // ============================================
 // LISTING EXPIRY MANAGEMENT

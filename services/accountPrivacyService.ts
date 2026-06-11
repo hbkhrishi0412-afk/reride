@@ -1,5 +1,5 @@
-import type { User } from '../types';
-import { authenticatedFetch } from '../utils/authenticatedFetch';
+import type { User } from '../types.js';
+import { authenticatedFetch } from '../utils/authenticatedFetch.js';
 
 export function downloadProfileExport(currentUser: User): void {
   const bundle = {

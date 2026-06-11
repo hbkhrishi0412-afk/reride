@@ -1,4 +1,4 @@
-import type { Notification } from '../types';
+import type { Notification } from '../types.js';
 
 const STORAGE_KEY = 'reride_notification_mute_keys';
 

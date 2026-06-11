@@ -5,8 +5,8 @@
 
 import { Capacitor } from '@capacitor/core';
 import { getSupabaseClient } from '../lib/supabase.js';
-import { OAuthExternalBrowser } from './oauthExternalBrowser';
-import { isAndroidAppAssetsHost } from './apiConfig';
+import { OAuthExternalBrowser } from './oauthExternalBrowser.js';
+import { isAndroidAppAssetsHost } from './apiConfig.js';
 
 /** Must match Android intent-filter + Supabase Dashboard → Redirect URLs. */
 export const NATIVE_OAUTH_REDIRECT = 'com.reride.app://oauth-callback';

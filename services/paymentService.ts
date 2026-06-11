@@ -3,14 +3,14 @@
  * Handles all payment-related operations: subscriptions, boosts, inspections, and credits
  */
 
-import type { SubscriptionPlan, BoostPackage, User } from '../types';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import type { SubscriptionPlan, BoostPackage, User } from '../types.js';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 import { 
   loadRazorpayCheckoutScript, 
   isRazorpayConfiguredInClient,
   openRazorpayPlanCheckout,
   openRazorpayBoostCheckout 
-} from './razorpayPlanPayment';
+} from './razorpayPlanPayment.js';
 
 // Product types for payments
 export type PaymentProductType = 
@@ -533,7 +533,7 @@ export function generateUPIIntent(options: {
 }
 
 // Re-export PaymentRequest from types for consistency
-import type { PaymentRequest } from '../types';
+import type { PaymentRequest } from '../types.js';
 export type { PaymentRequest };
 
 /**

@@ -4,7 +4,7 @@ import {
   getAllDistrictsFlattenedSorted,
   getDistrictsForState,
   getIndianStatesSorted,
-} from './indianLocations';
+} from './indianLocations.js';
 
 export interface CarMake {
   name: string;

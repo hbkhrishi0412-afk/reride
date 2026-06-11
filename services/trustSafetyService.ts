@@ -5,8 +5,8 @@ import type {
   ResponseTimeStats,
   User,
   Conversation,
-} from '../types';
-import { filterMessagesForViewer } from '../utils/conversationView';
+} from '../types.js';
+import { filterMessagesForViewer } from '../utils/conversationView.js';
 
 // ============================================
 // VERIFICATION MANAGEMENT

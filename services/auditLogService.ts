@@ -1,5 +1,5 @@
-import type { AuditLogEntry } from '../types';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import type { AuditLogEntry } from '../types.js';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 
 const AUDIT_LOG_STORAGE_KEY = 'reRideAuditLog';
 const MAX_LOCAL_ENTRIES = 200;

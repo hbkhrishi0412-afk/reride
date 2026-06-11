@@ -1,4 +1,4 @@
-import type { Vehicle } from '../types';
+import type { Vehicle } from '../types.js';
 
 function parseYmdLocal(s: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s).trim());

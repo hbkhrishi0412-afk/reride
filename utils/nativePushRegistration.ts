@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { authenticatedFetch } from './authenticatedFetch';
+import { authenticatedFetch } from './authenticatedFetch.js';
 
 let listenersInstalled = false;
 

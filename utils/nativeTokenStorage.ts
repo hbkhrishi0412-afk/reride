@@ -3,7 +3,7 @@
  * Falls back to Capacitor Preferences on web and during one-time migration from legacy Preferences keys.
  */
 
-import { isCapacitorNativeApp as isCapacitorNative } from './isCapacitorNative';
+import { isCapacitorNativeApp as isCapacitorNative } from './isCapacitorNative.js';
 
 const ACCESS_KEY = 'reRideAccessToken';
 const REFRESH_KEY = 'reRideRefreshToken';

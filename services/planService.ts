@@ -1,6 +1,6 @@
-import type { PlanDetails, SubscriptionPlan } from '../types';
+import type { PlanDetails, SubscriptionPlan } from '../types.js';
 import { PLAN_DETAILS } from '../constants/plans.js';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 import { randomAlphanumeric } from '../utils/secureRandom.js';
 
 // Lazy-load Plan model only when needed (server-side only)

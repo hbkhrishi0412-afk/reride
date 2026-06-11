@@ -1,16 +1,16 @@
-import type { Vehicle, User, VehicleData, StorefrontDiscoveryAggregates } from '../types';
-import { queueRequest } from '../utils/requestQueue';
+import type { Vehicle, User, VehicleData, StorefrontDiscoveryAggregates } from '../types.js';
+import { queueRequest } from '../utils/requestQueue.js';
 import {
   getAlternateApiOriginForFallback,
   isCapacitorNative,
   normalizeRerideApiHostToWww,
   resolveApiUrl,
-} from '../utils/apiConfig';
-import { ensureCsrfToken } from '../utils/authenticatedFetch';
-import { getBrowserAccessTokenForApi } from '../utils/authStorage';
-import { userRolesEqual } from '../utils/user-role';
-import { currentUserForLocalSession, currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
-import { migrateVehicleListCache, normalizeVehiclesList } from '../utils/vehicleIdentity';
+} from '../utils/apiConfig.js';
+import { ensureCsrfToken } from '../utils/authenticatedFetch.js';
+import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
+import { userRolesEqual } from '../utils/user-role.js';
+import { currentUserForLocalSession, currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot.js';
+import { migrateVehicleListCache, normalizeVehiclesList } from '../utils/vehicleIdentity.js';
 
 // Unified data service that handles both local and API data consistently
 class DataService {

@@ -1,8 +1,8 @@
 
-import type { Vehicle, ProsAndCons, Conversation, Suggestion } from '../types';
-import type { SearchFilters } from "../types";
-import { authenticatedFetch } from '../utils/authenticatedFetch';
-import { getLastVisibleMessageForViewer } from '../utils/conversationView';
+import type { Vehicle, ProsAndCons, Conversation, Suggestion } from '../types.js';
+import type { SearchFilters } from "../types.js";
+import { authenticatedFetch } from '../utils/authenticatedFetch.js';
+import { getLastVisibleMessageForViewer } from '../utils/conversationView.js';
 
 // NOTE: Do not import `@google/generative-ai` on the client.
 // That library brings Node/crypto/util dependencies which can crash WebView environments

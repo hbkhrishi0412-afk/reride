@@ -1,9 +1,9 @@
-import type { Vehicle } from '../types';
+import type { Vehicle } from '../types.js';
 import {
   normalizeVehicleIdentity,
   normalizeVehiclesList,
   parseVehicleIdentityFromBody,
-} from '../utils/vehicleIdentity';
+} from '../utils/vehicleIdentity.js';
 
 /**
  * Recover canonical listing identity from the API (for stale client state).

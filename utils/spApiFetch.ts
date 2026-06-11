@@ -2,8 +2,8 @@
  * Service-provider dashboard API calls (web + Capacitor).
  * Uses authenticatedFetch so cross-origin WebView gets JWT + X-App-Client + CSRF.
  */
-import { authenticatedFetch } from './authenticatedFetch';
-import { getValidAccessToken } from '../services/supabase-auth-service';
+import { authenticatedFetch } from './authenticatedFetch.js';
+import { getValidAccessToken } from '../services/supabase-auth-service.js';
 
 export async function spApiFetch(path: string, init?: RequestInit): Promise<Response> {
   const t = await getValidAccessToken();

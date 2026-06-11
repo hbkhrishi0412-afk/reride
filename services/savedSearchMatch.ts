@@ -1,4 +1,4 @@
-import type { SearchFilters, Vehicle } from '../types';
+import type { SearchFilters, Vehicle } from '../types.js';
 
 function matchesOwnership(noOfOwners: number | undefined, ownership: SearchFilters['ownership']): boolean {
   if (!ownership) return true;

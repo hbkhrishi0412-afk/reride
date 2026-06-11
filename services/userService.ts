@@ -1,9 +1,9 @@
 
-import type { User } from '../types';
-import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
-import { userRolesEqual } from '../utils/user-role';
-import { isDevelopmentEnvironment } from '../utils/environment';
-import { isCapacitorNative } from '../utils/apiConfig';
+import type { User } from '../types.js';
+import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot.js';
+import { userRolesEqual } from '../utils/user-role.js';
+import { isDevelopmentEnvironment } from '../utils/environment.js';
+import { isCapacitorNative } from '../utils/apiConfig.js';
 import {
   authenticatedFetch,
   handleApiResponse,
@@ -11,18 +11,18 @@ import {
   postLogoutClearCookies,
   refreshAuthToken,
   resetAuthFetchStateAfterLogout,
-} from '../utils/authenticatedFetch';
+} from '../utils/authenticatedFetch.js';
 import {
   clearSupabaseAuthStorage,
   clearSessionStoredAccessToken,
   getBrowserAccessTokenForApi,
   useHttpOnlyRefreshCookie,
-} from '../utils/authStorage';
+} from '../utils/authStorage.js';
 import {
   clearNativeTokens,
   setNativeAccessToken,
   setNativeRefreshToken,
-} from '../utils/nativeTokenStorage';
+} from '../utils/nativeTokenStorage.js';
 
 // --- Request Deduplication ---
 // Track ongoing requests to prevent duplicate simultaneous requests

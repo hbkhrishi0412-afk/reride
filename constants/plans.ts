@@ -1,4 +1,4 @@
-import type { PlanDetails, SubscriptionPlan } from '../types';
+import type { PlanDetails, SubscriptionPlan } from '../types.js';
 
 export const PLAN_DETAILS: Record<SubscriptionPlan, PlanDetails> = {
   free: {

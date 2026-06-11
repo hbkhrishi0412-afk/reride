@@ -1,4 +1,4 @@
-import { isAndroidWebViewAssetLoaderOrigin } from './cors-origin';
+import { isAndroidWebViewAssetLoaderOrigin } from './cors-origin.js';
 
 /**
  * Origins that may legitimately send `x-app-client: capacitor` (packaged WebView shells).

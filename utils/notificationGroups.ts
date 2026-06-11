@@ -1,5 +1,5 @@
-import type { Conversation, Notification, Vehicle } from '../types';
-import { getNotificationStoryKey } from './notificationMute';
+import type { Conversation, Notification, Vehicle } from '../types.js';
+import { getNotificationStoryKey } from './notificationMute.js';
 
 export interface NotificationStoryGroup {
   key: string;

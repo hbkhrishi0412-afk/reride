@@ -1,4 +1,4 @@
-import { isCapacitorNative } from './apiConfig';
+import { isCapacitorNative } from './apiConfig.js';
 import type { MediaPlugin } from '@capacitor-community/media';
 
 export type QrSaveToast = (

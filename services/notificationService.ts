@@ -1,7 +1,7 @@
-import type { Notification } from '../types';
-import { queueRequest } from '../utils/requestQueue';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
-import { getBrowserAccessTokenForApi } from '../utils/authStorage';
+import type { Notification } from '../types.js';
+import { queueRequest } from '../utils/requestQueue.js';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
+import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
 
 /** Best-effort email from JWT (custom app token). */
 function parseJwtEmailClaim(token: string): string | null {

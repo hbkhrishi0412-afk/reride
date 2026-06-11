@@ -1,5 +1,5 @@
-import type { Conversation } from '../types';
-import { emailToKey } from '../services/supabase-user-service';
+import type { Conversation } from '../types.js';
+import { emailToKey } from '../services/supabase-user-service.js';
 
 /**
  * True if a stored participant id (email, users.id UUID, or emailToKey slug) refers to the signed-in user.

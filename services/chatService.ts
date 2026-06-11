@@ -1,4 +1,4 @@
-import type { Conversation } from '../types';
+import type { Conversation } from '../types.js';
 
 const CONVERSATION_STORAGE_KEY = 'reRideConversations';
 

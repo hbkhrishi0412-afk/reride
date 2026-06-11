@@ -10,7 +10,7 @@
  * Storage is localStorage-only and capped at 20 ids. Failures are silent.
  */
 
-import { safeGetItem, safeSetItem } from './safeStorage';
+import { safeGetItem, safeSetItem } from './safeStorage.js';
 
 const KEY = 'reride.recentlyViewed.local';
 const MAX_IDS = 20;

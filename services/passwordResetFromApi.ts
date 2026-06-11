@@ -1,4 +1,4 @@
-import { authenticatedFetch } from '../utils/authenticatedFetch';
+import { authenticatedFetch } from '../utils/authenticatedFetch.js';
 
 /**
  * Request a password reset for `public.users` (bcrypt). Sends email via Resend when configured.

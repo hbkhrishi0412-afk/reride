@@ -8,7 +8,7 @@ const { join, extname } = require('path');
 
 const root = join(__dirname, '..');
 
-const SCAN_DIRS = ['api', 'server'];
+const SCAN_DIRS = ['api', 'server', 'lib', 'utils', 'services', 'constants'];
 const EXTENSIONS = new Set(['.ts', '.js', '.tsx', '.jsx', '.mts', '.cts']);
 const IMPORT_RE =
   /\b(?:import|export)\s+(?:type\s+)?(?:[\w*{}\s,]+from\s+)?['"](\.[^'"]+)['"]/g;

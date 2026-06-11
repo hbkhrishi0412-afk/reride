@@ -1,6 +1,6 @@
 // Client-side API service for sell car submissions
 // This file should only contain client-side code, not server-side MongoDB imports
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 
 interface SellCarSubmission {
   registration: string;

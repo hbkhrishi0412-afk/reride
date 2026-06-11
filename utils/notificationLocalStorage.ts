@@ -1,4 +1,4 @@
-import type { Notification } from '../types';
+import type { Notification } from '../types.js';
 
 /**
  * Data we actually persist: allowlisted fields only. Never pass through

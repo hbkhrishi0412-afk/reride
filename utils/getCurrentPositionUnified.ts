@@ -1,4 +1,4 @@
-import { isCapacitorNativeApp } from './isCapacitorNative';
+import { isCapacitorNativeApp } from './isCapacitorNative.js';
 
 /**
  * Web: navigator.geolocation with low-accuracy first, then high-accuracy retry.

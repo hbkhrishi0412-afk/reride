@@ -1,9 +1,9 @@
-import type { VehicleData } from '../types';
-import { VEHICLE_DATA } from '../components/vehicleData';
-import { safeGetItem, safeSetItem, isStorageAvailable } from '../utils/safeStorage';
-import { logInfo, logWarn, logError } from '../utils/logger';
-import { queueRequest } from '../utils/requestQueue';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import type { VehicleData } from '../types.js';
+import { VEHICLE_DATA } from '../components/vehicleData.js';
+import { safeGetItem, safeSetItem, isStorageAvailable } from '../utils/safeStorage.js';
+import { logInfo, logWarn, logError } from '../utils/logger.js';
+import { queueRequest } from '../utils/requestQueue.js';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 
 const VEHICLE_DATA_STORAGE_KEY = 'reRideVehicleData';
 

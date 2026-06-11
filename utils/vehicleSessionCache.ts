@@ -1,4 +1,4 @@
-import type { Vehicle } from '../types';
+import type { Vehicle } from '../types.js';
 
 /** Dropped from session JSON (bulky or high-sensitivity). */
 const DROP_FROM_SESSION: (keyof Vehicle)[] = [

@@ -5,7 +5,7 @@ import type {
   CityStats,
   RadiusSearchParams,
   Vehicle,
-} from '../types';
+} from '../types.js';
 
 // ============================================
 // DISTANCE CALCULATIONS

@@ -4,7 +4,7 @@
  * Images are stored as files in Supabase Storage buckets
  */
 
-import { getBrowserAccessTokenForApi } from '../utils/authStorage';
+import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
 import { randomAlphanumeric } from '../utils/secureRandom.js';
 
 interface UploadResult {

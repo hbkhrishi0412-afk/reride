@@ -9,10 +9,10 @@ import {
   signInWithGoogle as supabaseGoogleSignIn,
   syncServiceProviderOAuth as supabaseSyncServiceProviderOAuth,
   syncWithBackend as supabaseSyncWithBackend,
-} from './supabase-auth-service';
+} from './supabase-auth-service.js';
 import { getSupabaseClient } from '../lib/supabase.js';
-import type { User } from '../types';
-import { authenticatedFetch } from '../utils/authenticatedFetch';
+import type { User } from '../types.js';
+import { authenticatedFetch } from '../utils/authenticatedFetch.js';
 
 /** In-memory only (not persisted) — avoids storing the phone number in sessionStorage. */
 let pendingOtpPhoneForVerification: string | null = null;

@@ -1,4 +1,4 @@
-import type { FAQItem } from '../types';
+import type { FAQItem } from '../types.js';
 import { getSupabaseClient } from '../lib/supabase.js';
 
 const FAQ_STORAGE_KEY = 'reRideFaqs';

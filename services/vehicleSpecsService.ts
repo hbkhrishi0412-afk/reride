@@ -11,8 +11,8 @@
  * - Automatic cache refresh
  */
 
-import type { Vehicle } from '../types';
-import { publicApiFetch } from '../utils/apiFetch';
+import type { Vehicle } from '../types.js';
+import { publicApiFetch } from '../utils/apiFetch.js';
 
 export interface VehicleSpecs {
   engine?: string;

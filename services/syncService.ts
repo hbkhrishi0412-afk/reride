@@ -1,7 +1,7 @@
-import type { Conversation, Notification, BuyerActivity } from '../types';
-import { saveConversationToSupabase, addMessageToConversation } from './conversationService';
-import { saveNotificationToSupabase, updateNotificationInSupabase } from './notificationService';
-import { saveBuyerActivityToSupabase } from './buyerActivityService';
+import type { Conversation, Notification, BuyerActivity } from '../types.js';
+import { saveConversationToSupabase, addMessageToConversation } from './conversationService.js';
+import { saveNotificationToSupabase, updateNotificationInSupabase } from './notificationService.js';
+import { saveBuyerActivityToSupabase } from './buyerActivityService.js';
 
 interface SyncQueueItem {
   id: string;

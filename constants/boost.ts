@@ -1,4 +1,4 @@
-import type { BoostPackage } from '../types';
+import type { BoostPackage } from '../types.js';
 
 export const BOOST_PACKAGES: BoostPackage[] = [
   {

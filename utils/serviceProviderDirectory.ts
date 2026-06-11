@@ -1,5 +1,5 @@
-import { publicApiFetch } from './apiFetch';
-import { authenticatedFetch } from './authenticatedFetch';
+import { publicApiFetch } from './apiFetch.js';
+import { authenticatedFetch } from './authenticatedFetch.js';
 
 export interface ServiceProviderDirectoryEntry {
   id: string;

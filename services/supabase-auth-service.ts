@@ -9,19 +9,19 @@ import { getSupabaseClient } from '../lib/supabase.js';
 import type { User as SupabaseAuthUser, Session } from '@supabase/supabase-js';
 import type { User } from '../types.js';
 import { formatSupabaseError } from '../utils/errorUtils.js';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 import {
   getNativeGoogleWebClientId,
   shouldTryNativeGoogleSignIn,
   signInWithGoogleNative,
   signOutGoogleNativeIfAvailable,
-} from '../utils/nativeGoogleSignIn';
+} from '../utils/nativeGoogleSignIn.js';
 import {
   getNativeOAuthRedirectUrl,
   openGoogleOAuthUrl,
   shouldUseNativeGoogleOAuthFlow,
-} from '../utils/oauthMobile';
-import { clearSupabaseAuthStorage } from '../utils/authStorage';
+} from '../utils/oauthMobile.js';
+import { clearSupabaseAuthStorage } from '../utils/authStorage.js';
 
 // ── Shared result types ─────────────────────────────────────────────────────
 

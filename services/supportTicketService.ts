@@ -1,5 +1,5 @@
-import type { SupportTicket } from '../types';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import type { SupportTicket } from '../types.js';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 const SUPPORT_TICKET_STORAGE_KEY = 'reRideSupportTickets';
 
 export const getSupportTickets = (): SupportTicket[] | null => {

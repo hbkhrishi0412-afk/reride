@@ -1,6 +1,6 @@
 // Service to fetch service pricing from Supabase
 
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 
 export interface ServicePricing {
   id: string;

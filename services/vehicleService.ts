@@ -1,9 +1,9 @@
 
-import type { Vehicle, VehicleCategory } from '../types';
-import { getBrowserAccessTokenForApi } from '../utils/authStorage';
-import { isVehicle, isApiResponse } from '../types';
-import { isDevelopmentEnvironment } from '../utils/environment';
-import { isCapacitorNative } from '../utils/apiConfig';
+import type { Vehicle, VehicleCategory } from '../types.js';
+import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
+import { isVehicle, isApiResponse } from '../types.js';
+import { isDevelopmentEnvironment } from '../utils/environment.js';
+import { isCapacitorNative } from '../utils/apiConfig.js';
 
 // Fallback mock vehicles to prevent loading issues
 const FALLBACK_VEHICLES: Vehicle[] = [

@@ -8,9 +8,9 @@
  * for the custom app flow live in sessionStorage when that mode is active.
  */
 
-import { resolveApiUrl, isCapacitorNative, isApiRequestCrossOrigin } from './apiConfig';
-import { getNativeMemoryAccessToken } from './nativeTokenStorage';
-import { getCachedSupabaseAccessTokenSync } from './supabaseNativeAuthStorage';
+import { resolveApiUrl, isCapacitorNative, isApiRequestCrossOrigin } from './apiConfig.js';
+import { getNativeMemoryAccessToken } from './nativeTokenStorage.js';
+import { getCachedSupabaseAccessTokenSync } from './supabaseNativeAuthStorage.js';
 
 /** First-party web: refresh token is HttpOnly; Capacitor / cross-API-origin still use JSON + localStorage. */
 export function useHttpOnlyRefreshCookie(): boolean {

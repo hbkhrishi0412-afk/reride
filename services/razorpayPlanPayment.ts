@@ -1,5 +1,5 @@
-import type { SubscriptionPlan } from '../types';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import type { SubscriptionPlan } from '../types.js';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 
 declare global {
   interface Window {

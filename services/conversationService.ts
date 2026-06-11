@@ -1,6 +1,6 @@
-import type { ChatMessage, Conversation } from '../types';
-import { queueRequest } from '../utils/requestQueue';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import type { ChatMessage, Conversation } from '../types.js';
+import { queueRequest } from '../utils/requestQueue.js';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 
 /** Mark specific messages as read (persists to Supabase). */
 export async function patchConversationMarkRead(

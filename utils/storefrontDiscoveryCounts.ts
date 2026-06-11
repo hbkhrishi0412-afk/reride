@@ -1,4 +1,4 @@
-import type { Vehicle } from '../types';
+import type { Vehicle } from '../types.js';
 import { matchesCity } from './cityMapping.js';
 
 /** Published, non-rental listings used on home discovery rails. */

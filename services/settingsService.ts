@@ -1,5 +1,5 @@
-import type { PlatformSettings } from '../types';
-import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import type { PlatformSettings } from '../types.js';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 
 const SETTINGS_STORAGE_KEY = 'reRidePlatformSettings';
 

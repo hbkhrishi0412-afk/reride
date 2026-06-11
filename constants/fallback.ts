@@ -1,4 +1,4 @@
-import type { Vehicle, User, FAQItem, SupportTicket } from '../types';
+import type { Vehicle, User, FAQItem, SupportTicket } from '../types.js';
 
 // Use string literal to avoid undefined VehicleCategory when this chunk loads before types (fixes "Cannot read properties of undefined (reading 'FOUR_WHEELER')")
 const FOUR_WHEELER_CATEGORY = 'four-wheeler' as Vehicle['category'];
