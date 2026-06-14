@@ -21,7 +21,6 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { WebSocketServer } from 'ws';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -740,6 +739,99 @@ app.get('/api/vehicles', async (req, res) => {
   }
 });
 
+// Dev mock AI inspection — auto-generated when a vehicle is listed (mirrors production server hook)
+function buildDevMockAIInspectionReport(vehicle) {
+  const make = vehicle.make || 'Vehicle';
+  const model = vehicle.model || '';
+  const year = vehicle.year || new Date().getFullYear();
+  const imageUrls = Array.isArray(vehicle.images) ? vehicle.images : [];
+  const imageCount = imageUrls.length;
+
+  const reportId = `AIR-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+  return {
+    reportId,
+    vehicleId: vehicle.id,
+    generatedAt: new Date().toISOString(),
+    modelVersion: 'dev-mock',
+    processingTimeMs: 120,
+    overallGrade: 'B',
+    overallScore: 78,
+    confidenceScore: 82,
+    exterior: {
+      grade: 'B',
+      score: 80,
+      paintCondition: 'good',
+      bodyCondition: 'good',
+      summary: `Exterior of ${year} ${make} ${model} looks well maintained (dev mock).`,
+      findings: [],
+    },
+    interior: {
+      grade: 'B',
+      score: 78,
+      seatCondition: 'good',
+      dashboardCondition: 'good',
+      cleanlinessLevel: 'clean',
+      summary: 'Interior appears clean with normal wear for age (dev mock).',
+      findings: [],
+    },
+    tyres: {
+      grade: 'C',
+      score: 74,
+      estimatedTreadDepth: 'good',
+      mismatchedTyres: false,
+      brandVisible: null,
+      summary: 'Tyre tread appears adequate from photos (dev mock).',
+    },
+    photoQuality: {
+      overallScore: Math.min(90, 55 + imageCount * 5),
+      issues: imageCount < 6 ? ['too_far'] : [],
+      missingViews: imageCount < 6 ? ['interior_front', 'tyres'] : [],
+      recommendations: imageCount < 6
+        ? ['Add more angles: interior, engine bay, and tyre close-ups']
+        : ['Photo set is adequate for listing'],
+    },
+    highlights: [
+      `${imageCount} photo(s) analyzed automatically on listing`,
+      'Development mock — set GEMINI_API_KEY for real AI inspection in production',
+    ],
+    concerns: [],
+    buyerAdvisory: [
+      'This report was generated in local dev mode.',
+      'Always inspect the vehicle in person before purchase.',
+    ],
+    conditionImpact: {
+      estimatedValueReduction: 0,
+      majorIssuesCount: 0,
+      moderateIssuesCount: 0,
+      minorIssuesCount: 0,
+    },
+    allFindings: [],
+    imageAnalysis: imageUrls.slice(0, 10).map((url, idx) => ({
+      imageIndex: idx,
+      imageUrl: url,
+      detectedElements: ['vehicle body'],
+      issuesFound: 0,
+    })),
+  };
+}
+
+function scheduleDevAutoAIInspection(vehicle) {
+  const images = Array.isArray(vehicle.images) ? vehicle.images.filter(Boolean) : [];
+  if (images.length === 0) return;
+
+  setTimeout(() => {
+    const idx = mockVehicles.findIndex(v => v.id === vehicle.id);
+    if (idx === -1) return;
+    const report = buildDevMockAIInspectionReport(mockVehicles[idx]);
+    mockVehicles[idx] = { ...mockVehicles[idx], aiInspectionReport: report };
+    console.log(`🔍 Dev auto AI inspection saved for vehicle ${vehicle.id}`);
+    if (io) {
+      io.emit('vehicles:updated', { vehicle: mockVehicles[idx] });
+    }
+  }, 800);
+}
+
 app.post('/api/vehicles', async (req, res) => {
   const { type, action } = req.query;
   
@@ -935,7 +1027,7 @@ app.post('/api/vehicles', async (req, res) => {
     createdAt: new Date().toISOString()
   };
   mockVehicles.unshift(newVehicle);
-  // Emit real-time update
+  scheduleDevAutoAIInspection(newVehicle);
   if (io) {
     io.emit('vehicles:created', { vehicle: newVehicle });
   }
@@ -947,7 +1039,12 @@ app.put('/api/vehicles', (req, res) => {
   if (!id) return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
   const idx = mockVehicles.findIndex(v => v.id === id);
   if (idx === -1) return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+  const previousImages = JSON.stringify(mockVehicles[idx].images || []);
   mockVehicles[idx] = { ...mockVehicles[idx], ...patch };
+  const nextImages = JSON.stringify(mockVehicles[idx].images || []);
+  if (patch.images && previousImages !== nextImages) {
+    scheduleDevAutoAIInspection(mockVehicles[idx]);
+  }
   // Emit real-time update
   if (io) {
     io.emit('vehicles:updated', { vehicle: mockVehicles[idx] });
@@ -3146,6 +3243,31 @@ app.get('/api/vehicle-specs', async (req, res) => {
   } catch (error) {
     console.error('CarQuery proxy error:', error);
     return res.status(200).json({ success: false, specs: null, reason: 'CarQuery lookup failed' });
+  }
+});
+
+// Live vehicle market pricing (platform comparables + external benchmark)
+app.get('/api/vehicle-pricing', async (req, res) => {
+  try {
+    const { handleVehiclePricing } = await import('./server/handlers/vehicle-pricing.ts');
+    await handleVehiclePricing(req, res, {});
+  } catch (error) {
+    console.error('vehicle-pricing error:', error);
+    return res.status(200).json({
+      success: false,
+      comparables: [],
+      comparableCount: 0,
+      external: {
+        newOnRoadPrice: null,
+        usedFairLow: null,
+        usedFairHigh: null,
+        usedFairAverage: null,
+        summary: 'Market pricing temporarily unavailable.',
+        source: 'estimate',
+        fetchedAt: new Date().toISOString(),
+      },
+      cached: false,
+    });
   }
 });
 

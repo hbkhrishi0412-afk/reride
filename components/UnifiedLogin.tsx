@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { View, User } from '../types';
 import { login, register } from '../services/userService';
 import { runGoogleSignInButtonFlow } from '../services/authService';
+import { syncWithBackend } from '../services/supabase-auth-service';
 import { loginServiceProviderWithUsersTable } from '../services/serviceProviderLoginSupport';
 import { getSupabaseClient } from '../lib/supabase.js';
 import { setRememberMePreference } from '../utils/rememberMe';
@@ -444,7 +445,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           onRegister,
           onServiceProviderLogin,
         },
-        mode,
+        mode === 'register' ? 'register' : 'login',
       );
       if (flowError) {
         throw new Error(flowError);

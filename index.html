@@ -118,40 +118,43 @@
         box-shadow: 0 4px 8px rgba(0,0,0,0.3);
       }
     </style>
-    <!-- Loading shell -->
+    <!-- Loading shell — neutral skeleton matching the live app (white header, gray cards) -->
     <div id="root">
-      <div style="background:#fff;min-height:100vh;">
+      <div style="background:#f9fafb;min-height:100vh;">
         <header role="banner" aria-label="ReRide navigation"
-          style="height:60px;background:#FF6B35;display:flex;align-items:center;padding:0 1rem;gap:1rem;">
-          <div style="width:90px;height:28px;background:rgba(255,255,255,0.3);border-radius:6px;"></div>
+          style="height:72px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;padding:0 1.5rem;gap:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+          <div style="width:100px;height:32px;background:linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px;"></div>
           <div style="flex:1;"></div>
-          <div style="width:80px;height:28px;background:rgba(255,255,255,0.3);border-radius:6px;"></div>
+          <div style="width:72px;height:32px;background:linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px;"></div>
         </header>
-        <main id="main-content" role="main" aria-label="Vehicle listings">
-          <div style="height:200px;background:linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;"></div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem;padding:1.5rem;">
-            <div style="border-radius:1rem;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.08);">
+        <main id="main-content" role="main" aria-label="Vehicle listings" style="max-width:1280px;margin:0 auto;padding:1.5rem;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;">
+            <div style="height:24px;width:160px;background:linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:6px;"></div>
+            <div style="height:36px;width:120px;background:linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px;"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem;">
+            <div style="border-radius:1rem;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.08);border:1px solid #f3f4f6;">
               <div style="height:180px;background:linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;"></div>
               <div style="padding:1rem;">
                 <div style="height:16px;width:70%;background:#f0f0f0;border-radius:4px;margin-bottom:8px;"></div>
                 <div style="height:12px;width:50%;background:#f0f0f0;border-radius:4px;margin-bottom:12px;"></div>
-                <div style="height:22px;width:40%;background:#ffe5d8;border-radius:4px;"></div>
+                <div style="height:22px;width:40%;background:#f0f0f0;border-radius:4px;"></div>
               </div>
             </div>
-            <div style="border-radius:1rem;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.08);">
+            <div style="border-radius:1rem;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.08);border:1px solid #f3f4f6;">
               <div style="height:180px;background:linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;"></div>
               <div style="padding:1rem;">
                 <div style="height:16px;width:70%;background:#f0f0f0;border-radius:4px;margin-bottom:8px;"></div>
                 <div style="height:12px;width:50%;background:#f0f0f0;border-radius:4px;margin-bottom:12px;"></div>
-                <div style="height:22px;width:40%;background:#ffe5d8;border-radius:4px;"></div>
+                <div style="height:22px;width:40%;background:#f0f0f0;border-radius:4px;"></div>
               </div>
             </div>
-            <div style="border-radius:1rem;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.08);">
+            <div style="border-radius:1rem;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.08);border:1px solid #f3f4f6;">
               <div style="height:180px;background:linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;"></div>
               <div style="padding:1rem;">
                 <div style="height:16px;width:70%;background:#f0f0f0;border-radius:4px;margin-bottom:8px;"></div>
                 <div style="height:12px;width:50%;background:#f0f0f0;border-radius:4px;margin-bottom:12px;"></div>
-                <div style="height:22px;width:40%;background:#ffe5d8;border-radius:4px;"></div>
+                <div style="height:22px;width:40%;background:#f0f0f0;border-radius:4px;"></div>
               </div>
             </div>
           </div>

@@ -46,9 +46,12 @@ import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
 import {
   buildVehicleMutationBody,
+  findVehicleByRouteSegment,
+  getVehicleRouteId,
   migrateVehicleListCache,
   normalizeVehicleIdentity,
   normalizeVehiclesList,
+  vehicleIdsEqual,
   vehicleMissingCanonicalId,
   VehicleMutationIdentityError,
 } from '../utils/vehicleIdentity';
@@ -202,15 +205,10 @@ interface HistoryState {
   previousView: View;
   timestamp: number;
   selectedVehicleId?: number;
+  selectedVehicleDatabaseId?: string;
 }
 
 /** Compare vehicle ids from URL, JSON, or API (number vs numeric string). */
-function vehicleIdsEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  const na = Number(a);
-  const nb = Number(b);
-  return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
-}
 
 /** React Router pathname for packaged WebView (`/index.html`) → logical app path. */
 function normalizeRouterPath(path: string): string {
@@ -2119,7 +2117,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!vehicleForPath?.id && selectedVehicle?.id != null) {
           vehicleForPath = selectedVehicle;
         }
-        newPath = vehicleForPath?.id != null ? `/vehicle/${vehicleForPath.id}` : '/vehicle';
+        newPath = vehicleForPath?.id != null ? `/vehicle/${getVehicleRouteId(vehicleForPath)}` : '/vehicle';
       } else if (view === View.SELLER_PROFILE) {
         const emailForPath = (params?.sellerEmail ?? publicSellerProfile?.email ?? '').trim();
         newPath = emailForPath
@@ -2376,9 +2374,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (newView === viewNow && newView === View.DETAIL && path.includes('/vehicle/')) {
       const idMatch = path.match(/\/vehicle\/([^/?#]+)/);
       if (idMatch) {
-        const parsedId = Number(idMatch[1]);
-        if (Number.isFinite(parsedId) && !vehicleIdsEqual(selectedVehicle?.id, parsedId)) {
-          const found = vehicles.find((v) => vehicleIdsEqual(v.id, parsedId));
+        const segment = idMatch[1];
+        const found = findVehicleByRouteSegment(vehicles, segment);
+        const routeChanged =
+          !selectedVehicle || !findVehicleByRouteSegment([selectedVehicle], segment);
+        if (routeChanged) {
           if (found) {
             setSelectedVehicle(found);
             try {
@@ -2391,7 +2391,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const stored = sessionStorage.getItem('selectedVehicle');
               if (stored) {
                 const v = JSON.parse(stored) as Vehicle;
-                if (vehicleIdsEqual(v?.id, parsedId)) setSelectedVehicle(v);
+                if (findVehicleByRouteSegment([v], segment)) setSelectedVehicle(v);
               }
             } catch {
               /* ignore */
@@ -2462,12 +2462,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           const idMatch = path.match(/\/vehicle\/([^/?#]+)/);
           if (!idMatch) return;
-          const parsedId = Number(idMatch[1]);
-          if (!Number.isFinite(parsedId)) return;
           const stored = sessionStorage.getItem('selectedVehicle');
           if (!stored) return;
-          const v = JSON.parse(stored) as { id?: number | string };
-          if (vehicleIdsEqual(v?.id, parsedId)) setSelectedVehicle(v as Vehicle);
+          const v = JSON.parse(stored) as Vehicle;
+          if (findVehicleByRouteSegment([v], idMatch[1])) setSelectedVehicle(v as Vehicle);
         } catch {
           /* ignore */
         }
@@ -2482,12 +2480,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else if (path.includes('/vehicle/')) {
         const idMatch = path.match(/\/vehicle\/([^/?#]+)/);
         if (idMatch) {
-          const parsedId = Number(idMatch[1]);
-          if (Number.isFinite(parsedId)) {
-            const found = vehicles.find((v) => vehicleIdsEqual(v.id, parsedId));
-            if (found) setSelectedVehicle(found);
-            else trySessionStorageForPath();
-          }
+          const found = findVehicleByRouteSegment(vehicles, idMatch[1]);
+          if (found) setSelectedVehicle(found);
+          else trySessionStorageForPath();
         }
       }
     } else {
@@ -2542,10 +2537,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const path = getAppPathFromRouter(location ?? { pathname: '/' });
     const m = path.match(/\/vehicle\/([^/?#]+)/);
     if (!m) return;
-    const id = Number(m[1]);
-    if (!Number.isFinite(id)) return;
-    if (vehicleIdsEqual(selectedVehicle?.id, id)) return;
-    const found = vehicles.find((v) => vehicleIdsEqual(v.id, id));
+    const segment = m[1];
+    if (selectedVehicle && findVehicleByRouteSegment([selectedVehicle], segment)) return;
+    const found = findVehicleByRouteSegment(vehicles, segment);
     if (found) {
       setSelectedVehicle(found);
       return;
@@ -2554,11 +2548,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const raw = sessionStorage.getItem('selectedVehicle');
       if (!raw) return;
       const v = JSON.parse(raw) as Vehicle;
-      if (vehicleIdsEqual(v?.id, id)) setSelectedVehicle(v);
+      if (findVehicleByRouteSegment([v], segment)) setSelectedVehicle(v);
     } catch {
       /* ignore */
     }
-  }, [currentView, location?.pathname, location?.hash, vehicles, selectedVehicle?.id]);
+  }, [currentView, location?.pathname, location?.hash, vehicles, selectedVehicle?.id, selectedVehicle?.databaseId]);
 
   // CRITICAL: Listen for force loading completion event (safety mechanism)
   useEffect(() => {

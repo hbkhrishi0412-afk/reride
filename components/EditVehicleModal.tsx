@@ -345,7 +345,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
             // Run enhancement pipeline (validation + AI inspection + quality scoring)
             const result = await enhanceVehicleListing(formData, {
                 runValidation: true,
-                runAIInspection: formData.images && formData.images.length >= 4,
+                runAIInspection: false,
                 checkPhotoQuality: true,
                 calculateListingScore: true,
             });

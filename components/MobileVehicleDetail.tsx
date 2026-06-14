@@ -23,6 +23,7 @@ import { isListingAvailable } from '../utils/listingStock.js';
 import StarRating from './StarRating';
 import { useApp } from './AppProvider';
 import { PriceInsights } from './PriceInsights';
+import { findSimilarVehicles } from '../utils/vehiclePricing';
 
 interface MobileVehicleDetailProps {
   vehicle: Vehicle;
@@ -72,22 +73,32 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   onSelectVehicle
 }) => {
   const { t } = useTranslation();
-  const { updateVehicle, vehicles: contextVehicles } = useApp();
+  const { updateVehicle, vehicles: contextVehicles, refreshVehicles } = useApp();
   const ratingSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [showEMICalculator, setShowEMICalculator] = useState(false);
   const [showTestDriveModal, setShowTestDriveModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'specs' | 'features' | 'vahan' | 'aiReport'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'specs' | 'features' | 'vahan' | 'price' | 'aiReport'>('overview');
+  const detailTabsRef = useRef<HTMLDivElement>(null);
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState(false);
   const [aiInspectionReport, setAiInspectionReport] = useState<AIInspectionReportType | null>(null);
   const [isGeneratingAIInspection, setIsGeneratingAIInspection] = useState(false);
   const [aiInspectionError, setAiInspectionError] = useState<string | null>(null);
+  const [aiReportPollExhausted, setAiReportPollExhausted] = useState(false);
+
+  const vehicleWithLiveReport = useMemo(() => {
+    const live = contextVehicles.find((v) => v.id === vehicle.id);
+    if (live?.aiInspectionReport) {
+      return { ...vehicle, aiInspectionReport: live.aiInspectionReport };
+    }
+    return vehicle;
+  }, [vehicle, contextVehicles]);
 
   const safeVehicle = useMemo(() => ({
-    ...vehicle,
+    ...vehicleWithLiveReport,
     images: Array.isArray(vehicle.images) ? vehicle.images : [],
     features: Array.isArray(vehicle.features) ? vehicle.features : [],
     description: vehicle.description || '',
@@ -112,8 +123,8 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     status: vehicle.status || 'published',
     isFeatured: vehicle.isFeatured || false,
     views: vehicle.views || 0,
-    inquiriesCount: vehicle.inquiriesCount || 0
-  }), [vehicle]);
+    inquiriesCount: vehicleWithLiveReport.inquiriesCount || 0
+  }), [vehicleWithLiveReport]);
 
   const seller = useMemo(() => {
     if (!safeVehicle.sellerEmail) return undefined;
@@ -219,6 +230,31 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   };
 
   const currentAIReport = safeVehicle.aiInspectionReport || aiInspectionReport;
+  const hasListingPhotos = Boolean(safeVehicle.images && safeVehicle.images.length > 0);
+  const isAIReportPending = hasListingPhotos && !currentAIReport && !aiInspectionError && !aiReportPollExhausted;
+
+  useEffect(() => {
+    setAiReportPollExhausted(false);
+  }, [safeVehicle.id]);
+
+  useEffect(() => {
+    if (!hasListingPhotos || currentAIReport) return;
+
+    let attempts = 0;
+    const maxAttempts = 12;
+    void refreshVehicles();
+
+    const intervalId = window.setInterval(() => {
+      attempts += 1;
+      void refreshVehicles();
+      if (attempts >= maxAttempts) {
+        window.clearInterval(intervalId);
+        setAiReportPollExhausted(true);
+      }
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [safeVehicle.id, hasListingPhotos, currentAIReport, refreshVehicles]);
 
   const handleChat = () => {
     onStartChat(safeVehicle);
@@ -236,20 +272,19 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   const similarVehiclesForPricing = useMemo(() => {
     const pool = [...(contextVehicles || []), ...(recommendations || [])];
     const seen = new Set<number>();
-    return pool
-      .filter((v) => {
-        if (!v || v.id === safeVehicle.id || v.status !== 'published') return false;
-        if (seen.has(v.id)) return false;
-        seen.add(v.id);
-        return (
-          v.make === safeVehicle.make &&
-          v.model === safeVehicle.model &&
-          Math.abs(v.year - safeVehicle.year) <= 2
-        );
-      })
-      .slice(0, 20)
-      .map((v) => ({ price: v.price, year: v.year, mileage: v.mileage }));
-  }, [contextVehicles, recommendations, safeVehicle.id, safeVehicle.make, safeVehicle.model, safeVehicle.year]);
+    const deduped = pool.filter((v) => {
+      if (!v || v.id === safeVehicle.id || v.status !== 'published') return false;
+      if (seen.has(v.id)) return false;
+      seen.add(v.id);
+      return true;
+    });
+    return findSimilarVehicles(safeVehicle, deduped).slice(0, 20);
+  }, [contextVehicles, recommendations, safeVehicle]);
+
+  const openPriceTab = () => {
+    setActiveTab('price');
+    detailTabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   useEffect(() => {
     setActiveTab('overview');
@@ -314,7 +349,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               currentUser ? (
                 <a
                   href={callHref}
-                  className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl bg-blue-600 px-2 py-3 text-base font-semibold text-white transition-colors hover:bg-blue-700 active:scale-[0.99]"
+                  className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-gray-200 bg-white px-2 py-3 text-base font-semibold text-gray-700 transition-colors hover:bg-gray-50 active:scale-[0.99]"
                   style={{ minHeight: '52px' }}
                 >
                   <span className="flex items-center justify-center gap-2">
@@ -324,14 +359,14 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                     {t('vehicle.detail.call')}
                   </span>
                   {callPhoneLabel ? (
-                    <span className="text-xs font-medium text-white/90 tabular-nums">{callPhoneLabel}</span>
+                    <span className="text-xs font-medium text-gray-500 tabular-nums">{callPhoneLabel}</span>
                   ) : null}
                 </a>
               ) : (
                 <button
                   type="button"
                   onClick={onRequestLogin}
-                  className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl bg-blue-600 px-2 py-3 text-base font-semibold text-white transition-colors hover:bg-blue-700 active:scale-[0.99]"
+                  className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-gray-200 bg-white px-2 py-3 text-base font-semibold text-gray-700 transition-colors hover:bg-gray-50 active:scale-[0.99]"
                   style={{ minHeight: '52px' }}
                 >
                   <span className="flex items-center justify-center gap-2">
@@ -340,7 +375,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                     </svg>
                     {t('vehicle.detail.call')}
                   </span>
-                  <span className="text-[10px] font-medium leading-tight text-white/90">{t('vehicle.detail.loginToCallSeller')}</span>
+                  <span className="text-[10px] font-medium leading-tight text-gray-500">{t('vehicle.detail.loginToCallSeller')}</span>
                 </button>
               )
             ) : (
@@ -361,7 +396,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               <button
                 type="button"
                 onClick={handleWhatsAppSeller}
-                className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl bg-[#25D366] px-2 py-3 text-sm font-semibold text-white hover:bg-[#20BA5A] active:scale-[0.99]"
+                className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-[#25D366] bg-white px-2 py-3 text-sm font-semibold text-[#1FA855] hover:bg-[#25D366]/10 active:scale-[0.99]"
                 style={{ minHeight: '52px' }}
               >
                 {t('vehicle.detail.whatsapp', { defaultValue: 'WhatsApp' })}
@@ -374,7 +409,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 e.stopPropagation();
                 handleChat();
               }}
-              className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border border-blue-100/80 bg-slate-100/90 py-2.5 text-base font-semibold text-blue-600 transition-colors hover:bg-slate-200/95 active:scale-[0.99]"
+              className="flex flex-[1.4] flex-col items-center justify-center gap-0.5 rounded-xl bg-purple-600 py-2.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-purple-700 active:scale-[0.99]"
               style={{ minHeight: '52px' }}
             >
               <span className="flex items-center gap-2">
@@ -384,7 +419,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 {t('vehicle.detail.chat')}
               </span>
               {!currentUser && (
-                <span className="text-[10px] font-medium leading-tight text-blue-500/90">{t('vehicle.detail.loginToChatWithSeller')}</span>
+                <span className="text-[10px] font-medium leading-tight text-white/90">{t('vehicle.detail.loginToChatWithSeller')}</span>
               )}
             </button>
           </div>,
@@ -423,7 +458,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 {safeVehicle.year} {safeVehicle.make} {safeVehicle.model}
               </h1>
               <div className="flex flex-wrap gap-2 mb-2">
-                <ListingStockBadge vehicle={safeVehicle} />
+                <ListingStockBadge vehicle={safeVehicle} hideInStock />
                 <ListingTrustChips vehicle={safeVehicle} seller={seller} />
               </div>
               {safeVehicle.variant && (
@@ -576,21 +611,24 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               {t('vehicle.detail.price.saveExtraLoanInterest', { amount: saveExtraLoanInterest })}
             </p>
           </div>
-        </div>
 
-        <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
-          <PriceInsights
-            vehicle={safeVehicle}
-            similarVehicles={similarVehiclesForPricing}
-          />
+          <div className="mt-3">
+            <PriceInsights
+              vehicle={safeVehicle}
+              similarVehicles={similarVehiclesForPricing}
+              compact
+              compactHidePrice
+              onViewFullAnalysis={openPriceTab}
+            />
+          </div>
         </div>
 
         <MobileVehicleTrustStrip />
 
         {/* Additional Details Section */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <div className="bg-white rounded-2xl p-4 shadow-sm" ref={detailTabsRef}>
           <div className="flex border-b border-gray-200 mb-4 overflow-x-auto scrollbar-hide">
-            {(['overview', 'specs', 'features', 'vahan', ...(currentAIReport ? (['aiReport'] as const) : [])] as const).map((tab) => {
+            {(['overview', 'specs', 'features', 'vahan', 'price', ...(hasListingPhotos ? (['aiReport'] as const) : [])] as const).map((tab) => {
               const label =
                 tab === 'overview'
                   ? t('vehicle.detail.tabs.overview')
@@ -598,8 +636,12 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                     ? t('vehicle.detail.tabs.featureSpecs')
                     : tab === 'vahan'
                       ? t('vehicle.detail.tabs.vahan')
-                      : tab === 'aiReport'
-                        ? t('vehicle.detail.tabs.aiReport', 'AI Report')
+                      : tab === 'price'
+                        ? t('vehicle.detail.tabs.price', 'Price')
+                        : tab === 'aiReport'
+                        ? (isAIReportPending || isGeneratingAIInspection)
+                          ? t('vehicle.detail.ai.analyzing', 'Analyzing…')
+                          : t('vehicle.detail.tabs.aiReport', 'AI Report')
                         : t('vehicle.detail.tabs.features');
               return (
                 <button
@@ -615,18 +657,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 </button>
               );
             })}
-            {!currentAIReport && safeVehicle.images && safeVehicle.images.length > 0 && (
-              <button
-                type="button"
-                onClick={handleGenerateAIInspection}
-                disabled={isGeneratingAIInspection}
-                className="flex-shrink-0 py-3 px-2 text-sm font-semibold uppercase whitespace-nowrap text-blue-600 disabled:text-blue-300"
-              >
-                {isGeneratingAIInspection
-                  ? t('vehicle.detail.ai.analyzing', 'Analyzing…')
-                  : t('vehicle.detail.tabs.runAiReport', 'AI')}
-              </button>
-            )}
           </div>
 
           <div>
@@ -694,6 +724,46 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
 
             {activeTab === 'aiReport' && currentAIReport && (
               <AIInspectionReportComponent report={currentAIReport} />
+            )}
+
+            {activeTab === 'aiReport' && isAIReportPending && (
+              <div className="text-center py-8 space-y-3">
+                <div className="inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-gray-700">
+                  {t('vehicle.detail.ai.generatingReport', 'AI Photo Inspection report is being generated automatically…')}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleGenerateAIInspection}
+                  className="text-sm font-semibold text-blue-600 underline"
+                >
+                  {t('vehicle.detail.ai.generateNow', 'Generate now instead')}
+                </button>
+              </div>
+            )}
+
+            {activeTab === 'aiReport' && aiReportPollExhausted && !currentAIReport && !aiInspectionError && (
+              <div className="text-center py-8 space-y-3 px-2">
+                <p className="text-sm font-medium text-gray-800">
+                  {t('vehicle.detail.ai.reportUnavailable', 'AI inspection report is not available for this listing yet.')}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {t(
+                    'vehicle.detail.ai.reportUnavailableHint',
+                    'We tried to generate one automatically. You can request it again or contact the seller for more details.',
+                  )}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAiReportPollExhausted(false);
+                    void handleGenerateAIInspection();
+                  }}
+                  className="text-sm font-semibold text-purple-700 underline"
+                >
+                  {t('vehicle.detail.ai.generateNow', 'Generate now instead')}
+                </button>
+              </div>
             )}
 
             {activeTab === 'aiReport' && !currentAIReport && aiInspectionError && (
@@ -925,6 +995,13 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 </>
                 )}
               </div>
+            )}
+
+            {activeTab === 'price' && (
+              <PriceInsights
+                vehicle={safeVehicle}
+                similarVehicles={similarVehiclesForPricing}
+              />
             )}
           </div>
         </div>

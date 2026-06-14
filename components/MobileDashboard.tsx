@@ -366,8 +366,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   
   const totalListings = safeUserVehicles.length;
   const activeListings = safeUserVehicles.filter(v => v && v.status === 'published').length;
+  const publishedVehicles = safeUserVehicles.filter(v => v && v.status === 'published');
   const soldListings = safeUserVehicles.filter(v => v && v.status === 'sold').length;
-  const totalViews = safeUserVehicles.reduce((sum, v) => sum + (v?.views || 0), 0);
+  const totalViews = publishedVehicles.reduce((sum, v) => sum + (v?.views || 0), 0);
   const totalInquiries = safeConversations.length;
   const reportedCount = safeReportedVehicles.length;
   const featuredListingsCount = safeUserVehicles.filter(v => v && v.isFeatured).length;
@@ -1402,7 +1403,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     };
 
     const periodConversations = safeConversations.filter((c) => c && isIsoInWindow(c.lastMessageAt));
-    const periodTotalViews = safeUserVehicles.reduce(
+    const periodTotalViews = publishedVehicles.reduce(
       (sum, v) => sum + viewScoreForWindow(v, analyticsRangeDays),
       0
     );
@@ -1428,7 +1429,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         : 0;
 
     // Get top performing vehicles by estimated views in the selected window
-    const topVehicles = [...safeUserVehicles]
+    const topVehicles = [...publishedVehicles]
       .sort(
         (a, b) =>
           viewScoreForWindow(b, analyticsRangeDays) - viewScoreForWindow(a, analyticsRangeDays)
@@ -2496,7 +2497,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       // Run enhancement pipeline (validation + AI inspection + quality scoring)
       const enhancementResult = await enhanceVehicleListing(addFormData, {
         runValidation: true,
-        runAIInspection: addFormData.images && addFormData.images.length >= 4,
+        runAIInspection: false,
         checkPhotoQuality: true,
         calculateListingScore: true,
       });
@@ -3167,7 +3168,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       try {
         const enhancementResult = await enhanceVehicleListing(formData, {
           runValidation: true,
-          runAIInspection: Boolean(formData.images && formData.images.length >= 4),
+          runAIInspection: false,
           checkPhotoQuality: true,
           calculateListingScore: true,
         });

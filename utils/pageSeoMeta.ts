@@ -2,6 +2,8 @@ import { View } from '../types.js';
 import type { Vehicle } from '../types.js';
 import type { SEOProps } from '../components/SEO.js';
 import { getFirstValidImage } from './imageUtils.js';
+import { getVehicleRouteId } from '../utils/vehicleIdentity.js';
+import { PLATFORM_SUPPORT_PHONE_E164 } from './whatsappShare.js';
 
 function siteOrigin(): string {
   const raw =
@@ -13,18 +15,34 @@ function siteOrigin(): string {
 
 function organizationJsonLd(): Record<string, unknown> {
   const base = siteOrigin();
-  return {
+  // WHY: richer Organization schema improves how Google renders the brand in
+  // search/knowledge panels. Only truthful, derivable fields are included —
+  // contactPoint is added only when a real support line is configured.
+  const org: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: 'ReRide',
     url: base,
     logo: `${base}/icon-512.png`,
+    description:
+      'ReRide is an India-focused marketplace to buy and sell quality used cars and bikes, with verified listings and trusted car services.',
+    areaServed: { '@type': 'Country', name: 'India' },
   };
+  if (PLATFORM_SUPPORT_PHONE_E164) {
+    org.contactPoint = {
+      '@type': 'ContactPoint',
+      telephone: `+${PLATFORM_SUPPORT_PHONE_E164}`,
+      contactType: 'customer support',
+      areaServed: 'IN',
+      availableLanguage: ['en', 'hi'],
+    };
+  }
+  return org;
 }
 
 function vehicleJsonLd(v: Vehicle, imageUrl: string | undefined): Record<string, unknown> {
   const base = siteOrigin();
-  const url = `${base}/vehicle/${v.id}`;
+  const url = `${base}/vehicle/${getVehicleRouteId(v)}`;
   const offer =
     v.price != null
       ? {

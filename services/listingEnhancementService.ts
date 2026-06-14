@@ -34,7 +34,7 @@ export interface EnhancementOptions {
 
 const DEFAULT_OPTIONS: EnhancementOptions = {
   runValidation: true,
-  runAIInspection: true,
+  runAIInspection: false, // Server auto-generates on publish; avoid duplicate client-side calls
   checkPhotoQuality: true,
   autoEnhanceDescription: false,
   calculateListingScore: true,

@@ -23,10 +23,115 @@ const SchemaType = {
   BOOLEAN: 'BOOLEAN',
 } as const;
 
+type GeminiVisionPayload = {
+  model?: string;
+  imageUrls: string[];
+  documentUrls?: string[];
+  prompt?: string;
+  vehicleDetails?: AIInspectionRequest['vehicleDetails'];
+  config?: {
+    responseMimeType?: string;
+    responseSchema?: Record<string, unknown>;
+  };
+};
+
+/**
+ * Call Gemini Vision directly (server-side — uses GEMINI_API_KEY, no auth proxy).
+ */
+async function callGeminiVisionAPIDirect(payload: GeminiVisionPayload): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('AI_INSPECTION_UNAVAILABLE');
+  }
+
+  const modelName = payload.model || 'gemini-2.0-flash';
+  const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> = [];
+
+  for (const imageUrl of payload.imageUrls.slice(0, 10)) {
+    if (!imageUrl || typeof imageUrl !== 'string') continue;
+    try {
+      const imageResponse = await fetch(imageUrl, {
+        headers: { Accept: 'image/*' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!imageResponse.ok) continue;
+      const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+      const base64Data = Buffer.from(await imageResponse.arrayBuffer()).toString('base64');
+      parts.push({ inlineData: { mimeType: contentType, data: base64Data } });
+    } catch {
+      // Continue with remaining images
+    }
+  }
+
+  if (payload.documentUrls?.length) {
+    for (const docUrl of payload.documentUrls.slice(0, 3)) {
+      if (!docUrl || typeof docUrl !== 'string') continue;
+      try {
+        const docResponse = await fetch(docUrl, {
+          headers: { Accept: 'image/*' },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!docResponse.ok) continue;
+        const contentType = docResponse.headers.get('content-type') || 'image/jpeg';
+        const base64Data = Buffer.from(await docResponse.arrayBuffer()).toString('base64');
+        parts.push({ inlineData: { mimeType: contentType, data: base64Data } });
+      } catch {
+        // Continue
+      }
+    }
+  }
+
+  if (parts.length === 0) {
+    throw new Error('Could not process any of the provided images');
+  }
+
+  parts.push({ text: payload.prompt || buildInspectionPrompt({ imageUrls: payload.imageUrls, vehicleDetails: payload.vehicleDetails! }) });
+
+  const requestBody: Record<string, unknown> = {
+    contents: [{ parts }],
+  };
+
+  if (payload.config?.responseMimeType) {
+    requestBody.generationConfig = { responseMimeType: payload.config.responseMimeType };
+  }
+  if (payload.config?.responseSchema) {
+    requestBody.generationConfig = {
+      ...(requestBody.generationConfig as object || {}),
+      responseSchema: payload.config.responseSchema,
+    };
+  }
+
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(60000),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    let errorMessage = `Gemini API error: ${response.statusText}`;
+    try {
+      const errorJson = JSON.parse(errorBody);
+      errorMessage = errorJson.error?.message || errorJson.error || errorMessage;
+    } catch {
+      errorMessage = errorBody || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
+
+  const data = await response.json();
+  if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    return data.candidates[0].content.parts[0].text;
+  }
+  return JSON.stringify(data);
+}
+
 /**
  * Call the Gemini API through our secure backend proxy
  */
-async function callGeminiVisionAPI(payload: any): Promise<string> {
+async function callGeminiVisionAPI(payload: GeminiVisionPayload): Promise<string> {
   try {
     const response = await authenticatedFetch('/api/ai-inspection', {
       method: 'POST',
@@ -79,8 +184,9 @@ function generateReportId(): string {
 /**
  * Analyze vehicle photos and generate an AI inspection report
  */
-export async function generateAIInspection(
-  request: AIInspectionRequest
+async function runAIInspectionAnalysis(
+  request: AIInspectionRequest,
+  visionCaller: (payload: GeminiVisionPayload) => Promise<string>,
 ): Promise<AIInspectionReport> {
   const startTime = Date.now();
   const reportId = generateReportId();
@@ -94,10 +200,10 @@ export async function generateAIInspection(
   }
 
   const prompt = buildInspectionPrompt(request);
-  
-  const payload = {
+
+  const payload: GeminiVisionPayload = {
     model: 'gemini-2.0-flash',
-    imageUrls: request.imageUrls.slice(0, 10), // Limit to 10 images
+    imageUrls: request.imageUrls.slice(0, 10),
     documentUrls: request.includeDocumentAnalysis ? request.documentUrls : undefined,
     prompt,
     vehicleDetails: request.vehicleDetails,
@@ -108,18 +214,28 @@ export async function generateAIInspection(
   };
 
   try {
-    const jsonText = await callGeminiVisionAPI(payload);
+    const jsonText = await visionCaller(payload);
     const parsed = JSON.parse(jsonText.trim());
-    
     const processingTimeMs = Date.now() - startTime;
-    
     return buildInspectionReport(reportId, request, parsed, processingTimeMs);
   } catch (error) {
     console.error('Error generating AI inspection:', error);
-    
-    // Return a fallback report indicating failure
     return buildFallbackReport(reportId, request, error, Date.now() - startTime);
   }
+}
+
+/** Client-side: uses authenticated /api/ai-inspection proxy. */
+export async function generateAIInspection(
+  request: AIInspectionRequest
+): Promise<AIInspectionReport> {
+  return runAIInspectionAnalysis(request, callGeminiVisionAPI);
+}
+
+/** Server-side: calls Gemini directly when listing vehicles (auto-report on publish). */
+export async function generateAIInspectionForServer(
+  request: AIInspectionRequest
+): Promise<AIInspectionReport> {
+  return runAIInspectionAnalysis(request, callGeminiVisionAPIDirect);
 }
 
 /**

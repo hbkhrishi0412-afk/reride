@@ -52,7 +52,11 @@ import { PaymentErrorBoundary } from './ErrorBoundaries';
 import { VehicleOfferBanner } from './VehicleOfferBanner';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
-import { conversationBelongsToSeller } from '../utils/conversationParticipants';
+import {
+  conversationBelongsToSeller,
+  countInquiriesForVehicle,
+  countInquiriesForVehicles,
+} from '../utils/conversationParticipants';
 import { getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
 // Firebase status utilities removed - using Supabase
@@ -1796,7 +1800,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 editingVehicle ? { ...editingVehicle, ...base } : base,
                 {
                     runValidation: true,
-                    runAIInspection: Boolean(base.images && base.images.length >= 4),
+                    runAIInspection: false,
                     checkPhotoQuality: true,
                     calculateListingScore: true,
                 },
@@ -2005,7 +2009,13 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     <FormInput label="Registration Year" name="registrationYear" type="number" value={formData.registrationYear} onChange={handleChange} onBlur={handleBlur} required />
                     <div>
                         <FormInput label="Price" name="price" type="number" value={formData.price} onChange={handleChange} onBlur={handleBlur} error={errors.price} tooltip="Enter the listing price without commas or symbols." prefix="₹" required />
-                        <PricingGuidance vehicleDetails={formData} allVehicles={allVehicles} />
+                        <PricingGuidance
+                          vehicleDetails={formData}
+                          allVehicles={allVehicles}
+                          onApplySuggestedPrice={(price) =>
+                            setFormData((prev) => ({ ...prev, price }))
+                          }
+                        />
                     </div>
                     <FormInput label="Km Driven" name="mileage" type="number" value={formData.mileage} onChange={handleChange} onBlur={handleBlur} error={errors.mileage} suffix="km" />
                     <FormInput label="No. of Owners" name="noOfOwners" type="number" value={formData.noOfOwners} onChange={handleChange} onBlur={handleBlur} />
@@ -3373,6 +3383,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     }).length;
   }, [safeConversations, seller?.email, seller?.id]);
   const activeListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status !== 'sold'), [safeSellerVehicles]);
+  const publishedListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status === 'published'), [safeSellerVehicles]);
   const soldListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status === 'sold'), [safeSellerVehicles]);
   const reportedCount = useMemo(() => safeReportedVehicles.length, [safeReportedVehicles]);
   
@@ -3388,10 +3399,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     setSoldPage(1);
   }, [soldListings]);
   
-  // Filter listings by selected month for analytics
-  const filteredActiveListings = useMemo(() => 
-    filterVehiclesByMonth(activeListings, selectedMonth), 
-    [activeListings, selectedMonth, filterVehiclesByMonth]
+  // Filter listings by selected month for analytics (published only)
+  const filteredPublishedListings = useMemo(() => 
+    filterVehiclesByMonth(publishedListings, selectedMonth), 
+    [publishedListings, selectedMonth, filterVehiclesByMonth]
   );
   const filteredSoldListings = useMemo(() => 
     filterVehiclesByMonth(soldListings, selectedMonth), 
@@ -3415,24 +3426,26 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     // FIXED: Added safety checks to prevent crashes from null/undefined data
     try {
       const safeFilteredSoldListings = Array.isArray(filteredSoldListings) ? filteredSoldListings : [];
-      const safeFilteredActiveListings = Array.isArray(filteredActiveListings) ? filteredActiveListings : [];
+      const safeFilteredPublishedListings = Array.isArray(filteredPublishedListings) ? filteredPublishedListings : [];
       
       const totalSalesValue = safeFilteredSoldListings.reduce((sum: number, v) => {
         if (!v || typeof v.price !== 'number') return sum;
         return sum + v.price;
       }, 0);
       
-      const totalViews = safeFilteredActiveListings.reduce((sum, v) => {
+      const totalViews = safeFilteredPublishedListings.reduce((sum, v) => {
         if (!v || typeof v.views !== 'number') return sum;
         return sum + v.views;
       }, 0);
       
-      const totalInquiries = safeFilteredActiveListings.reduce((sum, v) => {
-        if (!v || typeof v.inquiriesCount !== 'number') return sum;
-        return sum + v.inquiriesCount;
-      }, 0);
+      const totalInquiries = countInquiriesForVehicles(
+        safeFilteredPublishedListings,
+        safeConversations,
+        seller?.email,
+        seller?.id,
+      );
       
-      const chartLabels = safeFilteredActiveListings.map(v => {
+      const chartLabels = safeFilteredPublishedListings.map(v => {
         if (!v) return '';
         const year = v.year || '';
         const model = v.model || '';
@@ -3445,7 +3458,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         datasets: [
           {
             label: 'Views',
-            data: safeFilteredActiveListings.map(v => (v && typeof v.views === 'number') ? v.views : 0),
+            data: safeFilteredPublishedListings.map(v => (v && typeof v.views === 'number') ? v.views : 0),
             backgroundColor: 'rgba(255, 107, 53, 0.5)',
             borderColor: 'rgba(255, 107, 53, 1)',
             borderWidth: 1,
@@ -3453,7 +3466,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           },
           {
             label: 'Inquiries',
-            data: safeFilteredActiveListings.map(v => (v && typeof v.inquiriesCount === 'number') ? v.inquiriesCount : 0),
+            data: safeFilteredPublishedListings.map(v =>
+              countInquiriesForVehicle(v, safeConversations, seller?.email, seller?.id),
+            ),
             backgroundColor: 'rgba(30, 136, 229, 0.5)',
             borderColor: 'rgba(30, 136, 229, 1)',
             borderWidth: 1,
@@ -3480,7 +3495,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         }
       };
     }
-  }, [filteredActiveListings, filteredSoldListings]);
+  }, [filteredPublishedListings, filteredSoldListings, safeConversations, seller?.email, seller?.id]);
 
   const handleNavigate = (view: DashboardView) => {
     if (view !== 'messages') {
@@ -3946,7 +3961,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <StatCard title="Active Listings" value={filteredActiveListings.length} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 17v-2a4 4 0 00-4-4h-1.5m1.5 4H13m-2 0a2 2 0 104 0 2 2 0 00-4 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 11V7a4 4 0 00-4-4H7a4 4 0 00-4 4v4" /></svg>} />
+                    <StatCard title="Active Listings" value={filteredPublishedListings.length} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 17v-2a4 4 0 00-4-4h-1.5m1.5 4H13m-2 0a2 2 0 104 0 2 2 0 00-4 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 11V7a4 4 0 00-4-4H7a4 4 0 00-4 4v4" /></svg>} />
                     <StatCard title="Total Sales Value" value={formatSalesValue(analyticsData.totalSalesValue)} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>} />
                     <StatCard title="Total Views" value={analyticsData.totalViews.toLocaleString('en-IN')} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057 5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>} />
                     <StatCard title="Total Inquiries" value={analyticsData.totalInquiries.toLocaleString('en-IN')} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>} />
@@ -4011,7 +4026,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 
                 <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
                     <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Listing Performance</h2>
-                    {filteredActiveListings.length > 0 ? (
+                    {filteredPublishedListings.length > 0 ? (
                         (() => {
                           try {
                             // Safety check: ensure chartData is valid before rendering

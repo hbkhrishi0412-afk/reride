@@ -41,6 +41,16 @@ function escapeHtmlMountMessage(s: string): string {
 // i18n - must run before any component that uses useTranslation
 import './lib/i18n';
 
+// Preload route chunks for common deep links so Suspense fallback is shorter
+if (typeof window !== 'undefined') {
+  const path = `${window.location.pathname}${window.location.hash}`;
+  if (path.includes('used-cars')) {
+    void import('./components/VehicleList');
+  } else if (path.includes('home') || path === '/' || path === '/#/' || path.endsWith('#/')) {
+    void import('./components/Home');
+  }
+}
+
 // Error monitoring (Sentry) - init in production when DSN is set
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
   import('./utils/monitoring').then(({ initErrorTracking, initWebVitals }) => {

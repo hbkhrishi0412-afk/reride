@@ -8,6 +8,9 @@ import { logInfo, logError } from '../utils/logger.js';
 import { showVerifiedListingBadge } from '../utils/listingTrust.js';
 import { ListingStockBadge } from './ListingStockBadge.js';
 
+import { PriceFairnessBadge } from './PriceInsights.js';
+import type { BuyerVisibleDealLabel } from '../utils/vehiclePricing.js';
+
 interface VehicleCardProps {
   vehicle: Vehicle;
   onSelect: (vehicle: Vehicle) => void;
@@ -17,6 +20,7 @@ interface VehicleCardProps {
   isInWishlist: boolean;
   isCompareDisabled: boolean;
   onViewSellerProfile: (sellerEmail: string) => void;
+  dealLabel?: BuyerVisibleDealLabel | null;
 }
 
 const VehicleCard: React.FC<VehicleCardProps> = ({ 
@@ -27,7 +31,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   onToggleWishlist, 
   isInWishlist, 
   isCompareDisabled, 
-  onViewSellerProfile
+  onViewSellerProfile,
+  dealLabel,
 }) => {
   const { t } = useTranslation();
   // Validate onSelect prop on mount
@@ -404,16 +409,21 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
 
         {/* Price */}
         <div className="mt-auto pt-3 border-t" style={{ borderColor: '#E0E0E0' }}>
-          <p 
-            className="font-extrabold"
-            style={{
-              fontSize: '18px',
-              color: '#FF7F47',
-              fontFamily: "'Poppins', sans-serif"
-            }}
-          >
-            ₹{vehicle.price.toLocaleString('en-IN')}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p 
+              className="font-extrabold"
+              style={{
+                fontSize: '18px',
+                color: '#FF7F47',
+                fontFamily: "'Poppins', sans-serif"
+              }}
+            >
+              ₹{vehicle.price.toLocaleString('en-IN')}
+            </p>
+            {dealLabel && (
+              <PriceFairnessBadge fairnessLabel={dealLabel} buyerFacing />
+            )}
+          </div>
         </div>
       </div>
     </div>

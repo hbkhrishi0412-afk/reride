@@ -11,4 +11,12 @@ export { handleAdmin, seedUsers, seedVehicles } from './admin.js';
 export { handleHealth, handleAI, handleSystem, handleUtils } from './system.js';
 export { handleContent } from './content.js';
 export { handleSellCar } from './sell-car.js';
+export { handleVehiclePricing } from './vehicle-pricing.js';
 export { handleSupportChat } from './support-chat.js';
+export {
+  scheduleAutoAIInspection,
+  scheduleBackfillAIInspectionOnView,
+  runAutoAIInspection,
+  shouldRegenerateAIInspection,
+  shouldBackfillAIInspectionOnView,
+} from './vehicle-ai-inspection.js';

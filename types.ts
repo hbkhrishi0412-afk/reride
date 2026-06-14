@@ -173,7 +173,8 @@ export interface AccidentRecord {
 
 export interface VehicleDocument {
     name: 'Registration Certificate (RC)' | 'Insurance' | 'Pollution Under Control (PUC)' | 'Service Record' | 'Other';
-    url: string; // base64 data URL
+    /** Public or signed Supabase Storage URL — never inline base64. */
+    url: string;
     fileName: string;
 }
 

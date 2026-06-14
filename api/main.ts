@@ -11,6 +11,11 @@ import { VehicleCategory } from '../vehicle-category.js';
 // Supabase services
 import { supabaseUserService } from '../services/supabase-user-service.js';
 import { supabaseVehicleService } from '../services/supabase-vehicle-service.js';
+import {
+  scheduleAutoAIInspection,
+  scheduleBackfillAIInspectionOnView,
+  shouldRegenerateAIInspection,
+} from '../server/handlers/vehicle-ai-inspection.js';
 import { supabaseConversationService } from '../services/supabase-conversation-service.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
@@ -24,6 +29,7 @@ import {
   hasResolvableVehicleIdentity,
   normalizeVehiclesList,
   MUTATION_IDENTITY_REFRESH_MESSAGE,
+  sanitizeVehicleMediaUrls,
 } from '../utils/vehicleIdentity.js';
 import { lookupVehicleSpecsFromCarQuery } from '../lib/carquerySpecs.js';
 // Supabase admin database utilities (replaces Firebase admin functions)
@@ -868,6 +874,9 @@ async function mainHandler(
       return await handleSeed(req, res, handlerOptions);
     } else if (pathname.includes('/vehicle-specs') || pathname.endsWith('/vehicle-specs')) {
       return await handleVehicleSpecs(req, res);
+    } else if (pathname.includes('/vehicle-pricing') || pathname.endsWith('/vehicle-pricing')) {
+      const { handleVehiclePricing } = await import('../server/handlers/vehicle-pricing.js');
+      return await handleVehiclePricing(req, res, handlerOptions);
     } else     if (pathname.includes('/vehicle-data') || pathname.endsWith('/vehicle-data')) {
       try {
         return await handleVehicleData(req, res, handlerOptions);
@@ -4724,6 +4733,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           views: currentViews + 1,
         });
 
+        // Backfill AI report for legacy/seed listings missing one (fire-and-forget, deduped).
+        scheduleBackfillAIInspectionOnView(mutation.vehicle, vehicleService);
+
         return res.status(200).json({ success: true, views: updated.views });
       } catch (error) {
         logWarn('⚠️ track-view failed (non-fatal):', error);
@@ -5284,16 +5296,15 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
     }
     
-    // Normalize images to always be an array
-    const normalizedImages = Array.isArray(req.body.images) 
-      ? req.body.images 
-      : typeof req.body.images === 'string' 
-        ? [req.body.images] 
-        : [];
+    // Normalize images to always be an array; reject inline base64 (must be storage URLs).
+    const normalizedImages = sanitizeVehicleMediaUrls(
+      Array.isArray(req.body.images)
+        ? req.body.images
+        : typeof req.body.images === 'string'
+          ? [req.body.images]
+          : [],
+    );
     
-    // Validate images array size to prevent vehicle object from exceeding Firebase limits
-    // Firebase Realtime Database has 16MB limit per node
-    // Each base64 image can be ~1-1.5MB, so limit to 10 images max
     if (normalizedImages.length > 10) {
       logWarn('⚠️ Vehicle has too many images, limiting to 10', { 
         provided: normalizedImages.length,
@@ -5302,21 +5313,20 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       normalizedImages.splice(10); // Keep only first 10 images
     }
     
-    // Estimate total size of images (base64 strings)
+    // Estimate total payload size for unusually large URL lists
     const totalImageSize = normalizedImages.reduce((total: number, img: string) => {
       return total + (typeof img === 'string' ? img.length : 0);
     }, 0);
     
-    // Warn if images are very large (approaching 16MB limit)
-    const maxRecommendedSize = 10 * 1024 * 1024; // 10MB (leaving room for other vehicle data)
+    const maxRecommendedSize = 10 * 1024 * 1024;
     if (totalImageSize > maxRecommendedSize) {
-      logWarn('⚠️ Vehicle images are very large, may approach Firebase size limits', {
+      logWarn('⚠️ Vehicle image URL payload is very large', {
         totalSize: `${(totalImageSize / 1024 / 1024).toFixed(2)} MB`,
         imageCount: normalizedImages.length,
-        sellerEmail: req.body.sellerEmail
+        sellerEmail: req.body.sellerEmail,
       });
     }
-    
+
     // SECURITY: Field allowlist — `...req.body` previously let attackers inject
     // `isFeatured: true`, `views: 999999`, `certificationStatus: 'certified'`,
     // `trustScore: 100`, etc. Only allow fields the client is legitimately expected to set.
@@ -5362,6 +5372,16 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         if (key in body) adminExtras[key] = body[key];
       }
     }
+
+    if (Array.isArray(sanitizedBody.documents)) {
+      sanitizedBody.documents = (sanitizedBody.documents as Array<{ url?: string }>)
+        .map((doc) => ({
+          ...doc,
+          url: typeof doc.url === 'string' && !doc.url.startsWith('data:') ? doc.url : '',
+        }))
+        .filter((doc) => Boolean(doc.url));
+    }
+
     const vehicleData: Record<string, unknown> = {
       ...sanitizedBody,
       ...adminExtras,
@@ -5400,6 +5420,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       } else {
         console.log('✅ Vehicle creation verified in database', { id: verifyVehicle.id });
       }
+
+      // Auto-generate AI photo inspection report in the background (every new listing with photos)
+      scheduleAutoAIInspection(verifyVehicle, vehicleService);
       
       return res.status(201).json(verifyVehicle);
     } catch (error) {
@@ -5515,6 +5538,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       const updatedVehicle = await vehicleService.update(rowPk, sanitizedUpdate);
       console.log('✅ Vehicle updated and saved successfully:', rowPk);
+
+      if (shouldRegenerateAIInspection(existingVehicle, sanitizedUpdate)) {
+        scheduleAutoAIInspection(updatedVehicle, vehicleService, { forceRegenerate: true });
+      }
 
       return res.status(200).json(updatedVehicle);
     } catch (error) {
@@ -8643,6 +8670,25 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(200).json({ success: true, data: updated });
       } else {
         const conversation = await conversationService.create(conversationData);
+
+        if (conversationData.vehicleId != null) {
+          try {
+            const mutation = await resolveVehicleForMutation({
+              vehicleId: conversationData.vehicleId,
+              databaseId: conversationData.vehicleDatabaseId,
+            });
+            if (mutation.ok) {
+              const currentInquiries =
+                typeof mutation.vehicle.inquiriesCount === 'number' ? mutation.vehicle.inquiriesCount : 0;
+              await vehicleService.update(mutation.primaryKey, {
+                inquiriesCount: currentInquiries + 1,
+              });
+            }
+          } catch (inquiryError) {
+            logWarn('⚠️ Failed to increment inquiry count (non-fatal):', inquiryError);
+          }
+        }
+
         return res.status(200).json({ success: true, data: conversation });
       }
     }

@@ -20,6 +20,8 @@ import VirtualizedTileResults from './VehicleList/VirtualizedTileResults.js';
 import { saveSearch as saveBuyerSearch } from '../services/buyerService.js';
 import { getVehicleData } from '../services/vehicleDataService.js';
 import { logInfo, logError } from '../utils/logger.js';
+import { analyzeVehiclePricing, findSimilarVehicles } from '../utils/vehiclePricing.js';
+import type { BuyerVisibleDealLabel } from '../utils/vehiclePricing.js';
 import type { VehicleData } from '../types.js';
 import type { VehicleMake, VehicleModel } from '../vehicleDataTypes.js';
 // Lazy load location data when needed
@@ -1703,6 +1705,19 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     const endIndex = currentPage * BASE_ITEMS_PER_PAGE;
     return processedVehicles.slice(startIndex, endIndex);
   }, [processedVehicles, currentPage]);
+
+  const dealLabelByVehicleId = useMemo(() => {
+    const map = new Map<number, BuyerVisibleDealLabel>();
+    const pool = (vehicles || []).filter((v) => v.status === 'published' || !v.status);
+    for (const v of processedVehicles) {
+      const similar = findSimilarVehicles(v, pool);
+      const analysis = analyzeVehiclePricing(v, similar);
+      if (analysis.buyerVisibleLabel) {
+        map.set(v.id, analysis.buyerVisibleLabel);
+      }
+    }
+    return map;
+  }, [vehicles, processedVehicles]);
   
   const totalPages = Math.ceil(processedVehicles.length / BASE_ITEMS_PER_PAGE);
   const hasMore = currentPage < totalPages;
@@ -2114,7 +2129,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           ) : paginatedVehicles.length > 0 ? (
             <>
               {paginatedVehicles.map(vehicle => (
-                <VehicleCard key={vehicle.id} vehicle={vehicle} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(vehicle.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(vehicle.id)} isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} />
+                <VehicleCard key={vehicle.id} vehicle={vehicle} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(vehicle.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(vehicle.id)} isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} dealLabel={dealLabelByVehicleId.get(vehicle.id)} />
               ))}
               {hasMore && (
                 <div ref={loadMoreRef} className="col-span-full flex justify-center py-6">
@@ -2896,6 +2911,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                         isInWishlist={wishlist.includes(vehicle.id)}
                         isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
                         onViewSellerProfile={onViewSellerProfile}
+                        dealLabel={dealLabelByVehicleId.get(vehicle.id)}
                       />
                     ) : (
                       <VehicleTile

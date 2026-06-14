@@ -6,7 +6,7 @@
 
 import type { Vehicle } from '../types.js';
 
-export const VEHICLE_LIST_CACHE_VERSION = 3;
+export const VEHICLE_LIST_CACHE_VERSION = 4;
 export const VEHICLE_LIST_CACHE_VERSION_KEY = 'reRideVehicleListSchemaVersion';
 
 export const MUTATION_IDENTITY_REFRESH_MESSAGE =
@@ -163,4 +163,74 @@ export function assertVehicleMutationPayload(
   if (!databaseId) {
     throw new VehicleMutationIdentityError();
   }
+}
+
+/** Canonical URL segment — prefer Supabase TEXT primary key over hashed numeric id. */
+export function getVehicleRouteId(vehicle: Pick<Vehicle, 'id' | 'databaseId'>): string {
+  const pk = getCanonicalPrimaryKey(vehicle);
+  if (pk) return encodeURIComponent(pk);
+  return encodeURIComponent(String(vehicle.id));
+}
+
+export interface ResolvedRouteVehicleId {
+  routeSegment: string;
+  databaseId?: string;
+  numericId?: number;
+}
+
+export function resolveVehicleIdFromRouteSegment(segment: string): ResolvedRouteVehicleId {
+  const decoded = decodeURIComponent((segment || '').trim());
+  if (!decoded) return { routeSegment: '' };
+  if (isUuidPrimaryKey(decoded)) {
+    return { routeSegment: decoded, databaseId: decoded };
+  }
+  if (/^\d+$/.test(decoded)) {
+    const n = parseInt(decoded, 10);
+    if (Number.isFinite(n)) {
+      return { routeSegment: decoded, numericId: n, databaseId: decoded };
+    }
+  }
+  return { routeSegment: decoded, databaseId: decoded };
+}
+
+export function vehicleIdsEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  const na = Number(a);
+  const nb = Number(b);
+  return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
+}
+
+export function vehicleMatchesRouteSegment(
+  vehicle: Pick<Vehicle, 'id' | 'databaseId'>,
+  segment: string,
+): boolean {
+  const resolved = resolveVehicleIdFromRouteSegment(segment);
+  const pk = getCanonicalPrimaryKey(vehicle);
+  if (resolved.databaseId && pk && pk === resolved.databaseId) return true;
+  if (resolved.numericId != null && vehicleIdsEqual(vehicle.id, resolved.numericId)) return true;
+  return false;
+}
+
+export function findVehicleByRouteSegment<T extends Pick<Vehicle, 'id' | 'databaseId'>>(
+  vehicles: T[],
+  segment: string,
+): T | undefined {
+  const resolved = resolveVehicleIdFromRouteSegment(segment);
+  if (resolved.databaseId) {
+    const byPk = vehicles.find((v) => getCanonicalPrimaryKey(v) === resolved.databaseId);
+    if (byPk) return byPk;
+  }
+  if (resolved.numericId != null) {
+    return vehicles.find((v) => vehicleIdsEqual(v.id, resolved.numericId));
+  }
+  return undefined;
+}
+
+/** Reject inline base64 blobs in listing image/document arrays — must be storage URLs. */
+export function sanitizeVehicleMediaUrls(urls: unknown): string[] {
+  if (!Array.isArray(urls)) return [];
+  return urls
+    .filter((u): u is string => typeof u === 'string' && u.trim() !== '')
+    .map((u) => u.trim())
+    .filter((u) => !u.startsWith('data:'));
 }

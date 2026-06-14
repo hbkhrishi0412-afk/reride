@@ -23,12 +23,20 @@ ReRide — Vercel "Needs Attention" quick fix
 4) Google Sign-In is configured in Supabase Auth → Providers → Google and Google Cloud
    OAuth, not as GOOGLE_CLIENT_ID in Vercel (unless you add custom tooling).
 
-5) Optional cleanup — remove if unused, to clear dashboard noise:
+5) Optional — enable live pricing sources:
+   - SUREPASS_API_TOKEN           (Surepass IDV / vehicle price APIs — recommended)
+   - SUREPASS_API_BASE_URL       (default https://kyc-api.surepass.io)
+   - SUREPASS_IDV_PATH           (from Surepass dashboard docs)
+   - SUREPASS_VEHICLE_PRICE_PATH (from Surepass dashboard docs)
+   - SUREPASS_RC_TO_IDV_PATH     (optional, when RC number is available)
+   - GEMINI_API_KEY              (live web market search fallback)
+   - IBB_API_BASE_URL / IBB_API_KEY (Indian Blue Book enterprise API)
+
+6) Optional cleanup — remove if unused, to clear dashboard noise:
    - MONGODB_URL / MONGODB_URI   (this app’s Vercel API uses Supabase, not Mongo)
-   - GEMINI_API_KEY              (only if you do not use Gemini on the server)
    - OBSERVE_AUTONOMA_*          (not referenced in this repository)
 
-6) After rotating or fixing secrets, trigger a new Production deployment.
+7) After rotating or fixing secrets, trigger a new Production deployment.
 
 Details: see .env.example (section "Vercel → Project → Settings…").
 `.trim();

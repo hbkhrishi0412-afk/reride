@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef } from 'react';
  */
 export function useRevealOnScroll<T extends HTMLElement>(delayMs: number = 0) {
   const observerRef = useRef<IntersectionObserver | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timeoutRef = useRef<number | null>(null);
 
   const disconnect = useCallback(() => {
     observerRef.current?.disconnect();

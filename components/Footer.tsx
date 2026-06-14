@@ -26,21 +26,34 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* Brand Section */}
           <div className="md:col-span-2">
-            <p className="text-gray-300 text-lg mb-4 max-w-md">
+            {/* WHY: footer had no brand anchor; lockup ties the section to the identity. */}
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-reride-orange to-orange-400 shadow-orange">
+                <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M3 13l1.5-4.5A2 2 0 016.4 7h11.2a2 2 0 011.9 1.5L21 13m-18 0h18m-18 0v4a1 1 0 001 1h1a1 1 0 001-1v-1h10v1a1 1 0 001 1h1a1 1 0 001-1v-4M6.5 16h.01M17.5 16h.01" />
+                </svg>
+              </span>
+              <span className="text-2xl font-extrabold tracking-tight text-white">ReRide</span>
+            </div>
+            <p className="text-gray-300/90 text-base md:text-lg mb-6 max-w-md leading-relaxed">
               {t('footer.tagline')}
             </p>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2">
-                <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="group flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.07] px-4 py-2 backdrop-blur-sm transition-all duration-300 hover:border-green-400/40 hover:bg-white/10">
+                <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
                 </svg>
-                <span className="text-white font-semibold">{t('footer.verifiedPlatform')}</span>
+                <span className="text-sm font-semibold text-white">{t('footer.verifiedPlatform')}</span>
               </div>
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2">
-                <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+              <div className="group flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.07] px-4 py-2 backdrop-blur-sm transition-all duration-300 hover:border-blue-400/40 hover:bg-white/10">
+                <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                   <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
                 </svg>
-                <span className="text-white font-semibold">{t('footer.securePayments')}</span>
+                <span className="text-sm font-semibold text-white">{t('footer.securePayments')}</span>
+              </div>
+              <div className="group flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.07] px-4 py-2 backdrop-blur-sm transition-all duration-300 hover:border-orange-400/40 hover:bg-white/10">
+                <span className="text-base leading-none" aria-hidden="true">🇮🇳</span>
+                <span className="text-sm font-semibold text-white">{t('footer.madeInIndiaBadge', { defaultValue: 'Made in India' })}</span>
               </div>
             </div>
           </div>

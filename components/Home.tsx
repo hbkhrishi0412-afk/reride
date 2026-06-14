@@ -23,6 +23,7 @@ import {
 import { getPopularMakes } from '../utils/popularListings';
 import { PopularCitiesChips } from './PopularCitiesChips.js';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
+import FloatingWhatsApp from './FloatingWhatsApp';
 
 interface HomeProps {
     onSearch: (query: string) => void;
@@ -1723,6 +1724,9 @@ const Home: React.FC<HomeProps> = ({
                 </div>
             </div>
 
+            {/* WHY: WhatsApp is the #1 support/conversion channel for Indian buyers;
+                self-gating component renders only when a business number is configured. */}
+            <FloatingWhatsApp />
         </div>
     );
 };

@@ -56,6 +56,7 @@ function processImageUrls(images: string[] | null | undefined, vehicleId?: numbe
   };
 
   const toPublicUrl = (image: string): string => {
+    if (image && image.startsWith('data:')) return '';
     if (image && (image.startsWith('http://') || image.startsWith('https://'))) return image;
     if (!image || typeof image !== 'string' || image.trim() === '') return '';
     const filePath = resolvePath(image);

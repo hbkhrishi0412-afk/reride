@@ -45,3 +45,43 @@ export function normalizeInboxRole(role: string | undefined | null): 'seller' | 
   if (r === 'customer') return 'customer';
   return null;
 }
+
+export function conversationMatchesVehicle(
+  conv: Conversation | null | undefined,
+  vehicle: { id?: number | string } | null | undefined,
+): boolean {
+  if (!conv?.vehicleId || vehicle?.id == null) return false;
+  return String(conv.vehicleId) === String(vehicle.id);
+}
+
+export function countInquiriesForVehicles(
+  vehicles: Array<{ id?: number | string }>,
+  conversations: Conversation[],
+  sellerEmail: string | null | undefined,
+  sellerUserId?: string | null,
+): number {
+  if (!sellerEmail || vehicles.length === 0) return 0;
+  const vehicleIds = new Set(vehicles.map((v) => String(v.id)));
+  return conversations.filter(
+    (c) =>
+      c &&
+      conversationBelongsToSeller(c, sellerEmail, sellerUserId) &&
+      c.vehicleId != null &&
+      vehicleIds.has(String(c.vehicleId)),
+  ).length;
+}
+
+export function countInquiriesForVehicle(
+  vehicle: { id?: number | string },
+  conversations: Conversation[],
+  sellerEmail: string | null | undefined,
+  sellerUserId?: string | null,
+): number {
+  if (!sellerEmail) return 0;
+  return conversations.filter(
+    (c) =>
+      c &&
+      conversationBelongsToSeller(c, sellerEmail, sellerUserId) &&
+      conversationMatchesVehicle(c, vehicle),
+  ).length;
+}

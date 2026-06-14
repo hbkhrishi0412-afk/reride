@@ -1,0 +1,91 @@
+const Home = React.lazy(() => import('../Home'));
+const VehicleList = React.lazy(() => import('../VehicleList'));
+const VehicleDetail = React.lazy(() => import('../VehicleDetail'));
+// Enhanced lazy loading with error handling for production
+const Dashboard = React.lazy(() => {
+  return import('../Dashboard').then(module => {
+    return module;
+  }).catch((error) => {
+    // Log the error for debugging in production
+    const isProduction = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
+    if (isProduction) {
+      logError('[Production] Failed to load Dashboard component:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString(),
+        url: window.location.href
+      });
+    } else {
+      logError('Failed to load Dashboard component:', error);
+    }
+    // Return a fallback component module instead of throwing
+    return {
+      default: () => (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Failed to Load Dashboard</h2>
+            <p className="text-gray-600 mb-6">There was an error loading the dashboard. Please refresh the page.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+            >
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      )
+    };
+  });
+});
+const AdminPanel = React.lazy(() => import('../AdminPanel'));
+const Comparison = React.lazy(() => import('../Comparison'));
+const Profile = React.lazy(() => import('../Profile'));
+const CustomerInbox = React.lazy(() => import('../CustomerInbox'));
+const SellerProfilePage = React.lazy(() => import('../SellerProfilePage'));
+const DealerProfiles = React.lazy(() => import('../DealerProfiles'));
+const CarServices = React.lazy(() => import('../CarServices'));
+const ServiceDetail = React.lazy(() => import('../ServiceDetail'));
+const CarServiceLogin = React.lazy(() => import('../CarServiceLogin'));
+const CarServiceDashboard = React.lazy(() => import('../CarServiceDashboard'));
+const MobileCarServiceDashboard = React.lazy(() => import('../MobileCarServiceDashboard'));
+const PricingPage = React.lazy(() => import('../PricingPage'));
+const SupportPage = React.lazy(() => import('../SupportPage'));
+const AboutUsPage = React.lazy(() => import('../AboutUsPage'));
+const FAQPage = React.lazy(() => import('../FAQPage'));
+const BuyerDashboard = React.lazy(() => import('../BuyerDashboard'));
+const CityLandingPage = React.lazy(() => import('../CityLandingPage'));
+const UnifiedLogin = React.lazy(() => import('../UnifiedLogin'));
+const ForgotPassword = React.lazy(() => import('../ForgotPassword'));
+const SellCarPage = React.lazy(() => import('../SellCarPage'));
+const SellCarAdmin = React.lazy(() => import('../SellCarAdmin'));
+const AdminLogin = React.lazy(() => import('../../AdminLogin'));
+// Lazy-loaded Mobile view components (only loaded when needed - reduces initial bundle size)
+const MobileDashboard = React.lazy(() => import('../MobileDashboard'));
+const MobileVehicleDetail = React.lazy(() => import('../MobileVehicleDetail'));
+const MobileInbox = React.lazy(() => import('../MobileInbox'));
+const NotificationsPage = React.lazy(() => import('../NotificationsPage'));
+const MobileNotifications = React.lazy(() =>
+  import('../MobileNotifications').then((m) => ({ default: m.MobileNotifications }))
+);
+const MobileProfile = React.lazy(() => import('../MobileProfile'));
+const MobileWishlist = React.lazy(() => import('../MobileWishlist'));
+const MobileComparison = React.lazy(() => import('../MobileComparison'));
+const MobileSellerProfilePage = React.lazy(() => import('../MobileSellerProfilePage'));
+const MobileSellCarPage = React.lazy(() => import('../MobileSellCarPage'));
+const MobilePricingPage = React.lazy(() => import('../MobilePricingPage'));
+const MobileSupportPage = React.lazy(() => import('../MobileSupportPage'));
+const MobileFAQPage = React.lazy(() => import('../MobileFAQPage'));
+const PrivacyPolicyPage = React.lazy(() => import('../PrivacyPolicyPage'));
+const MobilePrivacyPolicyPage = React.lazy(() => import('../MobilePrivacyPolicyPage'));
+const SafetyCenterPage = React.lazy(() => import('../SafetyCenterPage'));
+const TermsOfServicePage = React.lazy(() => import('../TermsOfServicePage'));
+const MobileTermsOfServicePage = React.lazy(() => import('../MobileTermsOfServicePage'));
+const MobileBuyerDashboard = React.lazy(() => import('../MobileBuyerDashboard'));
+const MobileDealerProfilesPage = React.lazy(() => import('../MobileDealerProfilesPage'));
+const MobileHomePage = React.lazy(() => import('../MobileHomePage'));
+const ServiceCart = React.lazy(() => import('../ServiceCart'));
+
+// Lazy-loaded non-critical components (loaded on demand)
+const CommandPalette = React.lazy(() => import('../CommandPalette'));
+const KeyboardShortcutsHelp = React.lazy(() => import('../KeyboardShortcutsHelp'));
+const ChatWidget = React.lazy(() => import('../ChatWidget').then(module => ({ default: module.ChatWidget })));

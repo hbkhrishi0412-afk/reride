@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import type { Vehicle, User } from '../types';
+import { countInquiriesForVehicles } from '../utils/conversationParticipants';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
 
@@ -26,9 +27,15 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = memo(({ seller, sell
   const safeSellerVehicles = sellerVehicles || [];
   const safeConversations = conversations || [];
   
-  const activeListings = safeSellerVehicles.filter(v => v && v.status === 'published').length;
-  const totalViews = safeSellerVehicles.reduce((sum, v) => sum + (v?.views || 0), 0);
-  const totalInquiries = safeSellerVehicles.reduce((sum, v) => sum + (v?.inquiriesCount || 0), 0);
+  const publishedListings = safeSellerVehicles.filter(v => v && v.status === 'published');
+  const activeListings = publishedListings.length;
+  const totalViews = publishedListings.reduce((sum, v) => sum + (v?.views || 0), 0);
+  const totalInquiries = countInquiriesForVehicles(
+    publishedListings,
+    safeConversations,
+    seller?.email,
+    seller?.id,
+  );
   const unreadMessages = safeConversations.filter(c => c && !c.isReadBySeller).length;
 
   // Chart data
