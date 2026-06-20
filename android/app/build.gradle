@@ -1,10 +1,45 @@
 apply plugin: 'com.android.application'
 
-// Release signing: android/keystore.properties (gitignored). Falls back to -PKEYSTORE_FILE Gradle props.
+// Release signing: android/keystore.properties (gitignored). Falls back to -PKEYSTORE_* Gradle props.
 def keystorePropertiesFile = rootProject.file('keystore.properties')
 def keystoreProperties = new Properties()
 if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    keystorePropertiesFile.withInputStream { stream ->
+        keystoreProperties.load(new InputStreamReader(stream, 'UTF-8'))
+    }
+}
+
+def trimSigningProp = { Properties props, String key ->
+    def value = props.getProperty(key)
+    return value != null ? value.trim() : null
+}
+
+def gradleSigningProp = { String key ->
+    def value = project.findProperty(key)
+    return value != null ? value.toString().trim() : null
+}
+
+def resolveSigningValue = { String propertiesKey, String gradleKey ->
+    if (keystorePropertiesFile.exists()) {
+        return trimSigningProp(keystoreProperties, propertiesKey)
+    }
+    return gradleSigningProp(gradleKey)
+}
+
+def inferKeystoreType = { File storeFile, String explicitType ->
+    if (explicitType) {
+        return explicitType
+    }
+    def name = storeFile.name.toLowerCase(Locale.US)
+    if (name.endsWith('.p12') || name.endsWith('.pfx')) {
+        return 'PKCS12'
+    }
+    if (name.endsWith('.jks')) {
+        return 'JKS'
+    }
+    // Extensionless keys from `keytool -genkeypair` on Java 9+ are PKCS12, not JKS.
+    // Wrong storeType → javax.crypto.BadPaddingException during signing.
+    return 'PKCS12'
 }
 
 android {
@@ -29,17 +64,27 @@ android {
     }
     signingConfigs {
         release {
-            if (keystorePropertiesFile.exists()) {
-                // storeFile path is relative to the android/ folder, e.g. app/reride-newrelease
-                storeFile rootProject.file(keystoreProperties['storeFile'])
-                storePassword keystoreProperties['storePassword']
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
-            } else if (project.hasProperty('KEYSTORE_FILE')) {
-                storeFile file(project.findProperty('KEYSTORE_FILE'))
-                storePassword project.findProperty('KEYSTORE_PASSWORD')
-                keyAlias project.findProperty('KEY_ALIAS')
-                keyPassword project.findProperty('KEY_PASSWORD')
+            def storeFilePath = resolveSigningValue('storeFile', 'KEYSTORE_FILE')
+            def storePasswordValue = resolveSigningValue('storePassword', 'KEYSTORE_PASSWORD')
+            def keyAliasValue = resolveSigningValue('keyAlias', 'KEY_ALIAS')
+            def keyPasswordValue = resolveSigningValue('keyPassword', 'KEY_PASSWORD')
+            def storeTypeValue = resolveSigningValue('storeType', 'KEYSTORE_TYPE')
+
+            if (storeFilePath) {
+                def store = keystorePropertiesFile.exists()
+                    ? rootProject.file(storeFilePath)
+                    : file(storeFilePath)
+                if (!store.exists()) {
+                    throw new GradleException(
+                        "Release keystore not found at ${store.absolutePath}. " +
+                        "Update android/keystore.properties storeFile (see keystore.properties.example)."
+                    )
+                }
+                storeFile store
+                storePassword storePasswordValue
+                keyAlias keyAliasValue
+                keyPassword keyPasswordValue ?: storePasswordValue
+                storeType inferKeystoreType(store, storeTypeValue)
             }
         }
     }

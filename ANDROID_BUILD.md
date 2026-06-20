@@ -86,3 +86,35 @@ To enable push notifications on Android:
 - **White screen:** Re-run `npm run android` so the latest web build is synced; then run again from Android Studio.
 - **Gradle / build errors:** Ensure Android SDK is installed (including for compileSdk 36) and JDK 17 is selected.
 - **App not installing:** Use a device or emulator with API 24 or higher.
+
+---
+
+## 5. Release signing (Play Store AAB)
+
+Release builds use **`android/keystore.properties`** (gitignored). Copy from the example:
+
+```bash
+copy android\keystore.properties.example android\keystore.properties
+```
+
+Edit `storeFile`, `storeType`, `keyAlias`, and passwords. The active upload key is **`app/reride-newrelease`** (PKCS12, alias `reride-newrelease`).  
+Do **not** pick `app/reride-release-key.jks` in Android Studio unless that is your real upload key — wrong file/password causes:
+
+`BadPaddingException: Given final block not properly padded`
+
+**Build a signed AAB from the project root (recommended — avoids Android Studio “safe contents” password errors):**
+
+```bash
+npm run android:aab
+```
+
+Output: `android/app/build/outputs/bundle/release/app-release.aab`
+
+**Verify signing config:**
+
+```bash
+cd android
+gradlew.bat :app:signingReport
+```
+
+**If Android Studio shows “failed to decrypt safe contents entry”:** that is the IDE’s saved password vault, not Gradle. Either re-enter keystore passwords in **Build → Generate Signed Bundle** (do not reuse saved passwords), or build with `npm run android:aab` instead.
