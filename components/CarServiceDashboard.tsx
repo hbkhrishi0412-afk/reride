@@ -1,5 +1,4 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { getValidAccessToken } from '../services/supabase-auth-service';
 import { getSupabaseClient } from '../lib/supabase';
 import {
   CAR_SERVICE_OPTIONS,
