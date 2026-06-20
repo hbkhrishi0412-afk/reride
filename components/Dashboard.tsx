@@ -23,6 +23,18 @@ import { ChatWidget } from './ChatWidget';
 // Removed blocking import - will lazy load location data when needed
 import { planService } from '../services/planService';
 import BulkUploadModal from './BulkUploadModal';
+import SellerDisclosureForm from './SellerDisclosureForm';
+import MarkSoldDealModal from './MarkSoldDealModal';
+import { validateSellerDisclosure } from '../lib/vehicleDisclosureChecklist';
+import {
+  clearChecklistPhotoByUrl,
+  countAiReadyPhotos,
+  extractChecklistGalleryUrls,
+  getExtraGalleryImages,
+  mergeListingImages,
+  syncDocumentsFromChecklist,
+} from '../lib/universalChecklist/mediaSync';
+import { verifyVahanRegistration } from '../services/vehicleTrustService';
 
 export type DashboardNotifyFn = (
   message: string,
@@ -1158,7 +1170,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     const [indianStates, setIndianStates] = useState<Array<{name: string, code: string}>>([]);
     const [citiesByState, setCitiesByState] = useState<Record<string, string[]>>({});
     
-    const [documentType, setDocumentType] = useState<VehicleDocument['name']>('Registration Certificate (RC)');
+    const [documentType, setDocumentType] = useState<VehicleDocument['name']>('Service Record');
     const [featureInput, setFeatureInput] = useState('');
     const [fixInput, setFixInput] = useState('');
     const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
@@ -1176,14 +1188,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     }, []);
     const [isUploading, setIsUploading] = useState(false);
     const [isFeaturing, setIsFeaturing] = useState(false);
-    
-    // Photo checklist state - tracks which specific views have been uploaded
-    type PhotoViewId = 'front' | 'rear' | 'left' | 'right' | 'interior' | 'tyres';
-    const [photoViewUploads, setPhotoViewUploads] = useState<Record<PhotoViewId, string | null>>({
-        front: null, rear: null, left: null, right: null, interior: null, tyres: null
-    });
-    const [activePhotoView, setActivePhotoView] = useState<PhotoViewId | null>(null);
-    const checklistFileInputRef = React.useRef<HTMLInputElement>(null);
     
     const [aiSuggestions, setAiSuggestions] = useState<{
         structuredSpecs: Partial<Pick<Vehicle, 'engine' | 'transmission' | 'fuelType' | 'fuelEfficiency' | 'displacement' | 'groundClearance' | 'bootSpace'>>;
@@ -1658,79 +1662,36 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     };
   
     const handleRemoveImageUrl = (urlToRemove: string) => {
-      setFormData(prev => ({...prev, images: prev.images.filter(url => url !== urlToRemove)}));
-      // Also remove from photo view uploads if it matches
-      setPhotoViewUploads(prev => {
-        const updated = { ...prev };
-        (Object.keys(updated) as PhotoViewId[]).forEach(key => {
-          if (updated[key] === urlToRemove) {
-            updated[key] = null;
-          }
-        });
-        return updated;
+      setFormData((prev) => {
+        const clearedChecklist = clearChecklistPhotoByUrl(prev.sellerDisclosureChecklist, urlToRemove);
+        const checklistUrls = extractChecklistGalleryUrls(clearedChecklist);
+        const extras = getExtraGalleryImages(
+          clearedChecklist,
+          (prev.images || []).filter((url) => url !== urlToRemove),
+        );
+        return {
+          ...prev,
+          sellerDisclosureChecklist: clearedChecklist,
+          images: mergeListingImages(checklistUrls, extras),
+          documents: syncDocumentsFromChecklist(clearedChecklist, prev.documents || []),
+        };
       });
     };
-    
-    // Handle checklist photo view click - triggers upload for specific view
-    const handlePhotoViewClick = (viewId: PhotoViewId) => {
-      setActivePhotoView(viewId);
-      checklistFileInputRef.current?.click();
-    };
-    
-    // Handle checklist file upload
-    const handleChecklistFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const input = e.target;
-      if (!input.files || input.files.length === 0 || !activePhotoView) {
-        setActivePhotoView(null);
-        return;
-      }
 
-      setIsUploading(true);
-      const file = input.files[0]; // Only take the first file for checklist upload
-      
-      try {
-        const { uploadImages, validateImageFile } = await import('../services/imageUploadService');
-        
-        const validation = validateImageFile(file);
-        if (!validation.valid) {
-          notify(validation.error || 'Invalid image file');
-          setIsUploading(false);
-          input.value = '';
-          setActivePhotoView(null);
-          return;
-        }
-        
-        const uploadResults = await uploadImages([file], 'vehicles', seller?.email);
-        
-        if (uploadResults[0]?.success && uploadResults[0]?.url) {
-          const uploadedUrl = uploadResults[0].url;
-          
-          // Update photo view uploads
-          setPhotoViewUploads(prev => ({
-            ...prev,
-            [activePhotoView]: uploadedUrl
-          }));
-          
-          // Also add to main images array
-          const currentImages = formData.images || [];
-          const maxImages = 10;
-          if (currentImages.length < maxImages) {
-            setFormData(prev => ({ ...prev, images: [...prev.images, uploadedUrl] }));
-          }
-          
-          console.log(`✅ Uploaded ${activePhotoView} view photo`);
-        } else {
-          notify('Failed to upload image. Please try again.');
-        }
-      } catch (error) {
-        console.error("Error uploading checklist photo:", error);
-        notify('Failed to upload image. Please try again.');
-      } finally {
-        setIsUploading(false);
-        input.value = '';
-        setActivePhotoView(null);
-      }
+    const handleChecklistChange = (checklist: NonNullable<typeof formData.sellerDisclosureChecklist>) => {
+      setFormData((prev) => {
+        const checklistUrls = extractChecklistGalleryUrls(checklist);
+        const extras = getExtraGalleryImages(prev.sellerDisclosureChecklist, prev.images || []);
+        return {
+          ...prev,
+          sellerDisclosureChecklist: checklist,
+          images: mergeListingImages(checklistUrls, extras),
+          documents: syncDocumentsFromChecklist(checklist, prev.documents || []),
+        };
+      });
     };
+
+    const aiReadyPhotoCount = countAiReadyPhotos(formData.sellerDisclosureChecklist);
 
     const handleRemoveDocument = (urlToRemove: string) => {
         setFormData(prev => ({ ...prev, documents: (prev.documents || []).filter(doc => doc.url !== urlToRemove) }));
@@ -1779,6 +1740,15 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         if (isNaN(mileageValue) || mileageValue < 0) {
             notify('Please enter a valid mileage (km driven)');
             console.error('❌ Invalid mileage:', formData.mileage, '→', mileageValue);
+            return;
+        }
+
+        const disclosureCheck = validateSellerDisclosure(
+          formData.sellerDisclosureChecklist,
+          formData.category || VehicleCategory.FOUR_WHEELER,
+        );
+        if (!disclosureCheck.valid) {
+            notify(disclosureCheck.errors[0] || 'Complete the disclosure checklist');
             return;
         }
         
@@ -2120,18 +2090,58 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     </div>
                 </div>
             </FormFieldset>
+
+            <FormFieldset
+              title="Condition disclosure checklist"
+              step={3}
+              description="Required — structured condition with photo evidence per item"
+              defaultOpen={true}
+            >
+              <SellerDisclosureForm
+                category={formData.category || VehicleCategory.FOUR_WHEELER}
+                value={formData.sellerDisclosureChecklist}
+                sellerEmail={seller.email}
+                registrationNumber={formData.registrationNumber}
+                vahanVerified={Boolean(formData.vahanVerifiedAt || formData.vahanSnapshot)}
+                onChange={handleChecklistChange}
+                onVerifyVahan={async (registrationNumber) => {
+                  try {
+                    const result = await verifyVahanRegistration(
+                      registrationNumber,
+                      editingVehicle?.id ?? editingVehicle?.databaseId,
+                    );
+                    setFormData((prev) => ({
+                      ...prev,
+                      registrationNumber,
+                      vahanVerifiedAt: result.snapshot?.verifiedAt || new Date().toISOString(),
+                      vahanSnapshot: result.snapshot ?? prev.vahanSnapshot,
+                      engineNumber: result.snapshot?.engineNumber || prev.engineNumber,
+                      chassisNumber: result.snapshot?.chassisNumber || prev.chassisNumber,
+                      noOfOwners: result.snapshot?.ownerCount ?? prev.noOfOwners,
+                      insuranceValidity: result.snapshot?.insuranceUpto || prev.insuranceValidity,
+                    }));
+                    notify(
+                      result.verified ? 'RC verified with government records' : result.message || 'Saved RC — auto-verify unavailable',
+                      result.verified ? 'success' : 'warning',
+                    );
+                  } catch (e) {
+                    notify(e instanceof Error ? e.message : 'Verification failed', 'error');
+                  }
+                }}
+              />
+            </FormFieldset>
             
-            <FormFieldset title="Media, Documents & Description" step={4} description="Photos sell cars — add at least 6 quality images for AI inspection">
+            <FormFieldset title="Description, Features & Extra Photos" step={4} description="Optional marketing shots — mandatory photos are uploaded in the checklist above">
                 <div className="space-y-6">
                     {/* IMAGES */}
                     <div>
                         <div className="flex items-center justify-between mb-2">
                             <label className="block text-sm font-medium text-reride-text-dark">
-                                Images
-                                <span className="text-xs text-gray-500 ml-2 font-normal">(JPG or PNG, up to 10MB each)</span>
+                                Listing gallery
+                                <span className="text-xs text-gray-500 ml-2 font-normal">(synced from checklist + optional extras)</span>
                             </label>
                             <div className="flex items-center gap-2">
-                                {(formData.images?.length || 0) >= 4 && (
+                                {aiReadyPhotoCount >= 4 && (
                                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
                                         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                                             <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -2140,125 +2150,18 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                                     </span>
                                 )}
                                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                    (formData.images?.length || 0) >= 6
+                                    aiReadyPhotoCount >= 6
                                         ? 'bg-green-100 text-green-700'
                                         : 'bg-amber-100 text-amber-700'
                                 }`}>
-                                    {formData.images?.length || 0} / 6 recommended
+                                    {aiReadyPhotoCount} / 6 checklist angles
                                 </span>
                             </div>
                         </div>
-                        
-                        {/* AI Inspection Photo Checklist */}
-                        <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-xl p-4 mb-4 border border-blue-100">
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-200">
-                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold text-gray-900 text-sm">Photo Checklist for AI Inspection Report</h4>
-                                    <p className="text-xs text-gray-600">Upload these photos for an automatic AI condition report on your listing</p>
-                                </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-6 gap-2">
-                                {[
-                                    { id: 'front' as PhotoViewId, label: 'Front', icon: '🚗', desc: 'Full front view' },
-                                    { id: 'rear' as PhotoViewId, label: 'Rear', icon: '🔙', desc: 'Full back view' },
-                                    { id: 'left' as PhotoViewId, label: 'Left Side', icon: '◀️', desc: 'Driver side' },
-                                    { id: 'right' as PhotoViewId, label: 'Right Side', icon: '▶️', desc: 'Passenger side' },
-                                    { id: 'interior' as PhotoViewId, label: 'Interior', icon: '🪑', desc: 'Dashboard & seats' },
-                                    { id: 'tyres' as PhotoViewId, label: 'Tyres', icon: '⚫', desc: 'Close-up shot' },
-                                ].map((item) => {
-                                    const uploadedUrl = photoViewUploads[item.id];
-                                    const isChecked = !!uploadedUrl;
-                                    const isLoading = isUploading && activePhotoView === item.id;
-                                    return (
-                                        <button
-                                            type="button"
-                                            key={item.id}
-                                            onClick={() => !isLoading && handlePhotoViewClick(item.id)}
-                                            disabled={isLoading}
-                                            className={`relative flex flex-col items-center gap-1.5 p-3 rounded-xl text-center transition-all cursor-pointer hover:shadow-md ${
-                                                isChecked 
-                                                    ? 'bg-green-100 border-2 border-green-400 shadow-sm' 
-                                                    : 'bg-white border-2 border-gray-200 border-dashed hover:border-blue-400 hover:bg-blue-50'
-                                            } ${isLoading ? 'opacity-70' : ''}`}
-                                            title={isChecked ? `${item.label} uploaded - Click to replace` : `Click to upload ${item.label} photo`}
-                                        >
-                                            {isChecked && uploadedUrl ? (
-                                                <div className="relative w-10 h-10 rounded-lg overflow-hidden ring-2 ring-green-400">
-                                                    <img 
-                                                        src={uploadedUrl} 
-                                                        alt={item.label} 
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                    <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shadow-md">
-                                                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                        </svg>
-                                                    </div>
-                                                </div>
-                                            ) : isLoading ? (
-                                                <div className="w-10 h-10 flex items-center justify-center">
-                                                    <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                                    </svg>
-                                                </div>
-                                            ) : (
-                                                <span className="text-2xl">{item.icon}</span>
-                                            )}
-                                            <span className={`text-xs font-semibold ${isChecked ? 'text-green-700' : 'text-gray-700'}`}>{item.label}</span>
-                                            <span className="text-[10px] text-gray-500 leading-tight">{item.desc}</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                            {/* Hidden file input for checklist uploads */}
-                            <input 
-                                ref={checklistFileInputRef}
-                                type="file" 
-                                className="sr-only" 
-                                accept="image/png, image/jpeg" 
-                                onChange={handleChecklistFileUpload}
-                            />
-                            
-                            {(() => {
-                                const uploadedViewCount = Object.values(photoViewUploads).filter(Boolean).length;
-                                return (
-                                    <div className="mt-4 flex items-center justify-between">
-                                        <div className="flex items-center gap-3 flex-1">
-                                            <div className="flex-1 h-2 bg-white rounded-full overflow-hidden border border-gray-200">
-                                                <div 
-                                                    className={`h-full rounded-full transition-all duration-500 ${
-                                                        uploadedViewCount >= 6 ? 'bg-gradient-to-r from-green-400 to-green-500' : 'bg-gradient-to-r from-blue-400 to-purple-500'
-                                                    }`}
-                                                    style={{ width: `${Math.min(100, (uploadedViewCount / 6) * 100)}%` }}
-                                                />
-                                            </div>
-                                            <span className="text-sm font-bold text-gray-700 whitespace-nowrap">
-                                                {uploadedViewCount}/6
-                                            </span>
-                                        </div>
-                                        {uploadedViewCount >= 4 ? (
-                                            <span className="ml-4 text-xs font-semibold text-green-600 flex items-center gap-1">
-                                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                                </svg>
-                                                AI Inspection will be generated!
-                                            </span>
-                                        ) : (
-                                            <span className="ml-4 text-xs text-gray-500">
-                                                Add {4 - uploadedViewCount} more for AI report
-                                            </span>
-                                        )}
-                                    </div>
-                                );
-                            })()}
-                        </div>
+
+                        <p className="text-xs text-gray-600 mb-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+                            Photos from <span className="font-semibold">§1.3 Mandatory Photo Set</span> and document items in the checklist above appear here automatically. Use the upload below only for extra marketing shots.
+                        </p>
 
                         <label
                             htmlFor="file-upload"
@@ -2295,10 +2198,10 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                                     )}
                                 </div>
                                 <div className="bg-reride-orange hover:bg-orange-600 text-white font-bold py-2.5 px-6 rounded-lg shadow-md mb-3 transition-colors">
-                                    {isUploading ? 'Uploading…' : 'Click to Upload Photos'}
+                                    {isUploading ? 'Uploading…' : 'Add Extra Photos'}
                                 </div>
                                 <p className="text-sm text-gray-600">or drag & drop images here</p>
-                                <p className="text-xs text-gray-500 mt-1">JPG, PNG up to 10MB • First image = cover photo</p>
+                                <p className="text-xs text-gray-500 mt-1">Optional — JPG, PNG up to 10MB • First image = cover photo</p>
                             </div>
                             <input id="file-upload" type="file" className="sr-only" multiple accept="image/png, image/jpeg" onChange={(e) => handleFileUpload(e, 'image')} disabled={isUploading} />
                         </label>
@@ -2332,9 +2235,12 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     {/* DOCUMENTS */}
                     <div>
                         <label className="block text-sm font-medium text-reride-text-dark mb-2">
-                            Documents
-                            <span className="text-xs text-gray-500 ml-2 font-normal">(PDF, JPG or PNG)</span>
+                            Additional documents
+                            <span className="text-xs text-gray-500 ml-2 font-normal">(Service records, etc.)</span>
                         </label>
+                        <p className="text-xs text-gray-600 mb-2">
+                            RC, Insurance & PUC are uploaded in the disclosure checklist above — not here.
+                        </p>
                         <div className="flex flex-col sm:flex-row items-stretch gap-2">
                             <select
                                 id="document-type"
@@ -2344,9 +2250,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                                 onFocus={(e) => (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.15)')}
                                 onBlur={(e) => (e.currentTarget.style.boxShadow = '')}
                             >
-                                <option>Registration Certificate (RC)</option>
-                                <option>Insurance</option>
-                                <option>Pollution Under Control (PUC)</option>
                                 <option>Service Record</option>
                                 <option>Other</option>
                             </select>
@@ -3027,6 +2930,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // NEW: Boost listing feature
   const [showBoostModal, setShowBoostModal] = useState(false);
   const [vehicleToBoost, setVehicleToBoost] = useState<Vehicle | null>(null);
+  const [markSoldVehicle, setMarkSoldVehicle] = useState<Vehicle | null>(null);
   // Pagination state for Active Listings
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
@@ -3630,6 +3534,11 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   };
 
   const handleMarkAsSold = async (vehicleId: number) => {
+    const vehicle = safeSellerVehicles.find((v) => v?.id === vehicleId);
+    if (vehicle) {
+      setMarkSoldVehicle(vehicle);
+      return;
+    }
     try {
       // Prefer app-level callback so state/toasts stay consistent across environments
       if (onMarkAsSold) {
@@ -4974,6 +4883,20 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 }
                 // Keep modal open so user can retry
               }
+            }}
+          />
+        )}
+        {markSoldVehicle && (
+          <MarkSoldDealModal
+            vehicleId={markSoldVehicle.databaseId || markSoldVehicle.id}
+            vehicleTitle={`${markSoldVehicle.make} ${markSoldVehicle.model}`}
+            conversations={conversations}
+            sellerEmail={seller.email}
+            onClose={() => setMarkSoldVehicle(null)}
+            onSuccess={() => {
+              notify('Sale recorded — buyer will confirm to unlock ratings', 'success');
+              onUpdateVehicle({ ...markSoldVehicle, status: 'sold', soldAt: new Date().toISOString() });
+              setMarkSoldVehicle(null);
             }}
           />
         )}

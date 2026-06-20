@@ -400,13 +400,13 @@ export const AIInspectionReportDisplay: React.FC<AIInspectionReportProps> = ({
               Want a Certified Physical Inspection?
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Get a 150+ point inspection by our certified experts for complete peace of mind
+              Get a 150+ point inspection by a local mechanic. Pay them directly — we connect you with leads.
             </p>
             <button
               onClick={onRequestPhysicalInspection}
               className="px-6 py-2 bg-reride-orange text-white font-semibold rounded-lg hover:bg-reride-orange/90 transition-colors"
             >
-              Request Certified Inspection • ₹999
+              Find a pre-purchase inspector
             </button>
           </div>
         )}

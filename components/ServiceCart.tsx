@@ -56,6 +56,9 @@ type ServiceProvider = {
     distanceKm?: number;
     /** Aggregated workshop rating (1–5), when available */
     rating?: number | null;
+    reviewCount?: number;
+    completedJobs?: number;
+    isVerified?: boolean;
     serviceCategories?: string[];
     services?: Array<{
         serviceType: string;
@@ -215,8 +218,8 @@ const includedLinePackageId = (serviceType: string, includedId: string) =>
     `line-${serviceType.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${includedId.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
 const mockProviders: ServiceProvider[] = [
-    { id: 'sp-1', name: 'City Auto Care', city: 'London', distanceKm: 4.2 },
-    { id: 'sp-2', name: 'Prime Garage', city: 'London', distanceKm: 6.8 },
+    { id: 'sp-1', name: 'City Auto Care', city: 'London', distanceKm: 4.2, rating: 4.7, reviewCount: 128, completedJobs: 340, isVerified: true },
+    { id: 'sp-2', name: 'Prime Garage', city: 'London', distanceKm: 6.8, rating: 4.5, reviewCount: 86, completedJobs: 210, isVerified: true },
 ];
 
 const mockCoupons: Coupon[] = [
@@ -229,6 +232,22 @@ const SERVICE_PACKAGE_TO_CATEGORY: Record<string, string> = {
     'pkg-standard': 'Deep Detailing',
     'pkg-care-plus': 'Care Plus',
 };
+
+/** Shared booking-flow surfaces — matches CarServices grid warmth */
+const BOOKING_SURFACE =
+    'rounded-[18px] bg-white dark:bg-slate-900/70 p-5 sm:p-6 shadow-[0_10px_30px_-18px_rgba(15,23,42,0.22)] ring-1 ring-slate-900/[0.04] dark:ring-white/[0.06]';
+const BOOKING_OPTION_BASE =
+    'w-full rounded-[16px] px-4 py-3.5 text-left transition-all duration-200 shadow-[0_4px_14px_-8px_rgba(15,23,42,0.15)] ring-1 ring-slate-900/[0.06] dark:ring-white/[0.08] hover:shadow-[0_12px_28px_-12px_rgba(79,70,229,0.28)] hover:ring-indigo-300/50';
+const BOOKING_OPTION_SELECTED =
+    'ring-2 ring-indigo-500/50 shadow-[0_16px_36px_-14px_rgba(79,70,229,0.4)] bg-gradient-to-br from-indigo-50/90 via-blue-50/50 to-white dark:from-indigo-950/40 dark:via-blue-950/20 dark:to-slate-900/60';
+const STEP_BADGE =
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-sky-400 via-indigo-500 to-purple-600 text-white font-black text-sm shadow-lg shadow-indigo-500/30';
+const STEP_BADGE_MUTED =
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-black text-sm';
+const BOOKING_INPUT =
+    'w-full rounded-xl px-3.5 py-3 text-sm bg-white dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/80 dark:ring-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all';
+
+const FUEL_OPTIONS = ['Petrol', 'Diesel', 'CNG', 'EV'] as const;
 
 const CART_KEY = 'service_cart_v1';
 const REQUEST_STATUS_STYLES: Record<CustomerServiceRequest['status'], string> = {
@@ -335,6 +354,9 @@ const ServiceCart: React.FC<Props> = ({
     const [hasExplicitServiceSelection, setHasExplicitServiceSelection] = useState(false);
     /** True after "Pick items" with no parent line yet — cart can be empty without collapsing the sub-service panel. */
     const [inSubPickMode, setInSubPickMode] = useState(false);
+    const [extrasPanelOpen, setExtrasPanelOpen] = useState(false);
+    const [showAllAddons, setShowAllAddons] = useState(false);
+    const configureSectionRef = useRef<HTMLElement>(null);
     const { isMobileApp } = useIsMobileApp();
     const keyboardInset = useVisualViewportBottomInset();
     const mobileBottomNavOffset = isMobileApp
@@ -1089,17 +1111,16 @@ const ServiceCart: React.FC<Props> = ({
         if (!selectedAddress) missing.push('Select address');
         if (!selectedBookingDate || !selectedSlot) missing.push('Pick booking date and slot');
         if (items.length === 0) missing.push('Add at least one package');
-        if (selectedProviders.length === 0) missing.push('Choose a provider');
+        if (selectedProviders.length === 0) missing.push('Choose a workshop');
         return missing;
     }, [carDetails, selectedAddress, selectedBookingDate, selectedSlot, items.length, selectedProviders.length]);
 
     const step1Blockers = useMemo(() => {
         const m: string[] = [];
-        if (!carDetails) m.push('Add car details');
         if (items.length === 0) m.push('Add at least one service');
-        if (selectedProviders.length === 0) m.push('Choose a provider');
+        if (selectedProviders.length === 0) m.push('Choose a workshop');
         return m;
-    }, [carDetails, items.length, selectedProviders.length]);
+    }, [items.length, selectedProviders.length]);
 
     const canProceedToStep2 = step1Blockers.length === 0;
 
@@ -1190,6 +1211,21 @@ const ServiceCart: React.FC<Props> = ({
             } as ServicePackage;
         });
     }, [parentServicePackages]);
+
+    /** Lowest published price per service type across all workshops (for upfront "From ₹" hints). */
+    const serviceStartingPrices = useMemo(() => {
+        const prices: Record<string, number> = {};
+        Object.values(providerServices).forEach((services) => {
+            (services || []).forEach((svc) => {
+                if (svc.active === false || !svc.serviceType) return;
+                const price = svc.price;
+                if (price == null || price <= 0) return;
+                const key = svc.serviceType;
+                prices[key] = prices[key] != null ? Math.min(prices[key], price) : price;
+            });
+        });
+        return prices;
+    }, [providerServices]);
 
     /** Parent package is in cart as full-service line and/or has sub-service lines selected. */
     const isParentPackageInCart = useCallback(
@@ -1365,22 +1401,95 @@ const ServiceCart: React.FC<Props> = ({
     }, [selectedProviders, sortedAvailableProviders]);
 
     const selectedProviderId = selectedProviders[0];
-    const showServicePackageBuilder =
-        Boolean(selectedProviderId) && hasExplicitServiceSelection && Boolean(activeServicePackageId);
     const activeWebsitePackage = useMemo(
         () => websiteServicePackages.find((p) => p.id === activeServicePackageId),
         [websiteServicePackages, activeServicePackageId],
     );
     const hasSubServiceLines = includedOptionsForActiveServicePriced.length > 0;
+
     const isFullServiceLineMode =
-        showServicePackageBuilder && items.some((i) => i.serviceId === activeServicePackageId);
+        Boolean(activeServicePackageId) && items.some((i) => i.serviceId === activeServicePackageId);
     const selectedSubCount = items.filter((i) =>
         includedOptionsForActiveServicePriced.some((s) => s.id === i.serviceId),
     ).length;
 
-    const parentServicesInCartCount = useMemo(
-        () => websiteServicePackages.filter((p) => isParentPackageInCart(p.id, items)).length,
-        [websiteServicePackages, items, isParentPackageInCart],
+    const bookingSummaryGroups = useMemo(() => {
+        return websiteServicePackages
+            .filter((pkg) => isParentPackageInCart(pkg.id, items))
+            .map((pkg) => {
+                const hasFullParent = items.some((i) => i.serviceId === pkg.id);
+                const parentType = (pkg.parentServiceType || pkg.name).toLowerCase();
+                const subLineCount = items.filter((entry) => {
+                    if (entry.serviceId === pkg.id) return false;
+                    const meta = availableServicePackages.find((p) => p.id === entry.serviceId);
+                    return (
+                        Boolean(meta?.includedServiceId) &&
+                        (meta?.parentServiceType || '').toLowerCase() === parentType
+                    );
+                }).length;
+                return {
+                    packageId: pkg.id,
+                    name: pkg.name,
+                    hasFullParent,
+                    subLineCount,
+                };
+            });
+    }, [websiteServicePackages, items, isParentPackageInCart, availableServicePackages]);
+
+    const packageHasConfigurableAddons = useCallback(
+        (packageId: string) => {
+            const pkg = websiteServicePackages.find((p) => p.id === packageId);
+            if (!pkg) return false;
+            const parentType = (pkg.parentServiceType || pkg.name).toLowerCase();
+            return availableServicePackages.some(
+                (p) =>
+                    Boolean(p.includedServiceId) &&
+                    (p.parentServiceType || '').toLowerCase() === parentType,
+            );
+        },
+        [websiteServicePackages, availableServicePackages],
+    );
+
+    const showServicePackageBuilder =
+        Boolean(selectedProviderId) &&
+        items.length > 0 &&
+        bookingSummaryGroups.some((g) => packageHasConfigurableAddons(g.packageId));
+
+    useEffect(() => {
+        setExtrasPanelOpen(false);
+        setShowAllAddons(false);
+    }, [selectedProviders[0]]);
+
+    useEffect(() => {
+        if (selectedSubCount > 0 && !isFullServiceLineMode) {
+            setExtrasPanelOpen(true);
+        }
+    }, [selectedSubCount, isFullServiceLineMode]);
+
+    const focusPackageForConfigure = useCallback((packageId: string) => {
+        setHasExplicitServiceSelection(true);
+        setActiveServicePackageId(packageId);
+        setInSubPickMode(false);
+        setExtrasPanelOpen(true);
+        requestAnimationFrame(() => {
+            configureSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+    }, []);
+
+    const removeBookingLine = useCallback(
+        (packageId: string) => {
+            setItems((prev) => {
+                const next = stripParentPackageFromCart(prev, packageId);
+                if (activeServicePackageId === packageId) {
+                    const fallback = websiteServicePackages.find((p) => isParentPackageInCart(p.id, next));
+                    setActiveServicePackageId(fallback?.id || '');
+                    if (!fallback) setHasExplicitServiceSelection(false);
+                    setInSubPickMode(false);
+                }
+                return next;
+            });
+        },
+        [activeServicePackageId, stripParentPackageFromCart, websiteServicePackages, isParentPackageInCart],
     );
 
     const selectServiceForBooking = (serviceId: string) => {
@@ -1396,7 +1505,7 @@ const ServiceCart: React.FC<Props> = ({
                 return [...prev, { serviceId, quantity: 1 }];
             }
             // In cart: second click on the *focused* row removes the service; click on another
-            // selected row only moves focus so you can set Full / Pick per service.
+            // selected row only moves focus so you can set add-ons per service.
             if (activeServicePackageId === serviceId) {
                 setInSubPickMode(false);
                 return stripParentPackageFromCart(prev, serviceId);
@@ -1421,29 +1530,6 @@ const ServiceCart: React.FC<Props> = ({
         if (!activeServicePackageId) return;
         setInSubPickMode(true);
         setItems((prev) => prev.filter((entry) => entry.serviceId !== activeServicePackageId));
-    };
-
-    /** Select every available sub-service under the active parent service. */
-    const selectAllSubServicesForActive = () => {
-        if (!activeServicePackageId) return;
-        const activeService = availableServicePackages.find((pkg) => pkg.id === activeServicePackageId);
-        if (!activeService) return;
-        const parentType = (activeService.parentServiceType || activeService.name).toLowerCase();
-        const subIds = availableServicePackages
-            .filter(
-                (pkg) =>
-                    pkg.includedServiceId &&
-                    (pkg.parentServiceType || '').toLowerCase() === parentType,
-            )
-            .map((pkg) => pkg.id);
-        setItems((prev) => {
-            const withoutParent = prev.filter((entry) => entry.serviceId !== activeServicePackageId);
-            const existing = new Set(withoutParent.map((entry) => entry.serviceId));
-            const additions = subIds
-                .filter((id) => !existing.has(id))
-                .map((id) => ({ serviceId: id, quantity: 1 }));
-            return [...withoutParent, ...additions];
-        });
     };
 
     const toggleIncludedServiceLine = (serviceId: string) => {
@@ -1854,15 +1940,15 @@ const ServiceCart: React.FC<Props> = ({
             {/* Header Section */}
             <section className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-700 text-white">
                 <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.3),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.2),transparent_25%)]" />
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 relative">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                        <div className="flex items-center gap-3 sm:gap-4">
-                            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-white font-black text-lg sm:text-xl">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7 relative">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-white font-black text-base">
                                 SC
                             </div>
                             <div>
-                                <h1 className="text-2xl sm:text-4xl md:text-5xl font-black leading-tight">Service Cart</h1>
-                                <p className="text-white/90 mt-1 text-sm sm:text-base">Complete your service booking</p>
+                                <h1 className="text-xl sm:text-2xl font-black leading-tight">Book a service</h1>
+                                <p className="text-white/85 mt-0.5 text-xs sm:text-sm">Pick service → workshop → done</p>
                             </div>
                         </div>
                         {!isLoggedIn && (
@@ -1892,16 +1978,16 @@ const ServiceCart: React.FC<Props> = ({
                         {[
                             {
                                 n: 1,
-                                title: 'Vehicle & service',
-                                desc: 'Pick what you need and a workshop',
+                                title: 'Services & workshop',
+                                desc: 'Pick and go',
                                 done: canProceedToStep2 && bookingFlowStep === 2,
                                 active: bookingFlowStep === 1,
                                 disabled: false,
                             },
                             {
                                 n: 2,
-                                title: 'When, where & pay',
-                                desc: 'Address, time slot, and checkout',
+                                title: 'Time & checkout',
+                                desc: 'Address and pay',
                                 done: false,
                                 active: bookingFlowStep === 2,
                                 disabled: !canProceedToStep2,
@@ -1980,20 +2066,18 @@ const ServiceCart: React.FC<Props> = ({
                     </a>
                 )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5">
-                    <div className="flex flex-col gap-4 lg:col-span-1 min-w-0">
-                        {bookingFlowStep === 1 && (
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300">
+                {bookingFlowStep === 2 && (
+                <section className={`${BOOKING_SURFACE} mb-4 sm:mb-5`}>
+                            <div className="flex items-center justify-between mb-5">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <span className={STEP_BADGE}>
                                         <svg className="h-4.5 w-4.5" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 17a2 2 0 104 0m6 0a2 2 0 104 0M3 13l2-7h14l2 7M3 13h18M3 13v4h18v-4" />
                                         </svg>
                                     </span>
                                     <div className="min-w-0">
-                                        <h2 className="text-sm font-bold text-gray-900 dark:text-white">Vehicle</h2>
-                                        <p className="text-[11px] text-gray-500 dark:text-gray-400">{carDetails ? 'Saved' : 'Required to continue'}</p>
+                                        <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">Vehicle details</h2>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{carDetails ? 'Saved — tap Edit to change' : 'So the mechanic knows your car'}</p>
                                     </div>
                                 </div>
                                 {carDetails && (
@@ -2020,24 +2104,24 @@ const ServiceCart: React.FC<Props> = ({
                                 )}
                             </div>
                             {carDetails && !carFormOpen && (
-                                <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-gray-50 to-white dark:from-gray-900/40 dark:to-gray-800/20 p-4">
-                                    <div className="text-base font-bold text-gray-900 dark:text-white tracking-tight">
+                                <div className="rounded-[16px] bg-gradient-to-br from-indigo-50/80 via-white to-blue-50/40 dark:from-indigo-950/30 dark:via-slate-900/40 dark:to-blue-950/20 p-4 sm:p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] ring-1 ring-indigo-100/80 dark:ring-indigo-900/40">
+                                    <div className="text-lg font-black text-gray-900 dark:text-white tracking-tight">
                                         {carDetails.make} {carDetails.model}
                                     </div>
-                                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700/60 text-[11px] font-medium text-gray-700 dark:text-gray-200">
+                                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-white/80 dark:bg-slate-800/80 text-xs font-semibold text-gray-700 dark:text-gray-200 shadow-sm">
                                             {carDetails.year}
                                         </span>
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700/60 text-[11px] font-medium text-gray-700 dark:text-gray-200">
+                                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-white/80 dark:bg-slate-800/80 text-xs font-semibold text-gray-700 dark:text-gray-200 shadow-sm">
                                             {carDetails.fuel}
                                         </span>
                                         {carDetails.reg && (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 text-[11px] font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wide">
+                                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-xs font-bold text-white uppercase tracking-wide shadow-sm">
                                                 {carDetails.reg}
                                             </span>
                                         )}
                                         {carDetails.city && (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700/60 text-[11px] font-medium text-gray-700 dark:text-gray-200">
+                                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-white/80 dark:bg-slate-800/80 text-xs font-semibold text-gray-700 dark:text-gray-200 shadow-sm">
                                                 {carDetails.city}
                                             </span>
                                         )}
@@ -2045,58 +2129,72 @@ const ServiceCart: React.FC<Props> = ({
                                 </div>
                             )}
                             {(carFormOpen || !carDetails) && (
-                                <div className="space-y-3">
-                                    <div className="grid grid-cols-2 gap-2.5">
+                                <div className="space-y-3.5">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <label className="block">
-                                            <span className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wide">Make<span className="text-red-500 ml-0.5">*</span></span>
+                                            <span className="block text-[11px] font-bold text-indigo-600/80 dark:text-indigo-300/80 mb-1.5 uppercase tracking-wide">Make<span className="text-red-500 ml-0.5">*</span></span>
                                             <input
-                                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                                className={BOOKING_INPUT}
                                                 placeholder="e.g. Maruti"
                                                 value={carForm.make}
                                                 onChange={(e) => setCarForm({ ...carForm, make: e.target.value })}
                                             />
                                         </label>
                                         <label className="block">
-                                            <span className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wide">Model<span className="text-red-500 ml-0.5">*</span></span>
+                                            <span className="block text-[11px] font-bold text-indigo-600/80 dark:text-indigo-300/80 mb-1.5 uppercase tracking-wide">Model<span className="text-red-500 ml-0.5">*</span></span>
                                             <input
-                                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                                className={BOOKING_INPUT}
                                                 placeholder="e.g. Swift"
                                                 value={carForm.model}
                                                 onChange={(e) => setCarForm({ ...carForm, model: e.target.value })}
                                             />
                                         </label>
                                         <label className="block">
-                                            <span className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wide">Year<span className="text-red-500 ml-0.5">*</span></span>
+                                            <span className="block text-[11px] font-bold text-indigo-600/80 dark:text-indigo-300/80 mb-1.5 uppercase tracking-wide">Year<span className="text-red-500 ml-0.5">*</span></span>
                                             <input
-                                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                                className={BOOKING_INPUT}
                                                 placeholder="2021"
                                                 value={carForm.year}
                                                 onChange={(e) => setCarForm({ ...carForm, year: e.target.value })}
                                             />
                                         </label>
-                                        <label className="block">
-                                            <span className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wide">Fuel<span className="text-red-500 ml-0.5">*</span></span>
-                                            <input
-                                                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                                                placeholder="Petrol / Diesel"
-                                                value={carForm.fuel}
-                                                onChange={(e) => setCarForm({ ...carForm, fuel: e.target.value })}
-                                            />
-                                        </label>
+                                        <div className="block sm:col-span-2">
+                                            <span className="block text-[11px] font-bold text-indigo-600/80 dark:text-indigo-300/80 mb-1.5 uppercase tracking-wide">Fuel<span className="text-red-500 ml-0.5">*</span></span>
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {FUEL_OPTIONS.map((fuel) => {
+                                                    const selected = carForm.fuel.toLowerCase() === fuel.toLowerCase();
+                                                    return (
+                                                        <button
+                                                            key={fuel}
+                                                            type="button"
+                                                            onClick={() => setCarForm({ ...carForm, fuel })}
+                                                            aria-pressed={selected}
+                                                            className={`rounded-xl px-2 py-2.5 text-xs font-bold transition-all ring-1 ${
+                                                                selected
+                                                                    ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white ring-indigo-400 shadow-sm'
+                                                                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 ring-slate-200/80 dark:ring-slate-700 hover:ring-indigo-300 dark:hover:ring-indigo-700'
+                                                            }`}
+                                                        >
+                                                            {fuel}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
                                     </div>
                                     <label className="block">
-                                        <span className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wide">Registration</span>
+                                        <span className="block text-[11px] font-bold text-indigo-600/80 dark:text-indigo-300/80 mb-1.5 uppercase tracking-wide">Registration</span>
                                         <input
-                                            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all uppercase"
+                                            className={`${BOOKING_INPUT} uppercase`}
                                             placeholder="e.g. KA01AB1234"
                                             value={carForm.reg}
                                             onChange={(e) => setCarForm({ ...carForm, reg: e.target.value })}
                                         />
                                     </label>
                                     <label className="block">
-                                        <span className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wide">City / Pincode</span>
+                                        <span className="block text-[11px] font-bold text-indigo-600/80 dark:text-indigo-300/80 mb-1.5 uppercase tracking-wide">City / Pincode</span>
                                         <input
-                                            className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                            className={BOOKING_INPUT}
                                             placeholder="Bengaluru / 560001"
                                             value={carForm.city}
                                             onChange={(e) => setCarForm({ ...carForm, city: e.target.value })}
@@ -2112,62 +2210,957 @@ const ServiceCart: React.FC<Props> = ({
                                     )}
                                     <button
                                         onClick={handleSaveCarDetails}
-                                        className="w-full px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors"
+                                        className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-sm shadow-lg shadow-indigo-500/25 transition-all min-h-[44px]"
                                     >
                                         Save vehicle
                                     </button>
                                 </div>
                             )}
                         </section>
-                        )}
+                )}
 
-                        {/* Booking summary card — sticky on desktop, gives constant context while configuring */}
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)] gap-4 sm:gap-6 items-start">
+                    <div className="order-1 space-y-4 min-w-0">
                         {bookingFlowStep === 1 && (
-                        <section className="bg-gradient-to-br from-slate-900 to-slate-800 dark:from-slate-800 dark:to-slate-900 rounded-2xl text-white p-4 sm:p-5 shadow-md lg:sticky lg:top-4 lg:self-start">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-sm font-bold uppercase tracking-wider text-white/80">Your booking</h3>
-                                {totals.total > 0 && (
-                                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/10 text-white/80">Estimate</span>
+                        <>
+                        {/* Card 1 — Services */}
+                        <section className={BOOKING_SURFACE}>
+                            <header className="flex items-start justify-between gap-3 mb-5">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <span className={STEP_BADGE}>A</span>
+                                    <div className="min-w-0">
+                                        <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                                            Choose services
+                                        </h2>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                            {selectedServiceTypes.length === 0
+                                                ? 'Tap one or more services'
+                                                : selectedServiceTypes.length > 1
+                                                  ? `${selectedServiceTypes.length} selected`
+                                                  : '1 selected · pick a workshop next'}
+                                        </p>
+                                    </div>
+                                </div>
+                                {items.length > 0 && (
+                                    <span className="shrink-0 rounded-full bg-gradient-to-r from-indigo-500/10 to-purple-500/10 px-3 py-1 text-[11px] font-black text-indigo-700 dark:text-indigo-300 tabular-nums ring-1 ring-indigo-200/60 dark:ring-indigo-800/60">
+                                        {items.length} added
+                                    </span>
                                 )}
+                            </header>
+                            {!selectedProviderId && items.length > 0 && (
+                                <div className="mb-4 flex items-center gap-2 rounded-[14px] bg-indigo-50/70 dark:bg-indigo-950/30 px-3.5 py-2.5 text-[11px] text-indigo-800/80 dark:text-indigo-200/80 ring-1 ring-indigo-100 dark:ring-indigo-900/50">
+                                    <svg className="w-3.5 h-3.5 shrink-0 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>Exact prices lock in once you pick a workshop.</span>
+                                </div>
+                            )}
+                            <div className="space-y-2.5">
+                                {websiteServicePackages.map((pkg) => {
+                                    const inCart = isParentPackageInCart(pkg.id, items);
+                                    const isConfiguringThis =
+                                        hasExplicitServiceSelection && activeServicePackageId === pkg.id;
+                                    const isSelected = inCart || isConfiguringThis;
+                                    const serviceType = pkg.parentServiceType || pkg.name;
+                                    const rowPrice = selectedProviderId
+                                        ? resolveItemUnitPrice({ serviceId: pkg.id, quantity: 1 }, selectedProviderId)
+                                        : undefined;
+                                    const startingPrice =
+                                        serviceStartingPrices[serviceType] ??
+                                        (pkg.price > 0 && !pkg.isCustom ? pkg.price : undefined);
+                                    const displayPrice = rowPrice ?? (selectedProviderId ? pkg.price : startingPrice);
+                                    const hasUpfrontPrice = displayPrice != null && displayPrice > 0;
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={pkg.id}
+                                            role="checkbox"
+                                            aria-checked={isSelected}
+                                            onClick={() => selectServiceForBooking(pkg.id)}
+                                            className={`${BOOKING_OPTION_BASE} flex items-center justify-between gap-3 ${
+                                                isSelected ? BOOKING_OPTION_SELECTED : 'bg-white dark:bg-slate-900/50'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <span
+                                                    className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors ${
+                                                        isSelected
+                                                            ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-sm'
+                                                            : 'ring-2 ring-slate-200 dark:ring-slate-600 bg-white dark:bg-slate-900 text-transparent'
+                                                    }`}
+                                                >
+                                                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <div className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5 min-w-0">
+                                                        <span className="truncate">{pkg.name}</span>
+                                                        {inCart && (
+                                                            <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+                                                                Selected
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {pkg.description && !selectedProviderId && (
+                                                        <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                                            {pkg.description}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <span className="text-right shrink-0 tabular-nums max-w-[9rem]">
+                                                {selectedProviderId ? (
+                                                    hasUpfrontPrice ? (
+                                                        <span className="text-sm font-black text-indigo-700 dark:text-indigo-300">
+                                                            ₹{displayPrice!.toLocaleString('en-IN')}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium italic">At checkout</span>
+                                                    )
+                                                ) : hasUpfrontPrice ? (
+                                                    <span className="text-sm font-black text-indigo-700 dark:text-indigo-300">
+                                                        From ₹{displayPrice!.toLocaleString('en-IN')}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[11px] text-slate-400/80 dark:text-slate-500 font-normal">View on selection</span>
+                                                )}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
                             </div>
-                            <div className="space-y-3 text-sm">
-                                <div>
-                                    <div className="text-[10px] uppercase tracking-wide text-white/50 mb-1">Services</div>
-                                    {items.length === 0 ? (
-                                        <div className="text-white/60 italic text-xs">None selected yet</div>
-                                    ) : (
-                                        <ul className="space-y-1">
-                                            {items.slice(0, 4).map((line) => {
-                                                const meta = availableServicePackages.find((p) => p.id === line.serviceId);
+                        </section>
+
+                        {/* Card 2 — Workshop / provider */}
+                        <section className={BOOKING_SURFACE}>
+                            <header className="flex items-start justify-between gap-3 mb-5">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <span className={selectedServiceTypes.length === 0 ? STEP_BADGE_MUTED : STEP_BADGE}>
+                                        B
+                                    </span>
+                                    <div className="min-w-0">
+                                        <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                                            Pick a workshop
+                                        </h2>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                            {selectedServiceTypes.length === 0
+                                                ? 'Choose a service first'
+                                                : `${sortedAvailableProviders.length} ${sortedAvailableProviders.length === 1 ? 'workshop' : 'workshops'} can do all your services`}
+                                        </p>
+                                    </div>
+                                </div>
+                                {onUseMyLocation && (
+                                    <button
+                                        type="button"
+                                        onClick={onUseMyLocation}
+                                        disabled={isLocating}
+                                        className="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 px-2.5 py-1.5 rounded-md disabled:opacity-60"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0L6.343 16.657A8 8 0 1117.657 16.657z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                        {isLocating ? 'Detecting…' : 'Near me'}
+                                    </button>
+                                )}
+                            </header>
+                            {selectedServiceTypes.length === 0 ? (
+                                <div className="rounded-[16px] px-4 py-10 text-center ring-1 ring-dashed ring-slate-200 dark:ring-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
+                                    <svg className="mx-auto w-10 h-10 text-indigo-200 dark:text-indigo-900 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                    </svg>
+                                    <p className="text-sm font-bold text-gray-700 dark:text-gray-300">No workshops yet</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs mx-auto">
+                                        Select at least one service above to see trusted workshops in your area.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {sortedAvailableProviders.map((p) => {
+                                        const pTotals = providerTotals[p.id];
+                                        const etaMin = estimateBookingEtaMinutes(
+                                            p.id,
+                                            items,
+                                            providerServices,
+                                            availableServicePackages,
+                                        );
+                                        const rating =
+                                            p.rating != null && Number.isFinite(Number(p.rating))
+                                                ? Number(p.rating)
+                                                : undefined;
+                                        const reviewCount = p.reviewCount;
+                                        const completedJobs = p.completedJobs;
+                                        const isChosen = selectedProviderId === p.id;
+                                        return (
+                                            <label
+                                                key={p.id}
+                                                className={`flex items-start gap-3 p-4 sm:p-4 cursor-pointer min-h-[44px] ${BOOKING_OPTION_BASE} ${
+                                                    isChosen ? BOOKING_OPTION_SELECTED : 'bg-white dark:bg-slate-900/50'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="service-booking-provider"
+                                                    className="h-4 w-4 mt-1 text-indigo-600 focus:ring-2 focus:ring-indigo-500 shrink-0"
+                                                    checked={isChosen}
+                                                    onChange={() => setSelectedProviders([p.id])}
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                                                        <div className="min-w-0">
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                <div className="text-sm font-black text-gray-900 dark:text-white truncate">
+                                                                    {p.name}
+                                                                </div>
+                                                                {p.isVerified && (
+                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-200/80 dark:ring-emerald-800/60 shrink-0">
+                                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                                        Verified Partner
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                                                                {rating != null && (
+                                                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-xs font-black text-amber-700 dark:text-amber-300 ring-1 ring-amber-200/70 dark:ring-amber-800/50">
+                                                                        <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
+                                                                        {rating.toFixed(1)}
+                                                                    </span>
+                                                                )}
+                                                                {reviewCount != null && reviewCount > 0 && (
+                                                                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                                                                        {reviewCount.toLocaleString('en-IN')} reviews
+                                                                    </span>
+                                                                )}
+                                                                {completedJobs != null && completedJobs > 0 && (
+                                                                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                                                                        {completedJobs.toLocaleString('en-IN')} jobs completed
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        {pTotals && pTotals.total > 0 && (
+                                                            <span className="text-base font-black text-indigo-700 dark:text-indigo-300 tabular-nums shrink-0">
+                                                                ₹{pTotals.total.toLocaleString('en-IN')}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                                        {p.city && p.city !== 'Unknown' ? (
+                                                            <span className="inline-flex items-center gap-1">
+                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0L6.343 16.657A8 8 0 1117.657 16.657zM15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                                                {p.city}
+                                                            </span>
+                                                        ) : null}
+                                                        {p.distanceKm != null ? <span>{Number(p.distanceKm).toFixed(1)} km away</span> : null}
+                                                        {etaMin != null ? <span>~{etaMin} min</span> : null}
+                                                    </div>
+                                                    {(!pTotals || pTotals.total <= 0) && items.length > 0 && (
+                                                        <div className="text-[11px] text-amber-700/90 dark:text-amber-400 mt-2 font-medium">
+                                                            Final price confirmed at booking.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
+                                    {availableProviders.length === 0 && (
+                                        <div className="rounded-[16px] px-4 py-8 text-center ring-1 ring-amber-200/80 dark:ring-amber-800/60 bg-amber-50/50 dark:bg-amber-950/20">
+                                            <p className="text-sm font-bold text-amber-800 dark:text-amber-200">No workshops match</p>
+                                            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1 max-w-sm mx-auto">
+                                                {selectedServiceTypes.length > 1
+                                                    ? 'No single workshop offers all selected services. Try a different mix.'
+                                                    : 'No workshops available for this service yet.'}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {locationError && (
+                                        <div className="text-xs text-red-700 dark:text-red-400 p-2.5 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                                            {locationError}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </section>
+
+                        {/* Optional extras — collapsed by default for a fast checkout */}
+                        {showServicePackageBuilder && (
+                        <div ref={configureSectionRef}>
+                            {!extrasPanelOpen ? (
+                                <div className={`${BOOKING_SURFACE} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3`}>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white">
+                                            Ready to continue
+                                        </p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                            Standard package included · add-ons are optional
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (!activeServicePackageId && bookingSummaryGroups[0]) {
+                                                focusPackageForConfigure(bookingSummaryGroups[0].packageId);
+                                            } else {
+                                                setExtrasPanelOpen(true);
+                                                requestAnimationFrame(() => {
+                                                    configureSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                                });
+                                            }
+                                        }}
+                                        className="shrink-0 rounded-xl px-4 py-2.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-200 dark:ring-indigo-800 bg-indigo-50/80 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                                    >
+                                        Customize add-ons
+                                    </button>
+                                </div>
+                            ) : activeWebsitePackage && (
+                        <section className={`${BOOKING_SURFACE} ring-2 ring-indigo-200/50 dark:ring-indigo-800/40`}>
+                            <header className="flex items-start justify-between gap-3 mb-4">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <span className={STEP_BADGE}>C</span>
+                                    <div className="min-w-0">
+                                        <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                                            Optional add-ons
+                                        </h2>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                            Skip this step if the standard package is enough
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setExtrasPanelOpen(false);
+                                        setShowAllAddons(false);
+                                    }}
+                                    className="shrink-0 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                                >
+                                    Done
+                                </button>
+                            </header>
+                            <div className="space-y-4">
+                                {bookingSummaryGroups.length > 1 && (
+                                    <div className="flex flex-wrap gap-2" role="tablist" aria-label="Services to customize">
+                                        {bookingSummaryGroups.filter((g) => packageHasConfigurableAddons(g.packageId)).map((group) => {
+                                            const isActive = activeServicePackageId === group.packageId;
+                                            return (
+                                                <button
+                                                    key={group.packageId}
+                                                    type="button"
+                                                    role="tab"
+                                                    aria-selected={isActive}
+                                                    onClick={() => focusPackageForConfigure(group.packageId)}
+                                                    className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors ${
+                                                        isActive
+                                                            ? 'bg-indigo-600 text-white'
+                                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                                                    }`}
+                                                >
+                                                    {group.name}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                {hasSubServiceLines && (
+                                    <div>
+                                        {isFullServiceLineMode && (
+                                            <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium mb-2">
+                                                ✓ Full {activeWebsitePackage.name} package selected
+                                            </p>
+                                        )}
+                                        {!isFullServiceLineMode && selectedSubCount > 0 && (
+                                            <p className="text-xs text-indigo-700 dark:text-indigo-400 font-medium mb-2">
+                                                {selectedSubCount} add-on{selectedSubCount === 1 ? '' : 's'} selected
+                                            </p>
+                                        )}
+                                        <div className="space-y-1.5">
+                                            {(showAllAddons
+                                                ? includedOptionsForActiveServicePriced
+                                                : includedOptionsForActiveServicePriced.slice(0, 4)
+                                            ).map((line) => {
+                                                const checked = items.some((item) => item.serviceId === line.id);
+                                                const lineLabel = line.name.replace(/^[^-]+-\s*/, '');
                                                 return (
-                                                    <li key={line.serviceId + String(line.quantity)} className="flex items-center gap-1.5 text-white/95">
-                                                        <span className="h-1 w-1 rounded-full bg-blue-400 shrink-0" />
-                                                        <span className="truncate">{meta?.name || line.serviceId}</span>
-                                                    </li>
+                                                    <button
+                                                        type="button"
+                                                        key={line.id}
+                                                        onClick={() => {
+                                                            if (isFullServiceLineMode) pickSubServicesForActive();
+                                                            toggleIncludedServiceLine(line.id);
+                                                        }}
+                                                        aria-pressed={checked && !isFullServiceLineMode}
+                                                        className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left rounded-xl ring-1 transition-colors ${
+                                                            checked && !isFullServiceLineMode
+                                                                ? 'ring-indigo-400 bg-indigo-50/80 dark:bg-indigo-950/40'
+                                                                : 'ring-slate-200/80 dark:ring-slate-700 bg-white dark:bg-slate-900/40'
+                                                        }`}
+                                                    >
+                                                        <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
+                                                            {lineLabel}
+                                                        </span>
+                                                        <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400 shrink-0 tabular-nums">
+                                                            {line.providerPrice != null && line.providerPrice > 0
+                                                                ? `+₹${line.providerPrice.toLocaleString('en-IN')}`
+                                                                : '—'}
+                                                        </span>
+                                                    </button>
                                                 );
                                             })}
-                                            {items.length > 4 && (
-                                                <li className="text-[11px] text-white/60">+ {items.length - 4} more</li>
+                                        </div>
+                                        {includedOptionsForActiveServicePriced.length > 4 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAllAddons((v) => !v)}
+                                                className="mt-2 text-[11px] font-bold text-indigo-700 dark:text-indigo-400 hover:underline"
+                                            >
+                                                {showAllAddons
+                                                    ? 'Show fewer'
+                                                    : `Show all ${includedOptionsForActiveServicePriced.length} add-ons`}
+                                            </button>
+                                        )}
+                                        {!isFullServiceLineMode && (
+                                            <button
+                                                type="button"
+                                                onClick={pickFullServiceForActive}
+                                                className="mt-2 text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:underline"
+                                            >
+                                                Reset to full package
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                            )}
+                        </div>
+                        )}
+
+                        {/* Continue button (mobile) — desktop uses sticky summary card */}
+                        <div className="lg:hidden mt-2 flex flex-col gap-2">
+                            {bookingSummaryGroups.length > 0 && (
+                                <div className="rounded-xl border border-slate-200/90 dark:border-slate-600 bg-white dark:bg-slate-800/90 px-3.5 py-3 shadow-sm">
+                                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
+                                        Your services
+                                    </div>
+                                    <ul className="space-y-2">
+                                        {bookingSummaryGroups.map((group) => (
+                                            <li
+                                                key={group.packageId}
+                                                className="flex items-start gap-2 rounded-lg bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5"
+                                            >
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+                                                        {group.name}
+                                                    </div>
+                                                    {group.subLineCount > 0 && (
+                                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                            {group.hasFullParent
+                                                                ? 'Full package'
+                                                                : `${group.subLineCount} add-on${group.subLineCount === 1 ? '' : 's'}`}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeBookingLine(group.packageId)}
+                                                    aria-label={`Remove ${group.name}`}
+                                                    className="shrink-0 rounded-md p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                                                    title="Remove"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            {step1Blockers.length > 0 && (
+                                <p className="text-xs text-amber-800 dark:text-amber-200 text-center">
+                                    {step1Blockers.join(' · ')}
+                                </p>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (!canProceedToStep2) return;
+                                    setBookingFlowStep(2);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                disabled={!canProceedToStep2}
+                                className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3.5 text-sm font-black text-white shadow-lg shadow-indigo-500/30 transition hover:from-indigo-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none min-h-[44px]"
+                            >
+                                Continue to time &amp; place →
+                            </button>
+                        </div>
+                        </>
+                        )}
+
+                        {bookingFlowStep === 2 && (
+                        <>
+                        {/* Card 1 — Address */}
+                        <section className={BOOKING_SURFACE}>
+                            <header className="flex items-start justify-between gap-3 mb-4">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0L6.343 16.657A8 8 0 1117.657 16.657zM15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                    </span>
+                                    <div className="min-w-0">
+                                        <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                                            Pickup address
+                                        </h2>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                            Where should we pick up your car?
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const newId = `addr-${Date.now()}`;
+                                        setAddresses(prev => [...prev, {
+                                            id: newId,
+                                            label: 'New Address',
+                                            line1: '',
+                                            city: '',
+                                            state: '',
+                                            pincode: '',
+                                        }]);
+                                        setEditingAddressId(newId);
+                                        setAddressForm({ label: 'New Address', line1: '', city: '', state: '', pincode: '' });
+                                    }}
+                                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-colors"
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    New
+                                </button>
+                            </header>
+                            <div className="space-y-2">
+                                {addresses.map(addr => {
+                                    const isEditing = editingAddressId === addr.id;
+                                    const isSelected = selectedAddress === addr.id;
+                                    return (
+                                        <div
+                                            key={addr.id}
+                                            className={`rounded-xl border-2 transition-all ${
+                                                isEditing
+                                                    ? 'border-indigo-300 dark:border-indigo-700 bg-indigo-50/30 dark:bg-indigo-900/10 p-3.5'
+                                                    : isSelected
+                                                      ? 'border-indigo-500 bg-indigo-50/60 dark:bg-indigo-900/15 dark:border-indigo-700 shadow-sm'
+                                                      : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700'
+                                            }`}
+                                        >
+                                            {isEditing ? (
+                                                <div className="space-y-2.5">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">
+                                                            Edit address
+                                                        </span>
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingAddressId(null);
+                                                                setAddressForm({});
+                                                            }}
+                                                            className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 font-semibold"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={addressForm.label || addr.label}
+                                                        onChange={(e) => setAddressForm({ ...addressForm, label: e.target.value })}
+                                                        placeholder="Label (Home, Office, …)"
+                                                        className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-transparent"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        value={addressForm.line1 || addr.line1}
+                                                        onChange={(e) => setAddressForm({ ...addressForm, line1: e.target.value })}
+                                                        placeholder="Street address"
+                                                        className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-transparent"
+                                                    />
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={addressForm.city || addr.city}
+                                                            onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })}
+                                                            placeholder="City"
+                                                            className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-transparent"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={addressForm.state || addr.state}
+                                                            onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })}
+                                                            placeholder="State"
+                                                            className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-transparent"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={addressForm.pincode || addr.pincode}
+                                                            onChange={(e) => setAddressForm({ ...addressForm, pincode: e.target.value })}
+                                                            placeholder="Pincode"
+                                                            className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-transparent"
+                                                        />
+                                                    </div>
+                                                    <div className="flex items-center justify-between pt-1">
+                                                        <button
+                                                            onClick={() => {
+                                                                setAddresses(prev => prev.filter(a => a.id !== addr.id));
+                                                                if (selectedAddress === addr.id) {
+                                                                    setSelectedAddress(addresses.find(a => a.id !== addr.id)?.id || '');
+                                                                }
+                                                                setEditingAddressId(null);
+                                                                setAddressForm({});
+                                                            }}
+                                                            className="px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-semibold transition-colors"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                if (addressForm.label || addressForm.line1 || addressForm.city) {
+                                                                    setAddresses(prev => prev.map(a =>
+                                                                        a.id === addr.id
+                                                                            ? { ...a, ...addressForm }
+                                                                            : a
+                                                                    ));
+                                                                }
+                                                                setEditingAddressId(null);
+                                                                setAddressForm({});
+                                                            }}
+                                                            className="px-4 py-1.5 text-xs bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-lg font-bold transition-colors"
+                                                        >
+                                                            Save address
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <label className="flex items-start gap-3 cursor-pointer p-3.5">
+                                                    <input
+                                                        type="radio"
+                                                        className="mt-1 w-4 h-4 text-indigo-600 focus:ring-2 focus:ring-indigo-500"
+                                                        checked={isSelected}
+                                                        onChange={() => setSelectedAddress(addr.id)}
+                                                    />
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <span className="text-sm font-bold text-gray-900 dark:text-white truncate">{addr.label}</span>
+                                                                {isSelected && (
+                                                                    <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-1.5 py-0.5 rounded">
+                                                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                                                        Selected
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    setEditingAddressId(addr.id);
+                                                                    setAddressForm({
+                                                                        label: addr.label,
+                                                                        line1: addr.line1,
+                                                                        city: addr.city,
+                                                                        state: addr.state,
+                                                                        pincode: addr.pincode,
+                                                                    });
+                                                                }}
+                                                                className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-semibold px-2 py-1 rounded hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                        </div>
+                                                        <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                                            {addr.line1}{addr.line1 ? ', ' : ''}{addr.city} {addr.pincode}
+                                                        </div>
+                                                        <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded">
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                                            Free home pickup
+                                                            {selectedProviderPrimary?.distanceKm ? ` · ${selectedProviderPrimary.distanceKm.toFixed(1)} km` : ''}
+                                                        </div>
+                                                    </div>
+                                                </label>
                                             )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </section>
+
+                        {/* Card 2 — Schedule */}
+                        <section className={BOOKING_SURFACE}>
+                            <header className="flex items-start gap-3 mb-4">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                </span>
+                                <div className="min-w-0">
+                                    <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                                        Pick a time
+                                    </h2>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                        Choose a date and 2-hour slot — we&apos;ll confirm with the workshop
+                                    </p>
+                                </div>
+                            </header>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label htmlFor="service-booking-date" className="block text-[11px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
+                                        Date
+                                    </label>
+                                    <input
+                                        id="service-booking-date"
+                                        type="date"
+                                        min={minBookingDateYmd}
+                                        value={selectedBookingDate}
+                                        onChange={e => {
+                                            setSelectedBookingDate(e.target.value);
+                                            setScheduleError('');
+                                        }}
+                                        className={`${BOOKING_INPUT} max-w-[16rem] font-semibold [color-scheme:light] dark:[color-scheme:dark]`}
+                                    />
+                                    {scheduleError && (
+                                        <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{scheduleError}</p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-2">
+                                        Time slot
+                                    </label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        {timeSlots.map(slot => {
+                                            const isSelected = selectedSlot === slot.id;
+                                            return (
+                                                <button
+                                                    key={slot.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedSlot(slot.id);
+                                                        setScheduleError('');
+                                                    }}
+                                                    aria-pressed={isSelected}
+                                                    className={`rounded-lg border-2 px-3 py-2.5 text-sm font-bold transition-all ${
+                                                        isSelected
+                                                            ? 'border-indigo-600 bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-md'
+                                                            : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-indigo-300 dark:hover:border-indigo-700 hover:bg-slate-50 dark:hover:bg-slate-800/40 bg-white dark:bg-gray-900'
+                                                    }`}
+                                                >
+                                                    <div className="text-sm">{slot.label}</div>
+                                                    {isSelected && slotDemandLevel && (
+                                                        <div className="text-[10px] mt-0.5 opacity-90 font-medium normal-case">{slotDemandLevel}</div>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {completionEstimate && (
+                                    <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-xs font-semibold text-indigo-800 dark:border-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-300 flex items-start gap-2">
+                                        <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <span>{completionEstimate}</span>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label htmlFor="service-booking-note" className="block text-[11px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
+                                        Note <span className="font-normal normal-case text-slate-400">(optional)</span>
+                                    </label>
+                                    <textarea
+                                        id="service-booking-note"
+                                        value={note}
+                                        onChange={(e) => setNote(e.target.value)}
+                                        className={`${BOOKING_INPUT} resize-none`}
+                                        rows={2}
+                                        placeholder="Warning lights? Pickup landmark? Preferred call time?"
+                                    />
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Card 3 — Coupon */}
+                        <section className={BOOKING_SURFACE}>
+                            <header className="flex items-start justify-between gap-3 mb-4">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" /></svg>
+                                    </span>
+                                    <div className="min-w-0">
+                                        <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                                            Coupon &amp; offers
+                                        </h2>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                            Apply a code or pick from available offers
+                                        </p>
+                                    </div>
+                                </div>
+                                {selectedCoupon && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedCoupon(undefined);
+                                            setCouponInput('');
+                                            setCouponMessage('');
+                                        }}
+                                        className="shrink-0 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400"
+                                    >
+                                        Remove
+                                    </button>
+                                )}
+                            </header>
+
+                            <div className="flex gap-2">
+                                <input
+                                    value={couponInput}
+                                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                                    placeholder="Enter code"
+                                    className={`${BOOKING_INPUT} flex-1 font-semibold uppercase`}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={applyCouponInput}
+                                    className="px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 text-sm font-bold transition-colors"
+                                >
+                                    Apply
+                                </button>
+                            </div>
+                            {couponMessage && (
+                                <p className={`mt-2 text-xs font-medium ${selectedCoupon ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                                    {couponMessage}
+                                </p>
+                            )}
+                            {bestCoupon && !selectedCoupon && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleApplyCoupon(bestCoupon.code)}
+                                    className="mt-3 w-full inline-flex items-center justify-between gap-2 rounded-lg border border-dashed border-emerald-300 dark:border-emerald-700 bg-emerald-50/40 dark:bg-emerald-900/10 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                                >
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                        Best offer for your cart
+                                    </span>
+                                    <span className="font-bold">Apply {bestCoupon.code}</span>
+                                </button>
+                            )}
+                            {coupons.length > 0 && (
+                                <div className="mt-3">
+                                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
+                                        Available offers
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {coupons.map(c => {
+                                            const isSelected = selectedCoupon === c.code;
+                                            return (
+                                                <button
+                                                    key={c.code}
+                                                    type="button"
+                                                    onClick={() => handleApplyCoupon(c.code)}
+                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all ${
+                                                        isSelected
+                                                            ? 'border-indigo-600 bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm'
+                                                            : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-indigo-300 dark:hover:border-indigo-700 bg-white dark:bg-gray-900'
+                                                    }`}
+                                                >
+                                                    {isSelected && (
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                                    )}
+                                                    {c.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </section>
+                        </>
+                        )}
+                    </div>
+
+                    <aside className="order-2 flex flex-col gap-4 min-w-0 w-full lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+                        {bookingFlowStep === 1 && (
+                        <section className="max-lg:hidden w-full min-w-0 max-w-full rounded-[20px] bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-5 sm:p-6 shadow-lg shadow-indigo-950/30 ring-1 ring-white/10">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-sm font-black uppercase tracking-wider text-white/90">Your booking</h3>
+                                {totals.total > 0 && (
+                                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-gradient-to-r from-sky-400/20 to-purple-500/20 text-white/90 ring-1 ring-white/15">Estimate</span>
+                                )}
+                            </div>
+                            <div className="space-y-4 text-sm">
+                                <div className="rounded-[14px] bg-white/[0.06] ring-1 ring-white/10 p-3.5">
+                                    <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-200/70 mb-2">Services</div>
+                                    {items.length === 0 ? (
+                                        <div className="flex items-center gap-2 text-indigo-100/50 text-xs">
+                                            <span className="h-8 w-8 rounded-lg bg-white/[0.06] ring-1 ring-white/10 flex items-center justify-center shrink-0">
+                                                <svg className="w-4 h-4 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                                            </span>
+                                            <span className="italic">None selected yet</span>
+                                        </div>
+                                    ) : (
+                                        <ul className="space-y-2">
+                                            {bookingSummaryGroups.map((group) => (
+                                                <li
+                                                    key={group.packageId}
+                                                    className="flex items-start gap-2 rounded-lg bg-white/[0.04] px-2 py-1.5 ring-1 ring-white/[0.06]"
+                                                >
+                                                    <span className="h-1.5 w-1.5 mt-2 rounded-full bg-gradient-to-r from-sky-400 to-purple-400 shrink-0" />
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="truncate text-sm font-medium text-white/95">
+                                                            {group.name}
+                                                        </div>
+                                                        {group.subLineCount > 0 && (
+                                                            <div className="text-[10px] text-indigo-200/60">
+                                                                {group.hasFullParent
+                                                                    ? 'Full package'
+                                                                    : `${group.subLineCount} add-on${group.subLineCount === 1 ? '' : 's'}`}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeBookingLine(group.packageId)}
+                                                        aria-label={`Remove ${group.name}`}
+                                                        className="shrink-0 rounded-md p-1.5 text-indigo-200/70 hover:text-white hover:bg-white/10 transition-colors"
+                                                        title="Remove"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                </li>
+                                            ))}
                                         </ul>
                                     )}
                                 </div>
-                                <div className="h-px bg-white/10" />
-                                <div>
-                                    <div className="text-[10px] uppercase tracking-wide text-white/50 mb-1">Workshop</div>
+                                <div className="rounded-[14px] bg-white/[0.06] ring-1 ring-white/10 p-3.5">
+                                    <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-200/70 mb-2">Workshop</div>
                                     {selectedProviderPrimary ? (
-                                        <div className="text-white/95 text-sm font-medium truncate">{selectedProviderPrimary.name}</div>
+                                        <div className="text-white/95 text-sm font-semibold truncate">{selectedProviderPrimary.name}</div>
                                     ) : (
-                                        <div className="text-white/60 italic text-xs">Choose a workshop</div>
+                                        <div className="flex items-center gap-2 text-indigo-100/50 text-xs">
+                                            <span className="h-8 w-8 rounded-lg bg-white/[0.06] ring-1 ring-white/10 flex items-center justify-center shrink-0">
+                                                <svg className="w-4 h-4 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5" /></svg>
+                                            </span>
+                                            <span className="italic">None selected yet</span>
+                                        </div>
                                     )}
                                 </div>
-                                <div className="h-px bg-white/10" />
-                                <div className="flex items-baseline justify-between">
-                                    <span className="text-white/60 text-xs uppercase tracking-wide">Est. total</span>
-                                    <span className="text-xl font-bold tabular-nums">
+                                <div className="flex items-baseline justify-between pt-1 border-t border-white/10">
+                                    <span className="text-indigo-200/70 text-xs font-bold uppercase tracking-wide">Est. total</span>
+                                    <span className="text-2xl font-black tabular-nums bg-gradient-to-r from-white to-indigo-100 bg-clip-text text-transparent">
                                         {totals.total > 0 ? `₹${totals.total.toLocaleString('en-IN')}` : '—'}
                                     </span>
                                 </div>
+                                {totals.total <= 0 && (
+                                    <p className="text-[11px] text-indigo-200/50 italic text-center -mt-1">Updates as you choose services</p>
+                                )}
                             </div>
                             <button
                                 type="button"
@@ -2177,13 +3170,18 @@ const ServiceCart: React.FC<Props> = ({
                                     window.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
                                 disabled={!canProceedToStep2}
-                                className="mt-4 w-full max-lg:hidden rounded-lg bg-white text-slate-900 hover:bg-blue-50 px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
+                                className="mt-5 w-full rounded-xl bg-white text-indigo-900 hover:bg-indigo-50 px-4 py-3 text-sm font-black transition shadow-lg disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none min-h-[44px]"
                             >
                                 Continue to time & place →
                             </button>
                             {!canProceedToStep2 && (
-                                <p className="mt-2 text-[11px] text-amber-300/90 text-center max-lg:hidden">
+                                <p className="mt-2 text-[11px] text-amber-300/90 text-center">
                                     {step1Blockers[0]}
+                                </p>
+                            )}
+                            {canProceedToStep2 && !extrasPanelOpen && showServicePackageBuilder && (
+                                <p className="mt-2 text-[10px] text-indigo-200/60 text-center">
+                                    Add-ons are optional — continue when ready
                                 </p>
                             )}
                         </section>
@@ -2191,8 +3189,7 @@ const ServiceCart: React.FC<Props> = ({
 
                         {bookingFlowStep === 2 && (
                         <>
-                        {/* Booking summary — sticky on desktop, gives the user constant context */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
+                        <section className={BOOKING_SURFACE}>
                             <div className="flex items-center justify-between mb-4">
                                 <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                                     Booking summary
@@ -2203,7 +3200,7 @@ const ServiceCart: React.FC<Props> = ({
                                         setBookingFlowStep(1);
                                         window.scrollTo({ top: 0, behavior: 'smooth' });
                                     }}
-                                    className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                                    className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
                                 >
                                     Edit
                                 </button>
@@ -2211,7 +3208,7 @@ const ServiceCart: React.FC<Props> = ({
                             <div className="space-y-3.5">
                                 {carDetails && (
                                     <div className="flex items-start gap-2.5">
-                                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300">
+                                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">
                                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 17a2 2 0 104 0m6 0a2 2 0 104 0M3 13l2-7h14l2 7M3 13h18M3 13v4h18v-4" /></svg>
                                         </div>
                                         <div className="min-w-0 flex-1">
@@ -2281,10 +3278,9 @@ const ServiceCart: React.FC<Props> = ({
                             </div>
                         </section>
 
-                        {/* Payment summary — sticky */}
                         <section
                             id="service-booking-payment-summary"
-                            className="scroll-mt-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm lg:sticky lg:top-4 lg:self-start"
+                            className={`scroll-mt-4 ${BOOKING_SURFACE}`}
                         >
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Payment</h3>
@@ -2350,7 +3346,7 @@ const ServiceCart: React.FC<Props> = ({
                             <button
                                 onClick={handleSubmit}
                                 type="button"
-                                className="max-lg:hidden mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-500/25 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                                className="max-lg:hidden mt-4 w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-500/25 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                                 disabled={checkoutReadiness.length > 0}
                             >
                                 Place service request
@@ -2362,769 +3358,12 @@ const ServiceCart: React.FC<Props> = ({
                             )}
                             <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                                <span>Free cancellation up to 2h · 3-month warranty</span>
+                                <span>Cancel within 5 mins</span>
                             </div>
                         </section>
                         </>
                         )}
-
-                    </div>
-
-                    <div className="space-y-4 lg:col-span-2 min-w-0">
-                        {bookingFlowStep === 1 && (
-                        <>
-                        {/* Card 1 — Services */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
-                            <header className="flex items-start justify-between gap-3 mb-4">
-                                <div className="flex items-start gap-3 min-w-0">
-                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 font-bold text-sm">
-                                        A
-                                    </span>
-                                    <div className="min-w-0">
-                                        <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                                            Choose services
-                                        </h2>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                            {selectedServiceTypes.length === 0
-                                                ? 'Select one or more — only matching workshops will appear below'
-                                                : selectedServiceTypes.length > 1
-                                                  ? `${selectedServiceTypes.length} selected · only workshops covering all will be shown`
-                                                  : '1 service selected · pick a workshop next'}
-                                        </p>
-                                    </div>
-                                </div>
-                                {items.length > 0 && (
-                                    <span className="shrink-0 rounded-full bg-blue-50 dark:bg-blue-900/30 px-2.5 py-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 tabular-nums">
-                                        {items.length} added
-                                    </span>
-                                )}
-                            </header>
-                            {!selectedProviderId && items.length > 0 && (
-                                <div className="mb-3 flex items-center gap-2 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 px-3 py-2 text-[11px] text-slate-600 dark:text-slate-400">
-                                    <svg className="w-3.5 h-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span>Prices appear once you choose a workshop in the next card.</span>
-                                </div>
-                            )}
-                            <div className="space-y-1.5">
-                                {websiteServicePackages.map((pkg) => {
-                                    const inCart = isParentPackageInCart(pkg.id, items);
-                                    const isConfiguringThis =
-                                        hasExplicitServiceSelection && activeServicePackageId === pkg.id;
-                                    const isSelected = inCart || isConfiguringThis;
-                                    const rowPrice = selectedProviderId
-                                        ? resolveItemUnitPrice({ serviceId: pkg.id, quantity: 1 }, selectedProviderId)
-                                        : undefined;
-                                    const displayPrice = rowPrice ?? pkg.price;
-                                    return (
-                                        <button
-                                            type="button"
-                                            key={pkg.id}
-                                            role="checkbox"
-                                            aria-checked={isSelected}
-                                            onClick={() => selectServiceForBooking(pkg.id)}
-                                            className={`w-full flex items-center justify-between gap-3 rounded-xl border-2 px-3.5 py-3 text-left transition-all ${
-                                                isSelected
-                                                    ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-900/15 dark:border-blue-700 shadow-sm'
-                                                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-slate-50/60 dark:hover:bg-slate-800/40'
-                                            }`}
-                                        >
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <span
-                                                    className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
-                                                        isSelected
-                                                            ? 'border-blue-600 bg-blue-600 text-white'
-                                                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-transparent'
-                                                    }`}
-                                                >
-                                                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                </span>
-                                                <div className="min-w-0">
-                                                    <div className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1.5 min-w-0">
-                                                        <span className="truncate">{pkg.name}</span>
-                                                        {inCart && activeServicePackageId === pkg.id && (
-                                                            <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200">
-                                                                Configuring
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    {pkg.description && (
-                                                        <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                                                            {pkg.description}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <span className="text-right shrink-0 tabular-nums max-w-[8rem]">
-                                                {!selectedProviderId ? (
-                                                    <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-medium">—</span>
-                                                ) : displayPrice != null && displayPrice > 0 ? (
-                                                    <span className="text-sm font-bold text-blue-700 dark:text-blue-400">
-                                                        ₹{displayPrice.toLocaleString('en-IN')}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-[11px] text-gray-500 dark:text-gray-400 italic">At checkout</span>
-                                                )}
-                                            </span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </section>
-
-                        {/* Card 2 — Workshop / provider */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
-                            <header className="flex items-start justify-between gap-3 mb-4">
-                                <div className="flex items-start gap-3 min-w-0">
-                                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-bold text-sm ${
-                                        selectedServiceTypes.length === 0
-                                            ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
-                                            : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300'
-                                    }`}>
-                                        B
-                                    </span>
-                                    <div className="min-w-0">
-                                        <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                                            Pick a workshop
-                                        </h2>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                            {selectedServiceTypes.length === 0
-                                                ? 'Choose a service first'
-                                                : `${sortedAvailableProviders.length} ${sortedAvailableProviders.length === 1 ? 'workshop' : 'workshops'} can do all your services`}
-                                        </p>
-                                    </div>
-                                </div>
-                                {onUseMyLocation && (
-                                    <button
-                                        type="button"
-                                        onClick={onUseMyLocation}
-                                        disabled={isLocating}
-                                        className="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 px-2.5 py-1.5 rounded-md disabled:opacity-60"
-                                    >
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0L6.343 16.657A8 8 0 1117.657 16.657z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        </svg>
-                                        {isLocating ? 'Detecting…' : 'Near me'}
-                                    </button>
-                                )}
-                            </header>
-                            {selectedServiceTypes.length === 0 ? (
-                                <div className="rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 px-4 py-8 text-center">
-                                    <svg className="mx-auto w-8 h-8 text-gray-300 dark:text-gray-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                                    </svg>
-                                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">No workshops yet</p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                        Tick at least one service above to see workshops in your area.
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {sortedAvailableProviders.map((p) => {
-                                        const pTotals = providerTotals[p.id];
-                                        const etaMin = estimateBookingEtaMinutes(
-                                            p.id,
-                                            items,
-                                            providerServices,
-                                            availableServicePackages,
-                                        );
-                                        const rating =
-                                            p.rating != null && Number.isFinite(Number(p.rating))
-                                                ? Number(p.rating)
-                                                : undefined;
-                                        const isChosen = selectedProviderId === p.id;
-                                        return (
-                                            <label
-                                                key={p.id}
-                                                className={`flex items-start gap-3 p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
-                                                    isChosen
-                                                        ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-900/15 dark:border-blue-700 shadow-sm'
-                                                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-slate-50/60 dark:hover:bg-slate-800/40'
-                                                }`}
-                                            >
-                                                <input
-                                                    type="radio"
-                                                    name="service-booking-provider"
-                                                    className="h-4 w-4 mt-1 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                                                    checked={isChosen}
-                                                    onChange={() => setSelectedProviders([p.id])}
-                                                />
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-start justify-between gap-2">
-                                                        <div className="text-sm font-bold text-gray-900 dark:text-white truncate">
-                                                            {p.name}
-                                                        </div>
-                                                        {pTotals && pTotals.total > 0 && (
-                                                            <span className="text-sm font-bold text-blue-700 dark:text-blue-400 tabular-nums shrink-0">
-                                                                ₹{pTotals.total.toLocaleString('en-IN')}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                                        {p.city && p.city !== 'Unknown' ? (
-                                                            <span className="inline-flex items-center gap-1">
-                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0L6.343 16.657A8 8 0 1117.657 16.657zM15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                                                {p.city}
-                                                            </span>
-                                                        ) : null}
-                                                        {rating != null && (
-                                                            <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400 font-semibold">
-                                                                <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
-                                                                {rating.toFixed(1)}
-                                                            </span>
-                                                        )}
-                                                        {p.distanceKm ? <span>{p.distanceKm} km</span> : null}
-                                                        {etaMin != null ? <span>~{etaMin} min</span> : null}
-                                                    </div>
-                                                    {(!pTotals || pTotals.total <= 0) && items.length > 0 && (
-                                                        <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-1.5">
-                                                            Final price confirmed at booking.
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </label>
-                                        );
-                                    })}
-                                    {availableProviders.length === 0 && (
-                                        <div className="rounded-xl border-2 border-dashed border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-900/10 px-4 py-6 text-center">
-                                            <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">No workshops match</p>
-                                            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                                                {selectedServiceTypes.length > 1
-                                                    ? 'No single workshop offers all selected services. Try a different mix.'
-                                                    : 'No workshops available for this service yet.'}
-                                            </p>
-                                        </div>
-                                    )}
-                                    {locationError && (
-                                        <div className="text-xs text-red-700 dark:text-red-400 p-2.5 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-                                            {locationError}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </section>
-
-                        {/* Card 3 — Configure (only when applicable) */}
-                        {showServicePackageBuilder && activeWebsitePackage && (
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl border border-blue-200 dark:border-blue-800 p-4 sm:p-5 shadow-sm">
-                            <header className="flex items-start gap-3 mb-4">
-                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 font-bold text-sm">
-                                    C
-                                </span>
-                                <div className="min-w-0">
-                                    <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                                        Configure {activeWebsitePackage.name}
-                                    </h2>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                        Pricing for {selectedProviderPrimary?.name || 'selected workshop'}
-                                        {parentServicesInCartCount > 1 ? ` · ${parentServicesInCartCount} services in cart` : ''}
-                                    </p>
-                                </div>
-                            </header>
-                            {hasSubServiceLines ? (
-                                <div className="space-y-3">
-                                    <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-900/60 w-full">
-                                        <button
-                                            type="button"
-                                            onClick={pickFullServiceForActive}
-                                            aria-pressed={isFullServiceLineMode}
-                                            className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition-all ${
-                                                isFullServiceLineMode
-                                                    ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
-                                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                                            }`}
-                                        >
-                                            Full service
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={pickSubServicesForActive}
-                                            aria-pressed={!isFullServiceLineMode}
-                                            className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition-all ${
-                                                !isFullServiceLineMode
-                                                    ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
-                                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                                            }`}
-                                        >
-                                            Pick items{selectedSubCount > 0 ? ` · ${selectedSubCount}` : ''}
-                                        </button>
-                                    </div>
-                                    {!isFullServiceLineMode && (
-                                        <div>
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-                                                    Choose what to include
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={selectAllSubServicesForActive}
-                                                    className="text-[11px] font-bold text-blue-700 dark:text-blue-400 hover:underline"
-                                                >
-                                                    Select all
-                                                </button>
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                {includedOptionsForActiveServicePriced.map((line) => {
-                                                    const checked = items.some((item) => item.serviceId === line.id);
-                                                    return (
-                                                        <button
-                                                            type="button"
-                                                            key={line.id}
-                                                            onClick={() => toggleIncludedServiceLine(line.id)}
-                                                            aria-pressed={checked}
-                                                            className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors ${
-                                                                checked
-                                                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                                                    : 'border-gray-200 bg-white hover:border-blue-300 dark:bg-gray-900 dark:border-gray-700'
-                                                            }`}
-                                                        >
-                                                            <span className="flex items-center gap-2.5 min-w-0">
-                                                                <span
-                                                                    className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 ${
-                                                                        checked
-                                                                            ? 'border-blue-600 bg-blue-600 text-white'
-                                                                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-transparent'
-                                                                    }`}
-                                                                >
-                                                                    <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                                    </svg>
-                                                                </span>
-                                                                <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">
-                                                                    {line.name}
-                                                                </span>
-                                                            </span>
-                                                            <span className="text-xs font-bold text-blue-700 dark:text-blue-400 shrink-0 tabular-nums">
-                                                                {line.providerPrice != null && line.providerPrice > 0
-                                                                    ? `₹${line.providerPrice.toLocaleString('en-IN')}`
-                                                                    : 'At checkout'}
-                                                            </span>
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/20 px-3 py-2.5 text-xs text-amber-800 dark:text-amber-200">
-                                    Sub-service breakdown isn't published — workshop will confirm line items on acceptance. Full service uses the bundle price.
-                                </div>
-                            )}
-                        </section>
-                        )}
-
-                        {/* Continue button (mobile) — desktop uses sticky summary card */}
-                        <div className="lg:hidden mt-2 flex flex-col gap-2">
-                            {step1Blockers.length > 0 && (
-                                <p className="text-xs text-amber-800 dark:text-amber-200 text-center">
-                                    {step1Blockers.join(' · ')}
-                                </p>
-                            )}
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (!canProceedToStep2) return;
-                                    setBookingFlowStep(2);
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                }}
-                                disabled={!canProceedToStep2}
-                                className="w-full rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-500/25 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
-                            >
-                                Continue to time &amp; place →
-                            </button>
-                        </div>
-                        </>
-                        )}
-
-                        {bookingFlowStep === 2 && (
-                        <>
-                        {/* Card 1 — Address */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
-                            <header className="flex items-start justify-between gap-3 mb-4">
-                                <div className="flex items-start gap-3 min-w-0">
-                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0L6.343 16.657A8 8 0 1117.657 16.657zM15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                    </span>
-                                    <div className="min-w-0">
-                                        <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                                            Pickup address
-                                        </h2>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                            Where should we pick up your car?
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const newId = `addr-${Date.now()}`;
-                                        setAddresses(prev => [...prev, {
-                                            id: newId,
-                                            label: 'New Address',
-                                            line1: '',
-                                            city: '',
-                                            state: '',
-                                            pincode: '',
-                                        }]);
-                                        setEditingAddressId(newId);
-                                        setAddressForm({ label: 'New Address', line1: '', city: '', state: '', pincode: '' });
-                                    }}
-                                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold transition-colors"
-                                >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                                    </svg>
-                                    New
-                                </button>
-                            </header>
-                            <div className="space-y-2">
-                                {addresses.map(addr => {
-                                    const isEditing = editingAddressId === addr.id;
-                                    const isSelected = selectedAddress === addr.id;
-                                    return (
-                                        <div
-                                            key={addr.id}
-                                            className={`rounded-xl border-2 transition-all ${
-                                                isEditing
-                                                    ? 'border-blue-300 dark:border-blue-700 bg-blue-50/30 dark:bg-blue-900/10 p-3.5'
-                                                    : isSelected
-                                                      ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-900/15 dark:border-blue-700 shadow-sm'
-                                                      : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'
-                                            }`}
-                                        >
-                                            {isEditing ? (
-                                                <div className="space-y-2.5">
-                                                    <div className="flex items-center justify-between mb-1">
-                                                        <span className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">
-                                                            Edit address
-                                                        </span>
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingAddressId(null);
-                                                                setAddressForm({});
-                                                            }}
-                                                            className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 font-semibold"
-                                                        >
-                                                            Cancel
-                                                        </button>
-                                                    </div>
-                                                    <input
-                                                        type="text"
-                                                        value={addressForm.label || addr.label}
-                                                        onChange={(e) => setAddressForm({ ...addressForm, label: e.target.value })}
-                                                        placeholder="Label (Home, Office, …)"
-                                                        className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                    />
-                                                    <input
-                                                        type="text"
-                                                        value={addressForm.line1 || addr.line1}
-                                                        onChange={(e) => setAddressForm({ ...addressForm, line1: e.target.value })}
-                                                        placeholder="Street address"
-                                                        className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                    />
-                                                    <div className="grid grid-cols-3 gap-2">
-                                                        <input
-                                                            type="text"
-                                                            value={addressForm.city || addr.city}
-                                                            onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })}
-                                                            placeholder="City"
-                                                            className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                        />
-                                                        <input
-                                                            type="text"
-                                                            value={addressForm.state || addr.state}
-                                                            onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })}
-                                                            placeholder="State"
-                                                            className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                        />
-                                                        <input
-                                                            type="text"
-                                                            value={addressForm.pincode || addr.pincode}
-                                                            onChange={(e) => setAddressForm({ ...addressForm, pincode: e.target.value })}
-                                                            placeholder="Pincode"
-                                                            className="border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                        />
-                                                    </div>
-                                                    <div className="flex items-center justify-between pt-1">
-                                                        <button
-                                                            onClick={() => {
-                                                                setAddresses(prev => prev.filter(a => a.id !== addr.id));
-                                                                if (selectedAddress === addr.id) {
-                                                                    setSelectedAddress(addresses.find(a => a.id !== addr.id)?.id || '');
-                                                                }
-                                                                setEditingAddressId(null);
-                                                                setAddressForm({});
-                                                            }}
-                                                            className="px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-semibold transition-colors"
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                if (addressForm.label || addressForm.line1 || addressForm.city) {
-                                                                    setAddresses(prev => prev.map(a =>
-                                                                        a.id === addr.id
-                                                                            ? { ...a, ...addressForm }
-                                                                            : a
-                                                                    ));
-                                                                }
-                                                                setEditingAddressId(null);
-                                                                setAddressForm({});
-                                                            }}
-                                                            className="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-colors"
-                                                        >
-                                                            Save address
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <label className="flex items-start gap-3 cursor-pointer p-3.5">
-                                                    <input
-                                                        type="radio"
-                                                        className="mt-1 w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                                                        checked={isSelected}
-                                                        onChange={() => setSelectedAddress(addr.id)}
-                                                    />
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <div className="flex items-center gap-2 min-w-0">
-                                                                <span className="text-sm font-bold text-gray-900 dark:text-white truncate">{addr.label}</span>
-                                                                {isSelected && (
-                                                                    <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-blue-600 text-white px-1.5 py-0.5 rounded">
-                                                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                                                                        Selected
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    e.stopPropagation();
-                                                                    setEditingAddressId(addr.id);
-                                                                    setAddressForm({
-                                                                        label: addr.label,
-                                                                        line1: addr.line1,
-                                                                        city: addr.city,
-                                                                        state: addr.state,
-                                                                        pincode: addr.pincode,
-                                                                    });
-                                                                }}
-                                                                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                                                            >
-                                                                Edit
-                                                            </button>
-                                                        </div>
-                                                        <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                                                            {addr.line1}{addr.line1 ? ', ' : ''}{addr.city} {addr.pincode}
-                                                        </div>
-                                                        <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded">
-                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                                            Free home pickup
-                                                            {selectedProviderPrimary?.distanceKm ? ` · ${selectedProviderPrimary.distanceKm.toFixed(1)} km` : ''}
-                                                        </div>
-                                                    </div>
-                                                </label>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </section>
-
-                        {/* Card 2 — Schedule */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
-                            <header className="flex items-start gap-3 mb-4">
-                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                                </span>
-                                <div className="min-w-0">
-                                    <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                                        Pick a time
-                                    </h2>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                        Choose a date and 2-hour slot — we&apos;ll confirm with the workshop
-                                    </p>
-                                </div>
-                            </header>
-
-                            <div className="space-y-4">
-                                <div>
-                                    <label htmlFor="service-booking-date" className="block text-[11px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
-                                        Date
-                                    </label>
-                                    <input
-                                        id="service-booking-date"
-                                        type="date"
-                                        min={minBookingDateYmd}
-                                        value={selectedBookingDate}
-                                        onChange={e => {
-                                            setSelectedBookingDate(e.target.value);
-                                            setScheduleError('');
-                                        }}
-                                        className="w-full max-w-[16rem] border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm font-semibold bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [color-scheme:light] dark:[color-scheme:dark]"
-                                    />
-                                    {scheduleError && (
-                                        <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{scheduleError}</p>
-                                    )}
-                                </div>
-
-                                <div>
-                                    <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-2">
-                                        Time slot
-                                    </label>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                        {timeSlots.map(slot => {
-                                            const isSelected = selectedSlot === slot.id;
-                                            return (
-                                                <button
-                                                    key={slot.id}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setSelectedSlot(slot.id);
-                                                        setScheduleError('');
-                                                    }}
-                                                    aria-pressed={isSelected}
-                                                    className={`rounded-lg border-2 px-3 py-2.5 text-sm font-bold transition-all ${
-                                                        isSelected
-                                                            ? 'border-blue-600 bg-blue-600 text-white shadow-md'
-                                                            : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-slate-50 dark:hover:bg-slate-800/40 bg-white dark:bg-gray-900'
-                                                    }`}
-                                                >
-                                                    <div className="text-sm">{slot.label}</div>
-                                                    {isSelected && slotDemandLevel && (
-                                                        <div className="text-[10px] mt-0.5 opacity-90 font-medium normal-case">{slotDemandLevel}</div>
-                                                    )}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                {completionEstimate && (
-                                    <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-semibold text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300 flex items-start gap-2">
-                                        <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                        <span>{completionEstimate}</span>
-                                    </div>
-                                )}
-
-                                <div>
-                                    <label htmlFor="service-booking-note" className="block text-[11px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
-                                        Note <span className="font-normal normal-case text-slate-400">(optional)</span>
-                                    </label>
-                                    <textarea
-                                        id="service-booking-note"
-                                        value={note}
-                                        onChange={(e) => setNote(e.target.value)}
-                                        className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                                        rows={2}
-                                        placeholder="Warning lights? Pickup landmark? Preferred call time?"
-                                    />
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Card 3 — Coupon */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
-                            <header className="flex items-start justify-between gap-3 mb-4">
-                                <div className="flex items-start gap-3 min-w-0">
-                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" /></svg>
-                                    </span>
-                                    <div className="min-w-0">
-                                        <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                                            Coupon &amp; offers
-                                        </h2>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                            Apply a code or pick from available offers
-                                        </p>
-                                    </div>
-                                </div>
-                                {selectedCoupon && (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setSelectedCoupon(undefined);
-                                            setCouponInput('');
-                                            setCouponMessage('');
-                                        }}
-                                        className="shrink-0 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400"
-                                    >
-                                        Remove
-                                    </button>
-                                )}
-                            </header>
-
-                            <div className="flex gap-2">
-                                <input
-                                    value={couponInput}
-                                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                                    placeholder="Enter code"
-                                    className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2.5 text-sm font-semibold uppercase bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={applyCouponInput}
-                                    className="px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 text-sm font-bold transition-colors"
-                                >
-                                    Apply
-                                </button>
-                            </div>
-                            {couponMessage && (
-                                <p className={`mt-2 text-xs font-medium ${selectedCoupon ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
-                                    {couponMessage}
-                                </p>
-                            )}
-                            {bestCoupon && !selectedCoupon && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleApplyCoupon(bestCoupon.code)}
-                                    className="mt-3 w-full inline-flex items-center justify-between gap-2 rounded-lg border border-dashed border-emerald-300 dark:border-emerald-700 bg-emerald-50/40 dark:bg-emerald-900/10 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
-                                >
-                                    <span className="inline-flex items-center gap-1.5">
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                        Best offer for your cart
-                                    </span>
-                                    <span className="font-bold">Apply {bestCoupon.code}</span>
-                                </button>
-                            )}
-                            {coupons.length > 0 && (
-                                <div className="mt-3">
-                                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
-                                        Available offers
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {coupons.map(c => {
-                                            const isSelected = selectedCoupon === c.code;
-                                            return (
-                                                <button
-                                                    key={c.code}
-                                                    type="button"
-                                                    onClick={() => handleApplyCoupon(c.code)}
-                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all ${
-                                                        isSelected
-                                                            ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
-                                                            : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-300 dark:hover:border-blue-700 bg-white dark:bg-gray-900'
-                                                    }`}
-                                                >
-                                                    {isSelected && (
-                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                                                    )}
-                                                    {c.label}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                        </section>
-                        </>
-                        )}
-                    </div>
+                    </aside>
                 </div>
                 {bookingFlowStep === 2 && (
                 <div
@@ -3145,7 +3384,7 @@ const ServiceCart: React.FC<Props> = ({
                         </div>
                         <a
                             href="#service-booking-payment-summary"
-                            className="shrink-0 text-xs font-semibold text-blue-600 dark:text-blue-400 py-1"
+                            className="shrink-0 text-xs font-semibold text-indigo-600 dark:text-indigo-400 py-1"
                         >
                             Breakdown
                         </a>
@@ -3153,7 +3392,7 @@ const ServiceCart: React.FC<Props> = ({
                             type="button"
                             onClick={handleSubmit}
                             disabled={checkoutReadiness.length > 0}
-                            className="shrink-0 min-w-[7.5rem] rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="shrink-0 min-w-[7.5rem] rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-indigo-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             Book
                         </button>

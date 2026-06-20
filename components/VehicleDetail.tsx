@@ -29,6 +29,14 @@ import VehicleDetailTrustStrip from './VehicleDetailTrustStrip.js';
 import { isListingAvailable } from '../utils/listingStock.js';
 import { PriceInsights } from './PriceInsights';
 import { findSimilarVehicles } from '../utils/vehiclePricing';
+import SellerDisclosureDisplay from './SellerDisclosureDisplay';
+import BuyerInspectionForm from './BuyerInspectionForm';
+import {
+  fetchRatingEligibility,
+  submitPeerRating,
+} from '../services/vehicleTrustService';
+import type { RatingEligibility } from '../types';
+import { View } from '../types';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -269,6 +277,8 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     clearConversationMessages,
     onOfferResponse,
     chatPeerOnlineByConversationId,
+    navigate,
+    setCurrentView,
   } = context;
   
   // Merge live AI report from catalog refresh (server auto-generates on listing)
@@ -310,6 +320,22 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     inquiriesCount: vehicle.inquiriesCount || 0,
     mileage: typeof vehicleWithLiveReport.mileage === 'number' ? vehicleWithLiveReport.mileage : 0
   }), [vehicleWithLiveReport]);
+
+  const [ratingEligibility, setRatingEligibility] = useState<RatingEligibility | null>(null);
+  const [ratingDealId, setRatingDealId] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (!currentUser?.email) {
+      setRatingEligibility(null);
+      return;
+    }
+    void fetchRatingEligibility(safeVehicle.databaseId || safeVehicle.id)
+      .then(({ eligibility, dealId }) => {
+        setRatingEligibility(eligibility);
+        setRatingDealId(dealId);
+      })
+      .catch(() => setRatingEligibility(null));
+  }, [currentUser?.email, safeVehicle.id, safeVehicle.databaseId]);
   
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<'images' | 'video'>('images');
@@ -508,10 +534,20 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     return () => window.clearInterval(intervalId);
   }, [safeVehicle.id, hasListingPhotos, currentAIReport, refreshVehicles]);
 
-  const handleRateSeller = (rating: number) => {
-    onAddSellerRating(safeVehicle.sellerEmail, Number(rating));
-    setShowSellerRatingSuccess(true);
-    // Clear any existing timeout before setting a new one
+  const handleRateSeller = async (rating: number) => {
+    if (ratingDealId) {
+      try {
+        await submitPeerRating(ratingDealId, Number(rating));
+        setShowSellerRatingSuccess(true);
+        setRatingEligibility((prev) => prev ? { ...prev, canRateSeller: false } : prev);
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Could not submit rating');
+        return;
+      }
+    } else {
+      onAddSellerRating(safeVehicle.sellerEmail, Number(rating));
+      setShowSellerRatingSuccess(true);
+    }
     if (ratingSuccessTimeoutRef.current) {
       clearTimeout(ratingSuccessTimeoutRef.current);
     }
@@ -529,7 +565,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
 
   const isComparing = comparisonList.includes(safeVehicle.id);
   const isInWishlist = wishlist.includes(safeVehicle.id);
-  const canRate = currentUser?.role === 'customer';
+  const canRate = Boolean(ratingEligibility?.canRateSeller);
   const isCompareDisabled = !isComparing && comparisonList.length >= 4;
   
   // ✅ FIX: Normalize emails for comparison (consistent with codebase pattern)
@@ -1003,6 +1039,18 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               {/* Left Column - Overview Content */}
                               <div className="lg:col-span-2 space-y-6">
                                 <VehicleDetailTrustStrip />
+                                <SellerDisclosureDisplay
+                                  checklist={safeVehicle.sellerDisclosureChecklist}
+                                  category={safeVehicle.category}
+                                  vahanSnapshot={safeVehicle.vahanSnapshot}
+                                />
+                                <BuyerInspectionForm
+                                  vehicleId={safeVehicle.databaseId || safeVehicle.id}
+                                  category={safeVehicle.category}
+                                  sellerChecklist={safeVehicle.sellerDisclosureChecklist}
+                                  buyerEmail={currentUser?.email}
+                                  onRequireLogin={() => setCurrentView(View.CUSTOMER_LOGIN)}
+                                />
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                   <KeySpec label={t('vehicle.year')} value={safeVehicle.year} />
                                   <KeySpec
@@ -1164,7 +1212,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             <AIInspectionReportComponent 
                               report={currentAIReport} 
                               onRequestPhysicalInspection={() => {
-                                alert('Physical inspection request feature coming soon!');
+                                try {
+                                  sessionStorage.setItem(
+                                    'selectedService',
+                                    JSON.stringify({ title: 'Pre-Purchase Inspection' }),
+                                  );
+                                } catch { /* ignore */ }
+                                navigate(View.SERVICE_CART);
                               }}
                             />
                           </div>
@@ -1570,10 +1624,22 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                   return insurance;
                                 })()} />
                                 <SpecDetail label={t('vehicle.detail.vahan.fitnessStatus')} value={
-                                  <span className="text-green-600 font-medium">{t('vehicle.detail.vahan.fitnessValid')}</span>
+                                  safeVehicle.vahanSnapshot?.fitnessUpto ? (
+                                    <span className="text-green-600 font-medium">{safeVehicle.vahanSnapshot.fitnessUpto}</span>
+                                  ) : (
+                                    <span className="text-gray-500">{t('vehicle.detail.vahan.fitnessValid')}</span>
+                                  )
                                 } />
                                 <SpecDetail label={t('vehicle.detail.vahan.hypothecation')} value={
-                                  <span className="text-gray-600">{t('vehicle.detail.vahan.noHypothecation')}</span>
+                                  safeVehicle.vahanSnapshot ? (
+                                    <span className="text-gray-600">
+                                      {safeVehicle.vahanSnapshot.hypothecation
+                                        ? safeVehicle.vahanSnapshot.hypothecationBank || 'Yes'
+                                        : t('vehicle.detail.vahan.noHypothecation')}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-500">{t('vehicle.detail.vahan.noHypothecation')}</span>
+                                  )
                                 } />
                               </dl>
                             </div>
@@ -1702,6 +1768,11 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5">
                                   <h4 className="font-semibold text-xs text-gray-900 truncate">{seller.dealershipName || seller.name}</h4>
+                                  {(seller.reportedCount ?? 0) >= 2 && (
+                                    <span className="text-[10px] font-semibold text-red-700 bg-red-50 px-1.5 py-0.5 rounded-full">
+                                      Low trust
+                                    </span>
+                                  )}
                                   <span className="text-xs text-gray-400">•</span>
                                   {seller.ratingCount && seller.ratingCount > 0 ? (
                                     <div className="flex items-center gap-0.5">

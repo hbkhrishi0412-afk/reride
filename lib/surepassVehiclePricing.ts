@@ -131,10 +131,11 @@ async function postSurepass(
 }
 
 function vehiclePayload(
-  vehicle: Pick<
-    Vehicle,
-    'make' | 'model' | 'variant' | 'year' | 'mileage' | 'city' | 'state' | 'fuelType' | 'transmission' | 'color' | 'noOfOwners' | 'registrationNumber'
-  >,
+  vehicle: Pick<Vehicle, 'make' | 'model' | 'year'> &
+    Partial<Pick<Vehicle, 'variant' | 'city' | 'state' | 'fuelType' | 'transmission' | 'color' | 'noOfOwners'>> & {
+      mileage?: number;
+      registrationNumber?: string;
+    },
 ): Record<string, unknown> {
   return {
     make: vehicle.make,
@@ -146,9 +147,9 @@ function vehiclePayload(
     year: vehicle.year,
     manufacturing_year: vehicle.year,
     registration_year: vehicle.year,
-    mileage: vehicle.mileage,
-    kilometers: vehicle.mileage,
-    km_driven: vehicle.mileage,
+    mileage: vehicle.mileage ?? 0,
+    kilometers: vehicle.mileage ?? 0,
+    km_driven: vehicle.mileage ?? 0,
     city: vehicle.city || undefined,
     state: vehicle.state || undefined,
     fuel_type: vehicle.fuelType || undefined,
@@ -161,10 +162,8 @@ function vehiclePayload(
 }
 
 async function fetchIdvValuation(
-  vehicle: Pick<
-    Vehicle,
-    'make' | 'model' | 'variant' | 'year' | 'mileage' | 'city' | 'state' | 'fuelType' | 'transmission' | 'color' | 'noOfOwners'
-  >,
+  vehicle: Pick<Vehicle, 'make' | 'model' | 'year' | 'mileage'> &
+    Partial<Pick<Vehicle, 'variant' | 'city' | 'state' | 'fuelType' | 'transmission' | 'color' | 'noOfOwners'>>,
 ): Promise<ExternalMarketBenchmark | null> {
   const path = process.env.SUREPASS_IDV_PATH || '/api/v1/vehicle/idv-calculator';
   const body = await postSurepass(path, vehiclePayload(vehicle));
@@ -184,10 +183,10 @@ async function fetchRcToIdv(
 }
 
 async function fetchNewVehiclePrice(
-  vehicle: Pick<
-    Vehicle,
-    'make' | 'model' | 'variant' | 'year' | 'city' | 'state' | 'fuelType' | 'transmission' | 'color'
-  >,
+  vehicle: Pick<Vehicle, 'make' | 'model' | 'year'> &
+    Partial<
+      Pick<Vehicle, 'variant' | 'city' | 'state' | 'fuelType' | 'transmission' | 'color' | 'mileage' | 'noOfOwners'>
+    >,
 ): Promise<number | null> {
   const path = process.env.SUREPASS_VEHICLE_PRICE_PATH || '/api/v1/vehicle/vehicle-price-check';
   const body = await postSurepass(path, vehiclePayload(vehicle));
@@ -208,10 +207,13 @@ function mergeBenchmarks(
 }
 
 export async function fetchSurepassVehicleValuation(
-  vehicle: Pick<
-    Vehicle,
-    'make' | 'model' | 'variant' | 'year' | 'mileage' | 'city' | 'state' | 'fuelType' | 'transmission' | 'color' | 'noOfOwners' | 'registrationNumber'
-  >,
+  vehicle: Pick<Vehicle, 'make' | 'model' | 'year' | 'mileage'> &
+    Partial<
+      Pick<
+        Vehicle,
+        'variant' | 'city' | 'state' | 'fuelType' | 'transmission' | 'color' | 'noOfOwners' | 'registrationNumber'
+      >
+    >,
 ): Promise<ExternalMarketBenchmark | null> {
   if (!isSurepassConfigured()) return null;
 

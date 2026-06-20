@@ -8,6 +8,7 @@ import {
   estimateFairUsedPrice,
   findSimilarVehicles,
   getReferenceOnRoadPrice,
+  type MarketPricingVehicleInput,
 } from '../../utils/vehiclePricing.js';
 import { fetchIndianBlueBookValuation } from '../../lib/indianBlueBook.js';
 import { fetchSurepassVehicleValuation } from '../../lib/surepassVehiclePricing.js';
@@ -44,7 +45,7 @@ function cacheKey(params: {
 }
 
 async function fetchPlatformComparables(
-  vehicle: Pick<Vehicle, 'id' | 'make' | 'model' | 'year' | 'mileage' | 'price' | 'status' | 'city'>,
+  vehicle: MarketPricingVehicleInput,
 ): Promise<Pick<Vehicle, 'price' | 'year' | 'mileage'>[]> {
   if (!USE_SUPABASE) return [];
 
@@ -53,7 +54,8 @@ async function fetchPlatformComparables(
 }
 
 async function fetchExternalBenchmarkViaGemini(
-  vehicle: Pick<Vehicle, 'make' | 'model' | 'year' | 'mileage' | 'city' | 'state' | 'fuelType' | 'transmission'>,
+  vehicle: Pick<Vehicle, 'make' | 'model' | 'year' | 'mileage'> &
+    Partial<Pick<Vehicle, 'city' | 'state' | 'fuelType' | 'transmission'>>,
 ): Promise<ExternalMarketBenchmark | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
@@ -144,10 +146,7 @@ function buildEstimateBenchmark(
 }
 
 export async function buildMarketPricingResponse(
-  vehicle: Pick<
-    Vehicle,
-    'id' | 'make' | 'model' | 'variant' | 'year' | 'mileage' | 'price' | 'status' | 'city' | 'state' | 'fuelType' | 'transmission' | 'noOfOwners' | 'registrationNumber' | 'color'
-  >,
+  vehicle: MarketPricingVehicleInput,
 ): Promise<MarketPricingResponse> {
   const [comparables, surepassExternal, ibbExternal, liveExternal] = await Promise.all([
     fetchPlatformComparables(vehicle),
@@ -224,7 +223,7 @@ export async function handleVehiclePricing(
     });
   }
 
-  const vehicle = {
+  const vehicle: MarketPricingVehicleInput = {
     id: Number.isFinite(id) ? id : 0,
     make,
     model,
@@ -232,7 +231,7 @@ export async function handleVehiclePricing(
     year,
     mileage: Number.isFinite(mileage) ? mileage : 0,
     price: Number.isFinite(price) ? price : 0,
-    status: 'published' as const,
+    status: 'published',
     city,
     state,
     fuelType,

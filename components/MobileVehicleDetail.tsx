@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, ProsAndCons, User, AIInspectionReport as AIInspectionReportType } from '../types';
+import type { Vehicle, ProsAndCons, User, AIInspectionReport as AIInspectionReportType, RatingEligibility } from '../types';
 import { generateProsAndCons } from '../services/geminiService';
 import { generateAIInspection } from '../services/aiInspectionService';
 import AIInspectionReportComponent from './AIInspectionReport';
@@ -24,6 +24,9 @@ import StarRating from './StarRating';
 import { useApp } from './AppProvider';
 import { PriceInsights } from './PriceInsights';
 import { findSimilarVehicles } from '../utils/vehiclePricing';
+import SellerDisclosureDisplay from './SellerDisclosureDisplay';
+import BuyerInspectionForm from './BuyerInspectionForm';
+import { fetchRatingEligibility, submitPeerRating } from '../services/vehicleTrustService';
 
 interface MobileVehicleDetailProps {
   vehicle: Vehicle;
@@ -88,6 +91,8 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   const [isGeneratingAIInspection, setIsGeneratingAIInspection] = useState(false);
   const [aiInspectionError, setAiInspectionError] = useState<string | null>(null);
   const [aiReportPollExhausted, setAiReportPollExhausted] = useState(false);
+  const [ratingEligibility, setRatingEligibility] = useState<RatingEligibility | null>(null);
+  const [ratingDealId, setRatingDealId] = useState<string | undefined>();
 
   const vehicleWithLiveReport = useMemo(() => {
     const live = contextVehicles.find((v) => v.id === vehicle.id);
@@ -137,12 +142,38 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
 
   const isComparing = comparisonList.includes(safeVehicle.id);
   const isInWishlist = wishlist.includes(safeVehicle.id);
-  const canRate = currentUser?.role === 'customer' && !!onAddSellerRating;
+  const canRate = Boolean(ratingEligibility?.canRateSeller);
 
-  const handleRateSeller = (rating: number) => {
-    if (!onAddSellerRating || !safeVehicle.sellerEmail) return;
-    onAddSellerRating(safeVehicle.sellerEmail, Number(rating));
-    setShowSellerRatingSuccess(true);
+  useEffect(() => {
+    if (!currentUser?.email) {
+      setRatingEligibility(null);
+      setRatingDealId(undefined);
+      return;
+    }
+    void fetchRatingEligibility(safeVehicle.databaseId || safeVehicle.id)
+      .then(({ eligibility, dealId }) => {
+        setRatingEligibility(eligibility);
+        setRatingDealId(dealId);
+      })
+      .catch(() => setRatingEligibility(null));
+  }, [currentUser?.email, safeVehicle.id, safeVehicle.databaseId]);
+
+  const handleRateSeller = async (rating: number) => {
+    if (ratingDealId) {
+      try {
+        await submitPeerRating(ratingDealId, Number(rating));
+        setShowSellerRatingSuccess(true);
+        setRatingEligibility((prev) => (prev ? { ...prev, canRateSeller: false } : prev));
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Could not submit rating');
+        return;
+      }
+    } else if (onAddSellerRating && safeVehicle.sellerEmail) {
+      onAddSellerRating(safeVehicle.sellerEmail, Number(rating));
+      setShowSellerRatingSuccess(true);
+    } else {
+      return;
+    }
     if (ratingSuccessTimeoutRef.current) {
       clearTimeout(ratingSuccessTimeoutRef.current);
     }
@@ -662,6 +693,18 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           <div>
             {activeTab === 'overview' && (
               <div className="space-y-4">
+                <SellerDisclosureDisplay
+                  checklist={safeVehicle.sellerDisclosureChecklist}
+                  category={safeVehicle.category}
+                  vahanSnapshot={safeVehicle.vahanSnapshot}
+                />
+                <BuyerInspectionForm
+                  vehicleId={safeVehicle.databaseId || safeVehicle.id}
+                  category={safeVehicle.category}
+                  sellerChecklist={safeVehicle.sellerDisclosureChecklist}
+                  buyerEmail={currentUser?.email}
+                  onRequireLogin={onRequestLogin}
+                />
                 {safeVehicle.description && (
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">

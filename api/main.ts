@@ -877,6 +877,9 @@ async function mainHandler(
     } else if (pathname.includes('/vehicle-pricing') || pathname.endsWith('/vehicle-pricing')) {
       const { handleVehiclePricing } = await import('../server/handlers/vehicle-pricing.js');
       return await handleVehiclePricing(req, res, handlerOptions);
+    } else if (pathname.includes('/vehicle-trust') || pathname.endsWith('/vehicle-trust')) {
+      const { handleVehicleTrust } = await import('../server/handlers/vehicle-trust.js');
+      return await handleVehicleTrust(req, res, handlerOptions);
     } else     if (pathname.includes('/vehicle-data') || pathname.endsWith('/vehicle-data')) {
       try {
         return await handleVehicleData(req, res, handlerOptions);
@@ -1245,10 +1248,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
               return normalized ? toPublicDirectoryUser(normalized) : null;
             })
             .filter((u): u is NormalizedUser => u !== null);
+          const { enrichPublicServiceProviderUsers } = await import('../services/provider-trust-stats.js');
+          const enrichedProviders = await enrichPublicServiceProviderUsers(normalizedProviders);
           logInfo(
-            `✅ Returning ${normalizedProviders.length} normalized service providers (${providers.length - normalizedProviders.length} filtered out)`,
+            `✅ Returning ${enrichedProviders.length} enriched service providers (${providers.length - normalizedProviders.length} filtered out)`,
           );
-          return res.status(200).json(normalizedProviders);
+          return res.status(200).json(enrichedProviders);
         } catch (error) {
           logError('❌ Error fetching service providers:', error);
           return res.status(200).json([]);

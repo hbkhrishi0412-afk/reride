@@ -7,6 +7,7 @@ import VehicleCard from './VehicleCard';
 import LazyImage from './LazyImage';
 import { getFirstValidImage } from '../utils/imageUtils';
 import { StatCard, StatCardGrid, EmptyState } from './dashboard/shared';
+import PendingDealsBanner from './PendingDealsBanner';
 
 // Compare list maximum — must match VehicleCard/marketplace behaviour
 const MAX_COMPARE = 4;
@@ -220,6 +221,8 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             {t('buyerDashboard.welcomeSubtitle', { name: currentUser.name })}
           </p>
         </div>
+
+        <PendingDealsBanner vehicles={vehicles} />
 
         {/* Stats Cards — shared primitives for consistency across roles */}
         <StatCardGrid cols={4} className="mb-6">

@@ -7,6 +7,7 @@ import * as buyerService from '../services/buyerService';
 import { getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
 import { StatCard, StatCardGrid, EmptyState } from './dashboard/shared';
+import PendingDealsBanner from './PendingDealsBanner';
 
 const ServiceCart = lazy(() => import('./ServiceCart'));
 
@@ -181,6 +182,10 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
             </svg>
           </div>
         </div>
+      </div>
+
+      <div className="px-4 mt-4">
+        <PendingDealsBanner vehicles={vehicles} />
       </div>
 
       {/* Stats Cards — shared primitives, accessible and keyboard-navigable */}

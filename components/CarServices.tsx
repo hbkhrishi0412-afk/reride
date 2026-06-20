@@ -792,6 +792,9 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
             <h2 className="text-2xl lg:text-4xl font-black text-slate-900 mt-3">
               {t('carServices.chooseService')}
             </h2>
+            <p className="text-sm text-slate-500 mt-2 max-w-lg mx-auto lg:mx-0">
+              {t('carServices.chooseServiceHint')}
+            </p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 lg:gap-6 cs-stagger">
             {categoryTiles.map((category) => (

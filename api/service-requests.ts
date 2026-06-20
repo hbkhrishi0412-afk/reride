@@ -518,6 +518,17 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
             cancelledAt: updates.cancelledAt || null,
           },
         });
+        if (normalizedStatus === 'completed') {
+          const providerId = String(existing.providerId || updates.providerId || '').trim();
+          if (providerId) {
+            try {
+              const { syncProviderTrustMetadata } = await import('../services/provider-trust-stats.js');
+              await syncProviderTrustMetadata(providerId);
+            } catch (syncErr) {
+              console.warn('Provider trust sync after completion failed:', syncErr);
+            }
+          }
+        }
       }
       const updated = await supabaseServiceRequestService.findById(id);
       return res.status(200).json(normalizeServiceRequestResponse(updated || existing));

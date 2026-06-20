@@ -10,6 +10,10 @@ import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import {
+  buildDemoProviderServices,
+  demoProviderServiceCategories,
+} from '../services/demo-provider-catalog.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -66,14 +70,20 @@ async function findAuthUserByEmail(
 }
 
 async function insertServiceProviderRow(supabase: SupabaseClient, uid: string): Promise<void> {
-  const metadata = { workshops: [...TEST.workshops], availability: TEST.availability };
+  const services = buildDemoProviderServices();
+  const metadata = {
+    workshops: [...TEST.workshops],
+    availability: TEST.availability,
+    services,
+    serviceCategories: demoProviderServiceCategories(),
+  };
   const { error } = await supabase.from('service_providers').insert({
     id: uid,
     name: TEST.name,
     email: TEST.email,
     phone: TEST.phone,
     location: TEST.city,
-    services: [...TEST.skills],
+    services: Object.keys(services),
     metadata,
   });
   if (error) throw new Error(`service_providers insert: ${error.message}`);
@@ -92,6 +102,7 @@ async function upsertUsersRow(supabase: SupabaseClient, uid: string): Promise<vo
     auth_provider: 'email',
     location: TEST.city,
     firebase_uid: uid,
+    is_verified: true,
     created_at: now,
     updated_at: now,
   };

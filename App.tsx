@@ -1196,7 +1196,17 @@ const AppContent: React.FC = () => {
   // Derive registered service providers for the service cart
   const [serviceProviderBase, setServiceProviderBase] = React.useState<ServiceProviderDirectoryEntry[]>([]);
   const [serviceProviderOptions, setServiceProviderOptions] = React.useState<
-    Array<{ id: string; name: string; city: string; distanceKm?: number; serviceCategories?: string[]; rating?: number }>
+    Array<{
+      id: string;
+      name: string;
+      city: string;
+      distanceKm?: number;
+      serviceCategories?: string[];
+      rating?: number;
+      reviewCount?: number;
+      completedJobs?: number;
+      isVerified?: boolean;
+    }>
   >([]);
 
   React.useEffect(() => {
@@ -1262,6 +1272,9 @@ const AppContent: React.FC = () => {
             distanceKm: p.distanceKm,
             serviceCategories: p.serviceCategories,
             ...(p.rating != null && Number.isFinite(p.rating) ? { rating: p.rating } : {}),
+            ...(p.reviewCount != null ? { reviewCount: p.reviewCount } : {}),
+            ...(p.completedJobs != null ? { completedJobs: p.completedJobs } : {}),
+            ...(p.isVerified ? { isVerified: true } : {}),
           })),
         );
       }

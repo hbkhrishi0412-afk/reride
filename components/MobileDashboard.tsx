@@ -1,7 +1,7 @@
 import React, { useState, memo, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User, Vehicle, Conversation, Notification } from '../types';
-import { View as ViewEnum } from '../types';
+import { View as ViewEnum, VehicleCategory } from '../types';
 import { planService } from '../services/planService';
 import AiAssistant from './AiAssistant';
 import BulkUploadModal from './BulkUploadModal';
@@ -20,6 +20,17 @@ import {
   getListingImprovementSuggestions,
   type ListingEnhancementResult 
 } from '../services/listingEnhancementService';
+import SellerDisclosureForm from './SellerDisclosureForm';
+import { validateSellerDisclosure } from '../lib/vehicleDisclosureChecklist';
+import {
+  clearChecklistPhotoByUrl,
+  countAiReadyPhotos,
+  extractChecklistGalleryUrls,
+  getExtraGalleryImages,
+  mergeListingImages,
+} from '../lib/universalChecklist/mediaSync';
+import { verifyVahanRegistration } from '../services/vehicleTrustService';
+import MarkSoldDealModal from './MarkSoldDealModal';
 
 // ---------- Premium inline SVG icon set (kept local to avoid new deps) ----------
 type IconProps = { className?: string; size?: number; stroke?: number };
@@ -183,6 +194,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const [planLoading, setPlanLoading] = useState(true);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [boostVehicle, setBoostVehicle] = useState<Vehicle | null>(null);
+  const [markSoldVehicle, setMarkSoldVehicle] = useState<Vehicle | null>(null);
   /** Seller analytics tab: which rolling window to use for views / inquiries. */
   const [analyticsRangeDays, setAnalyticsRangeDays] = useState<7 | 30 | 90>(30);
   const [selectedBanks, setSelectedBanks] = useState<string[]>([]);
@@ -363,6 +375,15 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const safeConversations = conversations || [];
   const safeAllVehicles = allVehicles || [];
   const safeReportedVehicles = reportedVehicles || [];
+
+  const handleMarkAsSold = useCallback((vehicleId: number) => {
+    const vehicle = safeUserVehicles.find((v) => v?.id === vehicleId);
+    if (vehicle) {
+      setMarkSoldVehicle(vehicle);
+      return;
+    }
+    void _onMarkAsSold(vehicleId);
+  }, [safeUserVehicles, _onMarkAsSold]);
   
   const totalListings = safeUserVehicles.length;
   const activeListings = safeUserVehicles.filter(v => v && v.status === 'published').length;
@@ -1117,7 +1138,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                         color: '#047857',
                         tint: 'rgba(16,185,129,0.08)',
                         show: vehicle.status === 'published',
-                        onClick: () => _onMarkAsSold(vehicle.id)
+                        onClick: () => handleMarkAsSold(vehicle.id)
                       },
                       {
                         key: 'feature',
@@ -2350,80 +2371,46 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       newErrors.mileage = t('sellerListing.error.mileage');
     }
 
+    const disclosure = validateSellerDisclosure(
+      addFormData.sellerDisclosureChecklist,
+      addFormData.category || VehicleCategory.FOUR_WHEELER,
+    );
+    if (!disclosure.valid) {
+      newErrors.disclosure = disclosure.errors[0] || 'Complete disclosure checklist';
+    }
+
     setAddErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const [isUploadingImages, setIsUploadingImages] = useState(false);
-  
-  // Photo checklist state - tracks which specific views have been uploaded
-  type PhotoViewId = 'front' | 'rear' | 'left' | 'right' | 'interior' | 'tyres';
-  const [mobilePhotoViewUploads, setMobilePhotoViewUploads] = useState<Record<PhotoViewId, string | null>>({
-    front: null, rear: null, left: null, right: null, interior: null, tyres: null
-  });
-  const [mobileActivePhotoView, setMobileActivePhotoView] = useState<PhotoViewId | null>(null);
-  const mobileChecklistFileInputRef = React.useRef<HTMLInputElement>(null);
-  
-  // Handle checklist photo view click - triggers upload for specific view
-  const handleMobilePhotoViewClick = (viewId: PhotoViewId) => {
-    setMobileActivePhotoView(viewId);
-    mobileChecklistFileInputRef.current?.click();
-  };
-  
-  // Handle checklist file upload for mobile
-  const handleMobileChecklistFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const input = e.target;
-    if (!input.files || input.files.length === 0 || !mobileActivePhotoView) {
-      setMobileActivePhotoView(null);
-      return;
-    }
 
-    setIsUploadingImages(true);
-    const file = input.files[0];
-    
-    try {
-      const { uploadImages, validateImageFile } = await import('../services/imageUploadService');
-      
-      const validation = validateImageFile(file);
-      if (!validation.valid) {
-        notify(validation.error || 'Invalid image file', 'error');
-        setIsUploadingImages(false);
-        input.value = '';
-        setMobileActivePhotoView(null);
-        return;
-      }
-      
-      const uploadResults = await uploadImages([file], 'vehicles', currentUser?.email);
-      
-      if (uploadResults[0]?.success && uploadResults[0]?.url) {
-        const uploadedUrl = uploadResults[0].url;
-        
-        // Update photo view uploads
-        setMobilePhotoViewUploads(prev => ({
-          ...prev,
-          [mobileActivePhotoView]: uploadedUrl
-        }));
-        
-        // Also add to main images array
-        const currentImages = addFormData.images || [];
-        const maxImages = 10;
-        if (currentImages.length < maxImages) {
-          setAddFormData(prev => ({ ...prev, images: [...prev.images, uploadedUrl] }));
-        }
-        
-        console.log(`✅ Uploaded ${mobileActivePhotoView} view photo`);
-      } else {
-        notify('Failed to upload image. Please try again.', 'error');
-      }
-    } catch (error) {
-      console.error("Error uploading checklist photo:", error);
-      notify('Failed to upload image. Please try again.', 'error');
-    } finally {
-      setIsUploadingImages(false);
-      input.value = '';
-      setMobileActivePhotoView(null);
-    }
+  const handleChecklistChange = (checklist: NonNullable<typeof addFormData.sellerDisclosureChecklist>) => {
+    setAddFormData((prev) => {
+      const checklistUrls = extractChecklistGalleryUrls(checklist);
+      const extras = getExtraGalleryImages(prev.sellerDisclosureChecklist, prev.images || []);
+      return {
+        ...prev,
+        sellerDisclosureChecklist: checklist,
+        images: mergeListingImages(checklistUrls, extras),
+      };
+    });
   };
+
+  const handleEditChecklistChange = (checklist: NonNullable<Vehicle['sellerDisclosureChecklist']>) => {
+    setEditFormData((prev) => {
+      if (!prev) return prev;
+      const checklistUrls = extractChecklistGalleryUrls(checklist);
+      const extras = getExtraGalleryImages(prev.sellerDisclosureChecklist, prev.images || []);
+      return {
+        ...prev,
+        sellerDisclosureChecklist: checklist,
+        images: mergeListingImages(checklistUrls, extras),
+      };
+    });
+  };
+
+  const aiReadyPhotoCount = countAiReadyPhotos(addFormData.sellerDisclosureChecklist);
 
   const handleAddImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -2479,10 +2466,19 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   };
   
   const handleRemoveAddImage = (urlToRemove: string) => {
-    setAddFormData(prev => ({
-      ...prev,
-      images: (prev.images || []).filter(url => url !== urlToRemove)
-    }));
+    setAddFormData((prev) => {
+      const clearedChecklist = clearChecklistPhotoByUrl(prev.sellerDisclosureChecklist, urlToRemove);
+      const checklistUrls = extractChecklistGalleryUrls(clearedChecklist);
+      const extras = getExtraGalleryImages(
+        clearedChecklist,
+        (prev.images || []).filter((url) => url !== urlToRemove),
+      );
+      return {
+        ...prev,
+        sellerDisclosureChecklist: clearedChecklist,
+        images: mergeListingImages(checklistUrls, extras),
+      };
+    });
   };
 
   const handleAddSubmit = async (e: React.FormEvent) => {
@@ -2792,124 +2788,51 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             </div>
           </div>
 
-          {/* Photos Section with AI Inspection Checklist */}
+          <div className="pt-6 border-t border-gray-200">
+            {addErrors.disclosure && (
+              <p className="text-sm text-red-600 mb-2">{addErrors.disclosure}</p>
+            )}
+            <SellerDisclosureForm
+              compact
+              category={addFormData.category || VehicleCategory.FOUR_WHEELER}
+              value={addFormData.sellerDisclosureChecklist}
+              sellerEmail={currentUser.email}
+              registrationNumber={addFormData.registrationNumber}
+              vahanVerified={Boolean(addFormData.vahanVerifiedAt || addFormData.vahanSnapshot)}
+              onChange={handleChecklistChange}
+              onVerifyVahan={async (registrationNumber) => {
+                const result = await verifyVahanRegistration(registrationNumber);
+                setAddFormData((prev) => ({
+                  ...prev,
+                  registrationNumber,
+                  vahanVerifiedAt: result.snapshot?.verifiedAt || new Date().toISOString(),
+                  vahanSnapshot: result.snapshot ?? prev.vahanSnapshot,
+                }));
+                notify(
+                  result.verified ? 'RC verified' : result.message || 'RC saved',
+                  result.verified ? 'success' : 'warning',
+                );
+              }}
+            />
+          </div>
+
+          {/* Extra photos — mandatory shots come from checklist above */}
           <div className="space-y-4 pt-6 border-t border-gray-200">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h4 className="font-bold text-gray-900 text-base">{t('sellerListing.section.photos', 'Photos')}</h4>
-              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-semibold">
-                {t('sellerListing.aiEnabled', 'AI Inspection Enabled')}
+              <h4 className="font-bold text-gray-900 text-base">{t('sellerListing.section.photos', 'Listing gallery')}</h4>
+              <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                aiReadyPhotoCount >= 6 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+              }`}>
+                {aiReadyPhotoCount}/6 {t('sellerListing.photoGuide.recommended', 'checklist angles')}
               </span>
             </div>
-            
-            {/* Photo Checklist Guide */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-4 border border-blue-100">
-              <div className="flex items-start gap-3 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm">{t('sellerListing.photoGuide.title', 'Photo Guide for Best Results')}</p>
-                  <p className="text-xs text-gray-600 mt-0.5">{t('sellerListing.photoGuide.subtitle', 'Upload 6+ photos for AI inspection report')}</p>
-                </div>
-              </div>
-              
-              {/* Checklist Items - Clickable */}
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { id: 'front' as PhotoViewId, label: t('sellerListing.photoGuide.front', 'Front View'), icon: '🚗' },
-                  { id: 'rear' as PhotoViewId, label: t('sellerListing.photoGuide.rear', 'Rear View'), icon: '🔙' },
-                  { id: 'left' as PhotoViewId, label: t('sellerListing.photoGuide.left', 'Left Side'), icon: '◀️' },
-                  { id: 'right' as PhotoViewId, label: t('sellerListing.photoGuide.right', 'Right Side'), icon: '▶️' },
-                  { id: 'interior' as PhotoViewId, label: t('sellerListing.photoGuide.interior', 'Interior/Dashboard'), icon: '🪑' },
-                  { id: 'tyres' as PhotoViewId, label: t('sellerListing.photoGuide.tyres', 'Tyres Close-up'), icon: '⚫' },
-                ].map((item) => {
-                  const uploadedUrl = mobilePhotoViewUploads[item.id];
-                  const isChecked = !!uploadedUrl;
-                  const isLoading = isUploadingImages && mobileActivePhotoView === item.id;
-                  return (
-                    <button
-                      type="button"
-                      key={item.id}
-                      onClick={() => !isLoading && handleMobilePhotoViewClick(item.id)}
-                      disabled={isLoading}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium transition-all active:scale-[0.98] ${
-                        isChecked 
-                          ? 'bg-green-100 text-green-700 border-2 border-green-300' 
-                          : 'bg-white text-gray-600 border-2 border-gray-200 border-dashed'
-                      } ${isLoading ? 'opacity-70' : ''}`}
-                    >
-                      {isChecked && uploadedUrl ? (
-                        <div className="relative w-8 h-8 rounded overflow-hidden ring-2 ring-green-400 flex-shrink-0">
-                          <img src={uploadedUrl} alt={item.label} className="w-full h-full object-cover" />
-                          <div className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
-                            <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        </div>
-                      ) : isLoading ? (
-                        <svg className="animate-spin h-5 w-5 text-blue-500 flex-shrink-0" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                      ) : (
-                        <span className="text-lg">{item.icon}</span>
-                      )}
-                      <span className="flex-1 text-left">{item.label}</span>
-                      {!isChecked && !isLoading && (
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              {/* Hidden file input for checklist uploads */}
-              <input 
-                ref={mobileChecklistFileInputRef}
-                type="file" 
-                className="sr-only" 
-                accept="image/png, image/jpeg" 
-                onChange={handleMobileChecklistFileUpload}
-              />
-              
-              {/* Progress Indicator */}
-              {(() => {
-                const uploadedViewCount = Object.values(mobilePhotoViewUploads).filter(Boolean).length;
-                return (
-                  <div className="mt-3 pt-3 border-t border-blue-200">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-medium text-gray-700">
-                        {t('sellerListing.photoGuide.progress', 'Photos uploaded')}
-                      </span>
-                      <span className="text-xs font-bold text-blue-700">
-                        {uploadedViewCount}/6 {t('sellerListing.photoGuide.recommended', 'recommended')}
-                      </span>
-                    </div>
-                    <div className="h-2 bg-white rounded-full overflow-hidden border border-blue-200">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          uploadedViewCount >= 6 ? 'bg-green-500' : 'bg-blue-500'
-                        }`}
-                        style={{ width: `${Math.min(100, (uploadedViewCount / 6) * 100)}%` }}
-                      />
-                    </div>
-                    {uploadedViewCount >= 4 && (
-                      <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
-                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                        {t('sellerListing.photoGuide.aiReady', 'AI Inspection will be generated!')}
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
+
+            <p className="text-xs text-gray-600 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+              {t(
+                'sellerListing.photoGuide.syncedHint',
+                'Photos from the mandatory checklist (§1.3) appear here automatically. Tap below only for extra shots.',
+              )}
+            </p>
 
             {/* Upload Button */}
             <label
@@ -2936,8 +2859,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     </svg>
                   </div>
                   <div>
-                    <span className="text-sm font-semibold text-blue-700">{t('sellerListing.tapToUpload', 'Tap to Upload Photos')}</span>
-                    <p className="text-xs text-blue-600">{t('sellerListing.photoFormats', 'JPG, PNG up to 10MB each')}</p>
+                    <span className="text-sm font-semibold text-blue-700">{t('sellerListing.tapToUpload', 'Add Extra Photos')}</span>
+                    <p className="text-xs text-blue-600">{t('sellerListing.photoFormats', 'Optional — JPG, PNG up to 10MB each')}</p>
                   </div>
                 </>
               )}
@@ -3151,6 +3074,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       }
       if (formData.mileage < 0) {
         newErrors.mileage = t('sellerListing.error.mileage');
+      }
+
+      const disclosure = validateSellerDisclosure(
+        formData.sellerDisclosureChecklist,
+        formData.category || VehicleCategory.FOUR_WHEELER,
+      );
+      if (!disclosure.valid) {
+        newErrors.disclosure = disclosure.errors[0] || 'Complete disclosure checklist';
       }
 
       setEditErrors(newErrors);
@@ -3524,6 +3455,42 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 />
               </div>
             </div>
+          </div>
+
+          <div className="space-y-4 pt-4 border-t">
+            <h4 className="font-semibold text-gray-900">Condition disclosure checklist</h4>
+            {editErrors.disclosure && (
+              <p className="text-sm text-red-600">{editErrors.disclosure}</p>
+            )}
+            <SellerDisclosureForm
+              compact
+              category={formData.category || VehicleCategory.FOUR_WHEELER}
+              value={formData.sellerDisclosureChecklist}
+              sellerEmail={currentUser.email}
+              registrationNumber={formData.registrationNumber}
+              vahanVerified={Boolean(formData.vahanVerifiedAt || formData.vahanSnapshot)}
+              onChange={handleEditChecklistChange}
+              onVerifyVahan={async (registrationNumber) => {
+                const result = await verifyVahanRegistration(
+                  registrationNumber,
+                  editingVehicle?.id ?? editingVehicle?.databaseId,
+                );
+                setEditFormData((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        registrationNumber,
+                        vahanVerifiedAt: result.snapshot?.verifiedAt || new Date().toISOString(),
+                        vahanSnapshot: result.snapshot ?? prev.vahanSnapshot,
+                      }
+                    : prev,
+                );
+                notify(
+                  result.verified ? 'RC verified' : result.message || 'RC saved',
+                  result.verified ? 'success' : 'warning',
+                );
+              }}
+            />
           </div>
 
           {/* Status */}
@@ -4266,6 +4233,26 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             await onBoostListing(vehicleId, packageId);
             setBoostVehicle(null);
             addToast?.('Your listing has been boosted! It will get more visibility.', 'success');
+          }}
+        />
+      )}
+
+      {markSoldVehicle && (
+        <MarkSoldDealModal
+          vehicleId={markSoldVehicle.databaseId || markSoldVehicle.id}
+          vehicleTitle={`${markSoldVehicle.make} ${markSoldVehicle.model}`}
+          conversations={safeConversations}
+          sellerEmail={currentUser.email}
+          onClose={() => setMarkSoldVehicle(null)}
+          onSuccess={() => {
+            notify('Sale recorded — buyer will confirm to unlock ratings', 'success');
+            onUpdateVehicle?.({
+              ...markSoldVehicle,
+              status: 'sold',
+              soldAt: new Date().toISOString(),
+              listingStatus: 'sold',
+            });
+            setMarkSoldVehicle(null);
           }}
         />
       )}

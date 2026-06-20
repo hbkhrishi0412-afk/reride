@@ -20,3 +20,4 @@ export {
   shouldRegenerateAIInspection,
   shouldBackfillAIInspectionOnView,
 } from './vehicle-ai-inspection.js';
+export { handleVehicleTrust } from './vehicle-trust.js';

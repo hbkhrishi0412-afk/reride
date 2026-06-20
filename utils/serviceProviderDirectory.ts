@@ -9,6 +9,9 @@ export interface ServiceProviderDirectoryEntry {
   district?: string;
   serviceCategories?: string[];
   rating?: number;
+  reviewCount?: number;
+  completedJobs?: number;
+  isVerified?: boolean;
 }
 
 function parseRating(raw: unknown): number | undefined {
@@ -17,12 +20,29 @@ function parseRating(raw: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function parseCount(raw: unknown): number | undefined {
+  if (raw == null || raw === '') return undefined;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : undefined;
+}
+
 function mapApiProvider(raw: Record<string, unknown>): ServiceProviderDirectoryEntry | null {
-  const id = String(raw.id || raw.uid || raw.email || '').trim();
+  const id = String(
+    raw.id || raw.firebaseUid || raw.firebase_uid || raw.uid || raw.email || '',
+  ).trim();
   const name = String(raw.name || raw.dealershipName || '').trim();
   if (!id || !name) return null;
   const city = String(raw.city || raw.location || 'Unknown').trim() || 'Unknown';
-  const rating = parseRating(raw.rating);
+  const rating = parseRating(raw.rating ?? raw.averageRating);
+  const reviewCount = parseCount(raw.ratingCount);
+  const metadata =
+    raw.metadata && typeof raw.metadata === 'object' && !Array.isArray(raw.metadata)
+      ? (raw.metadata as Record<string, unknown>)
+      : {};
+  const completedJobs = parseCount(
+    raw.completedJobs ?? metadata.completedJobs ?? metadata.completedServiceCount ?? metadata.jobsCompleted,
+  );
+  const isVerified = Boolean(raw.isVerified);
   return {
     id,
     name,
@@ -33,6 +53,9 @@ function mapApiProvider(raw: Record<string, unknown>): ServiceProviderDirectoryE
       ? { serviceCategories: raw.serviceCategories as string[] }
       : {}),
     ...(rating != null ? { rating } : {}),
+    ...(reviewCount != null ? { reviewCount } : {}),
+    ...(completedJobs != null ? { completedJobs } : {}),
+    ...(isVerified ? { isVerified: true } : {}),
   };
 }
 

@@ -1,5 +1,19 @@
 import type { Vehicle } from '../types.js';
 
+/** Minimal vehicle fields for platform comparable search and market pricing APIs. */
+export type ComparableVehiclePick = Pick<
+  Vehicle,
+  'id' | 'make' | 'model' | 'year' | 'mileage' | 'price' | 'status'
+> & Partial<Pick<Vehicle, 'city'>>;
+
+export type MarketPricingVehicleInput = ComparableVehiclePick &
+  Partial<
+    Pick<
+      Vehicle,
+      'variant' | 'state' | 'fuelType' | 'transmission' | 'noOfOwners' | 'registrationNumber' | 'color'
+    >
+  >;
+
 export type DealRatingLabel = 'Great Deal' | 'Good Price' | 'Fair Price' | 'Above Market' | 'Overpriced';
 
 /** Buyer-visible labels only — never show negative badges on public listings. */
@@ -303,8 +317,8 @@ function scoreFromPercentDiff(priceDifferencePercent: number): {
  * Compare a listing to similar vehicles (same make/model, ±2 years, ±30% mileage when possible).
  */
 export function findSimilarVehicles(
-  vehicle: Vehicle,
-  pool: Pick<Vehicle, 'id' | 'make' | 'model' | 'year' | 'mileage' | 'price' | 'status' | 'city'>[],
+  vehicle: Pick<Vehicle, 'id' | 'make' | 'model' | 'year' | 'mileage'>,
+  pool: ComparableVehiclePick[],
 ): Pick<Vehicle, 'price' | 'year' | 'mileage'>[] {
   const mileageLo = vehicle.mileage * 0.7;
   const mileageHi = vehicle.mileage * 1.3;

@@ -11,6 +11,13 @@ import {
   isListingReadyToPublish,
   type ListingEnhancementResult 
 } from '../services/listingEnhancementService';
+import {
+  clearChecklistPhotoByUrl,
+  countAiReadyPhotos,
+  extractChecklistGalleryUrls,
+  getExtraGalleryImages,
+  mergeListingImages,
+} from '../lib/universalChecklist/mediaSync';
 
 interface EditVehicleModalProps {
     vehicle: Vehicle;
@@ -28,15 +35,6 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
     const [enhancementResult, setEnhancementResult] = useState<ListingEnhancementResult | null>(null);
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [showEnhancementSummary, setShowEnhancementSummary] = useState(false);
-    
-    // Photo checklist state
-    type PhotoViewId = 'front' | 'rear' | 'left' | 'right' | 'interior' | 'tyres';
-    const [editPhotoViewUploads, setEditPhotoViewUploads] = useState<Record<PhotoViewId, string | null>>({
-        front: null, rear: null, left: null, right: null, interior: null, tyres: null
-    });
-    const [editActivePhotoView, setEditActivePhotoView] = useState<PhotoViewId | null>(null);
-    const [isUploadingChecklist, setIsUploadingChecklist] = useState(false);
-    const editChecklistFileInputRef = React.useRef<HTMLInputElement>(null);
     const enhancementTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
@@ -243,79 +241,22 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
     };
 
     const handleRemoveImageUrl = (urlToRemove: string) => {
-        setFormData(prev => ({...prev, images: (prev.images || []).filter(url => url !== urlToRemove)}));
-        // Also remove from photo view uploads if it matches
-        setEditPhotoViewUploads(prev => {
-            const updated = { ...prev };
-            (Object.keys(updated) as PhotoViewId[]).forEach(key => {
-                if (updated[key] === urlToRemove) {
-                    updated[key] = null;
-                }
-            });
-            return updated;
+        setFormData((prev) => {
+            const clearedChecklist = clearChecklistPhotoByUrl(prev.sellerDisclosureChecklist, urlToRemove);
+            const checklistUrls = extractChecklistGalleryUrls(clearedChecklist);
+            const extras = getExtraGalleryImages(
+                clearedChecklist,
+                (prev.images || []).filter((url) => url !== urlToRemove),
+            );
+            return {
+                ...prev,
+                sellerDisclosureChecklist: clearedChecklist,
+                images: mergeListingImages(checklistUrls, extras),
+            };
         });
     };
-    
-    // Handle checklist photo view click
-    const handleEditPhotoViewClick = (viewId: PhotoViewId) => {
-        setEditActivePhotoView(viewId);
-        editChecklistFileInputRef.current?.click();
-    };
-    
-    // Handle checklist file upload
-    const handleEditChecklistFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const input = e.target;
-        if (!input.files || input.files.length === 0 || !editActivePhotoView) {
-            setEditActivePhotoView(null);
-            return;
-        }
 
-        setIsUploadingChecklist(true);
-        const file = input.files[0];
-        
-        try {
-            const { uploadImages, validateImageFile } = await import('../services/imageUploadService');
-            
-            const validation = validateImageFile(file);
-            if (!validation.valid) {
-                alert(validation.error || 'Invalid image file');
-                setIsUploadingChecklist(false);
-                input.value = '';
-                setEditActivePhotoView(null);
-                return;
-            }
-            
-            const uploadResults = await uploadImages([file], 'vehicles', vehicle.sellerEmail);
-            
-            if (uploadResults[0]?.success && uploadResults[0]?.url) {
-                const uploadedUrl = uploadResults[0].url;
-                
-                // Update photo view uploads
-                setEditPhotoViewUploads(prev => ({
-                    ...prev,
-                    [editActivePhotoView]: uploadedUrl
-                }));
-                
-                // Also add to main images array
-                const currentImages = formData.images || [];
-                const maxImages = 10;
-                if (currentImages.length < maxImages) {
-                    setFormData(prev => ({ ...prev, images: [...(prev.images || []), uploadedUrl] }));
-                }
-                
-                console.log(`✅ Uploaded ${editActivePhotoView} view photo`);
-            } else {
-                alert('Failed to upload image. Please try again.');
-            }
-        } catch (error) {
-            console.error("Error uploading checklist photo:", error);
-            alert('Failed to upload image. Please try again.');
-        } finally {
-            setIsUploadingChecklist(false);
-            input.value = '';
-            setEditActivePhotoView(null);
-        }
-    };
+    const aiReadyPhotoCount = countAiReadyPhotos(formData.sellerDisclosureChecklist);
 
     const validateForm = (): boolean => {
         const newErrors: Record<string, string> = {};
@@ -631,93 +572,14 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                         <span>📷</span> Vehicle Images
                                     </h3>
                                     
-                                    {/* AI Inspection Photo Checklist */}
-                                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 mb-4 border border-blue-100 dark:border-blue-800">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <div className="w-6 h-6 rounded-md bg-blue-500 flex items-center justify-center">
-                                                <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                                </svg>
-                                            </div>
-                                            <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">Photo Checklist for AI Inspection</span>
-                                            {Object.values(editPhotoViewUploads).filter(Boolean).length >= 4 && (
-                                                <span className="ml-auto text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">AI Ready!</span>
-                                            )}
-                                        </div>
-                                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                                            {[
-                                                { id: 'front' as PhotoViewId, label: 'Front', icon: '🚗' },
-                                                { id: 'rear' as PhotoViewId, label: 'Rear', icon: '🔙' },
-                                                { id: 'left' as PhotoViewId, label: 'Left Side', icon: '◀️' },
-                                                { id: 'right' as PhotoViewId, label: 'Right Side', icon: '▶️' },
-                                                { id: 'interior' as PhotoViewId, label: 'Interior', icon: '🪑' },
-                                                { id: 'tyres' as PhotoViewId, label: 'Tyres', icon: '⚫' },
-                                            ].map((item) => {
-                                                const uploadedUrl = editPhotoViewUploads[item.id];
-                                                const isChecked = !!uploadedUrl;
-                                                const isLoading = isUploadingChecklist && editActivePhotoView === item.id;
-                                                return (
-                                                    <button
-                                                        type="button"
-                                                        key={item.id}
-                                                        onClick={() => !isLoading && handleEditPhotoViewClick(item.id)}
-                                                        disabled={isLoading}
-                                                        className={`flex flex-col items-center gap-1 p-2 rounded-lg text-xs font-medium transition-all cursor-pointer hover:shadow-md ${
-                                                            isChecked 
-                                                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-2 border-green-300 dark:border-green-600' 
-                                                                : 'bg-white dark:bg-gray-800 text-gray-500 border-2 border-gray-200 dark:border-gray-600 border-dashed hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
-                                                        } ${isLoading ? 'opacity-70' : ''}`}
-                                                        title={isChecked ? `${item.label} uploaded - Click to replace` : `Click to upload ${item.label} photo`}
-                                                    >
-                                                        {isChecked && uploadedUrl ? (
-                                                            <div className="relative w-8 h-8 rounded overflow-hidden ring-2 ring-green-400">
-                                                                <img src={uploadedUrl} alt={item.label} className="w-full h-full object-cover" />
-                                                                <div className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
-                                                                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                                    </svg>
-                                                                </div>
-                                                            </div>
-                                                        ) : isLoading ? (
-                                                            <svg className="animate-spin h-5 w-5 text-blue-500" viewBox="0 0 24 24">
-                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                                            </svg>
-                                                        ) : (
-                                                            <span className="text-base">{item.icon}</span>
-                                                        )}
-                                                        <span className="truncate w-full text-center">{item.label}</span>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                        {/* Hidden file input for checklist uploads */}
-                                        <input 
-                                            ref={editChecklistFileInputRef}
-                                            type="file" 
-                                            className="sr-only" 
-                                            accept="image/png, image/jpeg" 
-                                            onChange={handleEditChecklistFileUpload}
-                                        />
-                                        {(() => {
-                                            const uploadedViewCount = Object.values(editPhotoViewUploads).filter(Boolean).length;
-                                            return (
-                                                <div className="mt-3 flex items-center gap-2">
-                                                    <div className="flex-1 h-1.5 bg-white dark:bg-gray-700 rounded-full overflow-hidden">
-                                                        <div 
-                                                            className={`h-full rounded-full transition-all duration-300 ${
-                                                                uploadedViewCount >= 6 ? 'bg-green-500' : 'bg-blue-500'
-                                                            }`}
-                                                            style={{ width: `${Math.min(100, (uploadedViewCount / 6) * 100)}%` }}
-                                                        />
-                                                    </div>
-                                                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                                                        {uploadedViewCount}/6
-                                                    </span>
-                                                </div>
-                                            );
-                                        })()}
-                                    </div>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-4 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-3 py-2">
+                                        Mandatory photos are managed in the disclosure checklist when creating/editing via the seller dashboard.
+                                        {aiReadyPhotoCount > 0 && (
+                                            <span className="block mt-1 font-semibold text-emerald-700 dark:text-emerald-400">
+                                                {aiReadyPhotoCount}/6 checklist angles on file
+                                            </span>
+                                        )}
+                                    </p>
 
                                     <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center hover:border-reride-orange transition-colors">
                                         <div className="flex flex-col items-center gap-4">
@@ -727,7 +589,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                             <div>
                                                 <label htmlFor="file-upload" className="cursor-pointer">
                                                     <span className="text-lg font-medium text-reride-orange hover:text-reride-blue transition-colors">
-                                                        Click to upload images
+                                                        Add extra images
                                                     </span>
                                                     <input 
                                                         id="file-upload" 

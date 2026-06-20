@@ -1495,7 +1495,7 @@ const getRequestActorId = (req) => {
 };
 
 // GET /api/users
-app.get('/api/users', (req, res) => {
+app.get('/api/users', async (req, res) => {
   const { action, email, role } = req.query;
   
   if (action === 'trust-score' && email) {
@@ -1510,7 +1510,41 @@ app.get('/api/users', (req, res) => {
 
   // Mirror production public catalog (api/main.ts): role-scoped lists for dealer directory.
   if (role === 'seller' || role === 'service_provider') {
-    return res.json(mockUsers.filter((u) => u.role === role).map(toPublicDirectoryUser));
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (supabaseUrl && supabaseKey && !String(supabaseKey).includes('your_')) {
+      try {
+        const { supabaseUserService } = await import('./services/supabase-user-service.ts');
+        const rows = await supabaseUserService.findByRole(role);
+        const base = rows.map((user) =>
+          toPublicDirectoryUser({
+            ...user,
+            city: user.location,
+            dealershipName: user.dealershipName || user.name,
+          }),
+        );
+        if (role === 'service_provider') {
+          const { enrichPublicServiceProviderUsers } = await import('./services/provider-trust-stats.ts');
+          return res.json(await enrichPublicServiceProviderUsers(base));
+        }
+        return res.json(base);
+      } catch (err) {
+        console.warn('Supabase directory fetch failed (dev-api), using mock fallback:', err?.message || err);
+      }
+    }
+
+    const base = mockUsers.filter((u) => u.role === role).map(toPublicDirectoryUser);
+    if (role === 'service_provider') {
+      try {
+        const { enrichPublicServiceProviderUsers } = await import('./services/provider-trust-stats.ts');
+        const enriched = await enrichPublicServiceProviderUsers(base);
+        return res.json(enriched);
+      } catch (err) {
+        console.warn('Provider trust enrichment failed (dev-api):', err?.message || err);
+      }
+    }
+    return res.json(base);
   }
   
   res.json(mockUsers.map((u) => toPublicDirectoryUser(u)));
@@ -1814,18 +1848,44 @@ function normalizeIncludedServices(input) {
   return result;
 }
 
-app.get('/api/provider-services', (req, res) => {
+app.get('/api/provider-services', async (req, res) => {
   const scope = req.query.scope || 'mine';
   const uid = getDevUid(req);
 
   if (scope === 'public') {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && supabaseKey && !String(supabaseKey).includes('your_')) {
+      try {
+        const { getSupabaseAdminClient } = await import('./lib/supabase-admin.ts');
+        const supabase = getSupabaseAdminClient();
+        const { data: allProviders, error } = await supabase
+          .from('service_providers')
+          .select('id, metadata');
+        if (!error && Array.isArray(allProviders)) {
+          const result = allProviders.flatMap((provider) => {
+            const services = provider.metadata?.services || {};
+            return Object.entries(services).map(([serviceType, payload]) => ({
+              providerId: provider.id,
+              serviceType,
+              ...(payload || {}),
+              includedServices: Array.isArray(payload?.includedServices) ? payload.includedServices : [],
+            }));
+          });
+          return res.json(result);
+        }
+      } catch (err) {
+        console.warn('Supabase provider-services public fetch failed (dev-api):', err?.message || err);
+      }
+    }
+
     const flattened = Object.entries(mockProviderServices).flatMap(([pid, services]) =>
       Object.entries(services || {}).map(([serviceType, payload]) => ({
         providerId: pid,
         serviceType,
         ...payload,
         includedServices: Array.isArray(payload.includedServices) ? payload.includedServices : [],
-      }))
+      })),
     );
     return res.json(flattened);
   }
@@ -3268,6 +3328,16 @@ app.get('/api/vehicle-pricing', async (req, res) => {
       },
       cached: false,
     });
+  }
+});
+
+app.all('/api/vehicle-trust', async (req, res) => {
+  try {
+    const { handleVehicleTrust } = await import('./server/handlers/vehicle-trust.ts');
+    await handleVehicleTrust(req, res, {});
+  } catch (error) {
+    console.error('vehicle-trust error:', error);
+    return res.status(500).json({ success: false, reason: 'Vehicle trust API error' });
   }
 });
 

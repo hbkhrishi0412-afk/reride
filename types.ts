@@ -3,6 +3,20 @@
 import React from 'react';
 import type { VehicleCategoryData } from './vehicleDataTypes';
 import { VehicleCategory } from './vehicle-category.js';
+import type {
+  SellerDisclosureChecklist,
+  VahanSnapshot,
+  DisclosureItemKey,
+  DisclosureChecklistItem,
+  BuyerInspectionItem,
+  BuyerInspectionReport,
+} from './lib/vehicleDisclosureChecklist.js';
+export type {
+  UniversalSellerChecklist,
+  ListingChecklistTier,
+  ChecklistItemStatus,
+} from './lib/universalChecklist/types.js';
+export type { SellerDisclosureChecklist, VahanSnapshot, BuyerInspectionItem, BuyerInspectionReport, DisclosureItemKey, DisclosureChecklistItem };
 
 export { VehicleCategory };
 
@@ -307,6 +321,40 @@ export interface Vehicle {
   
   /** AI-powered photo inspection report */
   aiInspectionReport?: AIInspectionReport;
+
+  /** Seller self-disclosure checklist (structured condition + photo per item) */
+  sellerDisclosureChecklist?: SellerDisclosureChecklist;
+  /** Government RC snapshot when verified */
+  vahanSnapshot?: VahanSnapshot;
+}
+
+export interface VehicleTrustDeal {
+  id: string;
+  vehicleId: string;
+  sellerEmail: string;
+  buyerEmail: string;
+  status: 'pending_buyer_confirm' | 'completed' | 'cancelled';
+  createdAt: string;
+  sellerConfirmedAt?: string;
+  buyerConfirmedAt?: string;
+  completedAt?: string;
+}
+
+export interface PeerRatingRecord {
+  id: string;
+  dealId: string;
+  raterEmail: string;
+  ratedEmail: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
+}
+
+export interface RatingEligibility {
+  canRateSeller: boolean;
+  canRateBuyer: boolean;
+  dealId?: string;
+  reason?: string;
 }
 
 export type SubscriptionPlan = 'free' | 'pro' | 'premium';

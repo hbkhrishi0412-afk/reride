@@ -29,6 +29,8 @@
     "seed:all": "node seed-all-mock-data.js",
     "seed:users": "node seed-all-mock-data.js",
     "seed:test-provider": "node --import tsx scripts/seed-test-service-provider.ts",
+    "seed:provider-trust-demo": "node --import tsx scripts/seed-provider-trust-demo.ts",
+    "backfill:provider-trust": "node --import tsx scripts/backfill-provider-trust-stats.ts",
     "clean": "node -e \"const fs = require('fs'); const path = require('path'); const dirs = ['node_modules/.vite', 'dist']; dirs.forEach(d => { try { fs.rmSync(d, { recursive: true, force: true }); console.log('Cleaned:', d); } catch(e) {} });\"",
     "perf": "node performance-optimize.js",
     "perf:clean": "node performance-optimize.js --clean",

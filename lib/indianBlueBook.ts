@@ -88,10 +88,10 @@ export function parseIndianBlueBookResponse(body: Record<string, unknown>): Exte
 }
 
 export async function fetchIndianBlueBookValuation(
-  vehicle: Pick<
-    Vehicle,
-    'make' | 'model' | 'variant' | 'year' | 'mileage' | 'city' | 'state' | 'fuelType' | 'transmission' | 'noOfOwners'
-  >,
+  vehicle: Pick<Vehicle, 'make' | 'model' | 'year' | 'mileage'> &
+    Partial<
+      Pick<Vehicle, 'variant' | 'city' | 'state' | 'fuelType' | 'transmission' | 'noOfOwners'>
+    >,
 ): Promise<ExternalMarketBenchmark | null> {
   if (!isIndianBlueBookConfigured()) return null;
 

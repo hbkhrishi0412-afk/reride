@@ -3,7 +3,16 @@ import type { User, Vehicle, Badge } from '../types.js';
 export const getSellerBadges = (seller: User, allSellerVehicles: Vehicle[]): Badge[] => {
     const badges: Badge[] = [];
 
-    // Verified Seller Badge
+  // Low disclosure trust marker
+  if (seller.reportedCount && seller.reportedCount >= 2) {
+    badges.push({
+      type: 'verified',
+      label: 'Low trust',
+      description: 'Multiple buyers reported disclosure mismatches on past listings.',
+    });
+  }
+
+  // Verified Seller Badge
     if (seller.isVerified) {
         badges.push({
             type: 'verified',
