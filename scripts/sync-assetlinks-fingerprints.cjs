@@ -20,6 +20,53 @@ const path = require('node:path');
 
 const PACKAGE_NAME = 'com.reride.app';
 const OUT_PATH = path.join(process.cwd(), 'public', '.well-known', 'assetlinks.json');
+const KEYSTORE_PROPS_PATH = path.join(process.cwd(), 'android', 'keystore.properties');
+
+function loadEnvFiles() {
+  for (const name of ['.env', '.env.local']) {
+    const envPath = path.join(process.cwd(), name);
+    if (!fs.existsSync(envPath)) continue;
+    for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] == null || process.env[key] === '') {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
+function loadKeystoreProperties() {
+  if (!fs.existsSync(KEYSTORE_PROPS_PATH)) return;
+  const props = {};
+  for (const line of fs.readFileSync(KEYSTORE_PROPS_PATH, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    props[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+  }
+  if (!process.env.KEYSTORE_FILE && props.storeFile) {
+    process.env.KEYSTORE_FILE = path.join(process.cwd(), 'android', props.storeFile);
+  }
+  if (!process.env.KEY_ALIAS && props.keyAlias) process.env.KEY_ALIAS = props.keyAlias;
+  if (!process.env.KEYSTORE_PASSWORD && props.storePassword) {
+    process.env.KEYSTORE_PASSWORD = props.storePassword;
+  }
+  if (!process.env.KEY_PASSWORD && props.keyPassword) {
+    process.env.KEY_PASSWORD = props.keyPassword;
+  }
+}
 
 function findKeytool() {
   if (process.env.JAVA_HOME) {
@@ -105,6 +152,12 @@ function collectFingerprints() {
     );
   }
 
+  if (!pasted && fps.size > 0) {
+    console.log(
+      'ℹ If Play Console still shows "Link not working" after deploy, add Play App Signing SHA-256 to RELEASE_SHA256_FINGERPRINT in .env.local and re-run this script.',
+    );
+  }
+
   if (fps.size === 0) {
     throw new Error('No fingerprints collected. Install JDK/Android Studio JBR or set RELEASE_SHA256_FINGERPRINT.');
   }
@@ -129,6 +182,8 @@ function writeAssetLinks(fingerprints) {
 }
 
 try {
+  loadEnvFiles();
+  loadKeystoreProperties();
   const fingerprints = collectFingerprints();
   writeAssetLinks(fingerprints);
 } catch (err) {

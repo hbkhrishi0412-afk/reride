@@ -125,6 +125,6 @@
     { "source": "/api/send-sms-hook", "destination": "/api/send-sms-hook.ts" },
     { "source": "/api/(.*)", "destination": "/api/main.ts" },
     { "source": "/", "destination": "/index.html" },
-    { "source": "/((?!assets/)(?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/)(?!api/)(?!\\.well-known/).*)", "destination": "/index.html" }
   ]
 }

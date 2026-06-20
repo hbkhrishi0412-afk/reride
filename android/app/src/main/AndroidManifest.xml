@@ -48,13 +48,12 @@
                 <data android:scheme="com.reride.app" android:host="oauth-callback" android:pathPrefix="/" />
             </intent-filter>
 
-            <!-- Android App Links — https://www.reride.co.in/* opens the app when assetlinks.json verifies -->
+            <!-- Android App Links — www only (apex reride.co.in redirects; Google rejects assetlinks.json over redirects) -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="www.reride.co.in" />
-                <data android:scheme="https" android:host="reride.co.in" />
             </intent-filter>
 
         </activity>
