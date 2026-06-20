@@ -10,7 +10,7 @@ import type {
   UniversalSellerChecklist,
   VahanSnapshot,
   VehicleTrustDeal,
-} from '../types';
+} from '../types.js';
 
 const BASE = '/api/vehicle-trust';
 
