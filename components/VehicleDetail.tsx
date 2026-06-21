@@ -1659,7 +1659,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                         <div className="space-y-2.5">
                         {/* Listing trust signals */}
                         <div className="flex flex-wrap items-center gap-2">
-                          <ListingStockBadge vehicle={safeVehicle} size="md" hideInStock />
+                          <ListingStockBadge vehicle={safeVehicle} size="md" />
                           <VerificationBadge vehicle={safeVehicle} />
                         </div>
                         <ListingTrustChips vehicle={safeVehicle} seller={seller} />

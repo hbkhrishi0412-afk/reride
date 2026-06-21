@@ -288,6 +288,7 @@ function pathToView(path: string): View {
   if (normalizedPath === '/admin/sell-car') return View.SELL_CAR_ADMIN;
   if (normalizedPath === '/admin' || normalizedPath === '/admin/panel') return View.ADMIN_PANEL;
   if (normalizedPath === '/login') return View.LOGIN_PORTAL;
+  if (normalizedPath === '/404') return View.NOT_FOUND;
   if (normalizedPath === '/compare') return View.COMPARISON;
   if (normalizedPath === '/wishlist') return View.WISHLIST;
   if (normalizedPath === '/profile') return View.PROFILE;
@@ -331,11 +332,35 @@ function parseSellerEmailFromPath(path: string): string | null {
 }
 
 /**
+ * Map ?role= on /login to seller/customer login views so refresh keeps the intended portal.
+ */
+function loginViewFromSearch(search: string | null | undefined): View | null {
+  if (!search) return null;
+  try {
+    const role = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get('role');
+    const normalized = (role || '').toLowerCase().trim();
+    if (normalized === 'seller') return View.SELLER_LOGIN;
+    if (normalized === 'customer') return View.CUSTOMER_LOGIN;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/**
  * Prefer the URL for public seller routes: history.state.view can lag or be wrong on HashRouter/WebView
  * while the hash already shows /seller/..., which previously kept the UI on DETAIL or HOME.
  */
-function resolveViewFromPathAndState(path: string, routerState: HistoryState | null | undefined): View {
+function resolveViewFromPathAndState(
+  path: string,
+  routerState: HistoryState | null | undefined,
+  search?: string | null,
+): View {
   const pathView = pathToView(path);
+  if (pathView === View.LOGIN_PORTAL) {
+    const roleView = loginViewFromSearch(search);
+    if (roleView) return roleView;
+  }
   if (pathView === View.SELLER_PROFILE) {
     return View.SELLER_PROFILE;
   }
@@ -371,7 +396,7 @@ function readInitialAppViewFromBrowser(): View {
       pathname: window.location.pathname || '/',
       hash: window.location.hash || '',
     });
-    return resolveViewFromPathAndState(path, null);
+    return resolveViewFromPathAndState(path, null, window.location.search);
   } catch {
     return View.HOME;
   }
@@ -640,6 +665,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const googleOAuthSyncDoneRef = useRef(false);
   /** While tryFinishGoogleOAuth is calling syncWithBackend — blocks duplicate session-restore sync */
   const oauthGoogleProfileSyncInFlightUidRef = useRef<string | null>(null);
+  const handleRegisterRef = useRef<(user: User) => void>(() => {});
   /** Mutex for session-restore sync (auth events can fire in bursts) */
   const profileRestoreFromSupabaseInFlightRef = useRef(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -1048,6 +1074,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Clear storage
       sessionStorage.removeItem('currentUser');
       sessionStorage.removeItem('reride_oauth_role');
+      sessionStorage.removeItem('reride_oauth_mode');
       sessionStorage.removeItem('reride_last_role');
       googleOAuthSyncDoneRef.current = false;
       oauthGoogleProfileSyncInFlightUidRef.current = null;
@@ -1056,6 +1083,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('reRideRefreshToken');
       try {
         localStorage.removeItem('reride_oauth_role');
+        localStorage.removeItem('reride_oauth_mode');
         localStorage.removeItem('reride_last_role');
       } catch {
         /* ignore */
@@ -1111,6 +1139,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentUser(null);
       sessionStorage.removeItem('currentUser');
       sessionStorage.removeItem('reride_oauth_role');
+      sessionStorage.removeItem('reride_oauth_mode');
       sessionStorage.removeItem('reride_last_role');
       googleOAuthSyncDoneRef.current = false;
       oauthGoogleProfileSyncInFlightUidRef.current = null;
@@ -1119,6 +1148,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('reRideRefreshToken');
       try {
         localStorage.removeItem('reride_oauth_role');
+        localStorage.removeItem('reride_oauth_mode');
         localStorage.removeItem('reride_last_role');
       } catch {
         /* ignore */
@@ -1357,15 +1387,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           pendingRole = localStorage.getItem('reride_oauth_role') as typeof pendingRole;
         } catch { /* ignore */ }
       }
+      let pendingMode: 'login' | 'register' =
+        (sessionStorage.getItem('reride_oauth_mode') as 'login' | 'register' | null) || 'login';
+      if (!sessionStorage.getItem('reride_oauth_mode')) {
+        try {
+          const fromLocal = localStorage.getItem('reride_oauth_mode') as 'login' | 'register' | null;
+          if (fromLocal) pendingMode = fromLocal;
+        } catch { /* ignore */ }
+      }
       if (!pendingRole || !session?.user || googleOAuthSyncDoneRef.current || cancelled) {
         return;
       }
       googleOAuthSyncDoneRef.current = true;
       oauthGoogleProfileSyncInFlightUidRef.current = session.user.id;
+      const accessToken = session.access_token;
       try {
         try {
           sessionStorage.removeItem('reride_oauth_role');
+      sessionStorage.removeItem('reride_oauth_mode');
           localStorage.removeItem('reride_oauth_role');
+        localStorage.removeItem('reride_oauth_mode');
+          sessionStorage.removeItem('reride_oauth_mode');
+          localStorage.removeItem('reride_oauth_mode');
         } catch {
           /* ignore */
         }
@@ -1374,6 +1417,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (pendingRole === 'service_provider') {
             const result = await syncServiceProviderOAuth(
               session.user as unknown as Record<string, unknown>,
+              accessToken,
             );
             if (result.success && result.provider) {
               try {
@@ -1406,9 +1450,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             session.user as unknown as Record<string, unknown>,
             pendingRole,
             'google',
+            accessToken,
           );
           if (result.success && result.user) {
-            handleLogin(result.user);
+            if (pendingMode === 'register') {
+              handleRegisterRef.current(result.user);
+            } else {
+              handleLogin(result.user);
+            }
             try {
               window.dispatchEvent(new CustomEvent('reride:oauth-complete'));
             } catch {
@@ -1625,13 +1674,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const applyPostRegisterNavigation = (): void => {
       addToast(t('toast.welcomeNewUser', { name: user.name }), 'success');
 
-      // Navigate based on user role
+      let postRegisterView = View.HOME;
       if (user.role === 'admin') {
+        postRegisterView = View.ADMIN_PANEL;
         setCurrentView(View.ADMIN_PANEL);
       } else if (user.role === 'seller') {
         logDebug('🔄 Setting seller dashboard view after registration');
+        postRegisterView = View.SELLER_DASHBOARD;
         setCurrentView(View.SELLER_DASHBOARD);
       } else if (user.role === 'service_provider') {
+        postRegisterView = View.CAR_SERVICE_DASHBOARD;
         setCurrentView(View.CAR_SERVICE_DASHBOARD);
         try {
           const loc =
@@ -1651,14 +1703,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           /* ignore */
         }
       } else if (user.role === 'customer') {
+        postRegisterView = View.HOME;
         setCurrentView(View.HOME);
       } else {
         setCurrentView(View.HOME);
       }
+
+      try {
+        const pathByRole =
+          user.role === 'admin'
+            ? '/admin'
+            : user.role === 'seller'
+              ? '/seller/dashboard'
+              : user.role === 'service_provider'
+                ? '/car-services/dashboard'
+                : '/';
+        routerNavigate(pathByRole, {
+          state: {
+            view: postRegisterView,
+            timestamp: Date.now(),
+          },
+        });
+      } catch {
+        /* ignore */
+      }
     };
 
     scheduleCapacitorPostLoginUi(applyPostRegisterNavigation);
-  }, [addToast, t]);
+  }, [addToast, routerNavigate, t]);
+  handleRegisterRef.current = handleRegister;
 
   const syncUserCachesByEmail = useCallback((email: string, updates: Partial<User>) => {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
@@ -2094,8 +2167,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         [View.ADMIN_PANEL]: '/admin',
         [View.ADMIN_LOGIN]: '/admin/login',
         [View.LOGIN_PORTAL]: '/login',
-        [View.CUSTOMER_LOGIN]: '/login',
-        [View.SELLER_LOGIN]: '/login',
+        [View.CUSTOMER_LOGIN]: '/login?role=customer',
+        [View.SELLER_LOGIN]: '/login?role=seller',
         [View.COMPARISON]: '/compare',
         [View.WISHLIST]: '/wishlist',
         [View.PROFILE]: '/profile',
@@ -2112,6 +2185,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         [View.SELL_CAR]: '/sell-car',
         [View.SELL_CAR_ADMIN]: '/admin/sell-car',
         [View.NOTIFICATIONS_CENTER]: '/notifications',
+        [View.NOT_FOUND]: '/404',
       };
 
       // Handle dynamic paths
@@ -2317,7 +2391,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const path = getAppPathFromRouter(location ?? { pathname: '/' });
       const routerState = location?.state as HistoryState | null;
-      setCurrentView(resolveViewFromPathAndState(path, routerState));
+      setCurrentView(resolveViewFromPathAndState(path, routerState, location.search));
     } catch (error) {
       logDebug('Failed initial URL → view sync:', error);
     }
@@ -2334,7 +2408,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     let newView: View;
     try {
-      newView = resolveViewFromPathAndState(path, routerState);
+      newView = resolveViewFromPathAndState(path, routerState, location.search);
     } catch (_) {
       newView = View.HOME;
     }
@@ -6903,7 +6977,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveChat, setIsAnnouncementVisible, setInitialSearchQuery,
     setIsCommandPaletteOpen, updateUserLocation, updateSelectedCity, setUsers,
     setPlatformSettings, setAuditLog, setVehicleData, setFaqItems, setSupportTickets,
-    setNotifications, addToast, removeToast, navigate, goBack, refreshVehicles, handleLogin, handleLogout,
+    setNotifications, addToast, removeToast, navigate, goBack, refreshVehicles, handleLogin, handleRegister, handleLogout,
     updateVehicleHandler, syncUserCachesByEmail, syncAllUserCaches, syncVehicleCachesById,
     t,
   ]);

@@ -447,14 +447,10 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           onServiceProviderLogin,
         },
         mode === 'register' ? 'register' : 'login',
+        rememberMe,
       );
       if (flowError) {
         throw new Error(flowError);
-      }
-      if (mode === 'login') {
-        setRememberMePreference(rememberMe);
-      } else {
-        setRememberMePreference(true);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : t('auth.error.googleSignInFailed');
@@ -1082,7 +1078,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={isLoading || isGoogleLoading || !canUseGoogle}
+                disabled={isLoading || isGoogleLoading}
                 title={!canUseGoogle ? t('auth.googleRequiresCustomerOrSeller') : undefined}
                 className="group w-full inline-flex justify-center items-center py-2.5 px-3 border border-gray-200 rounded-xl bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-orange-500 transition-all duration-200 disabled:opacity-50 active:scale-[0.98] sm:py-3 sm:px-4 sm:border-2 sm:text-sm sm:bg-white/80 sm:backdrop-blur-sm"
               >
@@ -1519,7 +1515,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={isLoading || isGoogleLoading || !canUseGoogle}
+                disabled={isLoading || isGoogleLoading}
                 title={!canUseGoogle ? t('auth.googleRequiresCustomerOrSeller') : undefined}
                 className="group w-full inline-flex justify-center items-center py-2.5 px-4 border border-gray-200 rounded-xl bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-orange-500 transition-all duration-200 disabled:opacity-50 active:scale-[0.98]"
               >

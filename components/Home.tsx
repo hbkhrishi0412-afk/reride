@@ -12,6 +12,9 @@ import {
     getHomeMobileCityGradient,
     HOME_DISCOVERY_CATEGORIES,
     HOME_DISCOVERY_CITY_ORDER,
+    HOME_SECTION_BG,
+    HOME_SECTION_FADE,
+    HOME_LISTING_CARD,
 } from '../constants/homeDiscovery';
 import CityMonument from './CityMonument';
 import VehicleCategoryIcon from './VehicleCategoryIcon';
@@ -444,7 +447,7 @@ const Home: React.FC<HomeProps> = ({
     );
 
     return (
-        <div className="min-h-screen bg-white w-full">
+        <div className={`min-h-screen w-full ${HOME_SECTION_BG.page}`}>
             {/* Sticky compact search — appears once the hero scrolls off-screen */}
             {showStickySearch && (
                 <div
@@ -950,7 +953,7 @@ const Home: React.FC<HomeProps> = ({
                 vehicles to show. Backed by localStorage so it works for
                 logged-out visitors too. */}
             {continueBrowsingVehicles.length > 0 && (
-                <div className="bg-gray-50/60 border-b border-gray-100">
+                <div className={HOME_SECTION_BG.continue}>
                     <div className="max-w-7xl mx-auto px-4 py-8 md:py-10">
                         <div className="flex items-end justify-between mb-5">
                             <div>
@@ -980,7 +983,7 @@ const Home: React.FC<HomeProps> = ({
                                     <button
                                         key={vehicle.id}
                                         onClick={() => onSelectVehicle(vehicle)}
-                                        className="group flex-shrink-0 w-[220px] md:w-[240px] bg-white rounded-2xl border border-gray-100 hover:border-purple-200 hover:shadow-md transition-all overflow-hidden text-left"
+                                        className={`group flex-shrink-0 w-[220px] md:w-[240px] ${HOME_LISTING_CARD} rounded-2xl overflow-hidden text-left`}
                                     >
                                         <div className="relative h-[130px] bg-gray-100">
                                             {optimized ? (
@@ -1015,7 +1018,7 @@ const Home: React.FC<HomeProps> = ({
 
             {/* Featured Collection Section */}
             {featuredVehicles.length > 0 ? (
-                <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50/60">
+                <div className={`py-16 md:py-20 px-4 ${HOME_SECTION_BG.featured}`}>
                     <div className="max-w-7xl mx-auto">
                         <div ref={featuredHeadRef} className="reveal-on-scroll flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10 md:mb-12">
                             <div className="space-y-3 text-center md:text-left">
@@ -1072,7 +1075,7 @@ const Home: React.FC<HomeProps> = ({
                                     <div
                                         key={vehicle.id}
                                         onClick={() => onSelectVehicle(vehicle)}
-                                        className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-200/80 cursor-pointer flex-shrink-0 snap-start min-w-[260px] md:min-w-[300px] lg:min-w-[320px]"
+                                        className={`${HOME_LISTING_CARD} rounded-2xl overflow-hidden cursor-pointer flex-shrink-0 snap-start min-w-[260px] md:min-w-[300px] lg:min-w-[320px]`}
                                     >
                                         <div className="relative h-56 overflow-hidden">
                                             <LazyImage
@@ -1144,7 +1147,7 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             ) : showSkeletons ? (
-                <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50/60">
+                <div className={`py-16 md:py-20 px-4 ${HOME_SECTION_BG.featured}`}>
                     <div className="max-w-7xl mx-auto space-y-4">
                         <div className="h-4 bg-gray-100 rounded w-40 animate-pulse" />
                         <div className="h-6 bg-gray-100 rounded w-64 animate-pulse mb-6" />
@@ -1154,7 +1157,7 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             ) : (
-                <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50/60">
+                <div className={`py-16 md:py-20 px-4 ${HOME_SECTION_BG.featured}`}>
                     <div className="max-w-3xl mx-auto">
                         <div className="text-center">
                             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-reride-orange to-orange-400 rounded-2xl mb-5 shadow-md">
@@ -1182,7 +1185,7 @@ const Home: React.FC<HomeProps> = ({
 
             {/* Recently Added Section */}
             {recentVehicles.length > 0 ? (
-                <div className="py-16 md:py-20 px-4 bg-white">
+                <div className={`py-16 md:py-20 px-4 ${HOME_SECTION_BG.recent}`}>
                     <div className="max-w-7xl mx-auto">
                         <div ref={recentHeadRef} className="reveal-on-scroll flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10 md:mb-12">
                             <div className="space-y-3 text-center md:text-left">
@@ -1215,7 +1218,7 @@ const Home: React.FC<HomeProps> = ({
                                 <div
                                     key={vehicle.id}
                                     onClick={() => onSelectVehicle(vehicle)}
-                                    className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-200/80 cursor-pointer"
+                                    className={`${HOME_LISTING_CARD} rounded-2xl overflow-hidden cursor-pointer`}
                                 >
                                     <div className="relative h-48 overflow-hidden">
                                         <LazyImage
@@ -1274,7 +1277,7 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             ) : showSkeletons ? (
-                <div className="py-16 md:py-20 px-4 bg-white">
+                <div className={`py-16 md:py-20 px-4 ${HOME_SECTION_BG.recent}`}>
                     <div className="max-w-7xl mx-auto">
                         <div className="h-6 bg-gray-100 rounded w-52 mb-3 animate-pulse" />
                         <div className="h-4 bg-gray-100 rounded w-80 mb-10 animate-pulse" />
@@ -1286,7 +1289,7 @@ const Home: React.FC<HomeProps> = ({
             ) : null}
 
             {/* Explore by Location Section — postcard-style cards (matches mobile design) */}
-            <div className="py-16 md:py-20 px-4 bg-white border-t border-gray-100">
+            <div className={`py-16 md:py-20 px-4 ${HOME_SECTION_BG.cities}`}>
                 <div className="max-w-7xl mx-auto">
                     <div ref={citiesHeadRef} className="reveal-on-scroll flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8 md:mb-10">
                         <div className="space-y-2">
@@ -1463,7 +1466,7 @@ const Home: React.FC<HomeProps> = ({
             </div>
 
             {/* Testimonials */}
-            <div ref={testimonialsRef} className="reveal-on-scroll py-16 md:py-20 px-4 bg-white">
+            <div ref={testimonialsRef} className={`reveal-on-scroll py-16 md:py-20 px-4 ${HOME_SECTION_BG.testimonials}`}>
                 <div className="max-w-6xl mx-auto">
                     <div className="text-center mb-10 md:mb-12 space-y-3">
                         <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-pink-700">
@@ -1476,7 +1479,7 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
                         {testimonialItems.map((item, idx) => (
-                            <div key={idx} className="bg-gray-50/80 rounded-xl border border-gray-200/80 p-6 hover:shadow-md hover:bg-white transition-all duration-200">
+                            <div key={idx} className="home-listing-card rounded-xl p-6 transition-all duration-200">
                                 <svg className="w-7 h-7 text-purple-200 mb-3" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
                                 </svg>
@@ -1497,7 +1500,7 @@ const Home: React.FC<HomeProps> = ({
             </div>
 
             {/* Browse by Category — tile cards with illustrated icon plates (matches mobile design) */}
-            <div ref={categoriesRef} className="reveal-on-scroll py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50 border-t border-gray-100">
+            <div ref={categoriesRef} className={`reveal-on-scroll py-16 md:py-20 px-4 ${HOME_SECTION_BG.categories}`}>
                 <div className="max-w-7xl mx-auto">
                     <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8 md:mb-10">
                         <div className="space-y-2">
@@ -1581,7 +1584,7 @@ const Home: React.FC<HomeProps> = ({
             </div>
 
             {/* Sell Car Steps Section */}
-            <div ref={sellRef} className="reveal-on-scroll py-16 md:py-20 px-4 bg-white">
+            <div ref={sellRef} className={`reveal-on-scroll py-16 md:py-20 px-4 ${HOME_SECTION_BG.sell}`}>
                 <div className="max-w-6xl mx-auto text-center">
                     <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-12 md:mb-16 tracking-tight leading-tight">{t('home.sell.title')}</h2>
 
@@ -1636,7 +1639,7 @@ const Home: React.FC<HomeProps> = ({
 
             {/* Trending Now / Popular Dealers */}
             {featuredVehicles.length > 4 && (
-                <div className="py-16 md:py-20 px-4 bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50">
+                <div className={`py-16 md:py-20 px-4 ${HOME_SECTION_BG.trending}`}>
                     <div className="max-w-3xl mx-auto">
                         <div className="text-center space-y-4">
                             <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-orange-700">

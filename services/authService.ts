@@ -15,6 +15,7 @@ import { getSupabaseClient } from '../lib/supabase.js';
 import type { User } from '../types.js';
 import { authenticatedFetch } from '../utils/authenticatedFetch.js';
 import { clearSupabaseAuthStorage, resolveSupabaseAccessTokenForApi } from '../utils/authStorage.js';
+import { setRememberMePreference } from '../utils/rememberMe.js';
 
 export type GoogleOAuthRole = 'customer' | 'seller' | 'service_provider';
 
@@ -52,10 +53,21 @@ export function persistGoogleOAuthRole(role: GoogleOAuthRole): void {
   }
 }
 
+export function persistGoogleOAuthMode(mode: 'login' | 'register'): void {
+  try {
+    sessionStorage.setItem('reride_oauth_mode', mode);
+    localStorage.setItem('reride_oauth_mode', mode);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function clearGoogleOAuthRole(): void {
   try {
     sessionStorage.removeItem('reride_oauth_role');
     localStorage.removeItem('reride_oauth_role');
+    sessionStorage.removeItem('reride_oauth_mode');
+    localStorage.removeItem('reride_oauth_mode');
   } catch {
     /* ignore */
   }
@@ -144,8 +156,12 @@ export async function runGoogleSignInButtonFlow(
     onServiceProviderLogin?: (provider: Record<string, unknown>) => void;
   },
   mode: 'login' | 'register' = 'login',
+  rememberMe: boolean = true,
 ): Promise<string | null> {
   persistGoogleOAuthRole(role);
+  persistGoogleOAuthMode(mode);
+  // Persist before browser OAuth redirect so PKCE + remember-me survive the round-trip.
+  setRememberMePreference(mode === 'register' ? true : rememberMe);
 
   const result = await Promise.race([
     supabaseGoogleSignIn(),

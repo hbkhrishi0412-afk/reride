@@ -144,6 +144,104 @@ html {
   }
 }
 
+/* ===== Premium Home Section Surfaces ===== */
+/* Warm ivory shell — luxury marketplace feel, not flat rainbow blocks */
+
+.home-page {
+  background-color: #eceae6;
+  background-image: radial-gradient(ellipse 130% 70% at 50% -15%, rgba(255, 255, 255, 0.92) 0%, transparent 58%);
+}
+
+.home-section {
+  position: relative;
+  border-top: 1px solid rgba(15, 23, 42, 0.07);
+}
+
+.home-section--continue {
+  background:
+    radial-gradient(ellipse 72% 58% at 10% 0%, rgba(99, 102, 241, 0.06) 0%, transparent 58%),
+    linear-gradient(180deg, #f8f7f5 0%, #f0eeeb 100%);
+}
+
+.home-section--featured {
+  background:
+    radial-gradient(ellipse 78% 62% at 90% -8%, rgba(124, 58, 237, 0.07) 0%, transparent 58%),
+    radial-gradient(ellipse 52% 48% at 4% 100%, rgba(255, 107, 53, 0.04) 0%, transparent 52%),
+    linear-gradient(178deg, #fdfcfa 0%, #f4f2ef 48%, #ebe8e4 100%);
+}
+
+.home-section--recent {
+  background:
+    radial-gradient(ellipse 72% 56% at 92% 6%, rgba(255, 107, 53, 0.065) 0%, transparent 56%),
+    linear-gradient(180deg, #ffffff 0%, #f9f8f6 52%, #f1efec 100%);
+}
+
+.home-section--cities {
+  background:
+    radial-gradient(ellipse 68% 52% at 6% 96%, rgba(124, 58, 237, 0.045) 0%, transparent 56%),
+    linear-gradient(180deg, #f7f6f4 0%, #fbfaf9 46%, #efedea 100%);
+}
+
+.home-section--testimonials {
+  background:
+    radial-gradient(ellipse 62% 52% at 50% -5%, rgba(236, 72, 153, 0.05) 0%, transparent 62%),
+    linear-gradient(180deg, #ffffff 0%, #f7f6f4 100%);
+}
+
+.home-section--categories {
+  background:
+    radial-gradient(ellipse 58% 48% at 100% 48%, rgba(255, 107, 53, 0.055) 0%, transparent 56%),
+    linear-gradient(180deg, #f4f3f0 0%, #fdfcfb 56%, #f5f4f1 100%);
+}
+
+.home-section--sell {
+  background: linear-gradient(180deg, #ffffff 0%, #f6f5f2 100%);
+}
+
+.home-section--recommendations {
+  background:
+    radial-gradient(ellipse 66% 56% at 0% 52%, rgba(124, 58, 237, 0.05) 0%, transparent 58%),
+    linear-gradient(180deg, #f9f8f6 0%, #f1efec 100%);
+}
+
+.home-section--trending {
+  background:
+    radial-gradient(ellipse 82% 62% at 50% -10%, rgba(255, 107, 53, 0.08) 0%, transparent 62%),
+    linear-gradient(135deg, #fdf9f6 0%, #f5f2ee 50%, #ece8e3 100%);
+}
+
+.home-section-fade-featured {
+  --home-section-fade: #ebe8e4;
+}
+
+.home-listing-card {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 4px 16px -4px rgba(15, 23, 42, 0.09),
+    0 14px 36px -14px rgba(15, 23, 42, 0.07);
+  transition:
+    box-shadow 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 320ms ease;
+}
+
+.home-listing-card:hover {
+  border-color: rgba(15, 23, 42, 0.11);
+  box-shadow:
+    0 2px 4px rgba(15, 23, 42, 0.05),
+    0 10px 28px -6px rgba(15, 23, 42, 0.13),
+    0 22px 44px -18px rgba(15, 23, 42, 0.11);
+  transform: translateY(-3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-listing-card:hover {
+    transform: none;
+  }
+}
+
 /* Hero gradient-text shimmer (slowly cycles between brand colors) */
 @keyframes hero-gradient-text {
   0%   { background-position: 0% 50%; }

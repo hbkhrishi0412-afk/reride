@@ -100,7 +100,18 @@ export const saveSearch = (userId: string, search: Omit<SavedSearch, 'id' | 'cre
       notificationFrequency: search.notificationFrequency ?? created.notificationFrequency,
     });
   }
-  return getSavedSearches(userId).find((s) => s.id === created.id) ?? created;
+  const saved =
+    getSavedSearches(userId).find((s) => s.id === created.id) ?? created;
+  void (async () => {
+    try {
+      const activity = getBuyerActivitySync(userId);
+      activity.savedSearches = getSavedSearches(userId);
+      await saveBuyerActivity(activity);
+    } catch {
+      /* non-fatal — local save already succeeded */
+    }
+  })();
+  return saved;
 };
 
 export const deleteSavedSearch = (userId: string, searchId: string): void => {

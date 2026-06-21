@@ -68,6 +68,33 @@ const io = new Server(server, {
 });
 const PORT = parseInt(process.env.VITE_LOCAL_API_PORT || '3001', 10) || 3001;
 
+/** Delegate to production api/main.ts handler for routes not duplicated in dev-api-server. */
+const MAIN_HANDLER_DELEGATED_PREFIXES = [
+  '/api/settings',
+  '/api/support-tickets',
+  '/api/buyer-activity',
+  '/api/audit-log',
+];
+let mainHandlerModulePromise = null;
+function loadMainHandler() {
+  if (!mainHandlerModulePromise) {
+    mainHandlerModulePromise = import('./api/main.ts').then((m) => m.default);
+  }
+  return mainHandlerModulePromise;
+}
+async function delegateToMainHandler(req, res) {
+  try {
+    const handler = await loadMainHandler();
+    const url = req.originalUrl || req.url;
+    await handler({ ...req, url }, res);
+  } catch (error) {
+    console.error('delegateToMainHandler error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, reason: 'API delegation failed' });
+    }
+  }
+}
+
 /**
  * Dev parity with api/main.ts oauth-login: derive session from Supabase JWT.
  * Verifies signature when SUPABASE_JWT_SECRET is set; otherwise decodes payload only (local dev).
@@ -657,6 +684,10 @@ function resolveAuthRole(req) {
 app.get('/api/vehicles', async (req, res) => {
   const { type, action } = req.query;
 
+  if (action === 'track-view') {
+    return res.json({ success: true });
+  }
+
   if (action === 'radius-search' && req.query.lat && req.query.lng && req.query.radius) {
     const lat = parseFloat(String(req.query.lat));
     const lng = parseFloat(String(req.query.lng));
@@ -741,6 +772,10 @@ app.get('/api/vehicles', async (req, res) => {
 
 app.post('/api/vehicles', async (req, res) => {
   const { type, action } = req.query;
+
+  if (action === 'track-view') {
+    return res.json({ success: true });
+  }
   
   if (type === 'data') {
     console.log('🚗 POST /api/vehicles?type=data - Updating vehicle data');
@@ -1454,6 +1489,10 @@ app.get('/api/users', async (req, res) => {
 // POST /api/users (login, register, etc.)
 app.post('/api/users', (req, res) => {
   const { action } = req.body;
+
+  if (action === 'request-password-reset' || action === 'complete-password-reset') {
+    return delegateToMainHandler(req, res);
+  }
   
   if (action === 'login') {
     const { email, password, role } = req.body;
@@ -3248,6 +3287,10 @@ app.get('/api/geocode/reverse', async (req, res) => {
   }
 });
 
+for (const prefix of MAIN_HANDLER_DELEGATED_PREFIXES) {
+  app.all(prefix, delegateToMainHandler);
+}
+
 app.all('/api/vehicle-trust', async (req, res) => {
   try {
     const { handleVehicleTrust } = await import('./server/handlers/vehicle-trust.ts');
@@ -4029,6 +4072,10 @@ app.get('/api/health', (req, res) => {
       aiInspection: '/api/ai-inspection',
       vehicleSpecs: '/api/vehicle-specs',
       uploadImage: '/api/upload-image',
+      settings: '/api/settings',
+      supportTickets: '/api/support-tickets',
+      buyerActivity: '/api/buyer-activity',
+      auditLog: '/api/audit-log',
       csrfToken: '/api/csrf-token',
       // chat: '/api/chat', // Disabled - Firebase handles chat in production
       health: '/api/health'

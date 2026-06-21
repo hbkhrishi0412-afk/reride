@@ -21,6 +21,9 @@ import {
   getHomeMobileCityGradient,
   HOME_DISCOVERY_CATEGORIES,
   HOME_DISCOVERY_CITY_ORDER,
+  HOME_SECTION_BG,
+  HOME_SECTION_FADE,
+  HOME_LISTING_CARD,
 } from '../constants/homeDiscovery';
 import CityMonument from './CityMonument';
 import VehicleCategoryIcon from './VehicleCategoryIcon';
@@ -460,7 +463,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
     allVehicles.length === 0;
 
   return (
-    <div className="bg-gray-50">
+    <div className={HOME_SECTION_BG.page}>
       {/* Hero Section */}
       <div
         className="relative pt-5 pb-8 px-4 overflow-hidden bg-[#0B1020]"
@@ -686,7 +689,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       {continueBrowsingVehicles.length > 0 && (
         <div
           ref={continueRef}
-          className="reveal-on-scroll px-4 py-5 bg-white border-t border-gray-100"
+          className={`reveal-on-scroll px-4 py-5 ${HOME_SECTION_BG.continue}`}
         >
           <div className="flex items-end justify-between mb-3">
             <div className="space-y-0.5">
@@ -741,7 +744,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
       {/* Featured Vehicles Carousel */}
       {isCatalogLoading ? (
-        <div className="px-4 py-6 bg-white border-t border-gray-100" aria-busy="true" aria-label={t('home.featured.title')}>
+        <div className={`px-4 py-6 ${HOME_SECTION_BG.featured}`} aria-busy="true" aria-label={t('home.featured.title')}>
           <div className="h-5 w-40 bg-gray-200 rounded-lg animate-pulse mb-4" />
           <div className="flex gap-4 overflow-hidden">
             {[0, 1].map((i) => (
@@ -759,7 +762,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           </div>
         </div>
       ) : displayedFeaturedVehicles.length > 0 ? (
-        <div ref={featuredRef} className="reveal-on-scroll px-4 py-6 bg-white border-t border-gray-100">
+        <div ref={featuredRef} className={`reveal-on-scroll px-4 py-6 ${HOME_SECTION_BG.featured}`}>
           <div className="flex items-end justify-between mb-4">
             <div className="space-y-1">
               <div className="inline-flex items-center gap-1.5 text-purple-700 text-[10px] font-semibold uppercase tracking-wider">
@@ -783,11 +786,11 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           
           <div className="relative">
             <div
-              className="pointer-events-none absolute left-0 top-0 bottom-0 w-7 bg-gradient-to-r from-white to-transparent z-10"
+              className={`pointer-events-none absolute left-0 top-0 bottom-0 w-7 bg-gradient-to-r ${HOME_SECTION_FADE.featured} to-transparent z-10`}
               aria-hidden="true"
             />
             <div
-              className="pointer-events-none absolute right-0 top-0 bottom-0 w-7 bg-gradient-to-l from-white to-transparent z-10"
+              className={`pointer-events-none absolute right-0 top-0 bottom-0 w-7 bg-gradient-to-l ${HOME_SECTION_FADE.featured} to-transparent z-10`}
               aria-hidden="true"
             />
             <div
@@ -909,7 +912,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                     }
                   }}
                 >
-                  <div className="bg-white rounded-2xl overflow-hidden active:scale-[0.98] transition-transform duration-200 border border-gray-100 cursor-pointer shine-on-hover" style={{ boxShadow: '0 6px 16px -8px rgba(0,0,0,0.18), 0 2px 6px -2px rgba(0,0,0,0.08)' }}>
+                  <div className={`${HOME_LISTING_CARD} rounded-2xl overflow-hidden active:scale-[0.98] transition-transform duration-200 cursor-pointer shine-on-hover`}>
                   <div className="relative h-52 overflow-hidden">
                       <LazyImage
                         src={getFirstValidImage(vehicle.images, vehicle.id)}
@@ -1024,7 +1027,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           )}
         </div>
       ) : (
-        <div className="px-4 py-5 bg-white border-t border-gray-100">
+        <div className={`px-4 py-5 ${HOME_SECTION_BG.featured}`}>
           <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-4 text-center">
             <p className="text-gray-800 font-semibold mb-1">
               {showCatalogLoadError ? t('toast.vehiclesLoadFailedShort') : t('mobile.home.noFeatured')}
@@ -1057,7 +1060,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       {/* Categories Section - Compact Mobile Tiles */}
       <section
         ref={categoriesRef}
-        className="reveal-on-scroll px-4 py-6 bg-gradient-to-b from-white to-gray-50 border-t border-gray-100"
+        className={`reveal-on-scroll px-4 py-6 ${HOME_SECTION_BG.categories}`}
         aria-labelledby="mobile-home-categories-heading"
       >
         <div className="flex items-end justify-between mb-4">
@@ -1154,7 +1157,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           glassmorphic count badge was hard to read on top of the gradient. */}
       <section
         ref={citiesRef}
-        className="reveal-on-scroll px-4 pt-6 pb-2 bg-white border-t border-gray-100"
+        className={`reveal-on-scroll px-4 pt-6 pb-2 ${HOME_SECTION_BG.cities}`}
         aria-labelledby="mobile-home-locations-heading"
       >
         <div className="flex items-end justify-between mb-4">
@@ -1351,7 +1354,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
       {/* Recommendations */}
       {recommendations.length > 0 && (
-        <div ref={recsRef} className="reveal-on-scroll px-4 py-6 bg-gray-50 border-t border-gray-100">
+        <div ref={recsRef} className={`reveal-on-scroll px-4 py-6 ${HOME_SECTION_BG.recommendations}`}>
           <div className="flex items-end justify-between mb-4">
             <div className="space-y-1">
               <div className="inline-flex items-center gap-1.5 text-pink-600 text-[10px] font-semibold uppercase tracking-wider">

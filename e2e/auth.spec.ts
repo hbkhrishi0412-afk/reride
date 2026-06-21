@@ -9,8 +9,11 @@ import {
 } from './helpers/auth';
 
 test.describe('User Authentication Flow', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test.beforeEach(async ({ page, baseURL }) => {
     await prepareE2EPage(page, baseURL);
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
   });
 
   test('should display login portal correctly', async ({ page }) => {
@@ -22,7 +25,10 @@ test.describe('User Authentication Flow', () => {
 
   test('should login as admin successfully', async ({ page }) => {
     await loginAsAdmin(page);
-    await expect(page).toHaveURL(/\/admin/, { timeout: 30_000 });
+    await expect(page).toHaveURL((url) => {
+      const path = url.pathname.replace(/\/$/, '') || '/';
+      return path === '/admin' || (path.startsWith('/admin/') && !path.includes('/login'));
+    }, { timeout: 30_000 });
     await expect(page.getByText('Test Admin').first()).toBeVisible({ timeout: 20_000 });
   });
 
@@ -50,7 +56,9 @@ test.describe('User Authentication Flow', () => {
   test('should logout successfully', async ({ page }) => {
     await loginAsAdmin(page);
     await page.getByRole('button', { name: /log out/i }).first().click();
-    await page.waitForFunction(() => !localStorage.getItem('reRideCurrentUser'), { timeout: 15_000 });
+    await page.waitForFunction(() => !localStorage.getItem('reRideCurrentUser'), undefined, {
+      timeout: 15_000,
+    });
     await page.goto('/login', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('button', { name: /^Customer$/i })).toBeVisible({ timeout: 15_000 });
   });

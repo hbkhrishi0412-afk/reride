@@ -61,6 +61,7 @@ test.describe('Vehicle detail — stock & contact CTAs', () => {
     await expect(page).toHaveURL(new RegExp(`/vehicle/${vehicle.id}`), { timeout: 15_000 });
 
     const detailBadge = page.getByTestId('listing-stock-badge').first();
+    await expect(detailBadge).toBeVisible({ timeout: 20_000 });
     await expect(detailBadge).toHaveAttribute('data-stock-status', 'in_stock');
     await expect(page.getByRole('button', { name: 'Chat with Seller' }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Book test drive' }).first()).toBeVisible();

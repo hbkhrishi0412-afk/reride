@@ -81,6 +81,24 @@ export function enforceRememberMePolicyOnBoot(): void {
   const ss = getSession();
   if (!ls || !ss) return;
 
+  // Supabase PKCE OAuth return (?code= / ?state=): never wipe auth storage here —
+  // the code_verifier lives in localStorage and must survive until exchangeCodeForSession runs.
+  if (typeof window !== 'undefined') {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('code') || params.has('state') || params.has('error')) {
+        try {
+          ss.setItem(ALIVE_KEY, '1');
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   let pref: string | null = null;
   try {
     pref = ls.getItem(PREF_KEY);

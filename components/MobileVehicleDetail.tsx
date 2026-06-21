@@ -437,7 +437,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 {safeVehicle.year} {safeVehicle.make} {safeVehicle.model}
               </h1>
               <div className="flex flex-wrap gap-2 mb-2">
-                <ListingStockBadge vehicle={safeVehicle} hideInStock />
+                <ListingStockBadge vehicle={safeVehicle} />
                 <ListingTrustChips vehicle={safeVehicle} seller={seller} />
               </div>
               {safeVehicle.variant && (

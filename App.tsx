@@ -144,6 +144,27 @@ function userHasAdminRole(user: User | null | undefined): boolean {
   return (user?.role || '').toLowerCase().trim() === 'admin';
 }
 
+const SupportChatWidget = React.lazy(() => import('./components/SupportChatWidget'));
+
+const SupportChatHost: React.FC = () => {
+  const { currentUser } = useApp();
+  return (
+    <Suspense fallback={null}>
+      <SupportChatWidget
+        currentUser={
+          currentUser?.email
+            ? {
+                email: currentUser.email,
+                name: currentUser.name || currentUser.email,
+                role: currentUser.role,
+              }
+            : null
+        }
+      />
+    </Suspense>
+  );
+};
+
 const AppContent: React.FC = () => {
   const routerLocation = useLocation();
   const [routerSearchParams, setRouterSearchParams] = useSearchParams();
@@ -2189,6 +2210,7 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <AppProvider>
         <AppContent />
+        <SupportChatHost />
         <CookieConsentBanner />
       </AppProvider>
     </ErrorBoundary>

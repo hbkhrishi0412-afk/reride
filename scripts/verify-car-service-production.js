@@ -113,7 +113,7 @@ async function main() {
   logPass('service categories patch');
 
   // 4) Provider services create/update
-  const testServiceType = `qa_tmp_${Date.now()}`;
+  const testServiceType = 'Periodic Services';
   const upsertResp = await fetch(`${baseUrl}/api/provider-services`, {
     method: 'PATCH',
     headers: headers(providerBearer, true),

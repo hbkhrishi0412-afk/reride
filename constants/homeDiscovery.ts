@@ -176,3 +176,25 @@ export function getHomeMobileCityAccent(cityName: string): {
 } {
   return HOME_MOBILE_CITY_ACCENT_BASE[cityName] || FALLBACK_ACCENT;
 }
+
+/** Premium home section surfaces — warm ivory palette with subtle brand glows (see index.css). */
+export const HOME_SECTION_BG = {
+  page: 'home-page',
+  continue: 'home-section home-section--continue',
+  featured: 'home-section home-section--featured',
+  recent: 'home-section home-section--recent',
+  cities: 'home-section home-section--cities',
+  testimonials: 'home-section home-section--testimonials',
+  categories: 'home-section home-section--categories',
+  sell: 'home-section home-section--sell',
+  recommendations: 'home-section home-section--recommendations',
+  trending: 'home-section home-section--trending',
+} as const;
+
+/** Carousel edge fades — match featured section base tone. */
+export const HOME_SECTION_FADE = {
+  featured: 'from-[#ebe8e4]',
+} as const;
+
+/** Elevated listing card on home sections. */
+export const HOME_LISTING_CARD = 'home-listing-card';

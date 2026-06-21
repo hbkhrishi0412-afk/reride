@@ -14,12 +14,37 @@ export async function prepareE2EPage(page: Page, baseURL = 'http://localhost:517
     },
   ]);
   await page.addInitScript((users) => {
+    const clearSupabaseKeys = () => {
+      const toRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (
+          key === 'sb-access-token' ||
+          key === 'supabase.auth.token' ||
+          (key.startsWith('sb-') && key.endsWith('-auth-token'))
+        ) {
+          toRemove.push(key);
+        }
+      }
+      toRemove.forEach((k) => localStorage.removeItem(k));
+    };
+
     localStorage.setItem('reRideUsers', JSON.stringify(users));
     localStorage.setItem('reRideUsers_prod', JSON.stringify(users));
     localStorage.removeItem('reRideCurrentUser');
+    localStorage.removeItem('reRideAccessToken');
+    localStorage.removeItem('reRideRefreshToken');
+    localStorage.removeItem('reride_oauth_role');
+    localStorage.removeItem('reride_oauth_mode');
+    localStorage.removeItem('reride_last_role');
+    clearSupabaseKeys();
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem('currentUser');
       sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('reride_oauth_role');
+      sessionStorage.removeItem('reride_oauth_mode');
+      sessionStorage.removeItem('reride_last_role');
     }
   }, E2E_TEST_USERS);
 }
@@ -37,26 +62,39 @@ export async function dismissCookieBanner(page: Page) {
 async function submitCredentialForm(page: Page, email: string, password: string) {
   const emailInput = page.locator('#email-address, input[name="email"], input[type="email"]').first();
   await emailInput.waitFor({ state: 'visible', timeout: 60_000 });
+  await emailInput.click();
+  await emailInput.fill('');
   await emailInput.fill(email);
-  await page.locator('#password, input[name="password"]').first().fill(password);
-  await page.locator('button[type="submit"]').first().click();
+  const passwordInput = page.locator('#password, input[name="password"]').first();
+  await passwordInput.waitFor({ state: 'visible', timeout: 30_000 });
+  await passwordInput.fill(password);
+  const submit = page.locator('button[type="submit"]').first();
+  await submit.waitFor({ state: 'visible', timeout: 30_000 });
+  await submit.click();
 }
 
-/** Login portal → role tile → email/password form. */
+/** Login portal → role tile (or ?role=) → email/password form. */
 export async function loginViaPortal(page: Page, role: 'seller' | 'customer', baseURL?: string) {
   await prepareE2EPage(page, baseURL);
-  await page.goto('/login', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  await page.goto(`/login?role=${role}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await dismissCookieBanner(page);
-  const roleLabel = role === 'seller' ? /^Seller$/i : /^Customer$/i;
-  const roleButton = page.getByRole('button', { name: roleLabel }).first();
-  await roleButton.waitFor({ state: 'visible', timeout: 30_000 });
-  await roleButton.click();
-  await page.locator('#email-address, input[name="email"]').first().waitFor({
-    state: 'visible',
-    timeout: 30_000,
-  });
+  const emailField = page.locator('#email-address, input[name="email"]').first();
+  try {
+    await emailField.waitFor({ state: 'visible', timeout: 8_000 });
+  } catch {
+    const roleLabel = role === 'seller' ? /^Seller$/i : /^Customer$/i;
+    const roleButton = page.getByRole('button', { name: roleLabel }).first();
+    await roleButton.waitFor({ state: 'visible', timeout: 30_000 });
+    await roleButton.click();
+    await emailField.waitFor({ state: 'visible', timeout: 30_000 });
+  }
   const user = E2E_TEST_USERS.find((u) => u.role === role)!;
   await submitCredentialForm(page, user.email, user.password);
+}
+
+function isPostAdminLoginUrl(url: URL): boolean {
+  const path = url.pathname.replace(/\/$/, '') || '/';
+  return path === '/admin' || (path.startsWith('/admin/') && !path.includes('/login'));
 }
 
 export async function loginAsAdmin(page: Page, baseURL?: string) {
@@ -65,7 +103,7 @@ export async function loginAsAdmin(page: Page, baseURL?: string) {
   await dismissCookieBanner(page);
   const user = E2E_TEST_USERS.find((u) => u.role === 'admin')!;
   await submitCredentialForm(page, user.email, user.password);
-  await page.waitForURL(/\/admin/, { timeout: 30_000 });
+  await page.waitForURL(isPostAdminLoginUrl, { timeout: 30_000 });
 }
 
 export async function loginAsSeller(page: Page, baseURL?: string) {
@@ -75,13 +113,14 @@ export async function loginAsSeller(page: Page, baseURL?: string) {
 
 export async function loginAsCustomer(page: Page, baseURL?: string) {
   await loginViaPortal(page, 'customer', baseURL);
-  await page.waitForFunction(
-    () => {
-      const raw = localStorage.getItem('reRideCurrentUser');
-      return raw != null && raw.includes('customer@test.com');
+  await page.waitForURL(
+    (url) => {
+      const path = url.pathname.replace(/\/$/, '') || '/';
+      return path === '/' || !path.includes('login');
     },
     { timeout: 30_000 },
   );
+  await page.getByText('Test Customer').first().waitFor({ state: 'visible', timeout: 20_000 });
 }
 
 /** Header Login → portal (legacy specs). */
