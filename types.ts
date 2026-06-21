@@ -389,6 +389,8 @@ export interface User {
   // Authentication fields
   firebaseUid?: string;
   authProvider?: 'email' | 'google' | 'phone';
+  /** True when the account has a password stored (OAuth users may not until they set one). */
+  hasPassword?: boolean;
   // Seller-specific profile info
   dealershipName?: string;
   bio?: string;

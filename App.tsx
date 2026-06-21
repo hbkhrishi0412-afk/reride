@@ -147,7 +147,13 @@ function userHasAdminRole(user: User | null | undefined): boolean {
 const SupportChatWidget = React.lazy(() => import('./components/SupportChatWidget'));
 
 const SupportChatHost: React.FC = () => {
+  const { isMobileApp } = useIsMobileApp();
   const { currentUser } = useApp();
+
+  if (isMobileApp) {
+    return null;
+  }
+
   return (
     <Suspense fallback={null}>
       <SupportChatWidget
@@ -342,6 +348,7 @@ const AppContent: React.FC = () => {
         conversations,
         setConversations,
         setActiveChat,
+        openChat: false,
       });
       if (!conversation) {
         addToast(t('toast.testDrive.sellerMissing'), 'error');
@@ -353,11 +360,15 @@ const AppContent: React.FC = () => {
         date: details.date,
         time: details.time,
       });
-      await sendMessageWithType(conversation.id, messageText, 'test_drive_request', {
+      const sent = await sendMessageWithType(conversation.id, messageText, 'test_drive_request', {
         date: details.date,
         time: details.time,
         status: 'pending',
       });
+      if (!sent) {
+        addToast(t('toast.failedSendMessageGeneric'), 'error');
+        return;
+      }
       addToast(t('toast.testDrive.sent'), 'success');
     },
     [
@@ -401,10 +412,15 @@ const AppContent: React.FC = () => {
             ? t('chat.testDrive.replyConfirmed', { vehicle: vehicleLabel })
             : t('chat.testDrive.replyDeclined', { vehicle: vehicleLabel });
 
-        await sendMessageWithType(conversationId, responseText, 'text', {
+        const sent = await sendMessageWithType(conversationId, responseText, 'text', {
           originalMessageId: messageId,
           status: newStatus,
         });
+
+        if (!sent) {
+          addToast(t('toast.testDrive.responseFailed'), 'error');
+          return;
+        }
 
         setConversations((prev: Conversation[]) =>
           prev.map((conv: Conversation) =>
@@ -2047,7 +2063,6 @@ const AppContent: React.FC = () => {
                 }}
                 onOfferResponse={(conversationId, messageId, response, counterPrice) => {
                   onOfferResponse(conversationId, messageId, response, counterPrice);
-                  addToast(`Offer ${response} successfully!`, 'success');
                 }}
                 onTestDriveResponse={handleTestDriveResponse}
                 onClearChat={clearConversationMessages}
@@ -2185,7 +2200,6 @@ const AppContent: React.FC = () => {
                 }}
                 onOfferResponse={(conversationId, messageId, response, counterPrice) => {
                   onOfferResponse(conversationId, messageId, response, counterPrice);
-                  addToast(`Offer ${response} successfully!`, 'success');
                 }}
                 onTestDriveResponse={handleTestDriveResponse}
                 onClearChat={clearConversationMessages}

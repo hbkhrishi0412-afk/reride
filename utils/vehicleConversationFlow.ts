@@ -11,13 +11,15 @@ export type OpenVehicleConversationDeps = {
   conversations: Conversation[];
   setConversations: Dispatch<SetStateAction<Conversation[]>>;
   setActiveChat: (conv: Conversation | null) => void;
+  /** When false, find/create the thread without opening the floating chat UI. */
+  openChat?: boolean;
 };
 
 /** Find or create a buyer↔seller chat for a listing. Returns null if seller email is missing. */
 export async function openOrCreateVehicleConversation(
   deps: OpenVehicleConversationDeps,
 ): Promise<Conversation | null> {
-  const { vehicle, currentUser, conversations, setConversations, setActiveChat } = deps;
+  const { vehicle, currentUser, conversations, setConversations, setActiveChat, openChat = true } = deps;
 
   if (!vehicle.sellerEmail) {
     logError('Cannot open chat: vehicle.sellerEmail is missing', { vehicleId: vehicle.id });
@@ -35,14 +37,16 @@ export async function openOrCreateVehicleConversation(
     : undefined;
 
   if (conversation) {
-    setActiveChat(conversation);
-    try {
-      localStorage.setItem(
-        'reRideActiveChat',
-        JSON.stringify({ id: conversation.id, updatedAt: Date.now() }),
-      );
-    } catch {
-      /* ignore */
+    if (openChat) {
+      setActiveChat(conversation);
+      try {
+        localStorage.setItem(
+          'reRideActiveChat',
+          JSON.stringify({ id: conversation.id, updatedAt: Date.now() }),
+        );
+      } catch {
+        /* ignore */
+      }
     }
     return conversation;
   }
@@ -66,15 +70,16 @@ export async function openOrCreateVehicleConversation(
   };
 
   setConversations((prev) => [...prev, newConversation]);
-  setActiveChat(newConversation);
-
-  try {
-    localStorage.setItem(
-      'reRideActiveChat',
-      JSON.stringify({ id: newConversation.id, updatedAt: Date.now() }),
-    );
-  } catch {
-    /* ignore */
+  if (openChat) {
+    setActiveChat(newConversation);
+    try {
+      localStorage.setItem(
+        'reRideActiveChat',
+        JSON.stringify({ id: newConversation.id, updatedAt: Date.now() }),
+      );
+    } catch {
+      /* ignore */
+    }
   }
 
   try {
@@ -85,15 +90,16 @@ export async function openOrCreateVehicleConversation(
     } else if (saveResult.data && saveResult.data.id !== newConversation.id) {
       const serverConv = saveResult.data;
       setConversations((prev) => prev.map((c) => (c.id === newConversation.id ? serverConv : c)));
-      setActiveChat(serverConv);
-      conversation = serverConv;
-      try {
-        localStorage.setItem(
-          'reRideActiveChat',
-          JSON.stringify({ id: serverConv.id, updatedAt: Date.now() }),
-        );
-      } catch {
-        /* ignore */
+      if (openChat) {
+        setActiveChat(serverConv);
+        try {
+          localStorage.setItem(
+            'reRideActiveChat',
+            JSON.stringify({ id: serverConv.id, updatedAt: Date.now() }),
+          );
+        } catch {
+          /* ignore */
+        }
       }
       return serverConv;
     }

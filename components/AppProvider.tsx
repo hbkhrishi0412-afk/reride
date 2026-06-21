@@ -51,6 +51,7 @@ import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
+import { logBackgroundSyncFailure, hasCachedVehicleCatalog } from '../utils/toastPolicy.js';
 import {
   buildVehicleMutationBody,
   findVehicleByRouteSegment,
@@ -203,6 +204,10 @@ function mergeVehicleCatalog(prev: Vehicle[], incoming: Vehicle[], isAdmin: bool
 
 interface VehicleUpdateOptions {
   successMessage?: string;
+  skipToast?: boolean;
+}
+
+interface UserUpdateOptions {
   skipToast?: boolean;
 }
 
@@ -556,7 +561,7 @@ interface AppContextType {
     params?: { city?: string; sellerEmail?: string; detailVehicle?: Vehicle; unblockPopstateSync?: boolean }
   ) => void;
   goBack: (fallbackView?: View) => void;
-  refreshVehicles: () => Promise<void>;
+  refreshVehicles: (options?: { userInitiated?: boolean }) => Promise<void>;
   
   // Admin functions
   onCreateUser: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
@@ -585,7 +590,12 @@ interface AppContextType {
   addRating: (vehicleId: number, rating: number) => void;
   addSellerRating: (sellerEmail: string, rating: number) => void;
   sendMessage: (conversationId: string, message: string) => void;
-  sendMessageWithType: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => void;
+  sendMessageWithType: (
+    conversationId: string,
+    messageText: string,
+    type?: ChatMessage['type'],
+    payload?: ChatMessage['payload'],
+  ) => Promise<boolean>;
   markAsRead: (
     conversationId: string,
     options?: { readerRole?: 'customer' | 'seller'; forceReadState?: boolean },
@@ -600,7 +610,7 @@ interface AppContextType {
   deleteConversation: (conversationId: string) => Promise<void>;
   toggleTyping: (conversationId: string, isTyping: boolean) => void;
   flagContent: (type: 'vehicle' | 'conversation', id: number | string, reason?: string) => void;
-  updateUser: (email: string, updates: Partial<User>) => Promise<void>;
+  updateUser: (email: string, updates: Partial<User>, options?: UserUpdateOptions) => Promise<void>;
   deleteUser: (email: string) => Promise<void>;
   updateVehicle: (id: number, updates: Partial<Vehicle>, options?: VehicleUpdateOptions) => Promise<void>;
   deleteVehicle: (id: number) => void;
@@ -2320,8 +2330,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [location.state, location.key, previousView, currentView, navigate],
   );
 
-  const refreshVehicles = useCallback(async () => {
+  const refreshVehicles = useCallback(async (options?: { userInitiated?: boolean }) => {
     const isAdmin = currentUser?.role === 'admin';
+    const userInitiated = Boolean(options?.userInitiated);
     try {
       const list = await dataService.getVehicles(isAdmin, true);
       const next = Array.isArray(list) ? list : [];
@@ -2331,6 +2342,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setVehiclesCatalogReady(true);
       logWarn('Refresh vehicles failed:', err);
       const msg = err instanceof Error ? err.message : String(err);
+      if (!userInitiated) {
+        logBackgroundSyncFailure('Vehicle catalog refresh', msg);
+        return;
+      }
       const is503OrSupabase = (err as any)?.status === 503 || (err as any)?.code === 503 || /supabase|503|service temporarily unavailable/i.test(msg);
       const toastMsg = is503OrSupabase
         ? t('toast.serviceUnavailableAdmin')
@@ -3493,12 +3508,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const message = reason instanceof Error ? reason.message : reason?.message ?? String(reason);
 
           if (status === 503 || /Supabase|SERVICE_ROLE_KEY|not configured/i.test(message)) {
-            addToast(
-              t('toast.listingsEmptyDbUnavailable'),
-              'error'
-            );
-          } else {
+            if (!hasCachedVehicleCatalog() && currentUser?.role === 'admin') {
+              addToast(t('toast.listingsEmptyDbUnavailable'), 'error');
+            } else {
+              logBackgroundSyncFailure('Vehicle catalog refresh', message);
+            }
+          } else if (!hasCachedVehicleCatalog() && currentUser?.role === 'admin') {
             addToast(t('toast.vehiclesLoadFailed'), 'error');
+          } else {
+            logBackgroundSyncFailure('Vehicle catalog refresh', message);
           }
         }
 
@@ -4801,8 +4819,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dataService.syncWhenOnline().then(() => {
         logInfo('✅ Data sync completed');
       }).catch((error) => {
-        logWarn('⚠️ Data sync failed:', error);
-        addToast(t('toast.dataSyncPartial'), 'warning');
+        logBackgroundSyncFailure('Offline data sync', error);
       });
     };
 
@@ -6031,11 +6048,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (!sendResult.success || !sendResult.persisted) {
           const retry = await addMessageWithSync(conversationId, newMessage);
-          if (retry.queued) {
-            addToast(t('toast.messageQueuedOffline'), 'info');
-          } else if (!retry.synced && !retry.queued) {
+          if (!retry.synced && !retry.queued) {
             logError('❌ Failed to send message:', sendResult.error);
             addToast(t('toast.failedSendMessageGeneric'), 'error');
+          } else if (!retry.synced && retry.queued) {
+            logBackgroundSyncFailure('Message send — queued for retry', sendResult.error);
           }
         }
 
@@ -6045,13 +6062,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         logError('Error in sendMessage:', error);
       }
     },
-    sendMessageWithType: async (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => {
+    sendMessageWithType: async (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']): Promise<boolean> => {
       logInfo('🔧 sendMessageWithType called:', { conversationId, messageText, type, payload, currentUser: currentUser?.email });
       
       if (!currentUser) {
         logWarn('⚠️ Cannot send message: no current user');
         addToast(t('toast.loginRequiredMessages'), 'error');
-        return;
+        return false;
       }
 
       try {
@@ -6063,7 +6080,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!conversation) {
           logWarn('⚠️ Conversation not found:', conversationId);
           addToast(t('toast.conversationNotFoundRefresh'), 'error');
-          return;
+          return false;
         }
 
         const messageId = Date.now() * 1000 + randomIntBelow(1000);
@@ -6134,17 +6151,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
         if (!sendResult.success || !sendResult.persisted) {
           const retry = await addMessageWithSync(conversationId, newMessage);
-          if (retry.queued) {
-            addToast(t('toast.messageQueuedOffline'), 'info');
-          } else if (!retry.synced && !retry.queued) {
+          if (!retry.synced && !retry.queued) {
             logError('❌ Failed to send message:', sendResult.error);
             addToast(t('toast.failedSendMessageGeneric'), 'error');
+            return false;
+          }
+          if (!retry.synced && retry.queued) {
+            logBackgroundSyncFailure('Message send — queued for retry', sendResult.error);
           }
         }
-
-        // Recipient notifications are created server-side when the message is persisted (PUT /api/conversations).
+        return true;
       } catch (error) {
         logError('Error in sendMessageWithType:', error);
+        return false;
       }
     },
     markAsRead: (inboxMarkRead.fn = async (
@@ -6166,7 +6185,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .map((msg) => msg.id);
       const forceReadState = Boolean(options?.forceReadState);
       if (unreadMessageIds.length === 0 && !forceReadState) return;
-      const previousConversation = conversation;
+
+      const threadAlreadyRead =
+        readerRole === 'customer' ? conversation.isReadByCustomer : conversation.isReadBySeller;
+      if (unreadMessageIds.length === 0 && forceReadState && threadAlreadyRead) {
+        return;
+      }
 
       setConversations((prev) =>
         Array.isArray(prev)
@@ -6198,29 +6222,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : patchConversationSetThreadReadState(conversationId, readerRole, true),
         )
         .then((res) => {
-          if (!res?.success && previousConversation) {
-            setConversations((prev) =>
-              Array.isArray(prev)
-                ? prev.map((conv) =>
-                    conv && String(conv.id) === String(conversationId) ? previousConversation : conv,
-                  )
-                : [],
-            );
-            addToast('Could not update. Please try again.', 'error');
+          if (!res?.success) {
+            logBackgroundSyncFailure('Persist mark-read', res?.error);
           }
         })
         .catch((err) => {
-          logWarn('Persist mark-read failed (non-fatal):', err);
-          if (previousConversation) {
-            setConversations((prev) =>
-              Array.isArray(prev)
-                ? prev.map((conv) =>
-                    conv && String(conv.id) === String(conversationId) ? previousConversation : conv,
-                  )
-                : [],
-            );
-          }
-          addToast('Could not update conversation. Please try again.', 'error');
+          logBackgroundSyncFailure('Persist mark-read', err);
         });
     }),
     setConversationReadState: async (
@@ -6255,6 +6262,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         )
         .then((res) => {
           if (!res?.success) {
+            logBackgroundSyncFailure('Persist unread-state', res?.error);
             if (previousConversation) {
               setConversations((prev) =>
                 Array.isArray(prev)
@@ -6264,12 +6272,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   : [],
               );
             }
-            addToast('Could not update. Please try again.', 'error');
-            return;
           }
         })
         .catch((err) => {
-          logWarn('Persist mark-unread failed (non-fatal):', err);
+          logBackgroundSyncFailure('Persist unread-state', err);
           if (previousConversation) {
             setConversations((prev) =>
               Array.isArray(prev)
@@ -6279,7 +6285,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 : [],
             );
           }
-          addToast('Could not update conversation. Please try again.', 'error');
         });
     },
     clearConversationMessages: async (conversationId: string) => {
@@ -6416,7 +6421,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       addToast(t('toast.contentFlagged', { reasonSuffix: reason ? ': ' + reason : '' }), 'warning');
     },
-    updateUser: async (email: string, updates: Partial<User>) => {
+    updateUser: async (email: string, updates: Partial<User>, options: UserUpdateOptions = {}) => {
       try {
         // CRITICAL: Never allow role to be updated via this function (security)
         const safeUpdates = { ...updates };
@@ -6632,15 +6637,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Keep all known users caches in sync immediately.
           syncUserCachesByEmail(email, safeUpdates);
           
-          // Show success message
-          if (updates.password) {
-            addToast(t('toast.passwordUpdatedSuccess'), 'success');
-          } else {
-            addToast(t('toast.profileUpdatedSuccess'), 'success');
+          // Show success message (skip for silent metadata sync after another primary action)
+          if (!options.skipToast) {
+            if (updates.password) {
+              addToast(t('toast.passwordUpdatedSuccess'), 'success');
+            } else {
+              addToast(t('toast.profileUpdatedSuccess'), 'success');
+            }
           }
           
         } catch (apiError) {
           logError('❌ API error during user update - Supabase update FAILED:', apiError);
+
+          if (options.skipToast) {
+            logBackgroundSyncFailure('User metadata sync', apiError);
+            throw apiError;
+          }
           
           // CRITICAL: Don't save locally when Supabase fails - user wants real-time updates
           // Only show error messages, don't update any local state

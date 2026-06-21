@@ -12,12 +12,13 @@ import {
   sellerQrDownloadFileName,
 } from '../utils/sellerQrCode';
 import { downloadProfileExport, requestAccountDeletion } from '../services/accountPrivacyService';
+import { userNeedsPasswordSetup } from '../utils/profilePassword';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 
 interface MobileProfileProps {
   currentUser: User;
   onUpdateProfile: (details: Partial<User>) => Promise<void> | void;
-  onUpdatePassword: (passwords: { current: string; new: string }) => Promise<boolean>;
+  onUpdatePassword: (passwords: { current?: string; new: string }) => Promise<boolean>;
   onBack?: () => void;
   onLogout?: () => void;
   addToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
@@ -48,6 +49,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   addToast,
   onNavigate,
 }) => {
+  const needsPasswordSetup = userNeedsPasswordSetup(currentUser);
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
   const [formData, setFormData] = useState({
@@ -149,7 +151,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   const validatePassword = (): boolean => {
     const newErrors: typeof passwordErrors = {};
 
-    if (!passwordData.current) {
+    if (!needsPasswordSetup && !passwordData.current) {
       newErrors.current = 'Current password is required';
     }
 
@@ -207,7 +209,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
       }
       
       const success = await onUpdatePassword({
-        current: passwordData.current,
+        ...(needsPasswordSetup ? {} : { current: passwordData.current }),
         new: passwordData.new
       });
       if (success) {
@@ -561,6 +563,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
           </div>
         ) : (
           <div className="space-y-4">
+            {!needsPasswordSetup && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Current Password</label>
               <PasswordInput
@@ -573,6 +576,13 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
                 <p className="text-xs text-red-600 mt-1">{passwordErrors.current}</p>
               )}
             </div>
+            )}
+
+            {needsPasswordSetup && (
+              <p className="text-sm text-gray-600">
+                Create a password so you can also sign in with email and password.
+              </p>
+            )}
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">New Password</label>
@@ -605,7 +615,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
               disabled={isSaving}
               className="w-full py-3 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-50"
             >
-              {isSaving ? 'Updating...' : 'Update Password'}
+              {isSaving ? 'Updating...' : needsPasswordSetup ? 'Set Password' : 'Update Password'}
             </button>
           </div>
         )}

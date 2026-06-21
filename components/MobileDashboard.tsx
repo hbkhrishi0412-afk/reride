@@ -101,7 +101,10 @@ interface MobileDashboardProps {
   onFlagContent: (type: 'vehicle' | 'conversation', id: string, reason: string) => void;
   onLogout?: () => void;
   // Add vehicle form handlers
-  onAddVehicle?: (vehicleData: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>, isFeaturing?: boolean) => void;
+  onAddVehicle?: (
+    vehicleData: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>,
+    isFeaturing?: boolean,
+  ) => Promise<boolean> | boolean;
   onAddMultipleVehicles?: (vehicles: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]) => void;
   onUpdateVehicle?: (vehicleData: Vehicle) => void;
   vehicleData?: any; // Vehicle data for form
@@ -2528,7 +2531,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       }
 
       if (onAddVehicle) {
-        await onAddVehicle(enhancementResult.vehicle, false);
+        const ok = await onAddVehicle(enhancementResult.vehicle, false);
+        if (!ok) return;
         setAddFormData(initialAddFormData);
         setActiveTab('listings');
       }

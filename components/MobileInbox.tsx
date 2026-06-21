@@ -192,11 +192,9 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
       setSelectedConv(conv);
       if (inboxRole === 'customer') {
         if (!conv.isReadByCustomer) {
-          onMarkAsRead(conv.id);
           onMarkMessagesAsRead(conv.id, 'customer');
         }
       } else if (!conv.isReadBySeller) {
-        onMarkAsRead(conv.id);
         onMarkMessagesAsRead(conv.id, 'seller');
       }
     },

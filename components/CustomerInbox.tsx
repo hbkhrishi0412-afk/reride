@@ -105,10 +105,9 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
       setMobileShowsChat(true);
     }
     if (conv.isReadByCustomer === false) {
-      onMarkAsRead(conv.id);
       onMarkMessagesAsRead(conv.id, 'customer');
     }
-  }, [isInboxNarrow, onMarkAsRead, onMarkMessagesAsRead]);
+  }, [isInboxNarrow, onMarkMessagesAsRead]);
 
   useEffect(() => {
     if (initialOpenConversationId) {

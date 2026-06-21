@@ -7,11 +7,12 @@ import useIsMobileApp from '../../hooks/useIsMobileApp';
 import { enrichVehiclesWithSellerInfo } from '../../utils/vehicleEnrichment';
 import { matchesCity } from '../../utils/cityMapping';
 import { buildVehicleMutationBody } from '../../utils/vehicleIdentity';
+import { addSellerListing, addSellerListingsBulk } from '../../utils/sellerAddListing.js';
 import { authenticatedFetch } from '../../utils/authenticatedFetch';
 import { planService } from '../../services/planService';
 import { logInfo, logWarn, logError } from '../../utils/logger';
 import { isPublicBuyListing } from '../../services/listingLifecycleService';
-import { computeListingExpiresAtForSeller } from '../../utils/listingPlanRules';
+import { runBackgroundSync } from '../../utils/toastPolicy.js';
 import { parseDeepLink } from '../../utils/mobileFeatures';
 import { randomIntBelow } from '../../utils/secureRandom.js';
 import { isCapacitorNativeApp } from '../../utils/isCapacitorNative';
@@ -21,6 +22,7 @@ import {
   conversationBelongsToSeller,
   normalizeInboxRole,
 } from '../../utils/conversationParticipants';
+import { updateProfilePassword } from '../../utils/profilePassword';
 import {
   VehicleListErrorBoundary,
   DashboardErrorBoundary,
@@ -331,7 +333,7 @@ switch (currentView) {
           onBrowseAllIndia={handleBrowseAllIndia}
           onUseMyLocation={handleHomeUseMyLocation}
           isCatalogLoading={isLoading || (!vehiclesCatalogReady && vehicles.length === 0)}
-          onRetryCatalogLoad={() => void refreshVehicles()}
+          onRetryCatalogLoad={() => void refreshVehicles({ userInitiated: true })}
         />
       );
     }
@@ -380,7 +382,7 @@ switch (currentView) {
         }}
         addToast={addToast}
         isCatalogLoading={isLoading || (!vehiclesCatalogReady && vehicles.length === 0)}
-        onRetryCatalogLoad={() => void refreshVehicles()}
+        onRetryCatalogLoad={() => void refreshVehicles({ userInitiated: true })}
       />
     );
 
@@ -446,7 +448,7 @@ switch (currentView) {
             setSelectedCity(city);
           }}
           sourceVehicleCount={vehicles.length}
-          onRetryLoadVehicles={refreshVehicles}
+          onRetryLoadVehicles={() => void refreshVehicles({ userInitiated: true })}
         />
       </VehicleListErrorBoundary>
     );
@@ -763,39 +765,23 @@ switch (currentView) {
                 await updateVehicle(vehicleId, { status: 'published', soldAt: undefined, listingStatus: 'active' });
               }}
               onAddMultipleVehicles={async (vehiclesData) => {
-                try {
-                  if (currentUser.planExpiryDate) {
-                    const expiryDate = new Date(currentUser.planExpiryDate);
-                    if (expiryDate < new Date()) {
-                      addToast('Your subscription has expired. Please renew to add new listings.', 'error');
-                      return;
-                    }
+                if (currentUser.planExpiryDate) {
+                  const expiryDate = new Date(currentUser.planExpiryDate);
+                  if (expiryDate < new Date()) {
+                    addToast('Your subscription has expired. Please renew to add new listings.', 'error');
+                    return;
                   }
-                  const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
-                  const newVehicles = vehiclesData.map(vehicle => ({
-                    ...vehicle,
-                    id: Date.now() + randomIntBelow(1000),
-                    sellerEmail: currentUser.email,
-                    averageRating: 0,
-                    ratingCount: 0,
-                    createdAt: new Date().toISOString(),
-                    listingExpiresAt,
-                  }));
-                  const { addVehicle, getVehicles } = await import('../../services/vehicleService');
-                  const results = await Promise.all(newVehicles.map(vehicle => addVehicle(vehicle)));
-                  try {
-                    const refreshedVehicles = await getVehicles();
-                    setVehicles(refreshedVehicles);
-                  } catch (refreshError) {
-                    logWarn('Failed to refresh vehicles list after adding vehicles:', refreshError);
-                    setVehicles(prev => [...prev, ...results]);
-                  }
-                  addToast(`${results.length} vehicles added successfully`, 'success');
-                } catch (error) {
-                  logError('âŒ Failed to add vehicles:', error);
-                  addToast('Could not add vehicles. Please check your connection and try again.', 'error');
-                  throw error;
                 }
+                const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
+                await addSellerListingsBulk({
+                  currentUser,
+                  vehiclesData,
+                  listingExpiresAt,
+                  setVehicles,
+                  nextNumericId: () => Date.now() + randomIntBelow(1000),
+                  addToast,
+                  logError,
+                });
               }}
               onRequestCertification={async (vehicleId) => {
                 try {
@@ -872,7 +858,9 @@ switch (currentView) {
                       usedCertifications: updatedUsedCertifications,
                     });
                   }
-                  await updateUser(seller.email, { usedCertifications: updatedUsedCertifications });
+                  await runBackgroundSync('Certification usage sync', () =>
+                    updateUser(seller.email, { usedCertifications: updatedUsedCertifications }, { skipToast: true }),
+                  );
                   if (typeof result.remainingCertifications === 'number') {
                     addToast(
                       `Certification requests remaining this month: ${result.remainingCertifications}`,
@@ -915,7 +903,7 @@ switch (currentView) {
                   }
 
                   if (result?.success && result.vehicle) {
-                    await updateVehicle(vehicleId, result.vehicle);
+                    await updateVehicle(vehicleId, result.vehicle, { skipToast: true });
 
                     if (typeof result.remainingCredits === 'number') {
                       const sellerEmail = result.vehicle?.sellerEmail || currentUser?.email;
@@ -928,10 +916,14 @@ switch (currentView) {
                             featuredCredits: remainingCredits
                           });
                         }
-                        await updateUser(sellerEmail, { featuredCredits: remainingCredits });
+                        await runBackgroundSync('Featured credits sync', () =>
+                          updateUser(sellerEmail, { featuredCredits: remainingCredits }, { skipToast: true }),
+                        );
                       }
 
                       addToast(`Listing featured! You have ${remainingCredits} feature credits left.`, 'success');
+                    } else {
+                      addToast('Listing featured successfully!', 'success');
                     }
                   } else {
                     addToast('Could not feature this listing. Please try again.', 'error');
@@ -956,42 +948,19 @@ switch (currentView) {
               onFlagContent={flagContent}
               onLogout={handleLogoutAll}
               onViewVehicle={selectVehicle}
-              onAddVehicle={async (vehicleData, isFeaturing = false) => {
-                try {
-                  const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
-                  
-                  const { addVehicle, getVehicles } = await import('../../services/vehicleService');
-                  const vehicleToAdd = {
-                    ...vehicleData,
-                    id: Date.now() + randomIntBelow(1000),
-                    sellerEmail: currentUser.email,
-                    averageRating: 0,
-                    ratingCount: 0,
-                    isFeatured: isFeaturing,
-                    status: 'published',
-                    createdAt: new Date().toISOString(),
-                    listingExpiresAt,
-                  } as Vehicle;
-                  
-                  const newVehicle = await addVehicle(vehicleToAdd);
-                  setVehicles(prev => [...prev, newVehicle]);
-                  
-                  // Refresh vehicles list from API to ensure buy cars section shows the new vehicle
-                  try {
-                    const refreshedVehicles = await getVehicles();
-                    setVehicles(refreshedVehicles);
-                  } catch (refreshError) {
-                    logWarn('Failed to refresh vehicles list after adding vehicle:', refreshError);
-                    // Continue anyway - we already updated local state
-                  }
-                  
-                  addToast('Vehicle added successfully!', 'success');
-                } catch (error) {
-                  logError('âŒ Failed to add vehicle:', error);
-                  addToast('Could not add vehicle. Please check your details and try again.', 'error');
-                  throw error;
-                }
-              }}
+              onAddVehicle={async (vehicleData, isFeaturing = false) =>
+                addSellerListing({
+                  currentUser,
+                  vehicleData,
+                  isFeaturing,
+                  listingExpiresAt: computeListingExpiresAtForSeller(currentUser),
+                  setVehicles,
+                  nextNumericId: () => Date.now() + randomIntBelow(1000),
+                  successMessage: 'Vehicle added successfully!',
+                  addToast,
+                  logError,
+                })
+              }
               onUpdateVehicle={async (vehicleData) => {
                 await updateVehicle(vehicleData.id, vehicleData);
               }}
@@ -1040,89 +1009,38 @@ switch (currentView) {
             users || []
           )}
           reportedVehicles={sellerReportedVehicles}
-          onAddVehicle={async (vehicleData, isFeaturing = false) => {
-            try {
-              const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
-              
-              const newVehicle = {
-                ...vehicleData,
-                id: Date.now() + randomIntBelow(1000),
-                sellerEmail: currentUser.email,
-                averageRating: 0,
-                ratingCount: 0,
-                isFeatured: isFeaturing,
-                status: 'published' as const,
-                createdAt: new Date().toISOString(),
-                listingExpiresAt,
-              };
-              
-              // Call API to create vehicle
-              const { addVehicle } = await import('../../services/vehicleService');
-              const result = await addVehicle(newVehicle);
-              
-              // Update local state
-              setVehicles(prev => [...prev, result]);
-              
-              // Refresh vehicles list from API to ensure buy cars section shows the new vehicle
-              try {
-                const { getVehicles } = await import('../../services/vehicleService');
-                const refreshedVehicles = await getVehicles();
-                setVehicles(refreshedVehicles);
-              } catch (refreshError) {
-                logWarn('Failed to refresh vehicles list after adding vehicle:', refreshError);
-                // Continue anyway - we already updated local state
-              }
-              
-              addToast('Vehicle added successfully', 'success');
-            } catch (error) {
-              logError('âŒ Failed to add vehicle:', error);
-              addToast('Failed to add vehicle', 'error');
-              throw error;
-            }
-          }}
+          onAddVehicle={async (vehicleData, isFeaturing = false) =>
+            addSellerListing({
+              currentUser,
+              vehicleData,
+              isFeaturing,
+              listingExpiresAt: computeListingExpiresAtForSeller(currentUser),
+              setVehicles,
+              nextNumericId: () => Date.now() + randomIntBelow(1000),
+              successMessage: 'Vehicle added successfully',
+              addToast,
+              logError,
+              errorMessage: 'Failed to add vehicle',
+            })
+          }
           onAddMultipleVehicles={async (vehiclesData) => {
-            try {
-              // Check if seller's plan has expired
-              if (currentUser.planExpiryDate) {
-                const expiryDate = new Date(currentUser.planExpiryDate);
-                const isExpired = expiryDate < new Date();
-                if (isExpired) {
-                  addToast('Your subscription has expired. Please renew to add new listings.', 'error');
-                  return;
-                }
+            if (currentUser.planExpiryDate) {
+              const expiryDate = new Date(currentUser.planExpiryDate);
+              if (expiryDate < new Date()) {
+                addToast('Your subscription has expired. Please renew to add new listings.', 'error');
+                return;
               }
-              
-              const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
-              
-              const newVehicles = vehiclesData.map(vehicle => ({
-                ...vehicle,
-                id: Date.now() + randomIntBelow(1000),
-                sellerEmail: currentUser.email,
-                averageRating: 0,
-                ratingCount: 0,
-                createdAt: new Date().toISOString(),
-                listingExpiresAt,
-              }));
-              
-              // Call API to create vehicles
-              const { addVehicle, getVehicles } = await import('../../services/vehicleService');
-              const results = await Promise.all(newVehicles.map(vehicle => addVehicle(vehicle)));
-              
-              // Refresh vehicles list from API to ensure buy cars section shows the new vehicles
-              try {
-                const refreshedVehicles = await getVehicles();
-                setVehicles(refreshedVehicles);
-              } catch (refreshError) {
-                logWarn('Failed to refresh vehicles list after adding vehicles:', refreshError);
-                // Fallback: update local state with results
-                setVehicles(prev => [...prev, ...results]);
-              }
-              addToast(`${results.length} vehicles added successfully`, 'success');
-            } catch (error) {
-              logError('âŒ Failed to add vehicles:', error);
-              addToast('Could not add vehicles. Please check your connection and try again.', 'error');
-              throw error;
             }
+            const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
+            await addSellerListingsBulk({
+              currentUser,
+              vehiclesData,
+              listingExpiresAt,
+              setVehicles,
+              nextNumericId: () => Date.now() + randomIntBelow(1000),
+              addToast,
+              logError,
+            });
           }}
           onUpdateVehicle={async (vehicleData) => {
             await updateVehicle(vehicleData.id, vehicleData);
@@ -1203,7 +1121,7 @@ switch (currentView) {
               }
 
               if (result?.success && result.vehicle) {
-                await updateVehicle(vehicleId, result.vehicle);
+                await updateVehicle(vehicleId, result.vehicle, { skipToast: true });
 
                 if (typeof result.remainingCredits === 'number') {
                   const sellerEmail = result.vehicle?.sellerEmail || currentUser?.email;
@@ -1217,10 +1135,14 @@ switch (currentView) {
                         featuredCredits: remainingCredits
                       });
                     }
-                    await updateUser(sellerEmail, { featuredCredits: remainingCredits });
+                    await runBackgroundSync('Featured credits sync', () =>
+                      updateUser(sellerEmail, { featuredCredits: remainingCredits }, { skipToast: true }),
+                    );
                   }
 
                   addToast(`Listing featured! You have ${remainingCredits} feature credits left.`, 'success');
+                } else {
+                  addToast('Listing featured successfully!', 'success');
                 }
               } else {
                 addToast('Could not feature this listing. Please try again.', 'error');
@@ -1319,7 +1241,9 @@ switch (currentView) {
                 });
               }
 
-              await updateUser(seller.email, { usedCertifications: updatedUsedCertifications });
+              await runBackgroundSync('Certification usage sync', () =>
+                updateUser(seller.email, { usedCertifications: updatedUsedCertifications }, { skipToast: true }),
+              );
 
               if (typeof result.remainingCertifications === 'number') {
                 addToast(
@@ -1481,38 +1405,13 @@ switch (currentView) {
           }}
           onUpdatePassword={async (passwords) => {
             if (!currentUser) return false;
-            try {
-              const { login } = await import('../../services/userService');
-              const loginResult = await login({
-                email: currentUser.email,
-                password: passwords.current,
-                role: currentUser.role,
-              });
-              if (!loginResult.success) {
-                addToast('Current password is incorrect', 'error');
-                return false;
-              }
-              try {
-                await updateUser(currentUser.email, { password: passwords.new });
-                return true;
-              } catch (updateError) {
-                logError('Failed to update password:', updateError);
-                const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
-                if (errorMessage.includes('Server error') || errorMessage.includes('500')) {
-                  addToast('Could not update password. Please try again later.', 'error');
-                } else if (errorMessage.includes('Authentication') || errorMessage.includes('401')) {
-                  addToast('Your session has expired. Please log in again to update your password.', 'error');
-                } else {
-                  addToast('Could not update password. Please check your connection and try again.', 'error');
-                }
-                return false;
-              }
-            } catch (error) {
-              logError('Failed to update password:', error);
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-              addToast('Could not update password. Please check your connection and try again.', 'error');
-              return false;
-            }
+            const { login } = await import('../../services/userService');
+            return updateProfilePassword(currentUser, passwords, {
+              login,
+              updateUser,
+              addToast,
+              logError,
+            });
           }}
           onBack={() => goBack(ViewEnum.HOME)}
           onLogout={handleLogoutAll}
@@ -1530,49 +1429,14 @@ switch (currentView) {
           }
         }}
         onUpdatePassword={async (passwords) => {
-          if (currentUser) {
-            try {
-              // Verify current password by attempting login
-              // This works for both production (bcrypt) and development (plain text)
-              const { login } = await import('../../services/userService');
-              const loginResult = await login({ 
-                email: currentUser.email, 
-                password: passwords.current,
-                role: currentUser.role 
-              });
-              
-              if (!loginResult.success) {
-                addToast('Current password is incorrect', 'error');
-                return false;
-              }
-              
-              // Current password is correct, now update to new password
-              // Send plain text password - API will hash it
-              try {
-                await updateUser(currentUser.email, { password: passwords.new });
-                // Success message will be shown by updateUser in AppProvider
-                return true;
-              } catch (updateError) {
-                logError('Failed to update password:', updateError);
-                // Check if it's a specific error from the API
-                const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
-                if (errorMessage.includes('Server error') || errorMessage.includes('500')) {
-                  addToast('Could not update password. Please try again later.', 'error');
-                } else if (errorMessage.includes('Authentication') || errorMessage.includes('401')) {
-                  addToast('Your session has expired. Please log in again to update your password.', 'error');
-                } else {
-                  addToast('Could not update password. Please check your connection and try again.', 'error');
-                }
-                return false;
-              }
-            } catch (error) {
-              logError('Failed to update password:', error);
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-              addToast('Could not update password. Please check your connection and try again.', 'error');
-              return false;
-            }
-          }
-          return false;
+          if (!currentUser) return false;
+          const { login } = await import('../../services/userService');
+          return updateProfilePassword(currentUser, passwords, {
+            login,
+            updateUser,
+            addToast,
+            logError,
+          });
         }}
       />
     ) : (

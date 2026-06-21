@@ -9,11 +9,12 @@ import {
   buildSellerShareUrl,
   sellerQrDownloadFileName,
 } from '../utils/sellerQrCode';
+import { userNeedsPasswordSetup } from '../utils/profilePassword';
 
 interface ProfileProps {
   currentUser: User;
   onUpdateProfile: (details: Partial<User>) => Promise<void> | void;
-  onUpdatePassword: (passwords: { current: string; new: string }) => Promise<boolean>;
+  onUpdatePassword: (passwords: { current?: string; new: string }) => Promise<boolean>;
 }
 
 interface FormErrors {
@@ -139,6 +140,7 @@ const calculatePasswordStrength = (password: string): PasswordStrength => {
 };
 
 const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdatePassword }) => {
+  const needsPasswordSetup = userNeedsPasswordSetup(currentUser);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isEditingPassword, setIsEditingPassword] = useState(false);
@@ -527,7 +529,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
     e.preventDefault();
     setPasswordError('');
 
-    if (!passwordData.current) {
+    if (!needsPasswordSetup && !passwordData.current) {
       setPasswordError('Current password is required');
       return;
     }
@@ -542,7 +544,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
       return;
     }
 
-    if (passwordData.current === passwordData.new) {
+    if (!needsPasswordSetup && passwordData.current === passwordData.new) {
       setPasswordError('New password must be different from current password');
       return;
     }
@@ -568,7 +570,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
       }
       
       const success = await onUpdatePassword({ 
-        current: passwordData.current, 
+        ...(needsPasswordSetup ? {} : { current: passwordData.current }),
         new: passwordData.new 
       });
       
@@ -1194,8 +1196,14 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                 <div className="px-6 py-5 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-gray-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="text-xl font-bold text-gray-900">Change Password</h2>
-                      <p className="text-sm text-gray-600 mt-1">Update your account password</p>
+                      <h2 className="text-xl font-bold text-gray-900">
+                        {needsPasswordSetup ? 'Set Password' : 'Change Password'}
+                      </h2>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {needsPasswordSetup
+                          ? 'Create a password so you can also sign in with email and password'
+                          : 'Update your account password'}
+                      </p>
                     </div>
                     {!isEditingPassword && (
                       <button 
@@ -1217,6 +1225,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                   {isEditingPassword ? (
                     <form onSubmit={handlePasswordSave}>
                       <div className="space-y-5">
+                        {!needsPasswordSetup && (
                         <PasswordInput
                           label="Current Password"
                           name="current"
@@ -1226,6 +1235,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                           disabled={!isEditingPassword}
                           className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed"
                         />
+                        )}
                       
                       <div className="space-y-2">
                         <PasswordInput
@@ -1309,7 +1319,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                           <button 
                             type="submit" 
                             disabled={
-                              !passwordData.current || 
+                              (!needsPasswordSetup && !passwordData.current) || 
                               !passwordData.new || 
                               !passwordData.confirm || 
                               !passwordStrength.meetsRequirements ||
@@ -1331,7 +1341,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                                 </svg>
-                                Update Password
+                                {needsPasswordSetup ? 'Set Password' : 'Update Password'}
                               </>
                             )}
                           </button>
@@ -1344,7 +1354,11 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                           </svg>
                         </div>
-                        <p className="text-sm text-gray-600">Click "Edit" to change your password</p>
+                        <p className="text-sm text-gray-600">
+                          {needsPasswordSetup
+                            ? 'Click "Edit" to create a password for your account'
+                            : 'Click "Edit" to change your password'}
+                        </p>
                       </div>
                     )}
                 </div>

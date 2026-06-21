@@ -160,6 +160,7 @@ export const config = {
 // Type for normalized user (without password)
 interface NormalizedUser extends Omit<UserType, 'password'> {
   id: string;
+  hasPassword: boolean;
 }
 
 // Helper: Calculate distance between coordinates
@@ -214,12 +215,14 @@ function normalizeUser(user: UserType | null | undefined): NormalizedUser | null
   }
 
   // Build normalized user object (exclude password)
+  const hasPassword = !!(user.password && String(user.password).trim());
   const { password, ...userWithoutPassword } = user;
   const normalized: NormalizedUser = {
     id,
     ...userWithoutPassword,
     email,
     role,
+    hasPassword,
   };
 
   normalized.rerideRecommended = isRerideStaffPick(
@@ -3642,16 +3645,21 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           logInfo('✅ User update verified in database');
         }
 
-        // Remove password from response for security
-        const { password: _, ...userWithoutPassword } = updatedUser;
-        
+        const normalizedUpdatedUser = normalizeUser(updatedUser);
+        if (!normalizedUpdatedUser) {
+          return res.status(500).json({
+            success: false,
+            reason: 'User update completed but failed to process response.',
+          });
+        }
+
         // CRITICAL FIX: Signal to frontend that password was updated so it can clear cache
         if (updateFields.password) {
           res.setHeader('X-Password-Updated', 'true');
           logInfo('🔐 Password update completed - frontend should clear cache');
         }
         
-        return res.status(200).json({ success: true, user: userWithoutPassword });
+        return res.status(200).json({ success: true, user: normalizedUpdatedUser });
       } catch (dbError) {
         logError('❌ Database error during user update:', dbError);
         const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown error';

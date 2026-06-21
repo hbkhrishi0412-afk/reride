@@ -93,6 +93,7 @@ export type HandlerOptions = Record<string, never>;
 
 export interface NormalizedUser extends Omit<UserType, 'password'> {
   id: string;
+  hasPassword: boolean;
 }
 
 // ── User normalizer ─────────────────────────────────────────────────────────
@@ -116,8 +117,9 @@ export function normalizeUser(user: UserType | null | undefined): NormalizedUser
   const email = user.email?.toLowerCase().trim() ?? '';
   if (!email) return null;
 
+  const hasPassword = !!(user.password && String(user.password).trim());
   const { password: _pw, ...userWithoutPassword } = user;
-  return { id, ...userWithoutPassword, email, role };
+  return { id, ...userWithoutPassword, email, role, hasPassword };
 }
 
 // ── Authentication helpers ──────────────────────────────────────────────────
