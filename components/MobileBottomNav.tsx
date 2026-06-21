@@ -269,13 +269,10 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                 </div>
                 
                 <span 
-                  className="relative z-10 block max-w-full truncate text-center text-[10px] font-semibold leading-none transition-colors duration-200 sm:text-[11px]"
+                  className="relative z-10 block max-w-full truncate text-center text-xs font-semibold leading-tight text-gray-900 transition-colors duration-200 sm:text-[13px]"
                   style={{ 
-                    color: item.isSpecial ? (isActive ? '#D97706' : '#D97706') : (isActive ? '#FF6B35' : '#6B7280'),
                     letterSpacing: '-0.01em',
-                    textShadow: isActive ? '0 1px 2px rgba(255, 107, 53, 0.2)' : 'none',
                     fontWeight: isActive ? 700 : 600,
-                    opacity: isActive ? 1 : (item.isSpecial ? 0.9 : 0.85)
                   }}
                 >
                   {item.label}

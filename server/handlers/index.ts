@@ -21,3 +21,4 @@ export {
   shouldBackfillAIInspectionOnView,
 } from './vehicle-ai-inspection.js';
 export { handleVehicleTrust } from './vehicle-trust.js';
+export { handleBuyerActivity } from './buyer-activity.js';

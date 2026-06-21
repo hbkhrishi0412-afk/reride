@@ -7,6 +7,8 @@ interface MobileBrandTopBarProps {
   onNavigate: (view: ViewEnum) => void;
   wishlistCount?: number;
   compareCount?: number;
+  unreadNotificationCount?: number;
+  showNotifications?: boolean;
   onLogin?: () => void;
   showLogin?: boolean;
 }
@@ -18,6 +20,8 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
   onNavigate,
   wishlistCount = 0,
   compareCount = 0,
+  unreadNotificationCount = 0,
+  showNotifications = false,
   onLogin,
   showLogin = false,
 }) => {
@@ -37,7 +41,7 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
         <button
           type="button"
           onClick={() => onNavigate(ViewEnum.HOME)}
-          className="max-w-[58%] truncate rounded-full border border-gray-200 bg-gray-50 px-4 py-1.5 text-center text-sm font-extrabold uppercase tracking-wide text-slate-900 shadow-sm transition-transform active:scale-[0.98] hover:border-gray-300 hover:bg-white"
+          className="max-w-[58%] truncate rounded-full border border-gray-200 bg-gray-50 px-5 py-2 text-center text-base font-extrabold uppercase tracking-wide text-slate-900 shadow-sm transition-transform active:scale-[0.98] hover:border-gray-300 hover:bg-white"
           style={{ fontFamily: 'Nunito Sans, sans-serif' }}
           aria-label={t('nav.home')}
         >
@@ -85,6 +89,37 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
               </span>
             )}
           </button>
+          {showNotifications ? (
+            <button
+              type="button"
+              onClick={() => onNavigate(ViewEnum.NOTIFICATIONS_CENTER)}
+              className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-800 shadow-sm transition-colors hover:bg-gray-50 active:scale-95"
+              aria-label={
+                unreadNotificationCount > 0
+                  ? `Notifications, ${unreadNotificationCount} unread`
+                  : 'Notifications'
+              }
+              data-testid="mobile-brand-notification-button"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.75}
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                />
+              </svg>
+              {unreadNotificationCount > 0 && (
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-orange-500 ring-2 ring-white" />
+              )}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => onNavigate(ViewEnum.WISHLIST)}

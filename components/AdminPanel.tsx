@@ -1,5 +1,6 @@
 
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { Vehicle, User, Conversation, PlatformSettings, AuditLogEntry, VehicleData, SupportTicket, FAQItem, SubscriptionPlan, PlanDetails } from '../types';
 import { View } from '../types';
 import EditUserModal from './EditUserModal';
@@ -15,6 +16,7 @@ import ImportUsersModal from './ImportUsersModal';
 import AdminServiceOps from './AdminServiceOps';
 import ServiceManagement from './ServiceManagement';
 import SellCarAdmin from './SellCarAdmin';
+import AdminVehicleFeedback from './AdminVehicleFeedback';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 import { isRerideStaffPick } from '../utils/staffPick';
 import {
@@ -28,6 +30,14 @@ import {
     AdminToolbar,
     adminTableHeadClass,
 } from './admin/AdminPrimitives';
+import {
+    AdminListingColumnCustomizer,
+    buildListingLookupMaps,
+    ListingTableHeader,
+    renderListingCell,
+    useListingColumnVisibility,
+} from './admin/AdminListingColumns';
+import { vehicleSearchHaystack } from '../utils/vehicleListFilters';
 
 /** Safe ₹ formatting — API/mock data can omit or invalidate numeric fields. */
 function formatInrAmount(value: unknown): string {
@@ -187,7 +197,41 @@ interface AdminPanelProps {
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => void;
 }
 
-type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps' | 'serviceManagement';
+type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'vehicleFeedback' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps' | 'serviceManagement';
+
+const ADMIN_VIEWS = new Set<AdminView>([
+    'analytics', 'users', 'listings', 'moderation', 'certificationRequests', 'vehicleData',
+    'sellCarAdmin', 'vehicleFeedback', 'auditLog', 'settings', 'support', 'faq', 'payments',
+    'planManagement', 'serviceOps', 'serviceManagement',
+]);
+
+function parseAdminTabFromUrl(value: string | null): AdminView | null {
+    if (value && ADMIN_VIEWS.has(value as AdminView)) return value as AdminView;
+    return null;
+}
+
+function adminListingMatchesSearch(vehicle: Vehicle, query: string, sellerDisplayName?: string): boolean {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    const hay = [
+        vehicleSearchHaystack(vehicle),
+        String(vehicle.year),
+        String(vehicle.price),
+        String(vehicle.id),
+        vehicle.databaseId,
+        vehicle.sellerEmail,
+        vehicle.sellerName,
+        sellerDisplayName,
+        vehicle.status,
+        vehicle.registrationNumber,
+        vehicle.listingType,
+        vehicle.sellerPhone,
+    ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+    return hay.includes(q);
+}
 type RoleFilter = 'all' | 'customer' | 'seller' | 'admin' | 'finance_partner';
 // FIX: Restrict sortable keys to prevent comparison errors on incompatible types.
 type SortableUserKey = 'name' | 'status' | 'partnerBanks';
@@ -233,6 +277,12 @@ const AdminViewNavIcon: React.FC<{ view: AdminView; className?: string }> = ({ v
             return (
                 <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+            );
+        case 'vehicleFeedback':
+            return (
+                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                 </svg>
             );
         case 'vehicleData':
@@ -1030,7 +1080,15 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         supportTickets, onUpdateSupportTicket, faqItems, onAddFaq, onUpdateFaq, onDeleteFaq,
         onCertificationApproval,
     } = props;
-    const [activeView, setActiveView] = useState<AdminView>('analytics');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const listingsQ = searchParams.get('listingsQ') ?? '';
+
+    const [activeView, setActiveView] = useState<AdminView>(() => {
+        const tab = parseAdminTabFromUrl(searchParams.get('tab'));
+        if (tab) return tab;
+        if (searchParams.get('listingsQ')?.trim()) return 'listings';
+        return 'analytics';
+    });
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
     const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
@@ -1283,6 +1341,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     items: [
                         { view: 'listings' as const, label: 'Listings' },
                         { view: 'sellCarAdmin' as const, label: 'Sell car submissions' },
+                        { view: 'vehicleFeedback' as const, label: 'Customer vehicle feedback' },
                         { view: 'vehicleData' as const, label: 'Vehicle data' },
                     ],
                 },
@@ -1460,17 +1519,68 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         setUserDirectoryPage(1);
     };
 
+    const listingLookup = useMemo(
+        () => buildListingLookupMaps(users || [], conversations || []),
+        [users, conversations],
+    );
+
+    const updateListingsSearch = useCallback(
+        (value: string) => {
+            setSearchParams(
+                (prev) => {
+                    const next = new URLSearchParams(prev);
+                    const trimmed = value.trim();
+                    if (trimmed) {
+                        next.set('listingsQ', value);
+                        next.set('tab', 'listings');
+                    } else {
+                        next.delete('listingsQ');
+                    }
+                    return next;
+                },
+                { replace: true },
+            );
+            if (value.trim()) {
+                setActiveView('listings');
+            }
+            setCurrentPage(1);
+        },
+        [setSearchParams],
+    );
+
+    useEffect(() => {
+        const tab = parseAdminTabFromUrl(searchParams.get('tab'));
+        if (tab) {
+            setActiveView(tab);
+            return;
+        }
+        if (searchParams.get('listingsQ')?.trim()) {
+            setActiveView('listings');
+        }
+    }, [searchParams]);
+
     // Pagination logic for vehicles
     const filteredVehicles = useMemo(() => {
         const vList = vehicles || [];
-        if (selectedSeller === 'all') return vList;
-        // Normalize emails for comparison (critical for production)
-        const normalizedSelectedSeller = selectedSeller ? selectedSeller.toLowerCase().trim() : '';
-        return vList.filter(vehicle => {
-          if (!vehicle?.sellerEmail) return false;
-          return vehicle.sellerEmail.toLowerCase().trim() === normalizedSelectedSeller;
-        });
-    }, [vehicles, selectedSeller]);
+        let result = vList;
+        if (selectedSeller !== 'all') {
+            const normalizedSelectedSeller = selectedSeller ? selectedSeller.toLowerCase().trim() : '';
+            result = result.filter((vehicle) => {
+                if (!vehicle?.sellerEmail) return false;
+                return vehicle.sellerEmail.toLowerCase().trim() === normalizedSelectedSeller;
+            });
+        }
+        const q = listingsQ.trim();
+        if (q) {
+            result = result.filter((vehicle) => {
+                const seller = vehicle.sellerEmail
+                    ? listingLookup.userByEmail.get(vehicle.sellerEmail.toLowerCase().trim())
+                    : undefined;
+                return adminListingMatchesSearch(vehicle, q, seller?.name);
+            });
+        }
+        return result;
+    }, [vehicles, selectedSeller, listingsQ, listingLookup]);
 
     const paginatedVehicles = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
@@ -1479,6 +1589,12 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     }, [filteredVehicles, currentPage, itemsPerPage]);
 
     const totalPages = Math.ceil(filteredVehicles.length / itemsPerPage);
+
+    const { visibleColumnDefs, visibleColumns, toggleColumn, resetColumns } = useListingColumnVisibility();
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [listingsQ, selectedSeller]);
 
     const handlePageChange = (page: number) => {
         setCurrentPage(page);
@@ -2081,6 +2197,19 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         <AdminToolbar
                             left={
                                 <>
+                                    <label className="relative block w-full min-w-[200px] sm:max-w-xs">
+                                        <span className="sr-only">Search listings</span>
+                                        <svg className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                        <input
+                                            type="search"
+                                            value={listingsQ}
+                                            onChange={(e) => updateListingsSearch(e.target.value)}
+                                            placeholder="Search vehicle, seller, status…"
+                                            className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                                        />
+                                    </label>
                                     <SellerFilterDropdown
                                         sellers={users.filter((u) => u.role === 'seller')}
                                         selectedSeller={selectedSeller}
@@ -2132,50 +2261,54 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         />
                         <AdminDataTableFrame
                             title="All listings"
-                            subtitle={`${filteredVehicles.length} total · showing ${paginatedVehicles.length} on this page`}
+                            subtitle={
+                                listingsQ.trim()
+                                    ? `${filteredVehicles.length} match${filteredVehicles.length === 1 ? '' : 'es'} · showing ${paginatedVehicles.length} on this page`
+                                    : `${filteredVehicles.length} total · showing ${paginatedVehicles.length} on this page`
+                            }
+                            actions={
+                                <>
+                                    {listingsQ.trim() ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => updateListingsSearch('')}
+                                            className="text-xs font-medium text-violet-600 hover:text-violet-800"
+                                        >
+                                            Clear search
+                                        </button>
+                                    ) : null}
+                                    <AdminListingColumnCustomizer
+                                        visibleColumns={visibleColumns}
+                                        onToggle={toggleColumn}
+                                        onReset={resetColumns}
+                                    />
+                                </>
+                            }
                         >
                             <table className="min-w-full divide-y divide-slate-100">
                                 <thead>
-                                    <tr>
-                                        <th className={`${adminTableHeadClass} px-4 py-3`}>Vehicle</th>
-                                        <th className={`${adminTableHeadClass} px-4 py-3`}>Seller</th>
-                                        <th className={`${adminTableHeadClass} px-4 py-3`}>Price</th>
-                                        <th className={`${adminTableHeadClass} px-4 py-3`}>Status</th>
-                                        <th className={`${adminTableHeadClass} px-4 py-3`}>Offer</th>
-                                        <th className={`${adminTableHeadClass} px-4 py-3 text-right`}>Actions</th>
-                                    </tr>
+                                    <ListingTableHeader visibleColumnDefs={visibleColumnDefs} />
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 bg-white">
-                                    {paginatedVehicles.map(vehicle => (
-                                        <tr key={vehicle.id}>
-                                            <td className="px-6 py-4 whitespace-nowrap font-medium">{vehicle.year} {vehicle.make} {vehicle.model}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{vehicle.sellerEmail}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">₹{formatInrAmount(vehicle.price)}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                                    vehicle.status === 'published' ? 'bg-green-100 text-green-800' :
-                                                    vehicle.status === 'sold' ? 'bg-blue-100 text-blue-800' :
-                                                    'bg-gray-100 text-gray-800'
-                                                }`}>
-                                                    {vehicle.status}
-                                                </span>
-                                    </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                {!vehicle.offerEnabled ? (
-                                                    <span className="text-gray-400">—</span>
-                                                ) : isSellerListingOfferVisible(vehicle) ? (
-                                                    <span className="px-2 py-0.5 inline-flex text-xs font-semibold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200">
-                                                        Active
-                                                    </span>
-                                                ) : (
-                                                    <span
-                                                        className="px-2 py-0.5 inline-flex text-xs font-medium rounded-full bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100"
-                                                        title="Offer is enabled but hidden from buyers (check dates or offer text)"
-                                                    >
-                                                        Inactive
-                                                    </span>
-                                                )}
+                                    {paginatedVehicles.length === 0 ? (
+                                        <tr>
+                                            <td
+                                                colSpan={visibleColumnDefs.length + 1}
+                                                className="px-6 py-10 text-center text-sm text-slate-500"
+                                            >
+                                                {listingsQ.trim()
+                                                    ? `No listings match "${listingsQ.trim()}".`
+                                                    : 'No listings to show.'}
                                             </td>
+                                        </tr>
+                                    ) : (
+                                    paginatedVehicles.map(vehicle => (
+                                        <tr key={vehicle.id}>
+                                            {visibleColumnDefs.map((col) => (
+                                                <td key={col.id} className="px-6 py-4 whitespace-nowrap text-sm">
+                                                    {renderListingCell(col.id, vehicle, listingLookup)}
+                                                </td>
+                                            ))}
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                                 <button 
                                                     onClick={(e) => {
@@ -2248,7 +2381,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                 </button>
                                     </td>
                                 </tr>
-                           ))}
+                                    ))
+                                    )}
                         </tbody>
                     </table>
                             {totalPages > 1 && (
@@ -2294,6 +2428,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 return props.onNavigate ? (
                     <SellCarAdmin onNavigate={props.onNavigate} embedded />
                 ) : null;
+            case 'vehicleFeedback':
+                return <AdminVehicleFeedback vehicles={vehicles} embedded />;
             case 'auditLog':
                 return <AuditLogView auditLog={auditLog} />;
             case 'settings':

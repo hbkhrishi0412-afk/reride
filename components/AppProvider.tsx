@@ -86,6 +86,11 @@ import {
   useHttpOnlyRefreshCookie,
 } from '../utils/authStorage';
 import { getEffectiveMuteKeys, isStoryMuted } from '../utils/notificationMute';
+import {
+  conversationBelongsToCustomer,
+  conversationBelongsToSeller,
+  participantIdMatchesAppUser,
+} from '../utils/conversationParticipants';
 import { getSupabaseClient } from '../lib/supabase';
 import { syncServiceProviderOAuth, syncWithBackend } from '../services/supabase-auth-service';
 import type { Session } from '@supabase/supabase-js';
@@ -1348,8 +1353,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         postLoginView = View.HOME;
         setCurrentView(View.HOME);
       } else if (userForSession.role === 'customer') {
-        postLoginView = View.HOME;
-        setCurrentView(View.HOME);
+        let customerView = View.HOME;
+        try {
+          const returnView = sessionStorage.getItem('reride.postLoginView');
+          sessionStorage.removeItem('reride.postLoginView');
+          if (returnView === View.DETAIL || returnView === 'DETAIL') {
+            customerView = View.DETAIL;
+          }
+        } catch {
+          /* ignore */
+        }
+        postLoginView = customerView;
+        setCurrentView(customerView);
       } else {
         setCurrentView(View.HOME);
       }
@@ -3292,7 +3307,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       setConversations((prev) => {
-        const idx = prev.findIndex((c) => c.id === conv.id);
+        const clientAlias =
+          row?.metadata && typeof row.metadata === 'object'
+            ? String((row.metadata as { client_conversation_id?: string }).client_conversation_id || '')
+            : '';
+        const idx = prev.findIndex(
+          (c) =>
+            c.id === conv.id ||
+            (clientAlias && c.id === clientAlias) ||
+            (clientAlias && String(c.id) === clientAlias),
+        );
         if (idx < 0) {
           const next = [...prev, conv];
           try {
@@ -3300,24 +3324,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } catch {
             void 0;
           }
+          if (currentUser?.role === 'seller' && !conv.isReadBySeller) {
+            const lastMsg = conv.messages?.[conv.messages.length - 1];
+            if (lastMsg?.sender === 'user') {
+              addToast(
+                `New message from ${conv.customerName || 'Customer'} about ${conv.vehicleName || 'your listing'}`,
+                'info',
+              );
+            }
+          }
           return next;
         }
         const existing = prev[idx];
         const mergedMsgs = mergeConversationMessagesForRealtime(existing.messages || [], conv.messages || []);
         const merged = {
           ...conv,
+          id: existing.id,
           messages: mergedMsgs.length ? mergedMsgs : conv.messages,
         };
+        const hadUnreadFromCustomer =
+          currentUser?.role === 'seller' &&
+          !existing.isReadBySeller &&
+          merged.isReadBySeller === false &&
+          mergedMsgs.length > (existing.messages?.length ?? 0) &&
+          mergedMsgs[mergedMsgs.length - 1]?.sender === 'user';
         const next = prev.map((c, i) => (i === idx ? merged : c));
         try {
           saveConversations(next);
         } catch {
           void 0;
         }
+        if (hadUnreadFromCustomer) {
+          addToast(
+            `New message from ${merged.customerName || 'Customer'} about ${merged.vehicleName || 'your listing'}`,
+            'info',
+          );
+        }
         return next;
       });
     },
-    [currentUser?.email, currentUser?.id],
+    [currentUser?.email, currentUser?.id, currentUser?.role, addToast],
   );
 
   const onConversationRealtimeEvent = useCallback(
@@ -3339,11 +3385,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const onNotificationRealtimeInsert = useCallback(
     (row: any) => {
       if (!userEmailForNotif) return;
-      const recipient = (row.recipient_email || row.user_id || '').toString().toLowerCase().trim();
-      if (!recipient || recipient !== userEmailForNotif) return;
+      const recipient = (row.recipient_email || row.user_id || '').toString();
+      if (!recipient || !participantIdMatchesAppUser(recipient, userEmailForNotif, currentUser?.id)) return;
       const notif: Notification = {
         id: row.id,
-        recipientEmail: recipient,
+        recipientEmail: userEmailForNotif,
         message: row.message || '',
         title: row.title,
         targetId: row.metadata?.targetId ?? row.id,
@@ -3352,11 +3398,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         timestamp: row.created_at || new Date().toISOString(),
       };
       setNotifications((prev) => [notif, ...prev]);
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-        showNotification(notif.title || 'New message', { body: notif.message });
+      if (typeof document !== 'undefined') {
+        if (document.visibilityState === 'hidden') {
+          showNotification(notif.title || 'New message', { body: notif.message });
+        } else if (notif.targetType === 'conversation') {
+          addToast(notif.message || notif.title || 'New message', 'info');
+        }
       }
     },
-    [userEmailForNotif],
+    [userEmailForNotif, currentUser?.id, addToast],
   );
 
   useSupabaseRealtime({
@@ -3563,6 +3613,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           }
         }
+
+        // Reload inbox threads after auth is ready (fixes empty seller/customer messages on login).
+        if (
+          isSubscribed &&
+          currentUser?.email &&
+          (currentUser.role === 'seller' || currentUser.role === 'customer')
+        ) {
+          try {
+            const inboxEmail = currentUser.email.toLowerCase().trim();
+            const { getConversationsFromSupabase } = await import('../services/conversationService');
+            const convResult =
+              currentUser.role === 'seller'
+                ? await getConversationsFromSupabase(undefined, inboxEmail)
+                : await getConversationsFromSupabase(inboxEmail);
+            if (convResult.success && convResult.data) {
+              const normalized = convResult.data.map((conv) => ({
+                ...conv,
+                sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+                customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
+              }));
+              setConversations(normalized);
+              saveConversations(normalized);
+            }
+          } catch (convErr) {
+            logWarn('Failed to sync conversations after login:', convErr);
+          }
+        }
       } catch (error) {
         logError('AppProvider: Failed to sync latest data after authentication:', error);
         // Don't show toast on every error - only if critical
@@ -3622,10 +3699,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Get notifications for current user
-    const userNotifications = notifications.filter(
-      n =>
-        n.recipientEmail &&
-        n.recipientEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim(),
+    const userNotifications = notifications.filter((n) =>
+      participantIdMatchesAppUser(
+        n.recipientEmail,
+        currentUser.email,
+        currentUser.id,
+      ),
     );
 
     if (userNotifications.length === 0) {
@@ -3643,7 +3722,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Mark as shown
       shownNotificationIdsRef.current.add(notification.id);
       
-      // Only show browser notification if page is in background
       if (document.visibilityState === 'hidden') {
         const title = notification.targetType === 'conversation' 
           ? 'New Message' 
@@ -3659,6 +3737,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             logWarn('Failed to show browser notification:', err);
           }
         });
+      } else if (notification.targetType === 'conversation') {
+        addToast(notification.message || notification.title || 'New message', 'info');
       }
     });
 
@@ -3670,7 +3750,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
     // PERFORMANCE: Depend on currentUser object instead of email property for stable reference
-  }, [notifications, currentUser]);
+  }, [notifications, currentUser, addToast]);
 
   // Periodic sync queue processor - retry failed Supabase saves
   useEffect(() => {
@@ -4018,11 +4098,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const conversationIds: string[] = [];
     conversations.forEach(conv => {
       if (!conv) return;
-      // Join if user is part of this conversation
-      const isParticipant = 
-        (currentUserRole === 'customer' && conv.customerId?.toLowerCase().trim() === currentUserEmail.toLowerCase().trim()) ||
-        (currentUserRole === 'seller' && conv.sellerId?.toLowerCase().trim() === currentUserEmail.toLowerCase().trim());
-      
+      const isParticipant =
+        currentUserRole === 'customer'
+          ? conversationBelongsToCustomer(conv, currentUserEmail, currentUser.id)
+          : conversationBelongsToSeller(conv, currentUserEmail, currentUser.id);
+
       if (isParticipant) {
         conversationIds.push(conv.id);
       }
@@ -4525,48 +4605,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
             customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId
           }));
-          
-          if (process.env.NODE_ENV === 'development') {
-            logInfo('🔍 Normalized conversations:', {
-              count: normalizedConversations.length,
-              conversations: normalizedConversations.map(c => ({
-                id: c.id,
-                sellerId: c.sellerId,
-                customerName: c.customerName,
-                vehicleName: c.vehicleName,
-                messageCount: c.messages?.length || 0
-              }))
-            });
-          }
-          
-          setConversations(prev => {
-            const prevIds = new Set(prev.map(c => c.id));
-            
-            // Check if there are new conversations or if message counts changed
-            const hasNewConversations = normalizedConversations.some(c => !prevIds.has(c.id));
-            const hasUpdatedMessages = normalizedConversations.some(newConv => {
-              const oldConv = prev.find(c => c.id === newConv.id);
-              return oldConv && oldConv.messages.length !== newConv.messages.length;
-            });
-            
-            if (hasNewConversations || hasUpdatedMessages || prev.length === 0) {
-              logInfo('🔄 Refreshing seller conversations:', {
-                newCount: normalizedConversations.length,
-                hasNew: hasNewConversations,
-                hasUpdated: hasUpdatedMessages,
-                previousCount: prev.length,
-                sellerEmail: normalizedSellerEmail
-              });
-              try {
-                saveConversations(normalizedConversations);
-              } catch (error) {
-                logError('Failed to save refreshed conversations:', error);
-              }
-              return normalizedConversations;
+
+          setConversations((prev) => {
+            const prevUnread = prev.filter(
+              (c) =>
+                c &&
+                !c.isReadBySeller &&
+                conversationBelongsToSeller(c, normalizedSellerEmail, currentUser.id),
+            ).length;
+            const nextUnread = normalizedConversations.filter((c) => c && !c.isReadBySeller).length;
+            if (
+              currentUser.role === 'seller' &&
+              nextUnread > prevUnread &&
+              typeof document !== 'undefined' &&
+              document.visibilityState === 'visible'
+            ) {
+              addToast('You have new buyer messages', 'info');
             }
-            
-            return prev;
+            return normalizedConversations;
           });
+          try {
+            saveConversations(normalizedConversations);
+          } catch (error) {
+            logError('Failed to save refreshed conversations:', error);
+          }
         } else if (process.env.NODE_ENV === 'development') {
           logWarn('⚠️ Failed to load seller conversations:', {
             success: result.success,
@@ -4589,7 +4651,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const refreshInterval = setInterval(loadSellerConversations, 4000);
     
     return () => clearInterval(refreshInterval);
-  }, [currentUser?.email, currentUser?.role]);
+  }, [currentUser?.email, currentUser?.role, currentUser?.id, addToast]);
 
   // Customers: poll API so seller replies appear even when Realtime RLS blocks postgres_changes
   useEffect(() => {
@@ -4611,23 +4673,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
           customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
         }));
-        setConversations((prev) => {
-          const prevIds = new Set(prev.map((c) => c.id));
-          const hasNew = normalizedConversations.some((c) => !prevIds.has(c.id));
-          const hasUpdated = normalizedConversations.some((newConv) => {
-            const oldConv = prev.find((c) => c.id === newConv.id);
-            return oldConv && oldConv.messages.length !== newConv.messages.length;
-          });
-          if (hasNew || hasUpdated || prev.length === 0) {
-            try {
-              saveConversations(normalizedConversations);
-            } catch (_) {
-              /* ignore */
-            }
-            return normalizedConversations;
-          }
-          return prev;
-        });
+        setConversations(normalizedConversations);
+        try {
+          saveConversations(normalizedConversations);
+        } catch (_) {
+          /* ignore */
+        }
       } catch (e) {
         if (process.env.NODE_ENV === 'development') {
           logWarn('Failed to refresh customer conversations:', e);

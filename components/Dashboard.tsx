@@ -27,7 +27,7 @@ import {
   mergeListingImages,
   syncDocumentsFromChecklist,
 } from '../lib/universalChecklist/mediaSync';
-import { verifyVahanRegistration } from '../services/vehicleTrustService';
+import { verifyVahanRegistration, applyVahanVerifyToVehicleFields } from '../services/vehicleTrustService';
 
 export type DashboardNotifyFn = (
   message: string,
@@ -1764,7 +1764,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 value={formData.sellerDisclosureChecklist}
                 sellerEmail={seller.email}
                 registrationNumber={formData.registrationNumber}
-                vahanVerified={Boolean(formData.vahanVerifiedAt || formData.vahanSnapshot)}
+                vahanVerified={formData.vahanSnapshot?.source === 'surepass'}
                 vahanSnapshot={formData.vahanSnapshot}
                 onChange={handleChecklistChange}
                 onVerifyVahan={async (registrationNumber) => {
@@ -1773,22 +1773,21 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                       registrationNumber,
                       editingVehicle?.databaseId ?? editingVehicle?.id,
                     );
-                    setFormData((prev) => ({
-                      ...prev,
-                      registrationNumber,
-                      vahanVerifiedAt: result.snapshot?.verifiedAt || new Date().toISOString(),
-                      vahanSnapshot: result.snapshot ?? prev.vahanSnapshot,
-                      engineNumber: result.snapshot?.engineNumber || prev.engineNumber,
-                      chassisNumber: result.snapshot?.chassisNumber || prev.chassisNumber,
-                      noOfOwners: result.snapshot?.ownerCount ?? prev.noOfOwners,
-                      insuranceValidity: result.snapshot?.insuranceUpto || prev.insuranceValidity,
-                    }));
+                    setFormData((prev) =>
+                      applyVahanVerifyToVehicleFields(prev, registrationNumber, result),
+                    );
                     notify(
                       result.verified ? 'RC verified with government records' : result.message || 'Saved RC — auto-verify unavailable',
                       result.verified ? 'success' : 'warning',
                     );
+                    return {
+                      verified: result.verified,
+                      message: result.message,
+                    };
                   } catch (e) {
-                    notify(e instanceof Error ? e.message : 'Verification failed', 'error');
+                    const message = e instanceof Error ? e.message : 'Verification failed';
+                    notify(message, 'error');
+                    return { verified: false, message };
                   }
                 }}
               />
@@ -2222,13 +2221,14 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
 const InquiriesView: React.FC<{
   conversations: Conversation[];
   sellerEmail: string;
+  sellerUserId?: string;
   onMarkConversationAsReadBySeller: (conversationId: string) => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onSelectConv: (conv: Conversation) => void;
   onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
   onMarkAllAsReadBySeller?: () => void;
 
-}> = memo(({ conversations, sellerEmail, onMarkConversationAsReadBySeller, onMarkMessagesAsRead, onSelectConv, onSetConversationReadState, onMarkAllAsReadBySeller }) => {
+}> = memo(({ conversations, sellerEmail, sellerUserId, onMarkConversationAsReadBySeller, onMarkMessagesAsRead, onSelectConv, onSetConversationReadState, onMarkAllAsReadBySeller }) => {
     const { t } = useTranslation();
     const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read'>('all');
 
@@ -2279,21 +2279,7 @@ const InquiriesView: React.FC<{
             }
             return false;
           }
-          const normalizedConvSellerId = (conv.sellerId || '').toLowerCase().trim();
-          const matches = normalizedConvSellerId === normalizedSellerEmail;
-          
-          if (process.env.NODE_ENV === 'development' && !matches) {
-            console.log('⚠️ InquiriesView: Conversation sellerId mismatch', {
-              convId: conv.id,
-              convSellerId: conv.sellerId,
-              normalizedConvSellerId,
-              sellerEmail,
-              normalizedSellerEmail,
-              matches
-            });
-          }
-          
-          return matches;
+          return conversationBelongsToSeller(conv, sellerEmail, sellerUserId);
         });
         
         if (process.env.NODE_ENV === 'development') {
@@ -2313,7 +2299,7 @@ const InquiriesView: React.FC<{
           const dateB = b?.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
           return dateB - dateA;
         });
-    }, [conversations, sellerEmail, filterMode]);
+    }, [conversations, sellerEmail, sellerUserId, filterMode]);
 
     return (
        <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
@@ -4081,6 +4067,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             <InquiriesView 
               conversations={safeConversations} 
               sellerEmail={seller.email}
+              sellerUserId={seller.id}
               onMarkConversationAsReadBySeller={onMarkConversationAsReadBySeller} 
               onMarkMessagesAsRead={onMarkMessagesAsRead}
               onSelectConv={setSelectedConv}

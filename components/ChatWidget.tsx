@@ -11,6 +11,7 @@ import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { filterMessagesForViewer } from '../utils/conversationView';
 import { isCapacitorNativeApp } from '../utils/isCapacitorNative';
 import { isOfferChatMessage } from '../utils/isOfferChatMessage';
+import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 
 interface ChatWidgetProps {
   conversation: Conversation;
@@ -113,6 +114,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
 
   /** Capacitor: sit above tab row (56px) + same safe-area as MobileBottomNav (env added in calc). */
   const bottomTabBarRowPx = isMobile && isCapacitorNativeApp() ? 56 : 0;
+  const keyboardInset = useVisualViewportBottomInset();
+  const showOfferInComposer =
+    currentUserRole === 'customer' && visibleMessages.length === 0;
   
   // Auto-open chat when conversation starts (even with no messages) or has new messages
   // BUT only if user hasn't manually closed it
@@ -820,8 +824,21 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
           </div>
         )}
 
-        {/* Input - Facebook Messenger style */}
-        <div className="p-3 border-t border-gray-200 bg-white relative">
+        {/* Composer */}
+        <div
+          className={`bg-white relative shrink-0 ${
+            isMobile
+              ? 'border-t border-black/[0.08] px-2 pt-2'
+              : 'p-3 border-t border-gray-200'
+          }`}
+          style={
+            isMobile
+              ? {
+                  paddingBottom: `max(0.75rem, env(safe-area-inset-bottom, 0px), ${keyboardInset}px)`,
+                }
+              : undefined
+          }
+        >
             <input
               ref={attachmentInputRef}
               type="file"
@@ -834,7 +851,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                 <p className="text-xs text-red-600 flex-1">{attachError}</p>
                 <button
                   type="button"
-                  className="text-xs font-semibold text-blue-600 shrink-0"
+                  className="text-xs font-semibold text-[#0084FF] shrink-0"
                   onClick={() => {
                     setAttachError(null);
                     attachmentInputRef.current?.click();
@@ -850,7 +867,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
               </p>
             )}
             {showEmojiPicker && (
-                <div ref={emojiPickerRef} className="absolute bottom-full mb-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-lg p-2 grid grid-cols-6 gap-2">
+                <div ref={emojiPickerRef} className="absolute bottom-full mb-2 left-2 right-2 bg-white dark:bg-brand-gray-700 rounded-lg shadow-lg p-2 grid grid-cols-6 gap-2 z-30">
                     {EMOJIS.map(emoji => (
                         <button key={emoji} onClick={() => handleEmojiClick(emoji)} className="text-2xl hover:bg-reride-light-gray dark:hover:bg-brand-gray-600 rounded-md p-1">
                             {emoji}
@@ -858,12 +875,97 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                     ))}
                 </div>
             )}
-            <form onSubmit={handleSendMessage} className="flex gap-1 items-center">
+            {isMobile ? (
+            <form onSubmit={handleSendMessage} className="flex items-end gap-1.5 pb-1">
                 <button
                   type="button"
                   onClick={() => attachmentInputRef.current?.click()}
                   disabled={isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording || !uploaderEmail}
-                  className="p-2 text-gray-500 hover:text-gray-700 rounded-full transition-colors disabled:opacity-40"
+                  className="flex shrink-0 items-center justify-center w-10 h-10 rounded-full text-[#0084FF] active:bg-black/5 mb-0.5 disabled:opacity-40"
+                  aria-label="Send a photo"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleVoiceTap()}
+                  disabled={isUploadingPhoto || isUploadingVoice || !uploaderEmail}
+                  className={`flex shrink-0 items-center justify-center w-10 h-10 rounded-full mb-0.5 disabled:opacity-40 ${
+                    voiceRecorder.isRecording
+                      ? 'bg-red-500 text-white animate-pulse'
+                      : 'text-[#0084FF] active:bg-black/5'
+                  }`}
+                  aria-label={voiceRecorder.isRecording ? 'Stop recording and send voice' : 'Record voice message'}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z" />
+                  </svg>
+                </button>
+                <div className="flex-1 min-w-0 flex items-center rounded-[20px] bg-[#F0F2F5] px-3 py-1.5 min-h-[44px] border border-transparent focus-within:border-[#0084FF]/30 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#0084FF]/20">
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={handleInputChange}
+                    enterKeyHint="send"
+                    autoComplete="off"
+                    autoCorrect="on"
+                    placeholder={
+                      voiceRecorder.isRecording
+                        ? 'Recording… tap mic to send'
+                        : isUploadingPhoto || isUploadingVoice
+                          ? 'Uploading…'
+                          : 'Message…'
+                    }
+                    disabled={isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
+                    className="flex-1 min-w-0 bg-transparent text-[15px] text-gray-900 placeholder:text-gray-500 outline-none py-1.5 disabled:opacity-60"
+                  />
+                  {showOfferInComposer && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setIsOfferModalOpen(true);
+                      }}
+                      className="shrink-0 p-1.5 rounded-full text-[#F97316] active:bg-orange-50"
+                      aria-label="Make an offer"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" /><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" /></svg>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojiPicker(prev => !prev)}
+                    className="shrink-0 p-1.5 rounded-full text-gray-500 active:bg-black/5"
+                    aria-label="Add emoji"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </button>
+                </div>
+                <button
+                  type="submit"
+                  disabled={!inputText.trim() || isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
+                  className={`flex shrink-0 items-center justify-center w-10 h-10 rounded-full mb-0.5 transition-all ${
+                    inputText.trim()
+                      ? 'bg-[#0084FF] text-white shadow-md active:scale-95'
+                      : 'bg-[#E4E6EB] text-gray-400 cursor-not-allowed'
+                  }`}
+                  aria-label="Send message"
+                >
+                  <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                  </svg>
+                </button>
+            </form>
+            ) : (
+            <form onSubmit={handleSendMessage} className="flex gap-1.5 items-end">
+                <button
+                  type="button"
+                  onClick={() => attachmentInputRef.current?.click()}
+                  disabled={isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording || !uploaderEmail}
+                  className="p-2 text-gray-500 hover:text-gray-700 rounded-full transition-colors disabled:opacity-40 shrink-0"
                   aria-label="Send a photo"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -874,7 +976,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                   type="button"
                   onClick={() => void handleVoiceTap()}
                   disabled={isUploadingPhoto || isUploadingVoice || !uploaderEmail}
-                  className={`p-2 rounded-full transition-colors disabled:opacity-40 ${
+                  className={`p-2 rounded-full transition-colors disabled:opacity-40 shrink-0 ${
                     voiceRecorder.isRecording
                       ? 'bg-red-500 text-white animate-pulse'
                       : 'text-gray-500 hover:text-gray-700'
@@ -885,55 +987,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                     <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z" />
                   </svg>
                 </button>
-                <button type="button" onClick={() => setShowEmojiPicker(prev => !prev)} className="p-2 text-gray-500 hover:text-gray-700 rounded-full transition-colors" aria-label="Add emoji">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </button>
-                {currentUserRole === 'customer' ? (
-                     <button 
-                       type="button" 
-                       onClick={(e) => {
-                         e.stopPropagation();
-                         e.preventDefault();
-                         if (process.env.NODE_ENV === 'development') {
-                           console.log('🔧 Make Offer button clicked (input area), opening modal');
-                         }
-                         setIsOfferModalOpen(true);
-                       }} 
-                       className="p-2 rounded-full transition-colors active:scale-95" 
-                       aria-label="Make an offer"
-                       style={{
-                         color: '#F97316',
-                         pointerEvents: 'auto',
-                         zIndex: 10
-                       }}
-                       onMouseEnter={(e) => {
-                         e.currentTarget.style.backgroundColor = 'rgba(249, 115, 22, 0.1)';
-                       }}
-                       onMouseLeave={(e) => {
-                         e.currentTarget.style.backgroundColor = 'transparent';
-                       }}
-                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" /><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" /></svg>
-                    </button>
-                ) : ( onMakeOffer && 
-                     <button 
-                       type="button" 
-                       onClick={(e) => {
-                         e.stopPropagation();
-                         e.preventDefault();
-                         onMakeOffer();
-                       }} 
-                       className="p-2 text-gray-500 hover:text-gray-700 rounded-full transition-colors active:scale-95" 
-                       aria-label="Make an offer"
-                       style={{
-                         pointerEvents: 'auto',
-                         zIndex: 10
-                       }}
-                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" /><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" /></svg>
-                    </button>
-                )}
-                <input
+                <div className="flex-1 min-w-0 flex items-center rounded-full bg-gray-100 px-3 py-1.5 min-h-[40px] border border-transparent focus-within:border-[#0084FF]/30 focus-within:bg-white focus-within:ring-1 focus-within:ring-[#0084FF]/20">
+                  <input
                     type="text"
                     value={inputText}
                     onChange={handleInputChange}
@@ -948,27 +1003,53 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                           : 'Type a message...'
                     }
                     disabled={isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
-                    className="flex-grow bg-gray-100 rounded-full px-4 py-2 focus:outline-none border border-transparent text-sm transition-colors disabled:opacity-60"
-                    style={{ 
-                        WebkitAppearance: 'none',
-                        MozAppearance: 'none',
-                        appearance: 'none'
-                    }}
-                    onFocus={(e) => { 
-                        e.currentTarget.style.backgroundColor = '#FFFFFF';
-                        e.currentTarget.style.border = '1px solid rgba(95,72,255,0.35)';
-                        e.currentTarget.style.boxShadow = '0 0 0 2px rgba(95,72,255,0.12)';
-                    }} 
-                    onBlur={(e) => { 
-                        e.currentTarget.style.backgroundColor = '#F3F4F6';
-                        e.currentTarget.style.border = '1px solid transparent';
-                        e.currentTarget.style.boxShadow = ''; 
-                    }}
-                />
-                <button type="submit" disabled={!inputText.trim() || isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording} className="p-2 transition-colors rounded-full hover:bg-gray-100 disabled:opacity-40" aria-label="Send message" style={{ color: '#0084FF' }} onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.color = '#0066CC'; }} onMouseLeave={(e) => { e.currentTarget.style.color = '#0084FF'; }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                    className="flex-1 min-w-0 bg-transparent text-sm text-gray-900 placeholder:text-gray-500 outline-none py-1 disabled:opacity-60"
+                  />
+                  <button type="button" onClick={() => setShowEmojiPicker(prev => !prev)} className="shrink-0 p-1 text-gray-500 hover:text-gray-700 rounded-full transition-colors" aria-label="Add emoji">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </button>
+                  {currentUserRole === 'customer' ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setIsOfferModalOpen(true);
+                      }}
+                      className="shrink-0 p-1 rounded-full text-[#F97316] hover:bg-orange-50 transition-colors"
+                      aria-label="Make an offer"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" /><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" /></svg>
+                    </button>
+                  ) : ( onMakeOffer &&
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        onMakeOffer();
+                      }}
+                      className="shrink-0 p-1 text-gray-500 hover:text-gray-700 rounded-full transition-colors"
+                      aria-label="Make an offer"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" /><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" /></svg>
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  disabled={!inputText.trim() || isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
+                  className={`p-2 transition-all rounded-full shrink-0 ${
+                    inputText.trim()
+                      ? 'text-[#0084FF] hover:bg-blue-50'
+                      : 'text-gray-400 cursor-not-allowed'
+                  }`}
+                  aria-label="Send message"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
                 </button>
             </form>
+            )}
         </div>
     </div>
   ) : null;

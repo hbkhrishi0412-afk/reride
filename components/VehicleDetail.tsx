@@ -1004,7 +1004,14 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                     buyerEmail={
                                       currentUser?.role === 'customer' ? currentUser.email : undefined
                                     }
-                                    onRequireLogin={() => setCurrentView(View.CUSTOMER_LOGIN)}
+                                    onRequireLogin={() => {
+                                      try {
+                                        sessionStorage.setItem('reride.postLoginView', View.DETAIL);
+                                      } catch {
+                                        /* ignore */
+                                      }
+                                      setCurrentView(View.CUSTOMER_LOGIN);
+                                    }}
                                   />
                                 )}
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">

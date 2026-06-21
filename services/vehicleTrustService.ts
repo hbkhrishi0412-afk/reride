@@ -14,6 +14,40 @@ import type {
 
 const BASE = '/api/vehicle-trust';
 
+export interface VahanVerifyResult {
+  snapshot: VahanSnapshot | null;
+  verified: boolean;
+  message?: string;
+}
+
+export function applyVahanVerifyToVehicleFields<T extends Record<string, unknown>>(
+  prev: T,
+  registrationNumber: string,
+  result: VahanVerifyResult,
+): T {
+  const next: T = {
+    ...prev,
+    registrationNumber,
+  };
+
+  if (result.verified && result.snapshot) {
+    return {
+      ...next,
+      vahanVerifiedAt: result.snapshot.verifiedAt,
+      vahanSnapshot: result.snapshot,
+      engineNumber: result.snapshot.engineNumber || prev.engineNumber,
+      chassisNumber: result.snapshot.chassisNumber || prev.chassisNumber,
+      noOfOwners: result.snapshot.ownerCount ?? prev.noOfOwners,
+      insuranceValidity: result.snapshot.insuranceUpto || prev.insuranceValidity,
+    };
+  }
+
+  return {
+    ...next,
+    vahanSnapshot: result.snapshot ?? prev.vahanSnapshot,
+  };
+}
+
 async function parseJson<T>(response: Response): Promise<T> {
   const data = await response.json();
   if (!response.ok) {
@@ -26,13 +60,21 @@ async function parseJson<T>(response: Response): Promise<T> {
           : 'Request failed';
     throw new Error(message);
   }
+  if ((data as { success?: boolean }).success === false) {
+    const reason = (data as { reason?: unknown }).reason;
+    const message =
+      typeof reason === 'string'
+        ? reason
+        : (data as { message?: string }).message || 'Request failed';
+    throw new Error(message);
+  }
   return data as T;
 }
 
 export async function verifyVahanRegistration(
   registrationNumber: string,
   vehicleId?: number | string,
-): Promise<{ snapshot: VahanSnapshot | null; verified: boolean; message?: string }> {
+): Promise<VahanVerifyResult> {
   const response = await authenticatedFetch(`${BASE}?action=vahan-verify`, {
     method: 'POST',
     body: JSON.stringify({ registrationNumber, vehicleId }),

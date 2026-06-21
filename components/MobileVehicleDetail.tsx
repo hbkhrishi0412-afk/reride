@@ -15,7 +15,6 @@ import { MobileVehicleTrustStrip } from './MobileVehicleTrustStrip';
 import { buildSellerWhatsAppUrl } from '../utils/sellerContact.js';
 import { trackPhoneView } from '../services/listingService.js';
 import TestDriveModal from './TestDriveModal.js';
-import { ListingStockBadge } from './ListingStockBadge.js';
 import { ListingTrustChips } from './ListingTrustChips.js';
 import { isListingAvailable } from '../utils/listingStock.js';
 import StarRating from './StarRating';
@@ -85,6 +84,9 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   const [showTestDriveModal, setShowTestDriveModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'features' | 'vahan' | 'price'>('overview');
   const detailTabsRef = useRef<HTMLDivElement>(null);
+  const detailTabButtonRefs = useRef<
+    Partial<Record<'overview' | 'features' | 'vahan' | 'price', HTMLButtonElement | null>>
+  >({});
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState(false);
   const [ratingEligibility, setRatingEligibility] = useState<RatingEligibility | null>(null);
@@ -280,6 +282,14 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     requestAnimationFrame(() => scrollAppToTop());
   }, [vehicle.id]);
 
+  useEffect(() => {
+    detailTabButtonRefs.current[activeTab]?.scrollIntoView({
+      behavior: 'smooth',
+      inline: 'center',
+      block: 'nearest',
+    });
+  }, [activeTab]);
+
   // Calculate EMI for display
   const baseEMI = useMemo(() => {
     const loanAmount = Math.round(safeVehicle.price * 0.8);
@@ -408,6 +418,19 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
 
   return (
     <div className="relative z-0 w-full bg-gray-50 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))]">
+      <div className="bg-white border-b border-gray-100 px-3 py-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center justify-center w-10 h-10 -ml-1 rounded-full active:bg-gray-100"
+          aria-label={t('common.back')}
+        >
+          <svg className="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      </div>
+
       {/* Image Gallery Header — contain (not cover) so wide listing photos aren't cropped */}
       <div className="relative flex w-full max-w-full items-center justify-center overflow-hidden bg-gray-100 aspect-[16/10] max-h-[min(42vh,300px)]">
         <img
@@ -437,7 +460,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 {safeVehicle.year} {safeVehicle.make} {safeVehicle.model}
               </h1>
               <div className="flex flex-wrap gap-2 mb-2">
-                <ListingStockBadge vehicle={safeVehicle} />
                 <ListingTrustChips vehicle={safeVehicle} seller={seller} />
               </div>
               {safeVehicle.variant && (
@@ -613,30 +635,37 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
 
         {/* Additional Details Section */}
         <div className="bg-white rounded-2xl p-4 shadow-sm" ref={detailTabsRef}>
-          <div className="flex border-b border-gray-200 mb-4 overflow-x-auto scrollbar-hide">
-            {(['overview', 'features', 'vahan', 'price'] as const).map((tab) => {
-              const label =
-                tab === 'overview'
-                  ? t('vehicle.detail.tabs.overview')
-                  : tab === 'features'
-                    ? t('vehicle.detail.tabs.featureSpecs')
-                    : tab === 'vahan'
-                      ? t('vehicle.detail.tabs.vahan')
-                      : t('vehicle.detail.tabs.price', 'Price');
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`flex-1 py-3 text-sm font-semibold uppercase whitespace-nowrap px-2 ${
-                    activeTab === tab
-                      ? 'text-orange-500 border-b-2 border-orange-500'
-                      : 'text-gray-600'
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+          <div className="-mx-4 px-4 mb-4 border-b border-gray-200 overflow-x-auto scrollbar-hide">
+            <div className="flex min-w-max gap-1">
+              {(['overview', 'features', 'vahan', 'price'] as const).map((tab) => {
+                const label =
+                  tab === 'overview'
+                    ? t('vehicle.detail.tabs.overview')
+                    : tab === 'features'
+                      ? t('vehicle.detail.tabs.featureSpecs')
+                      : tab === 'vahan'
+                        ? t('vehicle.detail.tabs.vahan')
+                        : t('vehicle.detail.tabs.price', 'Price');
+                return (
+                  <button
+                    key={tab}
+                    ref={(el) => {
+                      detailTabButtonRefs.current[tab] = el;
+                    }}
+                    type="button"
+                    onClick={() => setActiveTab(tab)}
+                    className={`relative flex-shrink-0 px-3 py-3 text-xs font-semibold uppercase whitespace-nowrap transition-colors ${
+                      activeTab === tab ? 'text-orange-500' : 'text-gray-600'
+                    }`}
+                  >
+                    {label}
+                    {activeTab === tab && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div>

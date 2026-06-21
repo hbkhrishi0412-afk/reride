@@ -4,8 +4,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   USE_SUPABASE, adminRead, adminReadAll, adminCreate, adminUpdate, adminDelete,
-  HandlerOptions, requireAuth, sanitizeString, type AuthResult,
+  HandlerOptions, authenticateRequestDual, sanitizeString, type AuthResult,
 } from '../handler-shared.js';
+import { normalizeUserRoleString } from '../../utils/user-role.js';
+import { supabaseUserService } from '../../services/supabase-user-service.js';
 
 export async function handleContent(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   if (!USE_SUPABASE) {
@@ -80,9 +82,38 @@ async function handleFAQs(req: VercelRequest, res: VercelResponse) {
 
 // ── Support Tickets ─────────────────────────────────────────────────────────
 
+async function resolveSupportTicketAuth(
+  req: VercelRequest,
+  res: VercelResponse,
+): Promise<AuthResult | null> {
+  const auth = await authenticateRequestDual(req);
+  if (!auth.isValid || !auth.user) {
+    res.status(401).json({
+      success: false,
+      reason: auth.error || 'Authentication required.',
+    });
+    return null;
+  }
+
+  let role = auth.user.role;
+  if (role !== 'admin' && auth.user.email && USE_SUPABASE) {
+    try {
+      const dbUser = await supabaseUserService.findByEmail(auth.user.email.toLowerCase().trim());
+      if (dbUser && normalizeUserRoleString(dbUser.role) === 'admin') {
+        role = 'admin';
+        auth.user = { ...auth.user, role: 'admin' };
+      }
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  return auth;
+}
+
 async function handleSupportTickets(req: VercelRequest, res: VercelResponse) {
   const path = 'support_tickets';
-  const auth = requireAuth(req, res, 'Support tickets');
+  const auth = await resolveSupportTicketAuth(req, res);
   if (!auth) return;
 
   const email = auth.user?.email?.toLowerCase().trim() ?? '';

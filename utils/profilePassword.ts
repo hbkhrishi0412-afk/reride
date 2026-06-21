@@ -1,4 +1,4 @@
-import type { User } from '../types';
+import type { User } from '../types.js';
 
 /** OAuth / phone users often have no app password until they set one explicitly. */
 export function userNeedsPasswordSetup(user: User): boolean {

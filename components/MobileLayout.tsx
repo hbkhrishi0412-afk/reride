@@ -109,6 +109,8 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
           onNavigate={onNavigate}
           wishlistCount={wishlistCount}
           compareCount={compareCount}
+          unreadNotificationCount={unreadNotificationCount}
+          showNotifications={Boolean(currentUser || serviceProvider)}
           showLogin={!currentUser && !serviceProvider}
           onLogin={() => onNavigate(ViewEnum.LOGIN_PORTAL)}
         />
@@ -128,6 +130,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
           unreadNotificationCount={unreadNotificationCount}
           compareCount={compareCount}
           serviceProvider={serviceProvider}
+          showTitleBar={showHeader}
         />
       )}
       

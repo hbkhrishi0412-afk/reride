@@ -38,17 +38,14 @@ test.describe('Mobile App and PWA Functionality', () => {
     await expect(page.locator('[data-testid="mobile-bottom-nav"] button:has-text("Menu")')).toBeVisible();
   });
 
-  test('should navigate to buy view and show mobile header controls', async ({ page }) => {
+  test('should navigate to buy view from bottom nav', async ({ page }) => {
     await page.locator('[data-testid="mobile-bottom-nav"] button:has-text("Buy")').click({ force: true });
-    await expect(page.locator('[data-testid="mobile-header"]')).toBeVisible();
-    await expect(page.locator('[data-testid="mobile-menu-button"]')).toBeVisible();
-    await expect(page.locator('[data-testid="mobile-search-button"]')).toBeVisible();
+    await expect(page).toHaveURL(/\/used-cars/);
+    await expect(page.locator('[data-testid="mobile-header"]')).not.toBeVisible();
   });
 
   test('should handle mobile menu drawer', async ({ page }) => {
-    // Ensure header is visible first.
-    await page.locator('[data-testid="mobile-bottom-nav"] button:has-text("Buy")').click({ force: true });
-    await page.click('[data-testid="mobile-menu-button"]');
+    await page.locator('[data-testid="mobile-bottom-nav"] button:has-text("Menu")').click({ force: true });
 
     const drawer = page.locator('[data-testid="mobile-drawer"]');
     await expect(drawer).toBeVisible();
@@ -59,12 +56,6 @@ test.describe('Mobile App and PWA Functionality', () => {
 
     await page.click('[data-testid="mobile-drawer-close"]');
     await expect(page.locator('[data-testid="mobile-drawer"]')).not.toBeVisible();
-  });
-
-  test('should open search from mobile header', async ({ page }) => {
-    await page.locator('[data-testid="mobile-bottom-nav"] button:has-text("Buy")').click({ force: true });
-    await page.click('[data-testid="mobile-search-button"]');
-    await expect(page).toHaveURL(/\/used-cars/);
   });
 
   test('should open menu drawer from home using bottom-nav menu button', async ({ page }) => {

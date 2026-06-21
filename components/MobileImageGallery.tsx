@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 interface MobileImageGalleryProps {
   images: string[];
@@ -6,10 +6,43 @@ interface MobileImageGalleryProps {
   onClose?: () => void;
 }
 
+const MIN_SCALE = 1;
+const MAX_SCALE = 4;
+const DOUBLE_TAP_SCALE = 2.5;
+const DOUBLE_TAP_MS = 300;
+const MIN_SWIPE_DISTANCE = 50;
+
+type Point = { x: number; y: number };
+
+type GestureMode = 'none' | 'pan' | 'pinch' | 'swipe';
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getTouchDistance(touches: TouchList) {
+  if (touches.length < 2) return 0;
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.hypot(dx, dy);
+}
+
+function clampTranslate(x: number, y: number, scale: number, width: number, height: number): Point {
+  if (scale <= 1 || width <= 0 || height <= 0) {
+    return { x: 0, y: 0 };
+  }
+  const maxX = (width * (scale - 1)) / 2;
+  const maxY = (height * (scale - 1)) / 2;
+  return {
+    x: clamp(x, -maxX, maxX),
+    y: clamp(y, -maxY, maxY),
+  };
+}
+
 /**
  * Mobile Image Gallery with Swipe Support
  * Full-screen swipeable image gallery optimized for mobile
- * Supports pinch-to-zoom and scrollable images
+ * Supports pinch-to-zoom, pan when zoomed, and double-tap zoom
  */
 export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
   images,
@@ -17,11 +50,54 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
   onClose
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const touchStartX = useRef<number>(0);
-  const touchEndX = useRef<number>(0);
-  const imageRef = useRef<HTMLImageElement>(null);
+  const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
+  const [animateTransform, setAnimateTransform] = useState(false);
 
-  const minSwipeDistance = 50;
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const scaleRef = useRef(1);
+  const translateRef = useRef<Point>({ x: 0, y: 0 });
+  const gestureRef = useRef<{
+    mode: GestureMode;
+    startScale: number;
+    startTranslate: Point;
+    startTouch: Point;
+    startPinchDistance: number;
+    swipeStartX: number;
+  }>({
+    mode: 'none',
+    startScale: 1,
+    startTranslate: { x: 0, y: 0 },
+    startTouch: { x: 0, y: 0 },
+    startPinchDistance: 0,
+    swipeStartX: 0,
+  });
+  const lastTapRef = useRef(0);
+
+  const applyTransform = useCallback((scale: number, x: number, y: number, animate = false) => {
+    const viewport = viewportRef.current;
+    const clampedScale = clamp(scale, MIN_SCALE, MAX_SCALE);
+    const nextTranslate =
+      clampedScale <= 1
+        ? { x: 0, y: 0 }
+        : clampTranslate(
+            x,
+            y,
+            clampedScale,
+            viewport?.clientWidth ?? 0,
+            viewport?.clientHeight ?? 0,
+          );
+
+    scaleRef.current = clampedScale;
+    translateRef.current = nextTranslate;
+    setAnimateTransform(animate);
+    setTransform({ scale: clampedScale, ...nextTranslate });
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    applyTransform(1, 0, 0, true);
+  }, [applyTransform]);
+
+  const isZoomed = () => scaleRef.current > 1.01;
 
   // Prevent body scroll when gallery is open
   useEffect(() => {
@@ -35,59 +111,163 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
     };
   }, [onClose]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    // Only handle horizontal swipes if not zoomed
-    if (e.touches.length === 1) {
-      touchStartX.current = e.touches[0].clientX;
-    }
-  };
+  useEffect(() => {
+    resetZoom();
+    gestureRef.current.mode = 'none';
+  }, [currentIndex, resetZoom]);
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    // Only track horizontal movement for single touch
-    if (e.touches.length === 1) {
-      touchEndX.current = e.touches[0].clientX;
-    }
-  };
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || !onClose) return;
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    // Only process swipe if single touch (not pinch zoom)
-    if (e.changedTouches.length === 1 && touchStartX.current && touchEndX.current) {
-      const distance = touchStartX.current - touchEndX.current;
-      const isLeftSwipe = distance > minSwipeDistance;
-      const isRightSwipe = distance < -minSwipeDistance;
-
-      if (isLeftSwipe && currentIndex < images.length - 1) {
-        setCurrentIndex(currentIndex + 1);
+    const onTouchMove = (e: TouchEvent) => {
+      if (gestureRef.current.mode === 'pinch' || gestureRef.current.mode === 'pan') {
+        e.preventDefault();
       }
-      if (isRightSwipe && currentIndex > 0) {
-        setCurrentIndex(currentIndex - 1);
-      }
+    };
 
-      touchStartX.current = 0;
-      touchEndX.current = 0;
-    }
-  };
+    viewport.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => viewport.removeEventListener('touchmove', onTouchMove);
+  }, [onClose]);
 
-  const goToNext = () => {
+  const goToNext = useCallback(() => {
     if (currentIndex < images.length - 1) {
-      setCurrentIndex(currentIndex + 1);
+      setCurrentIndex((index) => index + 1);
     }
-  };
+  }, [currentIndex, images.length]);
 
-  const goToPrevious = () => {
+  const goToPrevious = useCallback(() => {
     if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
+      setCurrentIndex((index) => index - 1);
     }
-  };
+  }, [currentIndex]);
 
   const goToIndex = (index: number) => {
     setCurrentIndex(index);
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setAnimateTransform(false);
+
+    if (e.touches.length === 2) {
+      gestureRef.current = {
+        mode: 'pinch',
+        startScale: scaleRef.current,
+        startTranslate: { ...translateRef.current },
+        startTouch: { x: 0, y: 0 },
+        startPinchDistance: getTouchDistance(e.touches),
+        swipeStartX: 0,
+      };
+      return;
+    }
+
+    if (e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    if (isZoomed()) {
+      gestureRef.current = {
+        mode: 'pan',
+        startScale: scaleRef.current,
+        startTranslate: { ...translateRef.current },
+        startTouch: { x: touch.clientX, y: touch.clientY },
+        startPinchDistance: 0,
+        swipeStartX: 0,
+      };
+      return;
+    }
+
+    gestureRef.current = {
+      mode: 'swipe',
+      startScale: 1,
+      startTranslate: { x: 0, y: 0 },
+      startTouch: { x: touch.clientX, y: touch.clientY },
+      startPinchDistance: 0,
+      swipeStartX: touch.clientX,
+    };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const gesture = gestureRef.current;
+
+    if (gesture.mode === 'pinch' && e.touches.length === 2 && gesture.startPinchDistance > 0) {
+      const distance = getTouchDistance(e.touches);
+      const ratio = distance / gesture.startPinchDistance;
+      applyTransform(gesture.startScale * ratio, gesture.startTranslate.x, gesture.startTranslate.y);
+      return;
+    }
+
+    if (gesture.mode === 'pan' && e.touches.length === 1) {
+      const touch = e.touches[0];
+      const dx = touch.clientX - gesture.startTouch.x;
+      const dy = touch.clientY - gesture.startTouch.y;
+      applyTransform(
+        scaleRef.current,
+        gesture.startTranslate.x + dx,
+        gesture.startTranslate.y + dy,
+      );
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const gesture = gestureRef.current;
+
+    if (gesture.mode === 'swipe' && !isZoomed() && e.changedTouches.length === 1) {
+      const endX = e.changedTouches[0].clientX;
+      const distance = gesture.swipeStartX - endX;
+
+      if (distance > MIN_SWIPE_DISTANCE) {
+        goToNext();
+      } else if (distance < -MIN_SWIPE_DISTANCE) {
+        goToPrevious();
+      } else {
+        const now = Date.now();
+        if (now - lastTapRef.current < DOUBLE_TAP_MS) {
+          applyTransform(DOUBLE_TAP_SCALE, 0, 0, true);
+          lastTapRef.current = 0;
+        } else {
+          lastTapRef.current = now;
+        }
+      }
+    }
+
+    if (gesture.mode === 'pan') {
+      if (e.changedTouches.length === 1) {
+        const touch = e.changedTouches[0];
+        const dx = Math.abs(touch.clientX - gesture.startTouch.x);
+        const dy = Math.abs(touch.clientY - gesture.startTouch.y);
+        if (dx < 12 && dy < 12) {
+          const now = Date.now();
+          if (now - lastTapRef.current < DOUBLE_TAP_MS) {
+            resetZoom();
+            lastTapRef.current = 0;
+          } else {
+            lastTapRef.current = now;
+          }
+        }
+      }
+      applyTransform(scaleRef.current, translateRef.current.x, translateRef.current.y, true);
+    } else if (gesture.mode === 'pinch') {
+      applyTransform(scaleRef.current, translateRef.current.x, translateRef.current.y, true);
+    }
+
+    gestureRef.current.mode = 'none';
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.92 : 1.08;
+    applyTransform(
+      scaleRef.current * delta,
+      translateRef.current.x,
+      translateRef.current.y,
+    );
+  };
+
   // Keyboard navigation
   useEffect(() => {
     if (!onClose) return;
-    
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') {
         goToPrevious();
@@ -100,7 +280,7 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, onClose]);
+  }, [currentIndex, onClose, goToNext, goToPrevious]);
 
   if (images.length === 0) {
     return null;
@@ -109,13 +289,7 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
   // If onClose is provided, render as full-screen modal
   if (onClose) {
     return (
-      <div
-        className="fixed inset-0 z-[100] bg-black"
-        style={{ 
-          touchAction: 'none',
-          WebkitOverflowScrolling: 'touch'
-        }}
-      >
+      <div className="fixed inset-0 z-[100] bg-black">
         {/* Close Button - Top Right */}
         <button
           onClick={onClose}
@@ -128,29 +302,26 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
           </svg>
         </button>
 
-        {/* Main Image Container - Scrollable and Zoomable */}
-        <div 
-          className="w-full h-full flex items-center justify-center overflow-auto"
-          style={{ 
-            touchAction: 'pan-x pan-y pinch-zoom',
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain'
-          }}
+        {/* Main Image Container - pinch / pan / double-tap zoom */}
+        <div
+          ref={viewportRef}
+          className="w-full h-full overflow-hidden touch-none"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
+          onWheel={handleWheel}
         >
-          <div className="min-w-full min-h-full flex items-center justify-center p-4">
+          <div className="flex h-full w-full items-center justify-center p-4">
             <img
-              ref={imageRef}
               src={images[currentIndex]}
               alt={`${alt} ${currentIndex + 1}`}
-              className="max-w-full max-h-full object-contain select-none"
-              style={{ 
-                touchAction: 'pan-x pan-y pinch-zoom',
+              className="max-h-full max-w-full select-none object-contain"
+              style={{
+                transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
+                transition: animateTransform ? 'transform 0.2s ease-out' : 'none',
                 userSelect: 'none',
                 WebkitTouchCallout: 'none',
-                ...({ WebkitUserDrag: 'none' } as React.CSSProperties)
+                ...({ WebkitUserDrag: 'none' } as React.CSSProperties),
               }}
               draggable={false}
             />
@@ -192,7 +363,7 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
 
         {/* Image Counter - Top Center */}
         {images.length > 1 && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full">
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full pointer-events-none">
             <span className="text-white text-sm font-semibold">
               {currentIndex + 1} / {images.length}
             </span>
@@ -201,13 +372,13 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
 
         {/* Thumbnail Strip - Bottom */}
         {images.length > 1 && (
-          <div 
+          <div
             className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm p-4 overflow-x-auto"
-            style={{ 
+            style={{
               touchAction: 'pan-x',
               WebkitOverflowScrolling: 'touch',
               scrollbarWidth: 'none',
-              msOverflowStyle: 'none'
+              msOverflowStyle: 'none',
             }}
           >
             <div className="flex gap-3 justify-center">
@@ -236,7 +407,7 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
 
         {/* Swipe Indicator Dots */}
         {images.length > 1 && (
-          <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-50 flex gap-2">
+          <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-50 flex gap-2 pointer-events-none">
             {images.map((_, index) => (
               <div
                 key={index}

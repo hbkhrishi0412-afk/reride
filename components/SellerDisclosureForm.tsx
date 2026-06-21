@@ -7,29 +7,28 @@ import {
   groupBySection,
   getSellerDefinitions,
   type ChecklistItemResponse,
-  type ChecklistItemStatus,
   type UniversalSellerChecklist,
 } from '../lib/universalChecklist';
 import {
   finalizeSellerChecklist,
+  isSellerItemComplete,
   mergeSellerResponses,
-  photoRequiredForItem,
+  sellerItemNeedsPhotoUpload,
 } from '../lib/universalChecklist/helpers';
 import type { VahanSnapshot } from '../lib/vehicleDisclosureChecklist';
 import { uploadImages, validateImageFile } from '../services/imageUploadService';
 
-const STATUS_OPTIONS: { value: ChecklistItemStatus; label: string }[] = [
-  { value: 'pass', label: 'Pass' },
-  { value: 'fail', label: 'Fail' },
-  { value: 'na', label: 'N/A' },
-];
+export interface VahanVerifyFeedback {
+  verified: boolean;
+  message?: string;
+}
 
 interface SellerDisclosureFormProps {
   category: VehicleCategory;
   value?: UniversalSellerChecklist | null;
   onChange: (checklist: UniversalSellerChecklist) => void;
   sellerEmail?: string;
-  onVerifyVahan?: (registrationNumber: string) => Promise<void>;
+  onVerifyVahan?: (registrationNumber: string) => Promise<VahanVerifyFeedback | void>;
   registrationNumber?: string;
   vahanVerified?: boolean;
   vahanSnapshot?: VahanSnapshot | null;
@@ -53,6 +52,7 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [regInput, setRegInput] = useState(registrationNumber || '');
   const [verifying, setVerifying] = useState(false);
+  const [verifyFeedback, setVerifyFeedback] = useState<VahanVerifyFeedback | null>(null);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   const sections = useMemo(() => groupBySection(getSellerDefinitions(category)), [category]);
@@ -74,6 +74,21 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
     emitChange(items.map((i) => (i.id === id ? { ...i, ...patch } : i)));
   };
 
+  const handleNotesChange = (id: string, notes: string) => {
+    updateItem(id, {
+      notes,
+      status: notes.trim() ? 'pass' : '',
+    });
+  };
+
+  const handleMarkNotApplicable = (id: string) => {
+    updateItem(id, { status: 'na', notes: '', photoUrl: '' });
+  };
+
+  const handleClearPhoto = (id: string) => {
+    updateItem(id, { photoUrl: '', status: '' });
+  };
+
   const handlePhotoUpload = async (id: string, file: File) => {
     const validation = validateImageFile(file);
     if (!validation.valid) {
@@ -83,7 +98,9 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
     setUploadingId(id);
     try {
       const results = await uploadImages([file], 'vehicles', sellerEmail);
-      if (results[0]?.url) updateItem(id, { photoUrl: results[0].url });
+      if (results[0]?.url) {
+        updateItem(id, { photoUrl: results[0].url, status: 'pass' });
+      }
     } catch {
       alert('Failed to upload photo');
     } finally {
@@ -93,9 +110,7 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
 
   const completed = items.filter((i) => {
     const def = defsById.get(i.id);
-    if (!def || !i.status) return false;
-    if (photoRequiredForItem(def, i.status) && !i.photoUrl) return false;
-    return true;
+    return def ? isSellerItemComplete(def, i) : false;
   }).length;
   const total = getSellerDefinitions(category).length;
   const tier = finalizeSellerChecklist(category, items).listingTier;
@@ -104,12 +119,12 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
     <div className={`rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 ${compact ? 'p-4' : 'p-5'}`}>
       <div className="flex items-start justify-between gap-3 mb-2">
         <div>
-          <h3 className="font-bold text-gray-900 text-base">Universal Vehicle Listing Checklist</h3>
+          <h3 className="font-bold text-gray-900 text-base">Vehicle documents & photos</h3>
           <p className="text-xs text-gray-600 mt-0.5">
-            Optional — complete all items for a Verified Listing badge · Pass / Fail / N/A · Photo where marked (S)
+            Upload photos or enter details for each item below. Complete all for a Verified Listing badge.
           </p>
           <p className="text-xs text-emerald-800 mt-1 font-medium">
-            §1.3 photos and RC/Insurance/PUC uploads sync to your listing gallery automatically.
+            RC, insurance, PUC, and checklist photos sync to your listing gallery automatically.
           </p>
         </div>
         <div className="text-right shrink-0">
@@ -145,7 +160,10 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
               onClick={async () => {
                 setVerifying(true);
                 try {
-                  await onVerifyVahan(regInput.trim());
+                  const result = await onVerifyVahan(regInput.trim());
+                  if (result) {
+                    setVerifyFeedback(result);
+                  }
                 } finally {
                   setVerifying(false);
                 }
@@ -155,11 +173,22 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
               {verifying ? '…' : vahanVerified ? 'Re-verify' : 'Verify'}
             </button>
           </div>
+          {verifyFeedback && (
+            <p
+              className={`text-xs mt-2 ${
+                verifyFeedback.verified ? 'text-emerald-700' : 'text-amber-700'
+              }`}
+            >
+              {verifyFeedback.message}
+            </p>
+          )}
           {vahanSnapshot && (
             <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50/60 p-3">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs font-bold text-purple-800 uppercase tracking-wide">
-                  {vahanVerified ? '✓ Vahan Verified' : 'RC Details'}
+                  {vahanVerified && vahanSnapshot.source === 'surepass'
+                    ? '✓ Vahan Verified'
+                    : 'RC Details (not verified)'}
                 </span>
                 {vahanSnapshot.source === 'surepass' && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">
@@ -259,7 +288,7 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
           const isOpen = openSections[section.sectionId] ?? section.sectionId.startsWith('core');
           const sectionDone = section.items.filter((def) => {
             const it = items.find((i) => i.id === def.id);
-            return it?.status && (!photoRequiredForItem(def, it.status) || it.photoUrl);
+            return isSellerItemComplete(def, it);
           }).length;
           return (
             <div key={section.sectionId} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -279,70 +308,89 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
                 <div className="p-2 space-y-2 border-t border-gray-100">
                   {section.items.map((def) => {
                     const item = items.find((i) => i.id === def.id)!;
-                    const needsPhoto = item.status && photoRequiredForItem(def, item.status);
-                    const done =
-                      Boolean(item.status) && (!needsPhoto || Boolean(item.photoUrl));
+                    const done = isSellerItemComplete(def, item);
+                    const needsPhoto = sellerItemNeedsPhotoUpload(def);
+                    const isNa = item.status === 'na';
+
                     return (
                       <div
                         key={def.id}
                         className={`rounded-lg border p-2.5 ${done ? 'border-emerald-200 bg-emerald-50/30' : 'border-gray-100'}`}
                       >
                         <p className="text-xs font-medium text-gray-900 mb-2 leading-snug">{def.label}</p>
-                        <div className="flex flex-wrap gap-1.5 mb-2">
-                          {STATUS_OPTIONS.map((opt) => (
+
+                        {isNa ? (
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs text-gray-500 italic">Marked as not applicable</span>
                             <button
-                              key={opt.value}
                               type="button"
-                              onClick={() => updateItem(def.id, { status: opt.value })}
-                              className={`px-2 py-1 text-xs rounded-md border font-medium ${
-                                item.status === opt.value
-                                  ? opt.value === 'pass'
-                                    ? 'bg-green-600 text-white border-green-600'
-                                    : opt.value === 'fail'
-                                      ? 'bg-red-600 text-white border-red-600'
-                                      : 'bg-gray-500 text-white border-gray-500'
-                                  : 'bg-white text-gray-700 border-gray-300'
-                              }`}
+                              onClick={() => updateItem(def.id, { status: '', notes: '', photoUrl: '' })}
+                              className="text-xs font-semibold text-emerald-700 underline"
                             >
-                              {opt.label}
+                              Undo
                             </button>
-                          ))}
-                        </div>
-                        <input
-                          type="text"
-                          value={item.notes || ''}
-                          onChange={(e) => updateItem(def.id, { notes: e.target.value })}
-                          placeholder="Notes (optional)"
-                          className="w-full mb-2 px-2 py-1 text-xs border rounded-md"
-                        />
-                        {(def.photoRequired === true || def.photoRequired === 'if_applicable') && (
-                          <div className="flex items-center gap-2">
-                            {item.photoUrl ? (
-                              <img src={item.photoUrl} alt="" className="w-10 h-10 rounded object-cover border" />
-                            ) : null}
-                            <label className="cursor-pointer">
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                disabled={uploadingId === def.id}
-                                onChange={(e) => {
-                                  const f = e.target.files?.[0];
-                                  if (f) void handlePhotoUpload(def.id, f);
-                                  e.target.value = '';
-                                }}
-                              />
-                              <span className="text-xs font-semibold text-emerald-700 underline">
-                                {uploadingId === def.id
-                                  ? 'Uploading…'
-                                  : needsPhoto
-                                    ? item.photoUrl
-                                      ? 'Change photo'
-                                      : '+ Photo required'
-                                    : '+ Add photo (optional until Pass/Fail)'}
-                              </span>
-                            </label>
                           </div>
+                        ) : (
+                          <>
+                            {needsPhoto && (
+                              <div className="flex flex-wrap items-center gap-2 mb-2">
+                                {item.photoUrl ? (
+                                  <>
+                                    <img
+                                      src={item.photoUrl}
+                                      alt=""
+                                      className="w-14 h-14 rounded-lg object-cover border"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleClearPhoto(def.id)}
+                                      className="text-xs font-semibold text-red-600 underline"
+                                    >
+                                      Remove photo
+                                    </button>
+                                  </>
+                                ) : (
+                                  <label className="inline-flex cursor-pointer items-center rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 active:scale-[0.98]">
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      disabled={uploadingId === def.id}
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (f) void handlePhotoUpload(def.id, f);
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                    {uploadingId === def.id ? 'Uploading…' : 'Upload photo'}
+                                  </label>
+                                )}
+                                {def.photoRequired === 'if_applicable' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkNotApplicable(def.id)}
+                                    className="text-xs text-gray-500 underline"
+                                  >
+                                    Not applicable
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            {!needsPhoto && (
+                              <input
+                                type="text"
+                                value={item.notes || ''}
+                                onChange={(e) => handleNotesChange(def.id, e.target.value)}
+                                placeholder="Enter details"
+                                className="w-full px-2.5 py-2 text-xs border rounded-md"
+                              />
+                            )}
+
+                            {needsPhoto && def.photoRequired === true && !item.photoUrl && (
+                              <p className="text-[11px] text-gray-500 mt-1">Photo required</p>
+                            )}
+                          </>
                         )}
                       </div>
                     );

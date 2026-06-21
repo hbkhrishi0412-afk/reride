@@ -547,8 +547,13 @@ switch (currentView) {
           users={users}
           onViewSellerProfile={openSellerProfileByEmail}
           onRequestLogin={() => {
-            addToast('Please login to call the seller', 'info');
-            navigate(ViewEnum.LOGIN_PORTAL);
+            try {
+              sessionStorage.setItem('reride.postLoginView', ViewEnum.DETAIL);
+            } catch {
+              /* ignore */
+            }
+            addToast('Please login to verify this vehicle', 'info');
+            navigate(ViewEnum.CUSTOMER_LOGIN);
           }}
           onStartChat={handleStartVehicleChat}
           onRequestTestDrive={handleRequestTestDrive}

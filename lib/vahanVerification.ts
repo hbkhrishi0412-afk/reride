@@ -7,6 +7,47 @@ export function isVahanApiConfigured(): boolean {
   return Boolean(process.env.SUREPASS_API_TOKEN?.trim());
 }
 
+export type VahanLookupFailureReason =
+  | 'not_configured'
+  | 'api_error'
+  | 'empty_response'
+  | 'not_found';
+
+export interface VahanLookupResult {
+  snapshot: VahanSnapshot | null;
+  failureReason?: VahanLookupFailureReason;
+  httpStatus?: number;
+}
+
+export function createManualVahanSnapshot(registrationNumber: string): VahanSnapshot {
+  return {
+    registrationNumber: registrationNumber.trim().toUpperCase(),
+    verifiedAt: new Date().toISOString(),
+    source: 'manual',
+  };
+}
+
+export function vahanLookupMessage(
+  lookup: VahanLookupResult,
+  registrationNumber: string,
+): string {
+  if (lookup.snapshot) {
+    return 'Vehicle verified against government records';
+  }
+  switch (lookup.failureReason) {
+    case 'not_configured':
+      return 'VAHAN auto-verify is not enabled on the server. RC number saved — enter engine and chassis details manually.';
+    case 'not_found':
+      return `No VAHAN record found for ${registrationNumber}. Double-check the RC number and try again.`;
+    case 'api_error':
+      return `Could not reach VAHAN records for ${registrationNumber}. Try again in a moment.`;
+    case 'empty_response':
+      return 'VAHAN returned no vehicle details for this RC. RC number saved for manual entry.';
+    default:
+      return 'Could not verify automatically. RC number saved.';
+  }
+}
+
 function baseUrl(): string {
   return (process.env.SUREPASS_API_BASE_URL || 'https://kyc-api.surepass.io').replace(/\/$/, '');
 }
@@ -118,12 +159,14 @@ export function parseVahanFromSurepass(
 
 export async function fetchVahanByRegistration(
   registrationNumber: string,
-): Promise<VahanSnapshot | null> {
+): Promise<VahanLookupResult> {
   const rc = registrationNumber.trim().toUpperCase();
-  if (!rc) return null;
+  if (!rc) {
+    return { snapshot: null, failureReason: 'not_found' };
+  }
 
   if (!isVahanApiConfigured()) {
-    return null;
+    return { snapshot: null, failureReason: 'not_configured' };
   }
 
   const path =
@@ -148,13 +191,21 @@ export async function fetchVahanByRegistration(
 
     if (!response.ok) {
       console.warn('Vahan/Surepass RC lookup failed', response.status);
-      return null;
+      return {
+        snapshot: null,
+        failureReason: response.status === 404 ? 'not_found' : 'api_error',
+        httpStatus: response.status,
+      };
     }
 
     const body = (await response.json()) as Record<string, unknown>;
-    return parseVahanFromSurepass(rc, body);
+    const snapshot = parseVahanFromSurepass(rc, body);
+    if (!snapshot) {
+      return { snapshot: null, failureReason: 'empty_response', httpStatus: response.status };
+    }
+    return { snapshot };
   } catch (error) {
     console.warn('Vahan lookup error', error instanceof Error ? error.message : error);
-    return null;
+    return { snapshot: null, failureReason: 'api_error' };
   }
 }

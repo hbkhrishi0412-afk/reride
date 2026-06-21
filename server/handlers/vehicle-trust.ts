@@ -9,7 +9,11 @@ import {
   getSupabaseAdminClient,
   type HandlerOptions,
 } from '../handler-shared.js';
-import { fetchVahanByRegistration } from '../../lib/vahanVerification.js';
+import {
+  createManualVahanSnapshot,
+  fetchVahanByRegistration,
+  vahanLookupMessage,
+} from '../../lib/vahanVerification.js';
 import {
   compareBuyerToSeller,
   type BuyerInspectionItem,
@@ -34,11 +38,23 @@ function generateId(prefix: string): string {
 async function getAuthEmail(req: VercelRequest): Promise<string | null> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return null;
-  const { verifyToken } = await import('../../utils/security.js');
-  const token = authHeader.slice(7);
-  const payload = verifyToken(token);
-  if (!payload?.email) return null;
-  return normalizeEmail(payload.email);
+
+  try {
+    const { verifyToken } = await import('../../utils/security.js');
+    const payload = verifyToken(authHeader.slice(7));
+    if (payload?.email) return normalizeEmail(payload.email);
+  } catch {
+    // Fall through — client may send a Supabase access_token instead of app JWT.
+  }
+
+  try {
+    const { verifySupabaseToken } = await import('../supabase-auth.js');
+    const sb = await verifySupabaseToken(authHeader);
+    const email = (sb.email || '').toLowerCase().trim();
+    return email || null;
+  } catch {
+    return null;
+  }
 }
 
 async function resolveVehicleId(vehicleIdRaw: string): Promise<{
@@ -118,25 +134,27 @@ export async function handleVehicleTrust(
         return res.status(400).json({ success: false, reason: 'registrationNumber is required' });
       }
 
-      const snapshot = await fetchVahanByRegistration(registrationNumber);
+      const lookup = await fetchVahanByRegistration(registrationNumber);
+      const verified = Boolean(lookup.snapshot);
+      const responseSnapshot = lookup.snapshot ?? createManualVahanSnapshot(registrationNumber);
 
       if (vehicleIdRaw) {
         const resolved = await resolveVehicleId(vehicleIdRaw);
         if (resolved) {
           const updates: Partial<Vehicle> = {
             registrationNumber,
-            vahanVerifiedAt: snapshot?.verifiedAt || new Date().toISOString(),
           };
-          if (snapshot) {
-            updates.vahanSnapshot = snapshot;
-            if (snapshot.engineNumber) updates.engineNumber = snapshot.engineNumber;
-            if (snapshot.chassisNumber) updates.chassisNumber = snapshot.chassisNumber;
-            if (snapshot.ownerCount != null) updates.noOfOwners = snapshot.ownerCount;
-            if (snapshot.insuranceUpto) updates.insuranceValidity = snapshot.insuranceUpto;
-            if (snapshot.manufacturer) updates.make = snapshot.manufacturer;
-            if (snapshot.model) updates.model = snapshot.model;
-            if (snapshot.fuelType) updates.fuelType = snapshot.fuelType;
-            if (snapshot.rtoCode) updates.rto = snapshot.rtoCode;
+          if (verified && lookup.snapshot) {
+            updates.vahanVerifiedAt = lookup.snapshot.verifiedAt;
+            updates.vahanSnapshot = lookup.snapshot;
+            if (lookup.snapshot.engineNumber) updates.engineNumber = lookup.snapshot.engineNumber;
+            if (lookup.snapshot.chassisNumber) updates.chassisNumber = lookup.snapshot.chassisNumber;
+            if (lookup.snapshot.ownerCount != null) updates.noOfOwners = lookup.snapshot.ownerCount;
+            if (lookup.snapshot.insuranceUpto) updates.insuranceValidity = lookup.snapshot.insuranceUpto;
+            if (lookup.snapshot.manufacturer) updates.make = lookup.snapshot.manufacturer;
+            if (lookup.snapshot.model) updates.model = lookup.snapshot.model;
+            if (lookup.snapshot.fuelType) updates.fuelType = lookup.snapshot.fuelType;
+            if (lookup.snapshot.rtoCode) updates.rto = lookup.snapshot.rtoCode;
           }
           try {
             await supabaseVehicleService.update(resolved.primaryKey, updates);
@@ -148,11 +166,9 @@ export async function handleVehicleTrust(
 
       return res.status(200).json({
         success: true,
-        snapshot,
-        verified: Boolean(snapshot),
-        message: snapshot
-          ? 'Vehicle verified against government records'
-          : 'Could not verify automatically. Seller-provided details saved.',
+        snapshot: responseSnapshot,
+        verified,
+        message: vahanLookupMessage(lookup, registrationNumber),
       });
     }
 
@@ -189,7 +205,7 @@ export async function handleVehicleTrust(
       const inspectionId = generateId('bins');
       const supabase = getSupabaseAdminClient();
 
-      await supabase.from('buyer_inspections').insert({
+      const { error: insertError } = await supabase.from('buyer_inspections').insert({
         id: inspectionId,
         vehicle_id: resolved.primaryKey,
         buyer_email: authEmail,
@@ -197,6 +213,14 @@ export async function handleVehicleTrust(
         flagged_keys: flaggedKeys,
         general_notes: generalNotes || null,
       });
+
+      if (insertError) {
+        console.error('buyer_inspections insert failed:', insertError);
+        return res.status(500).json({
+          success: false,
+          reason: insertError.message || 'Failed to save buyer inspection',
+        });
+      }
 
       if (flaggedKeys.length > 0 && resolved.vehicle.sellerEmail) {
         const flagId = generateId('dflag');

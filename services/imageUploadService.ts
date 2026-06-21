@@ -5,6 +5,7 @@
  */
 
 import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
+import { isCapacitorNative } from '../utils/apiConfig.js';
 import { randomAlphanumeric } from '../utils/secureRandom.js';
 
 interface UploadResult {
@@ -12,6 +13,46 @@ interface UploadResult {
   url?: string;
   error?: string;
   imageId?: string; // ID/path of the image in Supabase Storage
+}
+
+const RESIZE_TIMEOUT_MS = 45_000;
+const SUPABASE_AUTH_TIMEOUT_MS = 8_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
+function hasStoredUserProfile(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return !!JSON.parse(localStorage.getItem('reRideCurrentUser') || 'null');
+  } catch {
+    return false;
+  }
+}
+
+/** Mobile WebViews and hybrid auth should use /api/upload-image — Supabase JS getSession() often hangs there. */
+function shouldPreferServerUploadApi(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (getBrowserAccessTokenForApi()) return true;
+  if (hasStoredUserProfile()) return true;
+  return isCapacitorNative();
+}
+
+function isHeicFile(file: File): boolean {
+  const type = (file.type || '').toLowerCase();
+  const name = file.name.toLowerCase();
+  return (
+    type === 'image/heic' ||
+    type === 'image/heif' ||
+    name.endsWith('.heic') ||
+    name.endsWith('.heif')
+  );
 }
 
 /**
@@ -183,6 +224,30 @@ async function postApiUpload(file: File, folder: string): Promise<UploadResult> 
   };
 }
 
+async function resolveSupabaseAuthUser(
+  supabase: Awaited<ReturnType<typeof import('../lib/supabase.js').getSupabaseClient>>,
+): Promise<{ email?: string | null } | null> {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  let session = sessionData.session;
+
+  if (!session && !sessionError) {
+    const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+    if (!refreshError && refreshedSession) {
+      session = refreshedSession;
+    }
+  }
+
+  let user = session?.user ?? null;
+  if (!user) {
+    const { data: { user: getUserResult }, error: getUserError } = await supabase.auth.getUser();
+    if (!getUserError && getUserResult) {
+      user = getUserResult;
+    }
+  }
+
+  return user;
+}
+
 /**
  * Uploads image to Supabase Storage
  * Stores image as a file in Supabase Storage bucket
@@ -194,75 +259,42 @@ async function uploadToSupabaseStorage(file: File, folder: string, _userEmail?: 
   try {
     console.log(`📤 Uploading image to Supabase Storage: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
 
-    const isChatFolder = String(folder || '').startsWith('chat-messages');
-    const apiToken = typeof window !== 'undefined' ? getBrowserAccessTokenForApi() : null;
-
-    // Chat images/voice: prefer server upload when any app/Supabase JWT exists. Hybrid auth and
-    // WebViews often have no hydrated @supabase/supabase-js session while /api still accepts the same token.
-    if (isChatFolder && apiToken) {
+    if (shouldPreferServerUploadApi()) {
+      if (process.env.NODE_ENV === 'development') {
+        console.info('📤 Upload via /api/upload-image (mobile/hybrid auth — skipping Supabase JS client).');
+      }
       return await uploadViaApi(file, folder);
     }
-    
+
     const { getSupabaseClient } = await import('../lib/supabase.js');
     const supabase = getSupabaseClient();
-    
-    // Check if user is authenticated (required for RLS policy)
-    // First try to get the session (more reliable than getUser)
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    let session = sessionData.session;
-    
-    // If no session, try to refresh it
-    if (!session && !sessionError) {
-      const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
-      if (!refreshError && refreshedSession) {
-        session = refreshedSession;
-      }
-    }
-    
-    // If still no session, try getUser as fallback
-    let user = session?.user;
-    if (!user) {
-      const { data: { user: getUserResult }, error: getUserError } = await supabase.auth.getUser();
-      if (!getUserError && getUserResult) {
-        user = getUserResult;
-      }
-    }
-    
-    if (!user) {
-      let hasStoredProfile = false;
-      if (typeof window !== 'undefined') {
-        try {
-          hasStoredProfile = !!JSON.parse(localStorage.getItem('reRideCurrentUser') || 'null');
-        } catch {
-          hasStoredProfile = false;
-        }
-      }
 
+    let user = await withTimeout(
+      resolveSupabaseAuthUser(supabase),
+      SUPABASE_AUTH_TIMEOUT_MS,
+      'Supabase authentication timed out',
+    ).catch(() => null);
+
+    if (!user) {
       const token = typeof window !== 'undefined' ? getBrowserAccessTokenForApi() : null;
-      // App JWT or Supabase access token (server accepts both on /api/upload-image)
-      if (token || hasStoredProfile) {
-        if (process.env.NODE_ENV === 'development') {
-          console.info(
-            '📤 Upload via /api/upload-image (Supabase JS session not hydrated; app token or profile present).',
-          );
-        }
+      if (token || hasStoredUserProfile()) {
         return await uploadViaApi(file, folder);
       }
 
-      console.error(
-        '❌ Authentication check failed:',
-        sessionError?.message || 'No Supabase session and no app token',
-      );
+      console.error('❌ Authentication check failed: No Supabase session and no app token');
       return {
         success: false,
         error: 'You must be logged in to upload images. Please log in and try again.',
       };
     }
     console.log(`✅ User authenticated: ${user.email}`);
-    
-    // Resize image to standard dimensions before uploading
+
     console.log('🔄 Resizing image to fit standard dimensions...');
-    const resizedFile = await resizeImage(file, 1200, 800, 0.85);
+    const resizedFile = await withTimeout(
+      resizeImage(file, 1200, 800, 0.85),
+      RESIZE_TIMEOUT_MS,
+      'Image processing timed out. Try a smaller photo or save as JPEG/PNG.',
+    );
     console.log(`✅ Image resized: ${(resizedFile.size / 1024).toFixed(2)} KB (original: ${(file.size / 1024).toFixed(2)} KB)`);
     
     // Generate unique file name
@@ -452,13 +484,21 @@ async function prepareImageForApiUpload(
   const normalized = normalizeMimeType(file.type || 'image/jpeg');
   // PNG payloads can be very large in base64 JSON requests; force JPEG for API uploads.
   const forceJpeg = normalized === 'image/png';
-  const resized = await resizeImage(file, options.maxWidth, options.maxHeight, options.quality);
+  const resized = await withTimeout(
+    resizeImage(file, options.maxWidth, options.maxHeight, options.quality),
+    RESIZE_TIMEOUT_MS,
+    'Image processing timed out. Try a smaller photo or save as JPEG/PNG.',
+  );
 
   if (!forceJpeg) {
     return resized;
   }
 
-  return await convertImageFileType(resized, 'image/jpeg', options.quality);
+  return await withTimeout(
+    convertImageFileType(resized, 'image/jpeg', options.quality),
+    RESIZE_TIMEOUT_MS,
+    'Image processing timed out. Try a smaller photo or save as JPEG/PNG.',
+  );
 }
 
 async function convertImageFileType(file: File, targetMimeType: string, quality: number): Promise<File> {
@@ -548,6 +588,13 @@ export const validateImageFile = (file: File): { valid: boolean; error?: string 
 };
 
 function validateImageMimeType(file: File): { valid: boolean; error?: string } {
+  if (isHeicFile(file)) {
+    return {
+      valid: false,
+      error: 'HEIC photos are not supported. Please choose a JPEG or PNG image, or take a new photo.',
+    };
+  }
+
   const normalizedType = normalizeMimeType(file.type || 'image/jpeg');
   const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 

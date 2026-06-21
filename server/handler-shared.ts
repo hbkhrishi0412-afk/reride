@@ -154,6 +154,35 @@ export const authenticateRequest = (req: VercelRequest): AuthResult => {
   }
 };
 
+/** App JWT (reRideAccessToken) or Supabase access_token in Authorization header. */
+export const authenticateRequestDual = async (req: VercelRequest): Promise<AuthResult> => {
+  const legacy = authenticateRequest(req);
+  if (legacy.isValid) return legacy;
+
+  try {
+    const { verifySupabaseToken } = await import('./supabase-auth.js');
+    const sb = await verifySupabaseToken(req.headers.authorization);
+    const email = (sb.email || '').toLowerCase().trim();
+    if (!email) {
+      return { isValid: false, error: 'Invalid Supabase token' };
+    }
+    const meta = (sb.user?.app_metadata ?? sb.user?.user_metadata) as Record<string, unknown> | undefined;
+    const rawRole = typeof meta?.role === 'string' ? meta.role.toLowerCase() : 'customer';
+    const role =
+      rawRole === 'seller' || rawRole === 'admin' ? rawRole : 'customer';
+    return {
+      isValid: true,
+      user: {
+        userId: sb.uid,
+        email,
+        role,
+      },
+    };
+  } catch {
+    return { isValid: false, error: legacy.error || 'Authentication required' };
+  }
+};
+
 export const requireAuth = (
   req: VercelRequest,
   res: VercelResponse,

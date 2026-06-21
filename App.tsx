@@ -38,6 +38,7 @@ import {
   conversationBelongsToCustomer,
   conversationBelongsToSeller,
   normalizeInboxRole,
+  participantIdMatchesAppUser,
 } from './utils/conversationParticipants';
 import { parseDeepLink } from './utils/mobileFeatures';
 import {
@@ -143,33 +144,6 @@ const preloadCriticalComponents = () => {
 function userHasAdminRole(user: User | null | undefined): boolean {
   return (user?.role || '').toLowerCase().trim() === 'admin';
 }
-
-const SupportChatWidget = React.lazy(() => import('./components/SupportChatWidget'));
-
-const SupportChatHost: React.FC = () => {
-  const { isMobileApp } = useIsMobileApp();
-  const { currentUser } = useApp();
-
-  if (isMobileApp) {
-    return null;
-  }
-
-  return (
-    <Suspense fallback={null}>
-      <SupportChatWidget
-        currentUser={
-          currentUser?.email
-            ? {
-                email: currentUser.email,
-                name: currentUser.name || currentUser.email,
-                role: currentUser.role,
-              }
-            : null
-        }
-      />
-    </Suspense>
-  );
-};
 
 const AppContent: React.FC = () => {
   const routerLocation = useLocation();
@@ -797,14 +771,12 @@ const AppContent: React.FC = () => {
 
   const unreadNotificationsCount = React.useMemo(() => {
     if (!currentUser?.email) return 0;
-    const n = currentUser.email.toLowerCase().trim();
     return notifications.filter(
       (x) =>
-        x.recipientEmail &&
-        x.recipientEmail.toLowerCase().trim() === n &&
+        participantIdMatchesAppUser(x.recipientEmail, currentUser.email, currentUser.id) &&
         !x.isRead
     ).length;
-  }, [notifications, currentUser?.email]);
+  }, [notifications, currentUser?.email, currentUser?.id]);
 
   const handleOpenMessages = React.useCallback(() => {
     if (!currentUser) return;
@@ -1503,11 +1475,22 @@ const AppContent: React.FC = () => {
         setCurrentView(ViewEnum.CAR_SERVICE_DASHBOARD);
         break;
       case 'finance_partner':
-        setCurrentView(ViewEnum.BUYER_DASHBOARD);
+        setCurrentView(ViewEnum.HOME);
         break;
-      default:
-        setCurrentView(ViewEnum.BUYER_DASHBOARD);
+      default: {
+        try {
+          const returnView = sessionStorage.getItem('reride.postLoginView');
+          sessionStorage.removeItem('reride.postLoginView');
+          if (returnView === ViewEnum.DETAIL || returnView === 'DETAIL') {
+            setCurrentView(ViewEnum.DETAIL);
+            break;
+          }
+        } catch {
+          /* ignore */
+        }
+        setCurrentView(ViewEnum.HOME);
         break;
+      }
     }
   }, [currentUser, currentView, setCurrentView]);
 
@@ -1956,12 +1939,7 @@ const AppContent: React.FC = () => {
       ViewEnum.CAR_SERVICE_LOGIN,
     ];
     const isMobileAuthView = mobileAuthViews.includes(currentView);
-    const shouldHideHeader =
-      currentView === ViewEnum.HOME ||
-      currentView === ViewEnum.PROFILE ||
-      currentView === ViewEnum.COMPARISON ||
-      isMobileAuthView;
-    // Vehicle detail: full-bleed listing UX (no tab bar) — matches native listing apps / reference
+    // Title bar removed — brand top bar + bottom nav cover navigation; pages own back/search UI.
     const hideBottomNavOnDetail =
       currentView === ViewEnum.DETAIL ||
       currentView === ViewEnum.NOTIFICATIONS_CENTER ||
@@ -1987,7 +1965,7 @@ const AppContent: React.FC = () => {
         <OfflineIndicator />
         
         <MobileLayout
-          showHeader={!shouldHideHeader}
+          showHeader={false}
           showBottomNav={!hideBottomNavOnDetail}
           showBrandBar={!isMobileAuthView}
           headerTitle={getPageTitle()}
@@ -2224,7 +2202,6 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <AppProvider>
         <AppContent />
-        <SupportChatHost />
         <CookieConsentBanner />
       </AppProvider>
     </ErrorBoundary>

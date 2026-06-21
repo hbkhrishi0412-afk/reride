@@ -35,6 +35,7 @@ import {
 } from '../utils/vehicleIdentity.js';
 import { isPublicBuyListing } from '../services/listingLifecycleService.js';
 import { lookupVehicleSpecsFromCarQuery } from '../lib/carquerySpecs.js';
+import { participantIdMatchesAppUser } from '../utils/conversationParticipants.js';
 // Supabase admin database utilities (replaces Firebase admin functions)
 import { 
   adminRead, 
@@ -494,7 +495,7 @@ async function mainHandler(
 ) {
   attachApiCors(req, res);
 
-  const rawOrigin = req.headers.origin;
+  const rawOrigin = req.headers?.origin;
   const originHeader =
     typeof rawOrigin === 'string'
       ? rawOrigin
@@ -750,6 +751,7 @@ async function mainHandler(
         urlPath.includes('/buyer-activity')
       ) {
         const handlerOptions: HandlerOptions = {};
+        const { handleBuyerActivity } = await import('../server/handlers/buyer-activity.js');
         return await handleBuyerActivity(req, res, handlerOptions);
       }
     }
@@ -797,6 +799,7 @@ async function mainHandler(
           return await handleConversations(req, res, handlerOptions);
         } else if (checkPath.includes('/buyer-activity') || checkPath.endsWith('/buyer-activity')) {
           logInfo(`✅ Routing ${req.method} request from /api/main to handleBuyerActivity (original: ${checkPath})`);
+          const { handleBuyerActivity } = await import('../server/handlers/buyer-activity.js');
           return await handleBuyerActivity(req, res, handlerOptions);
         } else if (checkPath.includes('/content-reports') || checkPath.endsWith('/content-reports')) {
           return await handleContentReports(req, res, handlerOptions);
@@ -934,6 +937,7 @@ async function mainHandler(
     } else if (pathname.includes('/notifications') || pathname.endsWith('/notifications')) {
       return await handleNotifications(req, res, handlerOptions);
     } else if (pathname.includes('/buyer-activity') || pathname.endsWith('/buyer-activity')) {
+      const { handleBuyerActivity } = await import('../server/handlers/buyer-activity.js');
       return await handleBuyerActivity(req, res, handlerOptions);
     } else if (pathname.includes('/content-reports') || pathname.endsWith('/content-reports')) {
       return await handleContentReports(req, res, handlerOptions);
@@ -5749,7 +5753,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
 // Admin handler - preserves exact functionality from admin.ts
 async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
-  const { action } = req.query;
+  const action = firstQueryParam(req.query.action as string | string[] | undefined) || '';
 
   // SECURITY: Require authentication for all admin endpoints (legacy JWT or Supabase)
   const adminAuth = await authenticateRequestDual(req);
@@ -5857,6 +5861,12 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: Ha
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
+  }
+
+  if (action === 'buyer-inspections') {
+    const { handleAdminBuyerInspections } = await import('../server/handlers/admin.js');
+    await handleAdminBuyerInspections(req, res);
+    return;
   }
 
   return res.status(400).json({ success: false, reason: 'Invalid admin action' });
@@ -8578,6 +8588,56 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
 }
 
 // Conversations Handler
+async function insertConversationMessageNotification(params: {
+  recipientEmail: string;
+  senderName: string;
+  messageText: string;
+  conversationId: string;
+}): Promise<void> {
+  const recipientEmail = String(params.recipientEmail || '').toLowerCase().trim();
+  if (!recipientEmail || !recipientEmail.includes('@')) {
+    return;
+  }
+  const messageText = typeof params.messageText === 'string' ? params.messageText : '';
+  const senderName = params.senderName || 'User';
+  const notificationMessage =
+    messageText.length > 50
+      ? `New message from ${senderName}: ${messageText.substring(0, 50)}...`
+      : `New message from ${senderName}: ${messageText}`;
+  const notificationId = Date.now() * 1000 + randomInt(0, 1000);
+  try {
+    const supabase = getSupabaseAdminClient();
+    const record: Record<string, unknown> = {
+      user_id: recipientEmail,
+      recipient_email: recipientEmail,
+      type: 'conversation',
+      title: 'New message',
+      message: notificationMessage,
+      read: false,
+      is_read: false,
+      created_at: new Date().toISOString(),
+      metadata: {
+        conversationId: String(params.conversationId),
+        targetType: 'conversation',
+        targetId: String(params.conversationId),
+      },
+    };
+    const inserted = await supabase
+      .from('notifications')
+      .insert({ ...record, id: notificationId })
+      .select('id')
+      .single();
+    if (inserted.error) {
+      const retry = await supabase.from('notifications').insert(record).select('id').single();
+      if (retry.error) {
+        console.warn('⚠️ API: Failed to create message notification (non-fatal):', retry.error.message);
+      }
+    }
+  } catch (notifErr) {
+    console.warn('⚠️ API: Failed to create message notification (non-fatal):', notifErr);
+  }
+}
+
 async function handleConversations(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
     if (!USE_SUPABASE) {
@@ -8615,11 +8675,12 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       normalizedAuthUserId = auth.user.userId ? String(auth.user.userId).toLowerCase().trim() : '';
       isAdmin = auth.user.role === 'admin';
     }
-    const authIdentitySet = new Set(
-      [normalizedAuthEmail, normalizedAuthUserId].map((v) => v.toLowerCase().trim()).filter(Boolean),
-    );
     const isAuthParticipant = (participantId: string): boolean =>
-      authIdentitySet.has(String(participantId || '').toLowerCase().trim());
+      participantIdMatchesAppUser(
+        participantId,
+        normalizedAuthEmail,
+        normalizedAuthUserId,
+      );
 
     // GET - Retrieve conversations
     if (req.method === 'GET') {
@@ -8798,46 +8859,19 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           );
 
           const actingAsCustomer = isAuthParticipant(normalizedCustomerId);
-          const recipientEmail = actingAsCustomer ? normalizedSellerId : normalizedCustomerId;
+          const recipientEmail = actingAsCustomer
+            ? String(updatedConversation.sellerId || normalizedSellerId)
+            : String(updatedConversation.customerId || normalizedCustomerId);
           const senderName = actingAsCustomer
             ? conversation.customerName || 'Customer'
             : conversation.sellerName || 'Seller';
           const messageText = typeof responseMessage?.text === 'string' ? responseMessage.text : '';
-          const notificationMessage =
-            messageText.length > 50
-              ? `New message from ${senderName}: ${messageText.substring(0, 50)}...`
-              : `New message from ${senderName}: ${messageText}`;
-          const notificationId = Date.now() * 1000 + randomInt(0, 1000);
-          try {
-            const supabase = getSupabaseAdminClient();
-            const record: Record<string, unknown> = {
-              user_id: recipientEmail,
-              recipient_email: recipientEmail,
-              type: 'conversation',
-              title: 'New message',
-              message: notificationMessage,
-              read: false,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              metadata: {
-                conversationId: String(conversationId),
-                targetType: 'conversation',
-                targetId: String(conversationId),
-              },
-            };
-            const inserted = await supabase
-              .from('notifications')
-              .insert({ ...record, id: notificationId })
-              .select('id')
-              .single();
-            if (inserted.error) {
-              const retry = await supabase.from('notifications').insert(record).select('id').single();
-              if (retry.error)
-                console.warn('⚠️ API: Failed to create message notification (non-fatal):', retry.error.message);
-            }
-          } catch (notifErr) {
-            console.warn('⚠️ API: Failed to create message notification (non-fatal):', notifErr);
-          }
+          await insertConversationMessageNotification({
+            recipientEmail,
+            senderName,
+            messageText,
+            conversationId: String(updatedConversation.id || conversationId),
+          });
 
           return res.status(200).json({ success: true, data: updatedConversation });
         } catch (error) {
@@ -8873,47 +8907,34 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         
         // Create notification for the recipient (other party) so they get notified even when app is closed
         const actingAsCustomer = isAuthParticipant(normalizedCustomerId);
-        const recipientEmail = actingAsCustomer ? normalizedSellerId : normalizedCustomerId;
+        const recipientEmail = actingAsCustomer
+          ? String(updatedConversation.sellerId || normalizedSellerId)
+          : String(updatedConversation.customerId || normalizedCustomerId);
         const senderName = actingAsCustomer
           ? (conversation.customerName || 'Customer')
           : (conversation.sellerName || 'Seller');
         const messageText = typeof message.text === 'string' ? message.text : '';
-        const notificationMessage = messageText.length > 50
-          ? `New message from ${senderName}: ${messageText.substring(0, 50)}...`
-          : `New message from ${senderName}: ${messageText}`;
-        const notificationId = Date.now() * 1000 + randomInt(0, 1000);
-        try {
-          const supabase = getSupabaseAdminClient();
-          const record: Record<string, unknown> = {
-            user_id: recipientEmail,
-            recipient_email: recipientEmail,
-            type: 'conversation',
-            title: 'New message',
-            message: notificationMessage,
-            read: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            metadata: { conversationId: String(conversationId), targetType: 'conversation', targetId: String(conversationId) },
-          };
-          const inserted = await supabase.from('notifications').insert({ ...record, id: notificationId }).select('id').single();
-          if (inserted.error) {
-            const retry = await supabase.from('notifications').insert(record).select('id').single();
-            if (retry.error) console.warn('⚠️ API: Failed to create message notification (non-fatal):', retry.error.message);
-          }
-        } catch (notifErr) {
-          console.warn('⚠️ API: Failed to create message notification (non-fatal):', notifErr);
-        }
+        await insertConversationMessageNotification({
+          recipientEmail,
+          senderName,
+          messageText,
+          conversationId: String(updatedConversation.id || conversationId),
+        });
 
         // Fire-and-forget email notification to the seller for new customer inquiries.
         // We only email sellers (not customer replies) to avoid noise, and skip if the
         // sender is the seller themselves. Errors never block the API response.
         try {
-          const isSellerRecipient = normalizedSellerId && recipientEmail === normalizedSellerId;
-          if (isSellerRecipient && recipientEmail) {
+          const sellerRecipientEmail = String(updatedConversation.sellerId || normalizedSellerId)
+            .toLowerCase()
+            .trim();
+          const isSellerRecipient =
+            actingAsCustomer && sellerRecipientEmail && recipientEmail.toLowerCase().trim() === sellerRecipientEmail;
+          if (isSellerRecipient && sellerRecipientEmail) {
             const vehicleTitle = String(conversation.vehicleName || 'your listing');
             const preview = messageText.length > 140 ? messageText.substring(0, 140) + '…' : messageText;
             void sendInquiryNotificationToSeller(
-              recipientEmail,
+              sellerRecipientEmail,
               senderName || 'A buyer',
               vehicleTitle,
               preview || '(new message)',
@@ -9136,6 +9157,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
     // If no auth token, return empty array instead of 401 (user might not be logged in yet)
     let auth: AuthResult | null = null;
     let normalizedAuthEmail = '';
+    let normalizedAuthUserId = '';
     let isAdmin = false;
     
     if (req.method === 'GET') {
@@ -9144,6 +9166,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       auth = await authenticateRequestDual(req);
       if (auth.isValid && auth.user) {
         normalizedAuthEmail = normalizeAuthActorEmail(auth);
+        normalizedAuthUserId = auth.user.userId ? String(auth.user.userId).toLowerCase().trim() : '';
         isAdmin = auth.user.role === 'admin';
       }
       // If auth fails, continue with empty auth (will return empty array for non-admin)
@@ -9159,6 +9182,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         });
       }
       normalizedAuthEmail = normalizeAuthActorEmail(auth);
+      normalizedAuthUserId = auth.user.userId ? String(auth.user.userId).toLowerCase().trim() : '';
       isAdmin = auth.user.role === 'admin';
     }
 
@@ -9185,7 +9209,11 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         }
         
         const recipient = (notification.recipient_email || notification.user_id || '').toString().toLowerCase().trim();
-        if (!isAdmin && recipient && recipient !== normalizedAuthEmail) {
+        if (
+          !isAdmin &&
+          recipient &&
+          !participantIdMatchesAppUser(recipient, normalizedAuthEmail, normalizedAuthUserId)
+        ) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to notification' });
         }
         return res.status(200).json({ success: true, data: notification });
@@ -9217,12 +9245,19 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
           // No auth token - return empty array instead of 401
           return res.status(200).json({ success: true, data: [] });
         }
-        if (!isAdmin && normalizedAuthEmail !== normalizedEmail) {
+        if (
+          !isAdmin &&
+          !participantIdMatchesAppUser(normalizedEmail, normalizedAuthEmail, normalizedAuthUserId)
+        ) {
           return res.status(200).json({ success: true, data: [] });
         }
-        notifications = notifications.filter(n => {
+        notifications = notifications.filter((n) => {
           const recipient = n.recipientEmail || n.recipient_email || n.user_id || '';
-          return recipient.toString().toLowerCase().trim() === normalizedEmail;
+          return participantIdMatchesAppUser(
+            recipient.toString(),
+            normalizedEmail,
+            undefined,
+          );
         });
       } else {
         // No recipientEmail specified - only admins can see all notifications
@@ -9490,185 +9525,6 @@ async function handleContentReports(
   }
 }
 
-async function handleBuyerActivity(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
-  try {
-    if (!USE_SUPABASE) {
-      return res.status(503).json({
-        success: false,
-        reason: 'Supabase is not configured. Please set Supabase environment variables.'
-      });
-    }
-
-    const auth = await authenticateRequestDual(req);
-    if (!auth.isValid || !auth.user) {
-      logWarn('⚠️ Buyer Activity - Authentication failed:', auth.error);
-      return res.status(401).json({
-        success: false,
-        reason: auth.error || 'Authentication required.',
-        error: 'Invalid or expired authentication token',
-      });
-    }
-    const normalizedAuthEmail = normalizeAuthActorEmail(auth);
-    const normalizedAuthUserId = auth.user.userId
-      ? String(auth.user.userId).toLowerCase().trim()
-      : '';
-    const isAdmin = auth.user.role === 'admin';
-    const canAccessBuyerActivity = (userId: string): boolean => {
-      const norm = String(userId || '').toLowerCase().trim();
-      if (!norm) return false;
-      if (isAdmin) return true;
-      if (norm === normalizedAuthEmail) return true;
-      if (normalizedAuthUserId && norm === normalizedAuthUserId) return true;
-      return false;
-    };
-
-    // GET - Retrieve buyer activity
-    if (req.method === 'GET') {
-      const { userId } = req.query;
-      
-      if (!userId) {
-        return res.status(400).json({ success: false, reason: 'User ID is required' });
-      }
-
-      const userIdValue = Array.isArray(userId) ? userId[0] : userId;
-      const normalizedUserId = userIdValue.toLowerCase().trim();
-      
-      // Users can only access their own activity (unless admin)
-      if (!canAccessBuyerActivity(normalizedUserId)) {
-        return res.status(403).json({ success: false, reason: 'Unauthorized access to buyer activity' });
-      }
-
-      const supabase = getSupabaseAdminClient();
-      const { data: activity, error } = await supabase
-        .from('buyer_activity')
-        .select('*')
-        .eq('user_id', normalizedUserId)
-        .single();
-
-      if (error) {
-        // If not found, return default activity
-        if (error.code === 'PGRST116') {
-          return res.status(200).json({
-            success: true,
-            data: {
-              id: `activity_${normalizedUserId}`,
-              userId: normalizedUserId,
-              recentlyViewed: [],
-              savedSearches: [],
-              notifications: {
-                priceDrops: [],
-                newMatches: []
-              }
-            }
-          });
-        }
-        logError('❌ Failed to fetch buyer activity:', error);
-        return res.status(500).json({ success: false, reason: 'Failed to fetch buyer activity' });
-      }
-
-      // Transform database format to app format
-      const transformedActivity = {
-        id: activity.id,
-        userId: activity.user_id,
-        recentlyViewed: activity.recently_viewed || [],
-        savedSearches: activity.saved_searches || [],
-        notifications: {
-          priceDrops: activity.price_drops || [],
-          newMatches: activity.new_matches || []
-        }
-      };
-
-      return res.status(200).json({ success: true, data: transformedActivity });
-    }
-
-    // POST - Create or update buyer activity
-    if (req.method === 'POST' || req.method === 'PUT') {
-      const activityData = req.body;
-      
-      if (!activityData.userId) {
-        return res.status(400).json({ success: false, reason: 'User ID is required' });
-      }
-
-      const normalizedUserId = activityData.userId.toLowerCase().trim();
-      
-      // Users can only save their own activity (unless admin)
-      if (!canAccessBuyerActivity(normalizedUserId)) {
-        return res.status(403).json({ success: false, reason: 'Unauthorized to save buyer activity' });
-      }
-
-      const supabase = getSupabaseAdminClient();
-      
-      // Check if activity exists
-      const { data: existing } = await supabase
-        .from('buyer_activity')
-        .select('id')
-        .eq('user_id', normalizedUserId)
-        .single();
-
-      const activityRecord: Record<string, unknown> = {
-        id: existing?.id || `activity_${normalizedUserId}_${Date.now()}`,
-        user_id: normalizedUserId,
-        recently_viewed: activityData.recentlyViewed || [],
-        saved_searches: activityData.savedSearches || [],
-        price_drops: activityData.notifications?.priceDrops || [],
-        new_matches: activityData.notifications?.newMatches || [],
-        updated_at: new Date().toISOString()
-      };
-
-      let result;
-      if (existing) {
-        // Update existing
-        const { data, error } = await supabase
-          .from('buyer_activity')
-          .update(activityRecord)
-          .eq('user_id', normalizedUserId)
-          .select()
-          .single();
-
-        if (error) {
-          logError('❌ Failed to update buyer activity:', error);
-          return res.status(500).json({ success: false, reason: 'Failed to update buyer activity' });
-        }
-        result = data;
-      } else {
-        // Create new
-        activityRecord.created_at = new Date().toISOString();
-        const { data, error } = await supabase
-          .from('buyer_activity')
-          .insert(activityRecord)
-          .select()
-          .single();
-
-        if (error) {
-          logError('❌ Failed to create buyer activity:', error);
-          return res.status(500).json({ success: false, reason: 'Failed to create buyer activity' });
-        }
-        result = data;
-      }
-
-      // Transform back to app format
-      const transformedActivity = {
-        id: result.id,
-        userId: result.user_id,
-        recentlyViewed: result.recently_viewed || [],
-        savedSearches: result.saved_searches || [],
-        notifications: {
-          priceDrops: result.price_drops || [],
-          newMatches: result.new_matches || []
-        }
-      };
-
-      return res.status(200).json({ success: true, data: transformedActivity });
-    }
-
-    return res.status(405).json({ success: false, reason: 'Method not allowed' });
-  } catch (error) {
-    logError('❌ Buyer Activity API Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return res.status(500).json({ success: false, reason: errorMessage, error: errorMessage });
-  }
-}
-
 // Plans Handler
 async function handlePlans(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
@@ -9852,7 +9708,7 @@ export default async function handler(
     attachApiCors(req, res);
   } catch {
     // Inline minimal CORS if the helper fails (e.g. security-config module crashed)
-    const rawOrigin = req.headers.origin;
+    const rawOrigin = req.headers?.origin;
     const origin = typeof rawOrigin === 'string' ? rawOrigin : Array.isArray(rawOrigin) ? rawOrigin[0] : undefined;
     if (origin) {
       res.setHeader('Access-Control-Allow-Origin', origin);

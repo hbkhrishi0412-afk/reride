@@ -71,8 +71,6 @@ const PORT = parseInt(process.env.VITE_LOCAL_API_PORT || '3001', 10) || 3001;
 /** Delegate to production api/main.ts handler for routes not duplicated in dev-api-server. */
 const MAIN_HANDLER_DELEGATED_PREFIXES = [
   '/api/settings',
-  '/api/support-tickets',
-  '/api/buyer-activity',
   '/api/audit-log',
 ];
 let mainHandlerModulePromise = null;
@@ -86,7 +84,18 @@ async function delegateToMainHandler(req, res) {
   try {
     const handler = await loadMainHandler();
     const url = req.originalUrl || req.url;
-    await handler({ ...req, url }, res);
+    // Express Request getters (headers, query, …) are not copied by object spread.
+    await handler(
+      {
+        method: req.method,
+        url,
+        headers: req.headers ?? {},
+        query: req.query ?? {},
+        body: req.body,
+        cookies: req.cookies,
+      },
+      res,
+    );
   } catch (error) {
     console.error('delegateToMainHandler error:', error);
     if (!res.headersSent) {
@@ -451,18 +460,14 @@ app.delete('/api/plans', (req, res) => {
 });
 
 // Admin API endpoint
-app.get('/api/admin', (req, res) => {
-  console.log('🔧 GET /api/admin - Admin health check');
-  res.json({
-    status: 'ok',
-    message: 'Admin panel is accessible',
-    timestamp: new Date().toISOString(),
-    details: {
-      connectionState: 'connected',
-      plansCount: mockPlans.length,
-      availableActions: ['health', 'seed', 'test-connection']
-    }
-  });
+app.all('/api/admin', async (req, res) => {
+  try {
+    const { handleAdmin } = await import('./server/handlers/admin.ts');
+    await handleAdmin(req, res, {});
+  } catch (error) {
+    console.error('admin API error:', error);
+    return res.status(500).json({ success: false, reason: 'Admin API error' });
+  }
 });
 
 // Build Supabase Storage public URL for vehicle images (no client needed)
@@ -3291,6 +3296,42 @@ for (const prefix of MAIN_HANDLER_DELEGATED_PREFIXES) {
   app.all(prefix, delegateToMainHandler);
 }
 
+app.all(/^\/api\/buyer-activity(?:\/.*)?$/, async (req, res) => {
+  try {
+    const url = req.originalUrl || req.url || '';
+    const pathMatch = url.match(/\/api\/buyer-activity\/([^/?]+)/);
+    if (pathMatch && !req.query?.userId) {
+      req.query = { ...(req.query || {}), userId: decodeURIComponent(pathMatch[1]) };
+    }
+    const { handleBuyerActivity } = await import('./server/handlers/buyer-activity.ts');
+    await handleBuyerActivity(req, res, {});
+  } catch (error) {
+    console.error('buyer-activity error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        reason: error instanceof Error ? error.message : 'Buyer activity API error',
+      });
+    }
+  }
+});
+
+app.all('/api/support-tickets', async (req, res) => {
+  try {
+    req.query = { ...(req.query || {}), type: 'support-tickets' };
+    const { handleContent } = await import('./server/handlers/content.ts');
+    await handleContent(req, res, {});
+  } catch (error) {
+    console.error('support-tickets error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        reason: error instanceof Error ? error.message : 'Support tickets API error',
+      });
+    }
+  }
+});
+
 app.all('/api/vehicle-trust', async (req, res) => {
   try {
     const { handleVehicleTrust } = await import('./server/handlers/vehicle-trust.ts');
@@ -4137,6 +4178,11 @@ server.listen(PORT, () => {
   // console.log(`   - WebSocket /chat - Real-time chat (disabled - Firebase handles chat)`);
   console.log(`   - GET  /api/admin - Admin health check`);
   console.log(`   - GET  /api/health - Server health check`);
+  console.log(`   - POST /api/vehicle-trust?action=vahan-verify - VAHAN RC verification`);
+  if (!process.env.SUREPASS_API_TOKEN?.trim()) {
+    console.log(`\n⚠️  SUREPASS_API_TOKEN is not set — VAHAN verify will save RC only (no govt lookup).`);
+    console.log(`   Add to .env.local: SUREPASS_API_TOKEN=your_token from https://surepass.io/get-api-key/`);
+  }
   console.log(`\n🔗 Test the API:`);
   console.log(`   curl http://localhost:${PORT}/api/plans`);
   console.log(`   curl http://localhost:${PORT}/api/vehicles?type=data`);

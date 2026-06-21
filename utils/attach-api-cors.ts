@@ -50,7 +50,7 @@ function sanitizeAdditionalHeaderName(name: string): string | null {
 
 /** Minimal CORS if the full path throws (must never leave preflight without ACAO for trusted shells). */
 function applyMinimalCorsForTrustedShells(req: VercelRequest, res: VercelResponse): void {
-  const rawOrigin = req.headers.origin;
+  const rawOrigin = req.headers?.origin;
   const origin =
     typeof rawOrigin === 'string'
       ? rawOrigin
@@ -108,7 +108,7 @@ function attachApiCorsInner(req: VercelRequest, res: VercelResponse): void {
     res.setHeader(key, value);
   }
 
-  const rawOrigin = req.headers.origin;
+  const rawOrigin = req.headers?.origin;
   const origin =
     typeof rawOrigin === 'string'
       ? rawOrigin
@@ -160,8 +160,8 @@ function attachApiCorsInner(req: VercelRequest, res: VercelResponse): void {
   const allowHeadersList = [...config.CORS.ALLOWED_HEADERS];
   const seenLower = new Set(allowHeadersList.map((h) => h.toLowerCase()));
   const acrhRaw =
-    (req.headers['access-control-request-headers'] ||
-      req.headers['Access-Control-Request-Headers']) as string | undefined;
+    (req.headers?.['access-control-request-headers'] ||
+      req.headers?.['Access-Control-Request-Headers']) as string | undefined;
   if (typeof acrhRaw === 'string' && acrhRaw.trim()) {
     for (const part of acrhRaw.split(',')) {
       const safe = sanitizeAdditionalHeaderName(part);

@@ -778,18 +778,28 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
         return (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Enter Registration Number</h2>
-            <p className="text-gray-600 mb-4">We'll fetch your car details automatically</p>
+            <p className="text-gray-600 mb-4">We&apos;ll fetch your car details automatically</p>
             <div>
               <input
                 type="text"
                 placeholder="e.g., MH01AB1234"
                 value={registrationNumber}
-                onChange={(e) => setRegistrationNumber(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  setRegistrationNumber(e.target.value.toUpperCase());
+                  setRegistrationError('');
+                }}
                 onFocus={(e) => {
                   activateInputKeyboardPadding();
                   scrollFieldIntoComfortableView(e.currentTarget);
                 }}
                 onBlur={deactivateInputKeyboardPadding}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && registrationNumber.trim() && !isVerifying) {
+                    e.preventDefault();
+                    void handleRegistrationSubmit();
+                  }
+                }}
+                enterKeyHint="next"
                 className="w-full px-4 py-4 text-lg rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
                 style={{ minHeight: '56px' }}
                 autoCapitalize="characters"
@@ -1191,13 +1201,75 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
     }
   };
 
+  const renderStepActions = () => {
+    if (currentStep <= 0 || currentStep >= 9) return null;
+
+    if (currentStep === 1) {
+      return (
+        <div className="mt-6 space-y-3">
+          <button
+            type="button"
+            onClick={handleRegistrationSubmit}
+            disabled={isVerifying || !registrationNumber.trim()}
+            className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] touch-manipulation"
+            style={{ minHeight: '56px' }}
+          >
+            {isVerifying ? 'Fetching Details...' : 'Continue'}
+          </button>
+          <button
+            type="button"
+            onClick={handleFillManually}
+            className="w-full py-3 text-center text-sm font-medium text-gray-600 underline decoration-gray-400 underline-offset-4 active:text-orange-600 touch-manipulation"
+            style={{ minHeight: '44px' }}
+          >
+            Fill Details Manually
+          </button>
+        </div>
+      );
+    }
+
+    if (currentStep === 8) {
+      return (
+        <div className="mt-6 space-y-3">
+          {submitError ? (
+            <p className="text-red-600 text-sm text-center px-1" role="alert">
+              {submitError}
+            </p>
+          ) : null}
+          <button
+            type="submit"
+            form="mobile-sell-contact-form"
+            disabled={isSubmitting}
+            className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.99] touch-manipulation"
+            style={{ minHeight: '56px' }}
+          >
+            {isSubmitting ? 'Submitting…' : 'Submit'}
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-6 space-y-3">
+        {stepError ? (
+          <p className="text-red-600 text-sm text-center px-1" role="alert">
+            {stepError}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          onClick={handleContinueStep}
+          className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold active:scale-[0.99] touch-manipulation"
+          style={{ minHeight: '56px' }}
+        >
+          Continue
+        </button>
+      </div>
+    );
+  };
+
   return (
-    <div
-      className="bg-gray-50 flex min-h-0 flex-1 flex-col overflow-hidden"
-      style={
-        keyboardBottomInset > 0 ? { paddingBottom: `${keyboardBottomInset}px` } : undefined
-      }
-    >
+    <div className="bg-gray-50 flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Pinned chrome — does not scroll (fixes Continue + lists hidden behind tab bar on iOS Safari) */}
       <div className="shrink-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
         {currentStep > 0 && (
@@ -1230,73 +1302,20 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
         </div>
       )}
 
-      {/* Only the step body scrolls; Continue stays above device bottom nav */}
+      {/* Step body + actions scroll together — buttons sit directly below inputs */}
       <div
         id="mobile-sell-car-step-scroll"
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-6 overscroll-y-auto touch-pan-y"
         key={`sell-step-${currentStep}`}
+        style={
+          keyboardBottomInset > 0
+            ? { paddingBottom: `${keyboardBottomInset + 24}px` }
+            : { paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 0px))' }
+        }
       >
         {renderStep()}
+        {renderStepActions()}
       </div>
-
-      {currentStep > 0 && currentStep < 9 && (
-        <div className="relative z-20 shrink-0 border-t border-gray-200 bg-white px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_-4px_14px_rgba(0,0,0,0.06)]">
-          {currentStep === 1 ? (
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={handleRegistrationSubmit}
-                disabled={isVerifying || !registrationNumber.trim()}
-                className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ minHeight: '56px' }}
-              >
-                {isVerifying ? 'Fetching Details...' : 'Continue'}
-              </button>
-              <button
-                type="button"
-                onClick={handleFillManually}
-                className="w-full py-3 text-center text-sm font-medium text-gray-600 underline decoration-gray-400 underline-offset-4 active:text-orange-600 active:decoration-orange-400 touch-manipulation"
-                style={{ minHeight: '44px' }}
-              >
-                Fill Details Manually
-              </button>
-            </div>
-          ) : currentStep === 8 ? (
-            <div className="space-y-2">
-              {submitError ? (
-                <p className="text-red-600 text-sm text-center px-1" role="alert">
-                  {submitError}
-                </p>
-              ) : null}
-              <button
-                type="submit"
-                form="mobile-sell-contact-form"
-                disabled={isSubmitting}
-                className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{ minHeight: '56px' }}
-              >
-                {isSubmitting ? 'Submitting…' : 'Submit'}
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {stepError ? (
-                <p className="text-red-600 text-sm text-center px-1" role="alert">
-                  {stepError}
-                </p>
-              ) : null}
-              <button
-                type="button"
-                onClick={handleContinueStep}
-                className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold"
-                style={{ minHeight: '56px' }}
-              >
-                Continue
-              </button>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 };

@@ -33,7 +33,7 @@ import {
   getExtraGalleryImages,
   mergeListingImages,
 } from '../lib/universalChecklist/mediaSync';
-import { verifyVahanRegistration } from '../services/vehicleTrustService';
+import { verifyVahanRegistration, applyVahanVerifyToVehicleFields } from '../services/vehicleTrustService';
 import MarkSoldDealModal from './MarkSoldDealModal';
 
 // ---------- Premium inline SVG icon set (kept local to avoid new deps) ----------
@@ -61,7 +61,6 @@ const Icon = ({
   </svg>
 );
 const IconBell = (p: IconProps) => (<Icon {...p}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></Icon>);
-const IconSettings = (p: IconProps) => (<Icon {...p}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></Icon>);
 const IconPlus = (p: IconProps) => (<Icon {...p}><path d="M12 5v14M5 12h14" /></Icon>);
 const IconChevronRight = (p: IconProps) => (<Icon {...p}><path d="M9 18l6-6-6-6" /></Icon>);
 const IconArrowUpRight = (p: IconProps) => (<Icon {...p}><path d="M7 17L17 7M9 7h8v8" /></Icon>);
@@ -79,6 +78,11 @@ const IconEdit = (p: IconProps) => (<Icon {...p}><path d="M12 20h9M16.5 3.5a2.12
 const IconTrash = (p: IconProps) => (<Icon {...p}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></Icon>);
 const IconShield = (p: IconProps) => (<Icon {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></Icon>);
 const IconChart = (p: IconProps) => (<Icon {...p}><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></Icon>);
+const IconSettings = (p: IconProps) => (<Icon {...p}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></Icon>);
+const IconUser = (p: IconProps) => (<Icon {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></Icon>);
+const IconFlag = (p: IconProps) => (<Icon {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></Icon>);
+const IconDollar = (p: IconProps) => (<Icon {...p}><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></Icon>);
+const IconTrendUp = (p: IconProps) => (<Icon {...p}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></Icon>);
 
 interface MobileDashboardProps {
   currentUser: User;
@@ -142,6 +146,200 @@ type DashboardTab =
   | 'editVehicle'
   | 'notifications';
 
+type VehicleDataTree = Record<
+  string,
+  Array<{ name: string; models: Array<{ name: string; variants: string[] }> }>
+>;
+
+function formatVehicleCategoryLabel(category: string): string {
+  return category
+    .replace(/_/g, ' ')
+    .replace(/-/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (l) => l.toUpperCase());
+}
+
+function getVehicleCategories(data: VehicleDataTree): string[] {
+  return Object.keys(data || {}).filter(Boolean).sort();
+}
+
+function getMakesForCategory(data: VehicleDataTree, category: string): string[] {
+  if (!category || !data[category]) return [];
+  return data[category]
+    .map((make) => make?.name)
+    .filter((name): name is string => typeof name === 'string' && name.length > 0)
+    .sort();
+}
+
+function getModelsForMake(data: VehicleDataTree, category: string, make: string): string[] {
+  if (!category || !make || !data[category]) return [];
+  const makeData = data[category].find((m) => m?.name === make);
+  if (!makeData?.models) return [];
+  return makeData.models
+    .map((model) => model?.name)
+    .filter((name): name is string => typeof name === 'string' && name.length > 0)
+    .sort();
+}
+
+function getVariantsForModel(
+  data: VehicleDataTree,
+  category: string,
+  make: string,
+  model: string,
+): string[] {
+  if (!category || !make || !model || !data[category]) return [];
+  const makeData = data[category].find((m) => m?.name === make);
+  const modelData = makeData?.models?.find((m) => m?.name === model);
+  if (!modelData?.variants) return [];
+  return modelData.variants
+    .filter((variant): variant is string => typeof variant === 'string' && variant.length > 0)
+    .sort();
+}
+
+type VehicleIdentityFieldsProps = {
+  category: string;
+  make: string;
+  model: string;
+  variant: string;
+  categories: string[];
+  makes: string[];
+  models: string[];
+  variants: string[];
+  errors: Record<string, string>;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+  selectClassName?: string;
+  t: (key: string, defaultValue?: string) => string;
+};
+
+const VehicleIdentityFields: React.FC<VehicleIdentityFieldsProps> = ({
+  category,
+  make,
+  model,
+  variant,
+  categories,
+  makes,
+  models,
+  variants,
+  errors,
+  onChange,
+  selectClassName = 'native-input bg-white',
+  t,
+}) => {
+  const fieldId = React.useId().replace(/:/g, '');
+  const makeListId = `${fieldId}-make`;
+  const modelListId = `${fieldId}-model`;
+  const variantListId = `${fieldId}-variant`;
+
+  return (
+  <>
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        {t('sellerListing.label.category', 'Category')} <span className="text-red-500">*</span>
+      </label>
+      <select
+        name="category"
+        value={category || ''}
+        onChange={onChange}
+        className={`${selectClassName} ${errors.category ? 'bg-red-50' : ''}`}
+        required
+      >
+        <option value="" disabled>
+          {t('sellerListing.placeholder.category', 'Select category')}
+        </option>
+        {categories.map((cat) => (
+          <option key={cat} value={cat}>
+            {formatVehicleCategoryLabel(cat)}
+          </option>
+        ))}
+      </select>
+      {errors.category && <p className="text-red-600 text-xs mt-1.5 font-medium">{errors.category}</p>}
+    </div>
+
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        {t('sellerListing.label.make')} <span className="text-red-500">*</span>
+      </label>
+      <input
+        type="text"
+        name="make"
+        value={make || ''}
+        onChange={onChange}
+        list={makeListId}
+        placeholder={
+          !category
+            ? t('sellerListing.placeholder.selectCategoryFirst', 'Select category first')
+            : t('sellerListing.placeholder.makeSelect', 'Select or type make')
+        }
+        className={`${selectClassName} ${errors.make ? 'bg-red-50' : ''}`}
+        disabled={!category}
+        autoComplete="off"
+        required
+      />
+      <datalist id={makeListId}>
+        {makes.map((item) => (
+          <option key={item} value={item} />
+        ))}
+      </datalist>
+      {errors.make && <p className="text-red-600 text-xs mt-1.5 font-medium">{errors.make}</p>}
+    </div>
+
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        {t('sellerListing.label.model')} <span className="text-red-500">*</span>
+      </label>
+      <input
+        type="text"
+        name="model"
+        value={model || ''}
+        onChange={onChange}
+        list={modelListId}
+        placeholder={
+          !make
+            ? t('sellerListing.placeholder.selectMakeFirst', 'Select make first')
+            : t('sellerListing.placeholder.modelSelect', 'Select or type model')
+        }
+        className={`${selectClassName} ${errors.model ? 'bg-red-50' : ''}`}
+        disabled={!make}
+        autoComplete="off"
+        required
+      />
+      <datalist id={modelListId}>
+        {models.map((item) => (
+          <option key={item} value={item} />
+        ))}
+      </datalist>
+      {errors.model && <p className="text-red-600 text-xs mt-1.5 font-medium">{errors.model}</p>}
+    </div>
+
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        {t('sellerListing.label.variant')}
+      </label>
+      <input
+        type="text"
+        name="variant"
+        value={variant || ''}
+        onChange={onChange}
+        list={variantListId}
+        placeholder={
+          !model
+            ? t('sellerListing.placeholder.selectModelFirst', 'Select model first')
+            : t('sellerListing.placeholder.variantSelect', 'Select or type variant (optional)')
+        }
+        className={selectClassName}
+        disabled={!model}
+        autoComplete="off"
+      />
+      <datalist id={variantListId}>
+        {variants.map((item) => (
+          <option key={item} value={item} />
+        ))}
+      </datalist>
+    </div>
+  </>
+  );
+};
+
 const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   currentUser,
   userVehicles,
@@ -165,7 +363,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   onAddVehicle,
   onAddMultipleVehicles,
   onUpdateVehicle,
-  vehicleData: _vehicleData,
+  vehicleData,
   onViewVehicle,
   onUpdateProfile,
   onUpdateSellerProfile,
@@ -226,7 +424,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     images: [],
     documents: [],
     sellerEmail: currentUser.email,
-    category: 'four_wheeler' as any,
+    category: VehicleCategory.FOUR_WHEELER,
     status: 'published',
     isFeatured: false,
     registrationYear: new Date().getFullYear(),
@@ -383,6 +581,60 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const safeAllVehicles = allVehicles || [];
   const safeReportedVehicles = reportedVehicles || [];
 
+  const safeVehicleData = useMemo((): VehicleDataTree => {
+    if (vehicleData && typeof vehicleData === 'object' && Object.keys(vehicleData).length > 0) {
+      return vehicleData as VehicleDataTree;
+    }
+    return {
+      [VehicleCategory.FOUR_WHEELER]: [],
+      [VehicleCategory.TWO_WHEELER]: [],
+      [VehicleCategory.THREE_WHEELER]: [],
+    };
+  }, [vehicleData]);
+
+  const addVehicleCategories = useMemo(
+    () => getVehicleCategories(safeVehicleData),
+    [safeVehicleData],
+  );
+  const addAvailableMakes = useMemo(
+    () => getMakesForCategory(safeVehicleData, addFormData.category || ''),
+    [safeVehicleData, addFormData.category],
+  );
+  const addAvailableModels = useMemo(
+    () => getModelsForMake(safeVehicleData, addFormData.category || '', addFormData.make || ''),
+    [safeVehicleData, addFormData.category, addFormData.make],
+  );
+  const addAvailableVariants = useMemo(
+    () =>
+      getVariantsForModel(
+        safeVehicleData,
+        addFormData.category || '',
+        addFormData.make || '',
+        addFormData.model || '',
+      ),
+    [safeVehicleData, addFormData.category, addFormData.make, addFormData.model],
+  );
+
+  const editFormCategory = editFormData?.category || editingVehicle?.category || '';
+  const editAvailableMakes = useMemo(
+    () => getMakesForCategory(safeVehicleData, editFormCategory),
+    [safeVehicleData, editFormCategory],
+  );
+  const editAvailableModels = useMemo(
+    () => getModelsForMake(safeVehicleData, editFormCategory, editFormData?.make || editingVehicle?.make || ''),
+    [safeVehicleData, editFormCategory, editFormData?.make, editingVehicle?.make],
+  );
+  const editAvailableVariants = useMemo(
+    () =>
+      getVariantsForModel(
+        safeVehicleData,
+        editFormCategory,
+        editFormData?.make || editingVehicle?.make || '',
+        editFormData?.model || editingVehicle?.model || '',
+      ),
+    [safeVehicleData, editFormCategory, editFormData?.make, editFormData?.model, editingVehicle?.make, editingVehicle?.model],
+  );
+
   const handleMarkAsSold = useCallback((vehicleId: number) => {
     const vehicle = safeUserVehicles.find((v) => v?.id === vehicleId);
     if (vehicle) {
@@ -417,24 +669,24 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   }, [isSeller, safeConversations, messagesHubFilter]);
 
   const tabs = useMemo(() => {
-    const row: { id: DashboardTab; label: string; icon: string; count: number | null }[] = [
-      { id: 'overview', label: t('sellerDashboard.mobile.tab.overview'), icon: '📊', count: null },
-      { id: 'listings', label: t('sellerDashboard.mobile.tab.listings'), icon: '🚗', count: totalListings },
+    const row: { id: DashboardTab; label: string; icon: React.ReactNode; count: number | null }[] = [
+      { id: 'overview', label: t('sellerDashboard.mobile.tab.overview'), icon: <IconChart size={15} stroke={2} />, count: null },
+      { id: 'listings', label: t('sellerDashboard.mobile.tab.listings'), icon: <IconCar size={15} stroke={2} />, count: totalListings },
     ];
     if (isSeller) {
       row.push({
         id: 'messages',
         label: t('sellerDashboard.mobile.tab.messages'),
-        icon: '💬',
+        icon: <IconChat size={15} stroke={2} />,
         count: unreadSellerThreads > 0 ? unreadSellerThreads : null,
       });
     }
     row.push(
-      { id: 'analytics', label: t('sellerDashboard.mobile.tab.analytics'), icon: '📈', count: null },
-      { id: 'salesHistory', label: t('sellerDashboard.mobile.tab.sales'), icon: '💰', count: soldListings },
-      { id: 'reports', label: t('sellerDashboard.mobile.tab.reports'), icon: '🚩', count: reportedCount },
-      { id: 'settings', label: t('sellerDashboard.mobile.tab.settings'), icon: '⚙️', count: null },
-      { id: 'profile', label: t('sellerDashboard.mobile.tab.profile'), icon: '👤', count: null }
+      { id: 'analytics', label: t('sellerDashboard.mobile.tab.analytics'), icon: <IconTrendUp size={15} stroke={2} />, count: null },
+      { id: 'salesHistory', label: t('sellerDashboard.mobile.tab.sales'), icon: <IconDollar size={15} stroke={2} />, count: soldListings },
+      { id: 'reports', label: t('sellerDashboard.mobile.tab.reports'), icon: <IconFlag size={15} stroke={2} />, count: reportedCount },
+      { id: 'settings', label: t('sellerDashboard.mobile.tab.settings'), icon: <IconSettings size={15} stroke={2} />, count: null },
+      { id: 'profile', label: t('sellerDashboard.mobile.tab.profile'), icon: <IconUser size={15} stroke={2} />, count: null }
     );
     return row;
   }, [t, totalListings, soldListings, reportedCount, isSeller, unreadSellerThreads]);
@@ -452,7 +704,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
     return (
       <div className="space-y-4 pb-4">
-        {/* ── Premium Welcome Hero ── */}
+        {/* -- Premium Welcome Hero -- */}
         <div
           className="relative overflow-hidden rounded-3xl text-white"
           style={{
@@ -556,7 +808,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           </div>
         </div>
 
-        {/* ── Premium Stats Grid (2×2) ── */}
+        {/* -- Premium Stats Grid (2x2) -- */}
         <div className="grid grid-cols-2 gap-3">
           {[
             {
@@ -657,7 +909,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           })}
         </div>
 
-        {/* ── Plan card skeleton ── */}
+        {/* -- Plan card skeleton -- */}
         {isSeller && planLoading && (
           <div
             aria-hidden
@@ -676,7 +928,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           </div>
         )}
 
-        {/* ── Premium Plan Card (obsidian + amber accents) ── */}
+        {/* -- Premium Plan Card (obsidian + amber accents) -- */}
         {isSeller && plan && !planLoading && (
           <div
             className="relative overflow-hidden rounded-3xl text-white"
@@ -803,7 +1055,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           </div>
         )}
 
-        {/* ── AI Sales Assistant ── */}
+        {/* -- AI Sales Assistant -- */}
         {isSeller && (
           <div
             className="relative overflow-hidden rounded-3xl p-5"
@@ -858,7 +1110,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           </div>
         )}
 
-        {/* ── Premium Quick Actions ── */}
+        {/* -- Premium Quick Actions -- */}
         <div
           className="rounded-3xl p-5"
           style={{
@@ -1478,7 +1730,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         key: 'views',
         label: 'Total views',
         value: periodTotalViews.toLocaleString('en-IN'),
-        hint: averageViewsPerListing > 0 ? `${averageViewsPerListing} avg / listing · ${periodLabel}` : 'Awaiting traffic',
+        hint: averageViewsPerListing > 0 ? `${averageViewsPerListing} avg / listing Â· ${periodLabel}` : 'Awaiting traffic',
         icon: <IconEye size={16} stroke={1.9} />,
         accent: '#2563EB',
         tint: 'rgba(37,99,235,0.10)'
@@ -1947,7 +2199,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               className="w-9 h-9 rounded-full grid place-items-center text-slate-500 active:scale-95 transition-transform"
               style={{ background: 'rgba(15,23,42,0.05)', border: '1px solid rgba(15,23,42,0.06)' }}
             >
-              ✕
+              ×
             </button>
           </div>
 
@@ -2076,8 +2328,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               )}
               {(currentUser?.location || currentUser?.address || currentUser?.pincode) && (
                 <p className="text-[11.5px] text-white/55 mt-1 leading-relaxed font-medium">
-                  {[currentUser?.location, currentUser?.address].filter(Boolean).join(' · ')}
-                  {currentUser?.pincode ? ` · PIN ${String(currentUser.pincode).replace(/\D/g, '').slice(0, 6)}` : ''}
+                  {[currentUser?.location, currentUser?.address].filter(Boolean).join(' Â· ')}
+                  {currentUser?.pincode ? ` Â· PIN ${String(currentUser.pincode).replace(/\D/g, '').slice(0, 6)}` : ''}
                 </p>
               )}
             </div>
@@ -2238,7 +2490,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Inbox</p>
             <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Notifications</h3>
             <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">
-              {filteredNotifications.length} total · {unreadNotifications.length} unread
+              {filteredNotifications.length} total Â· {unreadNotifications.length} unread
             </p>
           </div>
           <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -2344,15 +2596,28 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const handleAddFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     const numericFields = ['year', 'price', 'mileage', 'noOfOwners', 'registrationYear'];
-    setAddFormData(prev => ({
-      ...prev,
-      [name]: numericFields.includes(name)
-        ? (() => {
-            const digits = parseIndianNumberDigits(String(value));
-            return digits === '' ? 0 : Number(digits);
-          })()
-        : value
-    }));
+    setAddFormData(prev => {
+      const next = {
+        ...prev,
+        [name]: numericFields.includes(name)
+          ? (() => {
+              const digits = parseIndianNumberDigits(String(value));
+              return digits === '' ? 0 : Number(digits);
+            })()
+          : value,
+      };
+      if (name === 'category') {
+        next.make = '';
+        next.model = '';
+        next.variant = '';
+      } else if (name === 'make') {
+        next.model = '';
+        next.variant = '';
+      } else if (name === 'model') {
+        next.variant = '';
+      }
+      return next;
+    });
     // Clear error when user starts typing
     if (addErrors[name]) {
       setAddErrors(prev => {
@@ -2366,6 +2631,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const validateAddForm = (): boolean => {
     const newErrors: Record<string, string> = {};
     
+    if (!addFormData.category) {
+      newErrors.category = t('sellerListing.error.categoryRequired', 'Please select a category.');
+    }
     if (!addFormData.make || addFormData.make.trim() === '') {
       newErrors.make = t('sellerListing.error.makeRequired');
     }
@@ -2574,7 +2842,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             style={{ background: 'rgba(15,23,42,0.05)', border: '1px solid rgba(15,23,42,0.06)' }}
             aria-label={t('common.close')}
           >
-            ✕
+            ×
           </button>
         </div>
 
@@ -2590,38 +2858,20 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           {/* Basic Information */}
           <div className="space-y-4">
             <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.basic')}</h4>
-            
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {t('sellerListing.label.make')} <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="make"
-                value={addFormData.make}
-                onChange={handleAddFormChange}
-                placeholder={t('sellerListing.placeholder.make')}
-                className={`native-input ${addErrors.make ? 'bg-red-50' : ''}`}
-                required
-              />
-              {addErrors.make && <p className="text-red-600 text-xs mt-1.5 font-medium">{addErrors.make}</p>}
-            </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {t('sellerListing.label.model')} <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="model"
-                value={addFormData.model}
-                onChange={handleAddFormChange}
-                placeholder={t('sellerListing.placeholder.model')}
-                className={`native-input ${addErrors.model ? 'bg-red-50' : ''}`}
-                required
-              />
-              {addErrors.model && <p className="text-red-600 text-xs mt-1.5 font-medium">{addErrors.model}</p>}
-            </div>
+            <VehicleIdentityFields
+              category={addFormData.category || ''}
+              make={addFormData.make}
+              model={addFormData.model}
+              variant={addFormData.variant || ''}
+              categories={addVehicleCategories}
+              makes={addAvailableMakes}
+              models={addAvailableModels}
+              variants={addAvailableVariants}
+              errors={addErrors}
+              onChange={handleAddFormChange}
+              t={t}
+            />
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -2640,20 +2890,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   required
                 />
                 {addErrors.year && <p className="text-red-600 text-xs mt-1.5 font-medium">{addErrors.year}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t('sellerListing.label.variant')}
-                </label>
-                <input
-                  type="text"
-                  name="variant"
-                  value={addFormData.variant || ''}
-                  onChange={handleAddFormChange}
-                  placeholder={t('sellerListing.placeholder.variant')}
-                  className="native-input"
-                />
               </div>
             </div>
 
@@ -2811,28 +3047,27 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               value={addFormData.sellerDisclosureChecklist}
               sellerEmail={currentUser.email}
               registrationNumber={addFormData.registrationNumber}
-              vahanVerified={Boolean(addFormData.vahanVerifiedAt || addFormData.vahanSnapshot)}
+              vahanVerified={addFormData.vahanSnapshot?.source === 'surepass'}
               vahanSnapshot={addFormData.vahanSnapshot}
               onChange={handleChecklistChange}
               onVerifyVahan={async (registrationNumber) => {
                 try {
                   const result = await verifyVahanRegistration(registrationNumber);
-                  setAddFormData((prev) => ({
-                    ...prev,
-                    registrationNumber,
-                    vahanVerifiedAt: result.snapshot?.verifiedAt || new Date().toISOString(),
-                    vahanSnapshot: result.snapshot ?? prev.vahanSnapshot,
-                    engineNumber: result.snapshot?.engineNumber || prev.engineNumber,
-                    chassisNumber: result.snapshot?.chassisNumber || prev.chassisNumber,
-                    noOfOwners: result.snapshot?.ownerCount ?? prev.noOfOwners,
-                    insuranceValidity: result.snapshot?.insuranceUpto || prev.insuranceValidity,
-                  }));
+                  setAddFormData((prev) =>
+                    applyVahanVerifyToVehicleFields(prev, registrationNumber, result),
+                  );
                   notify(
                     result.verified ? 'RC verified' : result.message || 'RC saved',
                     result.verified ? 'success' : 'warning',
                   );
+                  return {
+                    verified: result.verified,
+                    message: result.message,
+                  };
                 } catch (e) {
-                  notify(e instanceof Error ? e.message : 'Verification failed', 'error');
+                  const message = e instanceof Error ? e.message : 'Verification failed';
+                  notify(message, 'error');
+                  return { verified: false, message };
                 }
               }}
             />
@@ -2852,7 +3087,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             <p className="text-xs text-gray-600 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
               {t(
                 'sellerListing.photoGuide.syncedHint',
-                'Photos from the mandatory checklist (§1.3) appear here automatically. Tap below only for extra shots.',
+                'Photos from the mandatory checklist (Â§1.3) appear here automatically. Tap below only for extra shots.',
               )}
             </p>
 
@@ -3015,7 +3250,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           style={{ background: 'rgba(15,23,42,0.05)', border: '1px solid rgba(15,23,42,0.06)' }}
           aria-label={t('common.close')}
         >
-          ✕
+          ×
         </button>
       </div>
     );
@@ -3063,15 +3298,26 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       const numericFields = ['year', 'price', 'mileage', 'noOfOwners', 'registrationYear'];
       setEditFormData(prev => {
         if (!prev) return prev;
-        return {
+        const next = {
           ...prev,
           [name]: numericFields.includes(name)
             ? (() => {
                 const digits = parseIndianNumberDigits(String(value));
                 return digits === '' ? 0 : Number(digits);
               })()
-            : value
+            : value,
         };
+        if (name === 'category') {
+          next.make = '';
+          next.model = '';
+          next.variant = '';
+        } else if (name === 'make') {
+          next.model = '';
+          next.variant = '';
+        } else if (name === 'model') {
+          next.variant = '';
+        }
+        return next;
       });
       // Clear error when user starts typing
       if (editErrors[name]) {
@@ -3086,6 +3332,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     const validateForm = (): boolean => {
       const newErrors: Record<string, string> = {};
       
+      if (!formData.category) {
+        newErrors.category = t('sellerListing.error.categoryRequired', 'Please select a category.');
+      }
       if (!formData.make || formData.make.trim() === '') {
         newErrors.make = t('sellerListing.error.makeRequired');
       }
@@ -3164,36 +3413,21 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           {/* Basic Information */}
           <div className="space-y-4">
             <h4 className="font-semibold text-gray-900 border-b pb-2">{t('sellerListing.section.basic')}</h4>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('sellerListing.label.make')} <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="make"
-                value={formData.make}
-                onChange={handleChange}
-                className={`w-full px-3 py-2 border rounded-lg ${editErrors.make ? 'border-red-500' : 'border-gray-300'}`}
-                required
-              />
-              {editErrors.make && <p className="text-red-500 text-xs mt-1">{editErrors.make}</p>}
-          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('sellerListing.label.model')} <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="model"
-                value={formData.model}
-                onChange={handleChange}
-                className={`w-full px-3 py-2 border rounded-lg ${editErrors.model ? 'border-red-500' : 'border-gray-300'}`}
-                required
-              />
-              {editErrors.model && <p className="text-red-500 text-xs mt-1">{editErrors.model}</p>}
-            </div>
+            <VehicleIdentityFields
+              category={formData.category || ''}
+              make={formData.make}
+              model={formData.model}
+              variant={formData.variant || ''}
+              categories={addVehicleCategories}
+              makes={editAvailableMakes}
+              models={editAvailableModels}
+              variants={editAvailableVariants}
+              errors={editErrors}
+              onChange={handleChange}
+              selectClassName="w-full px-3 py-2 border rounded-lg border-gray-300 bg-white"
+              t={t}
+            />
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -3209,19 +3443,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   required
                 />
                 {editErrors.year && <p className="text-red-500 text-xs mt-1">{editErrors.year}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('sellerListing.label.variant')}
-                </label>
-                <input
-                  type="text"
-                  name="variant"
-                  value={formData.variant || ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
               </div>
             </div>
 
@@ -3486,7 +3707,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               value={formData.sellerDisclosureChecklist}
               sellerEmail={currentUser.email}
               registrationNumber={formData.registrationNumber}
-              vahanVerified={Boolean(formData.vahanVerifiedAt || formData.vahanSnapshot)}
+              vahanVerified={formData.vahanSnapshot?.source === 'surepass'}
               vahanSnapshot={formData.vahanSnapshot}
               onChange={handleEditChecklistChange}
               onVerifyVahan={async (registrationNumber) => {
@@ -3497,24 +3718,21 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   );
                   setEditFormData((prev) =>
                     prev
-                      ? {
-                          ...prev,
-                          registrationNumber,
-                          vahanVerifiedAt: result.snapshot?.verifiedAt || new Date().toISOString(),
-                          vahanSnapshot: result.snapshot ?? prev.vahanSnapshot,
-                          engineNumber: result.snapshot?.engineNumber || prev.engineNumber,
-                          chassisNumber: result.snapshot?.chassisNumber || prev.chassisNumber,
-                          noOfOwners: result.snapshot?.ownerCount ?? prev.noOfOwners,
-                          insuranceValidity: result.snapshot?.insuranceUpto || prev.insuranceValidity,
-                        }
+                      ? applyVahanVerifyToVehicleFields(prev, registrationNumber, result)
                       : prev,
                   );
                   notify(
                     result.verified ? 'RC verified' : result.message || 'RC saved',
                     result.verified ? 'success' : 'warning',
                   );
+                  return {
+                    verified: result.verified,
+                    message: result.message,
+                  };
                 } catch (e) {
-                  notify(e instanceof Error ? e.message : 'Verification failed', 'error');
+                  const message = e instanceof Error ? e.message : 'Verification failed';
+                  notify(message, 'error');
+                  return { verified: false, message };
                 }
               }}
             />
@@ -4036,7 +4254,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
         {/* App version footer */}
         <p className="text-center text-[10.5px] text-slate-400 font-medium tracking-wide pt-2">
-          Reride · Premium Seller Hub
+          Reride Â· Premium Seller Hub
         </p>
       </div>
     );
@@ -4061,140 +4279,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   return (
     <div className="w-full bg-gradient-to-b from-gray-50 to-white min-h-screen">
-      {/* Premium Dashboard Header — Obsidian luxe */}
-      {(() => {
-        const headerUnread = notifications.filter(n => n && n.recipientEmail === currentUser.email && !n.isRead).length;
-        const todayLabel = new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'short', day: 'numeric' });
-        const hr = new Date().getHours();
-        const greeting = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
-        const firstName = currentUser.name?.split(' ')[0] || 'there';
-        const initials = (currentUser.name || 'U').split(' ').map(s => s.charAt(0)).slice(0, 2).join('').toUpperCase();
-        return (
-          <div
-            className="px-5 sticky top-0 z-30 safe-top relative overflow-hidden"
-            style={{
-              top: '0px',
-              paddingTop: 'max(1.1rem, env(safe-area-inset-top, 0px))',
-              paddingBottom: '1.25rem',
-              background: 'linear-gradient(180deg, #0B0B0F 0%, #16161D 70%, #1C1C24 100%)',
-              boxShadow: '0 10px 30px -12px rgba(0,0,0,0.55)'
-            }}
-          >
-            {/* Subtle radial glow accents */}
-            <div aria-hidden className="pointer-events-none absolute inset-0">
-              <div className="absolute -top-24 -left-20 w-72 h-72 rounded-full" style={{ background: 'radial-gradient(closest-side, rgba(255,107,53,0.18), transparent 70%)' }} />
-              <div className="absolute -bottom-24 -right-16 w-72 h-72 rounded-full" style={{ background: 'radial-gradient(closest-side, rgba(168,135,255,0.10), transparent 70%)' }} />
-              <div className="absolute inset-x-0 bottom-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent)' }} />
-            </div>
-
-            {/* Top utility row */}
-            <div className="relative z-10 flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-8 h-8 rounded-lg grid place-items-center"
-                  style={{
-                    background: 'linear-gradient(135deg, #FF8456 0%, #FF6B35 100%)',
-                    boxShadow: '0 6px 14px rgba(255,107,53,0.35), inset 0 1px 0 rgba(255,255,255,0.25)'
-                  }}
-                >
-                  <span className="text-white font-black text-[11px] tracking-[0.18em]">RR</span>
-                </div>
-                <div className="flex flex-col leading-none">
-                  <span className="text-[10px] uppercase tracking-[0.22em] text-white/45 font-semibold">Reride</span>
-                  <span className="text-[11px] text-white/70 font-medium mt-0.5">{todayLabel}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('notifications')}
-                  aria-label={`Notifications${headerUnread ? `, ${headerUnread} unread` : ''}`}
-                  className="relative w-10 h-10 rounded-full grid place-items-center text-white/85 active:scale-95 transition-transform"
-                  style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.10)',
-                    backdropFilter: 'blur(10px)',
-                    WebkitBackdropFilter: 'blur(10px)'
-                  }}
-                >
-                  <IconBell size={18} stroke={1.6} />
-                  {headerUnread > 0 && (
-                    <span
-                      className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white grid place-items-center"
-                      style={{
-                        background: 'linear-gradient(135deg, #FF6B35, #E5482C)',
-                        boxShadow: '0 0 0 2px #0B0B0F'
-                      }}
-                    >
-                      {headerUnread > 9 ? '9+' : headerUnread}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('settings')}
-                  aria-label="Settings"
-                  className="w-10 h-10 rounded-full grid place-items-center text-white/85 active:scale-95 transition-transform"
-                  style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.10)',
-                    backdropFilter: 'blur(10px)',
-                    WebkitBackdropFilter: 'blur(10px)'
-                  }}
-                >
-                  <IconSettings size={18} stroke={1.6} />
-                </button>
-              </div>
-            </div>
-
-            {/* Greeting block */}
-            <div className="relative z-10 flex items-end justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-white/45 font-semibold mb-1.5">{greeting}</p>
-                <h1
-                  className="text-white font-semibold truncate"
-                  style={{ fontSize: '26px', lineHeight: 1.1, letterSpacing: '-0.03em' }}
-                >
-                  {firstName}
-                  <span className="text-white/40 font-light">.</span>
-                </h1>
-                <p className="mt-2 text-[12.5px] text-white/55 font-medium">
-                  {isSeller
-                    ? `${activeListings} active · ${totalViews.toLocaleString('en-IN')} views today`
-                    : isAdmin ? 'Platform overview' : 'Your car journey'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('profile')}
-                aria-label="Open profile"
-                className="relative shrink-0"
-              >
-                <span
-                  className="absolute -inset-[3px] rounded-2xl"
-                  style={{ background: 'conic-gradient(from 140deg, #FF8456, #FF6B35, #C7411F, #FF8456)' }}
-                />
-                <span
-                  className="relative w-12 h-12 rounded-2xl grid place-items-center font-bold text-white text-[15px] tracking-tight"
-                  style={{
-                    background: 'linear-gradient(160deg, #1F1F28 0%, #0E0E13 100%)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)'
-                  }}
-                >
-                  {initials}
-                </span>
-              </button>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Premium Tab Navigation — Refined pills */}
       <div
-        className="px-4 sticky z-20"
+        className="px-4 sticky z-20 safe-top"
         style={{
-          top: 'calc(env(safe-area-inset-top, 0px) + 132px)',
+          top: 'env(safe-area-inset-top, 0px)',
           background: 'rgba(255,255,255,0.85)',
           backdropFilter: 'saturate(180%) blur(14px)',
           WebkitBackdropFilter: 'saturate(180%) blur(14px)',
@@ -4218,7 +4307,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   letterSpacing: '-0.01em'
                 }}
               >
-                <span className="text-[15px] leading-none">{tab.icon}</span>
+                <span className="inline-flex shrink-0 items-center justify-center leading-none">{tab.icon}</span>
                 <span>{tab.label}</span>
                 {tab.count !== null && tab.count > 0 && (
                   <span

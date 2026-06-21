@@ -47,7 +47,7 @@ export async function getBuyerActivityFromSupabase(userId: string): Promise<{ su
 
     return { success: true, data: result || undefined };
   } catch (error) {
-    console.error('Error getting buyer activity from Supabase:', error);
+    console.warn('Could not load buyer activity from API, using local fallback:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }

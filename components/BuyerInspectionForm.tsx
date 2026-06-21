@@ -41,6 +41,7 @@ export const BuyerInspectionForm: React.FC<BuyerInspectionFormProps> = ({
   );
   const [generalNotes, setGeneralNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [flaggedCount, setFlaggedCount] = useState(0);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({ 'core.docs': true });
@@ -81,13 +82,21 @@ export const BuyerInspectionForm: React.FC<BuyerInspectionFormProps> = ({
 
   const handleSubmit = async () => {
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const result = await submitBuyerInspection(vehicleId, items, generalNotes, category);
       setFlaggedCount(result.flaggedCount);
       setDone(true);
       onSubmitted?.(result.flaggedCount);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to save inspection');
+      const message = e instanceof Error ? e.message : 'Failed to save inspection';
+      if (
+        /authentication|session|unauthorized|log in/i.test(message) &&
+        onRequireLogin
+      ) {
+        onRequireLogin();
+      }
+      setSubmitError(message);
     } finally {
       setSubmitting(false);
     }
@@ -184,6 +193,12 @@ export const BuyerInspectionForm: React.FC<BuyerInspectionFormProps> = ({
         rows={2}
         className="w-full px-3 py-2 text-sm border rounded-lg"
       />
+
+      {submitError && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2" role="alert">
+          {submitError}
+        </p>
+      )}
 
       <button
         type="button"

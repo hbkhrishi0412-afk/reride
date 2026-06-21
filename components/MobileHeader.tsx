@@ -25,6 +25,8 @@ interface MobileHeaderProps {
    * service-provider dashboard / logout, even if no `currentUser` is set.
    */
   serviceProvider?: { name?: string; email?: string } | null;
+  /** When false, only the slide-out menu renders (no fixed title bar). */
+  showTitleBar?: boolean;
 }
 
 /**
@@ -45,6 +47,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
   unreadNotificationCount = 0,
   compareCount = 0,
   serviceProvider = null,
+  showTitleBar = true,
 }) => {
   const { t } = useTranslation();
   const [internalShowMenu, setInternalShowMenu] = useState(false);
@@ -66,10 +69,12 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
     currentView === ViewEnum.SELLER_LOGIN ||
     currentView === ViewEnum.ADMIN_LOGIN
   );
+  const showDefaultHeaderActions =
+    rightAction === undefined && currentView !== ViewEnum.DETAIL;
 
   return (
     <>
-      {/* Premium Mobile Header with Glassmorphism */}
+      {showTitleBar && (
       <header
         className="fixed left-0 right-0 z-[50] h-14"
         data-testid="mobile-header"
@@ -144,7 +149,9 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
 
           {/* Right Section */}
           <div className="flex items-center gap-2">
-            {rightAction || (
+            {rightAction !== undefined ? (
+              rightAction
+            ) : showDefaultHeaderActions ? (
               <>
                 {/* Search Icon — shortcut to Browse Cars for screens that
                     don't have their own search bar. Hidden on USED_CARS /
@@ -244,10 +251,11 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                   </button>
                 )}
               </>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
+      )}
 
       {/* Slide-out Menu */}
       {showMenu && (

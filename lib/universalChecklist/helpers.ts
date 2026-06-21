@@ -32,6 +32,25 @@ export function photoRequiredForItem(
   return false;
 }
 
+/** Seller-facing completion — upload and/or enter details; no Pass/Fail/N/A UI. */
+export function isSellerItemComplete(
+  def: UniversalChecklistItemDef,
+  item: ChecklistItemResponse | undefined,
+): boolean {
+  if (!item) return false;
+  if (def.photoRequired === true) {
+    return Boolean(item.photoUrl?.trim());
+  }
+  if (def.photoRequired === 'if_applicable') {
+    return item.status === 'na' || Boolean(item.photoUrl?.trim());
+  }
+  return Boolean(item.notes?.trim()) || item.status === 'na';
+}
+
+export function sellerItemNeedsPhotoUpload(def: UniversalChecklistItemDef): boolean {
+  return def.photoRequired === true || def.photoRequired === 'if_applicable';
+}
+
 export function computeListingTier(
   checklist: UniversalSellerChecklist | undefined | null,
   category: VehicleCategory,
@@ -40,8 +59,8 @@ export function computeListingTier(
   const sellerDefs = getSellerDefinitions(category);
   for (const def of sellerDefs) {
     const item = checklist.items.find((i) => i.id === def.id);
-    if (!item?.status) return 'basic';
-    if (photoRequiredForItem(def, item.status) && !item.photoUrl?.trim()) {
+    if (!isSellerItemComplete(def, item)) return 'basic';
+    if (item?.status && photoRequiredForItem(def, item.status) && !item.photoUrl?.trim()) {
       return 'basic';
     }
   }
@@ -62,11 +81,15 @@ export function validateSellerChecklist(
 
   for (const def of sellerDefs) {
     const item = checklist.items.find((i) => i.id === def.id);
-    if (!item?.status) {
-      errors.push(`${def.label}: select Pass, Fail, or N/A`);
+    if (!isSellerItemComplete(def, item)) {
+      errors.push(
+        def.photoRequired === true || def.photoRequired === 'if_applicable'
+          ? `${def.label}: upload required photo or mark not applicable`
+          : `${def.label}: enter required details`,
+      );
       continue;
     }
-    if (photoRequiredForItem(def, item.status) && !String(item.photoUrl ?? '').trim()) {
+    if (photoRequiredForItem(def, item!.status) && !String(item!.photoUrl ?? '').trim()) {
       errors.push(`${def.label}: photo evidence required`);
     }
   }
