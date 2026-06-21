@@ -4,7 +4,11 @@ import PasswordInput from './PasswordInput.js';
 import { isTokenLikelyValid, refreshAuthToken, getAuthHeaders } from '../utils/authenticatedFetch.js';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
 import { logout as rerideLogout } from '../services/userService.js';
-import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
+import {
+  buildSellerQrCodeUrl,
+  buildSellerShareUrl,
+  sellerQrDownloadFileName,
+} from '../utils/sellerQrCode';
 
 interface ProfileProps {
   currentUser: User;
@@ -770,9 +774,8 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                             <h3 className="text-sm font-semibold text-gray-900">Seller Share Link & QR</h3>
                           </div>
                           {(() => {
-                            const origin = getPublicWebOriginForShareLinks();
-                            const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
-                            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(shareUrl)}`;
+                            const shareUrl = buildSellerShareUrl(currentUser.email);
+                            const qrUrl = buildSellerQrCodeUrl(shareUrl, 240);
                             return (
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                                 <div className="md:col-span-2">
@@ -798,7 +801,9 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                                   <img src={qrUrl} alt="Seller QR code" className="w-40 h-40 border rounded-lg bg-white" />
                                   <a
                                     href={qrUrl}
-                                    download={`seller-qr-${(currentUser.dealershipName || currentUser.name || 'profile').toString().replace(/\\s+/g,'-')}.png`}
+                                    download={sellerQrDownloadFileName(
+                                      (currentUser.dealershipName || currentUser.name || 'profile').toString(),
+                                    )}
                                     className="mt-2 text-xs text-blue-600 hover:underline"
                                   >
                                     Download QR

@@ -48,6 +48,7 @@ export function computeListingTier(
   return 'verified';
 }
 
+/** Checklist completion hints — publishing is never blocked; tier reflects how complete it is. */
 export function validateSellerChecklist(
   checklist: UniversalSellerChecklist | undefined | null,
   category: VehicleCategory,
@@ -56,11 +57,7 @@ export function validateSellerChecklist(
   const sellerDefs = getSellerDefinitions(category);
 
   if (!checklist?.items?.length) {
-    return {
-      valid: false,
-      errors: ['Complete the Universal Vehicle Listing Checklist (Core + category add-on) before publishing.'],
-      tier: 'basic',
-    };
+    return { valid: true, errors, tier: 'basic' };
   }
 
   for (const def of sellerDefs) {
@@ -75,7 +72,7 @@ export function validateSellerChecklist(
   }
 
   const tier = computeListingTier(checklist, category);
-  return { valid: errors.length === 0, errors, tier };
+  return { valid: true, errors, tier };
 }
 
 export function buildEmptySellerResponses(category: VehicleCategory): ChecklistItemResponse[] {
@@ -120,21 +117,12 @@ export function compareBuyerToSellerUniversal(
 ): string[] {
   if (!seller?.items?.length) return [];
   const flagged: string[] = [];
-  const defs = getAllDefinitionsForCategory(category);
 
   for (const buyerItem of buyerItems) {
-    if (!buyerItem.matchesSellerClaim) {
-      flagged.push(buyerItem.id);
-      continue;
-    }
+    if (!buyerItem.status) continue;
     const sellerItem = seller.items.find((s) => s.id === buyerItem.id);
-    if (!sellerItem?.status || !buyerItem.status) continue;
+    if (!sellerItem?.status) continue;
     if (sellerItem.status !== buyerItem.status) {
-      flagged.push(buyerItem.id);
-      continue;
-    }
-    const def = defs.find((d) => d.id === buyerItem.id);
-    if (def && isSellerRole(def.filledBy) && sellerItem.status === 'pass' && buyerItem.status === 'fail') {
       flagged.push(buyerItem.id);
     }
   }
@@ -149,7 +137,6 @@ export function buildEmptyBuyerResponses(category: VehicleCategory): BuyerInspec
       status: '' as ChecklistItemStatus,
       notes: '',
       photoUrl: '',
-      matchesSellerClaim: true,
     }));
 }
 

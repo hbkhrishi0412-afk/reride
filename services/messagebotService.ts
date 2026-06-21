@@ -116,3 +116,70 @@ export async function sendMessageBotOTP(
     return { success: false, error: msg };
   }
 }
+
+/**
+ * Transactional SMS (seller inquiry / test drive alerts).
+ * messageType 1 = transactional on most MessageBot accounts; override with env if needed.
+ */
+export async function sendMessageBotTransactionalSMS(
+  phoneE164: string,
+  messageText: string,
+  config: MessageBotConfig,
+): Promise<MessageBotSendResult> {
+  try {
+    const destinationAddress = toMessageBotDestination(phoneE164);
+    const alertDltId = process.env.MESSAGEBOT_SELLER_ALERT_DLT_TEMPLATE_ID?.trim();
+    const messageType = process.env.MESSAGEBOT_SELLER_ALERT_MESSAGE_TYPE?.trim() || '1';
+
+    const body: Record<string, string> = {
+      apiToken: config.apiToken,
+      messageType,
+      messageEncoding: '1',
+      destinationAddress,
+      sourceAddress: config.senderId,
+      messageText: messageText.slice(0, 160),
+      userReferenceId: `reride-alert-${Date.now()}`,
+    };
+
+    if (config.dltEntityId) {
+      body.dltEntityId = config.dltEntityId;
+    }
+    if (alertDltId) {
+      body.dltEntityTemplateId = alertDltId;
+    } else if (config.dltTemplateId) {
+      body.dltEntityTemplateId = config.dltTemplateId;
+    }
+
+    const response = await fetch(config.apiUrl || 'https://papi.messagebot.in/SendSmsV2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const raw = await response.text();
+    let json: Record<string, unknown>;
+    try {
+      json = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return {
+        success: false,
+        error: `MessageBot: invalid JSON (${response.status}): ${raw.slice(0, 200)}`,
+      };
+    }
+
+    const op = json.OperationCode;
+    const status = json.Status;
+    if (response.ok && op === 0 && status === 'Success') {
+      return { success: true };
+    }
+
+    const remarks = typeof json.Remarks === 'string' ? json.Remarks : '';
+    return {
+      success: false,
+      error: remarks || `MessageBot error (HTTP ${response.status})`,
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Failed to send transactional SMS via MessageBot';
+    return { success: false, error: msg };
+  }
+}

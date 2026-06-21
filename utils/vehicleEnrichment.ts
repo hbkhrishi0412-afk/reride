@@ -63,12 +63,6 @@ export const enrichVehiclesWithSellerInfo = (vehicles: Vehicle[], users: User[])
   });
 };
 
-/**
- * Enriches a single vehicle with seller information
- * @param vehicle Single vehicle
- * @param users Array of users
- * @returns Vehicle with populated seller information
- */
 export const enrichVehicleWithSellerInfo = (vehicle: Vehicle, users: User[]): Vehicle => {
   // Defensive checks
   if (!vehicle) {
@@ -124,3 +118,22 @@ export const enrichVehicleWithSellerInfo = (vehicle: Vehicle, users: User[]): Ve
     sellerRatingCount: vehicle.sellerRatingCount || 0
   };
 };
+
+/** Session cache strips sellerEmail; restore from live catalog when opening detail. */
+export function resolveVehicleSellerEmail(
+  vehicle: Vehicle | null | undefined,
+  catalog: Vehicle[] | undefined,
+): string {
+  const fromVehicle = (vehicle?.sellerEmail || '').trim();
+  if (fromVehicle) return fromVehicle;
+
+  if (!vehicle || !catalog?.length) return '';
+
+  const match = catalog.find(
+    (v) =>
+      v &&
+      (v.id === vehicle.id ||
+        (vehicle.databaseId != null && v.databaseId === vehicle.databaseId)),
+  );
+  return (match?.sellerEmail || '').trim();
+}

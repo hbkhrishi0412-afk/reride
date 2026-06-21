@@ -6,6 +6,7 @@ import LanguageSwitcher from './LanguageSwitcher';
 interface MobileBrandTopBarProps {
   onNavigate: (view: ViewEnum) => void;
   wishlistCount?: number;
+  compareCount?: number;
   onLogin?: () => void;
   showLogin?: boolean;
 }
@@ -16,6 +17,7 @@ interface MobileBrandTopBarProps {
 const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
   onNavigate,
   wishlistCount = 0,
+  compareCount = 0,
   onLogin,
   showLogin = false,
 }) => {
@@ -52,6 +54,37 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
               {t('nav.login')}
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={() => onNavigate(ViewEnum.COMPARISON)}
+            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-800 shadow-sm transition-colors hover:bg-gray-50 active:scale-95"
+            aria-label={
+              compareCount > 0
+                ? t('nav.compareCount', { count: compareCount })
+                : t('compare.pageTitle')
+            }
+            data-testid="mobile-brand-compare-button"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.75}
+                d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
+              />
+            </svg>
+            {compareCount > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
+                {compareCount}
+              </span>
+            )}
+          </button>
           <button
             type="button"
             onClick={() => onNavigate(ViewEnum.WISHLIST)}

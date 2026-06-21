@@ -261,15 +261,15 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
   };
 
   const trustSignals = [
-    { value: '50k+', label: 'Happy customers' },
-    { value: '₹25Cr+', label: 'Worth of cars sold' },
-    { value: '120+', label: 'Cities covered' }
+    { value: 'Free', label: 'To list your vehicle' },
+    { value: 'Direct', label: 'Buyer contact' },
+    { value: 'Pan-India', label: 'City coverage' }
   ];
 
   const heroHighlights = [
     { title: 'Instant valuation', desc: '90% cars get a price in under 2 minutes.' },
     { title: 'Doorstep inspection', desc: 'Free pickup & RC transfer included.' },
-    { title: 'Trusted by sellers', desc: '50,000+ happy owners across India.' }
+    { title: 'Transparent listings', desc: 'Add RC, photos, and details buyers can verify.' }
   ];
 
   const getBrandLogo = (brandName: string): string => {

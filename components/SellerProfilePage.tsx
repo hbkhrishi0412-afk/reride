@@ -6,6 +6,8 @@ import BadgeDisplay from './BadgeDisplay.js';
 import TrustBadgeDisplay from './TrustBadgeDisplay.js';
 import VerifiedBadge, { isUserVerified } from './VerifiedBadge.js';
 import { getSellerTrustChecklistSummary } from '../lib/sellerTrustChecklist.js';
+import { useApp } from './AppProvider.js';
+import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import { followSeller, unfollowSeller, isFollowingSeller, getFollowersCount, getFollowingCount, getFollowersOfSeller, getFollowedSellers } from '../services/buyerEngagementService.js';
 
 /* ============================================================
@@ -460,6 +462,7 @@ interface SellerProfilePageProps {
 }
 
 const SellerProfilePageContent: React.FC<SellerProfilePageProps & { seller: User }> = ({ seller, vehicles, onSelectVehicle, comparisonList, onToggleCompare, wishlist, onToggleWishlist, onBack, onViewSellerProfile, currentUser, onRequireLogin }) => {
+    const { comparisonCategory } = useApp();
     const [searchQuery, setSearchQuery] = useState('');
     // Restore logged-in user from storage (used to gate owner-only views)
     let storedUser: User | null = null;
@@ -897,7 +900,7 @@ const SellerProfilePageContent: React.FC<SellerProfilePageProps & { seller: User
                                         isSelectedForCompare={comparisonList.includes(vehicle.id)}
                                         onToggleWishlist={guardWishlist}
                                         isInWishlist={wishlist.includes(vehicle.id)}
-                                        isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
+                                        isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
                                         onViewSellerProfile={onViewSellerProfile}
                                     />
                                 ))}

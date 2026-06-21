@@ -284,6 +284,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       );
       if (result.success && result.user) {
         setShowGoogleRolePicker(false);
+        setRememberMePreference(rememberMe);
         onLogin(result.user);
       } else {
         setError(result.reason || t('auth.error.googleSignInFailed'));
@@ -449,6 +450,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       );
       if (flowError) {
         throw new Error(flowError);
+      }
+      if (mode === 'login') {
+        setRememberMePreference(rememberMe);
+      } else {
+        setRememberMePreference(true);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : t('auth.error.googleSignInFailed');
@@ -960,15 +966,15 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
             {isLogin && (
               <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center cursor-pointer">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     id="mobile-remember"
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded cursor-pointer"
+                    className="shrink-0"
                   />
-                  <span className="ml-2 text-gray-700">{t('auth.rememberMe')}</span>
+                  <span className="text-gray-700 leading-none">{t('auth.rememberMe')}</span>
                 </label>
                 <button
                   type="button"
@@ -1389,16 +1395,16 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
             {isLogin && (
               <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center cursor-pointer">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     id="remember-me"
                     name="remember-me"
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded cursor-pointer"
+                    className="shrink-0"
                   />
-                  <span className="ml-2 text-gray-700">{t('auth.rememberMe')}</span>
+                  <span className="text-gray-700 leading-none">{t('auth.rememberMe')}</span>
                 </label>
                 <button
                   type="button"

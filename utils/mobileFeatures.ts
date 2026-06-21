@@ -200,6 +200,28 @@ export interface CameraOptions {
   maxHeight?: number;
 }
 
+async function webPathToDataUrl(webPath: string): Promise<string | null> {
+  try {
+    const response = await fetch(webPath);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+      reader.onerror = () => reject(new Error('Failed to read image'));
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function nativeCameraSource(sourceType?: CameraOptions['sourceType']) {
+  if (sourceType === 'library') return 'Photos' as const;
+  if (sourceType === 'camera') return 'Camera' as const;
+  return 'Prompt' as const;
+}
+
 /**
  * Capture photo from camera or select from library
  */
@@ -208,14 +230,18 @@ export async function capturePhoto(options: CameraOptions = {}): Promise<string 
     const { Capacitor } = await import('@capacitor/core');
     if (Capacitor.isNativePlatform()) {
       const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
+      const sourceKey = nativeCameraSource(options.sourceType);
+      const source =
+        sourceKey === 'Photos'
+          ? CameraSource.Photos
+          : sourceKey === 'Camera'
+            ? CameraSource.Camera
+            : CameraSource.Prompt;
       const photo = await Camera.getPhoto({
         quality: Math.round((options.quality ?? 0.85) * 100),
         allowEditing: options.allowEdit ?? false,
         resultType: CameraResultType.Base64,
-        source:
-          options.sourceType === 'library'
-            ? CameraSource.Photos
-            : CameraSource.Camera,
+        source,
       });
       const base64 = photo.base64String;
       if (base64) {
@@ -257,9 +283,30 @@ export async function capturePhoto(options: CameraOptions = {}): Promise<string 
 }
 
 /**
- * Capture multiple photos
+ * Capture multiple photos (native gallery picker on Capacitor, file input elsewhere).
  */
 export async function capturePhotos(count: number = 5, options: CameraOptions = {}): Promise<string[]> {
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (Capacitor.isNativePlatform() && options.sourceType !== 'camera') {
+      const { Camera } = await import('@capacitor/camera');
+      const { photos } = await Camera.pickImages({
+        quality: Math.round((options.quality ?? 0.85) * 100),
+        limit: Math.max(1, count),
+      });
+      const dataUrls: string[] = [];
+      for (const photo of photos.slice(0, count)) {
+        const path = photo.webPath || (photo.path ? Capacitor.convertFileSrc(photo.path) : '');
+        if (!path) continue;
+        const dataUrl = await webPathToDataUrl(path);
+        if (dataUrl) dataUrls.push(dataUrl);
+      }
+      if (dataUrls.length > 0) return dataUrls;
+    }
+  } catch (e) {
+    console.warn('[ReRide] Native pickImages unavailable, using file picker:', e);
+  }
+
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -374,41 +421,27 @@ export interface LocationOptions {
 }
 
 /**
- * Get current location with native GPS
+ * Get current location with native GPS (Capacitor) or browser fallback.
  */
 export async function getCurrentLocation(
   options: LocationOptions = {}
 ): Promise<LocationCoordinates | null> {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      console.warn('Geolocation is not supported');
-      resolve(null);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          altitude: position.coords.altitude || undefined,
-          altitudeAccuracy: position.coords.altitudeAccuracy || undefined,
-          heading: position.coords.heading || undefined,
-          speed: position.coords.speed || undefined
-        });
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
-        resolve(null);
-      },
-      {
-        enableHighAccuracy: options.enableHighAccuracy ?? true,
-        timeout: options.timeout ?? 10000,
-        maximumAge: options.maximumAge ?? 60000
-      }
-    );
-  });
+  try {
+    const { getCurrentPositionUnified } = await import('./getCurrentPositionUnified.js');
+    const position = await getCurrentPositionUnified();
+    return {
+      lat: position.coords.latitude,
+      lng: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+      altitude: position.coords.altitude ?? undefined,
+      altitudeAccuracy: position.coords.altitudeAccuracy ?? undefined,
+      heading: position.coords.heading ?? undefined,
+      speed: position.coords.speed ?? undefined,
+    };
+  } catch (error) {
+    console.error('Geolocation error:', error);
+    return null;
+  }
 }
 
 /**

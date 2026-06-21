@@ -20,6 +20,7 @@ interface MobileLayoutProps {
   onLogout: () => void;
   wishlistCount?: number;
   inboxCount?: number;
+  compareCount?: number;
   /** Unread in-app notifications (Activity); drives header bell dot. */
   unreadNotificationCount?: number;
   /**
@@ -52,6 +53,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   onLogout,
   wishlistCount = 0,
   inboxCount = 0,
+  compareCount = 0,
   unreadNotificationCount = 0,
   serviceProvider = null,
 }) => {
@@ -106,6 +108,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
         <MobileBrandTopBar
           onNavigate={onNavigate}
           wishlistCount={wishlistCount}
+          compareCount={compareCount}
           showLogin={!currentUser && !serviceProvider}
           onLogin={() => onNavigate(ViewEnum.LOGIN_PORTAL)}
         />
@@ -123,6 +126,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
           showMenu={showMenu}
           onToggleMenu={() => setShowMenu(!showMenu)}
           unreadNotificationCount={unreadNotificationCount}
+          compareCount={compareCount}
           serviceProvider={serviceProvider}
         />
       )}

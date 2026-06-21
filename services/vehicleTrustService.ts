@@ -17,7 +17,14 @@ const BASE = '/api/vehicle-trust';
 async function parseJson<T>(response: Response): Promise<T> {
   const data = await response.json();
   if (!response.ok) {
-    throw new Error((data as { reason?: string }).reason || 'Request failed');
+    const reason = (data as { reason?: unknown }).reason;
+    const message =
+      typeof reason === 'string'
+        ? reason
+        : reason && typeof reason === 'object' && 'message' in reason && typeof (reason as { message: unknown }).message === 'string'
+          ? (reason as { message: string }).message
+          : 'Request failed';
+    throw new Error(message);
   }
   return data as T;
 }

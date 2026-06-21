@@ -4,6 +4,8 @@ import { getCityStats } from '../services/locationService';
 import { useIsMobileApp } from '../hooks/useIsMobileApp';
 import VehicleCard from './VehicleCard';
 import MobileVehicleCard from './MobileVehicleCard';
+import { useApp } from './AppProvider';
+import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 
 interface CityLandingPageProps {
   city: string;
@@ -27,6 +29,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
   onViewSellerProfile,
 }) => {
   const { isMobileApp } = useIsMobileApp();
+  const { comparisonCategory } = useApp();
   const cityStats = useMemo(() => getCityStats(vehicles, city), [vehicles, city]);
   const cityVehicles = useMemo(
     () => vehicles.filter((v) => v.city === city && v.status === 'published'),
@@ -97,6 +100,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
                   onSelect={onSelectVehicle}
                   isInWishlist={wishlist.includes(vehicle.id)}
                   isInCompare={comparisonList.includes(vehicle.id)}
+                  isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
                   onToggleWishlist={() => onToggleWishlist(vehicle.id)}
                   onToggleCompare={() => onToggleCompare(vehicle.id)}
                 />
@@ -150,7 +154,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
             onToggleCompare={onToggleCompare}
             isInWishlist={wishlist.includes(vehicle.id)}
             isSelectedForCompare={comparisonList.includes(vehicle.id)}
-            isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
+            isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
             onViewSellerProfile={onViewSellerProfile}
           />
         ))}

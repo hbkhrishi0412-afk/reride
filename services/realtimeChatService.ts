@@ -278,7 +278,7 @@ class RealtimeChatService {
         console.log('✅ Message saved to database successfully');
       }
 
-      return { success: true, persisted };
+      return { success: saveResult.success, persisted, error: saveResult.error };
     } catch (error) {
       console.error('Error sending message:', error);
       return {

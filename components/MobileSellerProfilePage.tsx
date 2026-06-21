@@ -7,6 +7,8 @@ import BadgeDisplay from './BadgeDisplay';
 import TrustBadgeDisplay from './TrustBadgeDisplay';
 import { followSeller, unfollowSeller, isFollowingSeller, getFollowersCount, getFollowingCount } from '../services/buyerEngagementService';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
+import { useApp } from './AppProvider';
+import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 
 interface MobileSellerProfilePageProps {
   seller: User | null;
@@ -369,6 +371,7 @@ const MobileSellerProfilePageContent: React.FC<MobileSellerProfilePageProps & { 
   currentUser,
   onRequireLogin,
 }) => {
+  const { comparisonCategory } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   let storedUser: User | null = null;
   try {
@@ -827,7 +830,7 @@ const MobileSellerProfilePageContent: React.FC<MobileSellerProfilePageProps & { 
                       }
                       onToggleCompare(vehicle.id);
                     }}
-                    disabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
+                    disabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
                     className={`flex-1 py-2 px-4 rounded-xl font-bold text-sm inline-flex items-center justify-center gap-1.5 disabled:opacity-50 ${
                       comparisonList.includes(vehicle.id)
                         ? 'msp-btn-primary'

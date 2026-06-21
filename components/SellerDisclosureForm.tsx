@@ -15,6 +15,7 @@ import {
   mergeSellerResponses,
   photoRequiredForItem,
 } from '../lib/universalChecklist/helpers';
+import type { VahanSnapshot } from '../lib/vehicleDisclosureChecklist';
 import { uploadImages, validateImageFile } from '../services/imageUploadService';
 
 const STATUS_OPTIONS: { value: ChecklistItemStatus; label: string }[] = [
@@ -31,6 +32,7 @@ interface SellerDisclosureFormProps {
   onVerifyVahan?: (registrationNumber: string) => Promise<void>;
   registrationNumber?: string;
   vahanVerified?: boolean;
+  vahanSnapshot?: VahanSnapshot | null;
   compact?: boolean;
 }
 
@@ -42,6 +44,7 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
   onVerifyVahan,
   registrationNumber,
   vahanVerified,
+  vahanSnapshot,
   compact = false,
 }) => {
   const [items, setItems] = useState<ChecklistItemResponse[]>(() =>
@@ -103,7 +106,7 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
         <div>
           <h3 className="font-bold text-gray-900 text-base">Universal Vehicle Listing Checklist</h3>
           <p className="text-xs text-gray-600 mt-0.5">
-            Core + category add-on · Pass / Fail / N/A · Photo where marked (S)
+            Optional — complete all items for a Verified Listing badge · Pass / Fail / N/A · Photo where marked (S)
           </p>
           <p className="text-xs text-emerald-800 mt-1 font-medium">
             §1.3 photos and RC/Insurance/PUC uploads sync to your listing gallery automatically.
@@ -152,6 +155,102 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
               {verifying ? '…' : vahanVerified ? 'Re-verify' : 'Verify'}
             </button>
           </div>
+          {vahanSnapshot && (
+            <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50/60 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-purple-800 uppercase tracking-wide">
+                  {vahanVerified ? '✓ Vahan Verified' : 'RC Details'}
+                </span>
+                {vahanSnapshot.source === 'surepass' && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">
+                    Govt. records
+                  </span>
+                )}
+              </div>
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                {vahanSnapshot.registrationNumber && (
+                  <div>
+                    <dt className="text-gray-500">Registration</dt>
+                    <dd className="font-semibold text-gray-900 uppercase">{vahanSnapshot.registrationNumber}</dd>
+                  </div>
+                )}
+                {vahanSnapshot.ownerName && (
+                  <div>
+                    <dt className="text-gray-500">Owner</dt>
+                    <dd className="font-semibold text-gray-900">{vahanSnapshot.ownerName}</dd>
+                  </div>
+                )}
+                {vahanSnapshot.manufacturer && (
+                  <div>
+                    <dt className="text-gray-500">Make</dt>
+                    <dd className="font-semibold text-gray-900">{vahanSnapshot.manufacturer}</dd>
+                  </div>
+                )}
+                {vahanSnapshot.model && (
+                  <div>
+                    <dt className="text-gray-500">Model</dt>
+                    <dd className="font-semibold text-gray-900">{vahanSnapshot.model}</dd>
+                  </div>
+                )}
+                {vahanSnapshot.fuelType && (
+                  <div>
+                    <dt className="text-gray-500">Fuel</dt>
+                    <dd className="font-semibold text-gray-900">{vahanSnapshot.fuelType}</dd>
+                  </div>
+                )}
+                {vahanSnapshot.engineNumber && (
+                  <div>
+                    <dt className="text-gray-500">Engine No.</dt>
+                    <dd className="font-semibold text-gray-900 font-mono">{vahanSnapshot.engineNumber}</dd>
+                  </div>
+                )}
+                {vahanSnapshot.chassisNumber && (
+                  <div>
+                    <dt className="text-gray-500">Chassis No.</dt>
+                    <dd className="font-semibold text-gray-900 font-mono">{vahanSnapshot.chassisNumber}</dd>
+                  </div>
+                )}
+                {vahanSnapshot.ownerCount != null && (
+                  <div>
+                    <dt className="text-gray-500">Owners</dt>
+                    <dd className="font-semibold text-gray-900">{vahanSnapshot.ownerCount}</dd>
+                  </div>
+                )}
+                {vahanSnapshot.registrationDate && (
+                  <div>
+                    <dt className="text-gray-500">Reg. Date</dt>
+                    <dd className="font-semibold text-gray-900">{vahanSnapshot.registrationDate}</dd>
+                  </div>
+                )}
+                {vahanSnapshot.fitnessUpto && (
+                  <div>
+                    <dt className="text-gray-500">Fitness upto</dt>
+                    <dd className="font-semibold text-gray-900">{vahanSnapshot.fitnessUpto}</dd>
+                  </div>
+                )}
+                {vahanSnapshot.insuranceUpto && (
+                  <div>
+                    <dt className="text-gray-500">Insurance upto</dt>
+                    <dd className="font-semibold text-gray-900">{vahanSnapshot.insuranceUpto}</dd>
+                  </div>
+                )}
+                {vahanSnapshot.rtoCode && (
+                  <div>
+                    <dt className="text-gray-500">RTO</dt>
+                    <dd className="font-semibold text-gray-900">{vahanSnapshot.rtoCode}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="text-gray-500">Hypothecation</dt>
+                  <dd className="font-semibold text-gray-900">
+                    {vahanSnapshot.hypothecation
+                      ? vahanSnapshot.hypothecationBank || 'Yes'
+                      : 'None'}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          )}
         </div>
       )}
 

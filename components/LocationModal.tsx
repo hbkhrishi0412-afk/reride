@@ -6,11 +6,14 @@ import {
     getDisplayNameForCity,
     primaryLocationLabel,
 } from '../utils/cityMapping';
-import { INDIAN_STATES, CITIES_BY_STATE, CITY_COORDINATES } from '../constants/location.js';
-import { supportEmail } from '../constants/legalContact';
-import { calculateDistance } from '../services/locationService';
+import { INDIAN_STATES, CITIES_BY_STATE } from '../constants/location.js';
 import { getCurrentPositionUnified } from '../utils/getCurrentPositionUnified';
 import { isCapacitorNativeApp } from '../utils/isCapacitorNative';
+import {
+    fetchReverseGeocodeAddress,
+    labelFromNearestCatalogCoordinate,
+    resolveDisplayLocationFromAddress,
+} from '../utils/reverseGeocode';
 
 interface LocationModalProps {
     isOpen: boolean;
@@ -30,73 +33,6 @@ function formatCityAndState(
     const displayCity = getDisplayNameForCity(cityCanonical);
     const stateName = states.find((s) => s.code === stateCode)?.name;
     return stateName ? `${displayCity}, ${stateName}` : displayCity;
-}
-
-/** When reverse-geocode fails, snap to the nearest city with known coordinates (pan-India coverage). */
-function labelFromNearestCatalogCoordinate(
-  lat: number,
-  lon: number,
-  allCities: Array<{ city: string; stateCode: string }>,
-  indianStates: Array<{ name: string; code: string }>
-): string {
-  let bestName = 'Mumbai';
-  let bestD = Infinity;
-  for (const [name, c] of Object.entries(CITY_COORDINATES)) {
-    const d = calculateDistance(
-      { lat, lng: lon },
-      { lat: c.lat, lng: c.lng }
-    );
-    if (d < bestD) {
-      bestD = d;
-      bestName = name;
-    }
-  }
-  const display = getDisplayNameForCity(bestName);
-  const row = allCities.find(
-    (r) => getDisplayNameForCity(r.city).toLowerCase() === display.toLowerCase()
-  );
-  if (row) {
-    return formatCityAndState(row.city, row.stateCode, indianStates);
-  }
-  return getDisplayNameForCity(bestName);
-}
-
-/** Nominatim public policy: be gentle (≈1 req/s). Spacing is enforced between outbound calls. */
-let lastNominatimRequestAt = 0;
-const NOMINATIM_MIN_INTERVAL_MS = 1100;
-
-async function waitForNominatimSlot(): Promise<void> {
-  const elapsed = Date.now() - lastNominatimRequestAt;
-  if (elapsed < NOMINATIM_MIN_INTERVAL_MS) {
-    await new Promise((r) => setTimeout(r, NOMINATIM_MIN_INTERVAL_MS - elapsed));
-  }
-  lastNominatimRequestAt = Date.now();
-}
-
-/** Single reverse request — fast failure so we fall back to nearest catalog city (offline-friendly). */
-async function fetchNominatimReverse(latitude: number, longitude: number): Promise<Response> {
-  const buildUrl = () =>
-    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(
-      String(latitude)
-    )}&lon=${encodeURIComponent(String(longitude))}&zoom=14&addressdetails=1&accept-language=en&email=${encodeURIComponent(
-      supportEmail
-    )}`;
-
-  await waitForNominatimSlot();
-  const ac = new AbortController();
-  const httpTimeout = window.setTimeout(() => ac.abort(), 6500);
-  try {
-    return await fetch(buildUrl(), {
-      signal: ac.signal,
-      headers: {
-        'User-Agent': 'ReRide-App/1.0 (https://www.reride.co.in)',
-        Accept: 'application/json',
-        'Accept-Language': 'en,en-IN,en-GB',
-      },
-    });
-  } finally {
-    clearTimeout(httpTimeout);
-  }
 }
 
 const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentLocation, onLocationChange, addToast }) => {
@@ -355,76 +291,17 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                 if (detectGenerationRef.current !== myGen) return;
 
                 const { latitude, longitude } = position.coords;
-                const allCitiesList = Object.values(citiesByState).flat();
-                const resolveLabel = (lat: number, lon: number) =>
-                    labelFromNearestCatalogCoordinate(lat, lon, allCities, indianStates);
-                const snap = resolveLabel(latitude, longitude);
+                const snap = labelFromNearestCatalogCoordinate(latitude, longitude, allCities, indianStates);
 
-                const NOMINATIM_BUDGET_MS = 9000;
                 try {
-                    const response = await Promise.race([
-                        fetchNominatimReverse(latitude, longitude),
-                        new Promise<Response>((_, rej) =>
-                            window.setTimeout(() => rej(new Error('nominatim-timeout')), NOMINATIM_BUDGET_MS)
-                        ),
-                    ]);
-
-                    if (!response.ok) {
-                        throw new Error('Geocoding failed');
-                    }
-
-                    const contentType = response.headers.get('content-type');
-                    if (!contentType || !contentType.includes('application/json')) {
-                        throw new Error('Geocoding API returned non-JSON response');
-                    }
-
-                    const data = (await response.json()) as { address?: Record<string, string> };
-                    const address = data.address || {};
-                    const detectedCity =
-                        address.city ||
-                        address.town ||
-                        address.municipality ||
-                        address.city_district ||
-                        address.district ||
-                        address.village ||
-                        address.suburb ||
-                        address.neighbourhood ||
-                        address.locality ||
-                        address.state_district ||
-                        address.county;
-
-                    let matchedCity: string | null = null;
-                    if (detectedCity) {
-                        const dLower = String(detectedCity).toLowerCase();
-                        matchedCity =
-                            allCitiesList.find((city) => city.toLowerCase() === dLower) ||
-                            allCitiesList.find(
-                                (city) => getDisplayNameForCity(city).toLowerCase() === dLower
-                            ) ||
-                            allCitiesList.find(
-                                (city) =>
-                                    city.toLowerCase().includes(dLower) ||
-                                    dLower.includes(city.toLowerCase()) ||
-                                    getDisplayNameForCity(city).toLowerCase().includes(dLower)
-                            ) ||
-                            null;
-                    }
-
-                    const row = matchedCity
-                        ? allCities.find(
-                              (c) =>
-                                  c.city.toLowerCase() === matchedCity!.toLowerCase() ||
-                                  getDisplayNameForCity(c.city).toLowerCase() ===
-                                      getDisplayNameForCity(matchedCity!).toLowerCase()
-                          )
-                        : null;
-
-                    const displayLocation = row
-                        ? formatCityAndState(row.city, row.stateCode, indianStates)
-                        : matchedCity
-                          ? getDisplayNameForCity(matchedCity)
-                          : snap;
-
+                    const address = await fetchReverseGeocodeAddress(latitude, longitude);
+                    const displayLocation = resolveDisplayLocationFromAddress(
+                        address,
+                        allCities,
+                        indianStates,
+                        latitude,
+                        longitude,
+                    );
                     applyDetected(displayLocation);
                 } catch {
                     applyDetected(snap);
@@ -618,13 +495,29 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     }}
                 >
                     <div className="space-y-1">
-                        {/* Auto-detect city via geolocation — row tap runs detection (same as Save) */}
-                        <label
-                            className="flex items-center gap-3 rounded-lg border border-gray-200/90 bg-gray-50/90 p-3 cursor-pointer transition-colors hover:bg-gray-100/90"
+                        {/* Auto-detect city via geolocation — tap runs detection immediately */}
+                        <div
+                            role="button"
+                            tabIndex={0}
+                            className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                                selectedOption === 'detect'
+                                    ? 'border-blue-300 bg-blue-50/80'
+                                    : 'border-gray-200/90 bg-gray-50/90 hover:bg-gray-100/90'
+                            }`}
                             onClick={() => {
                                 markUserEdited();
                                 setSelectedOption('detect');
                                 setSearchTerm('');
+                                handleDetectLocation();
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    markUserEdited();
+                                    setSelectedOption('detect');
+                                    setSearchTerm('');
+                                    handleDetectLocation();
+                                }
                             }}
                         >
                             <input
@@ -632,11 +525,9 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                 name="location"
                                 value="detect"
                                 checked={selectedOption === 'detect'}
-                                onChange={() => {
-                                    markUserEdited();
-                                    setSelectedOption('detect');
-                                }}
-                                className="w-4 h-4 text-blue-600 focus:ring-blue-500 flex-shrink-0"
+                                readOnly
+                                tabIndex={-1}
+                                className="w-4 h-4 text-blue-600 focus:ring-blue-500 flex-shrink-0 pointer-events-none"
                             />
                             <div className="flex min-w-0 flex-1 items-center gap-2.5">
                                 <svg
@@ -653,7 +544,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                             {isDetecting && selectedOption === 'detect' && (
                                 <span className="flex-shrink-0 text-xs text-blue-600">{t('locationModal.detecting')}</span>
                             )}
-                        </label>
+                        </div>
 
                         {/* All of India */}
                         <label className="flex items-center gap-3 p-3 rounded-md hover:bg-gray-50 cursor-pointer">

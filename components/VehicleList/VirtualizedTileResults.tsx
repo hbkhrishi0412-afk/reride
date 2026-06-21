@@ -2,6 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { FixedSizeList as List, type ListChildComponentProps } from 'react-window';
 import type { Vehicle } from '../../types';
 import VehicleTile from '../VehicleTile';
+import { isCompareDisabledForVehicle } from '../../utils/compareList.js';
 
 const TILE_ROW_HEIGHT = 148;
 const MAX_LIST_HEIGHT = 720;
@@ -12,6 +13,7 @@ interface VirtualizedTileResultsProps {
   onToggleCompare: (id: number) => void;
   onToggleWishlist: (id: number) => void;
   comparisonList: number[];
+  comparisonCategory?: string | null;
   wishlist: number[];
   onViewSellerProfile: (sellerEmail: string) => void;
 }
@@ -22,6 +24,7 @@ type TileRowData = {
   onToggleCompare: (id: number) => void;
   onToggleWishlist: (id: number) => void;
   comparisonList: number[];
+  comparisonCategory?: string | null;
   wishlist: number[];
   onViewSellerProfile: (sellerEmail: string) => void;
 };
@@ -41,7 +44,11 @@ const TileRow = memo(({ index, style, data }: ListChildComponentProps<TileRowDat
         isSelectedForCompare={data.comparisonList.includes(vehicle.id)}
         onToggleWishlist={data.onToggleWishlist}
         isInWishlist={data.wishlist.includes(vehicle.id)}
-        isCompareDisabled={!data.comparisonList.includes(vehicle.id) && data.comparisonList.length >= 4}
+        isCompareDisabled={isCompareDisabledForVehicle(
+          vehicle,
+          data.comparisonList,
+          data.comparisonCategory ?? null,
+        )}
         onViewSellerProfile={data.onViewSellerProfile}
       />
     </div>
@@ -56,6 +63,7 @@ const VirtualizedTileResults: React.FC<VirtualizedTileResultsProps> = ({
   onToggleCompare,
   onToggleWishlist,
   comparisonList,
+  comparisonCategory = null,
   wishlist,
   onViewSellerProfile,
 }) => {
@@ -66,6 +74,7 @@ const VirtualizedTileResults: React.FC<VirtualizedTileResultsProps> = ({
       onToggleCompare,
       onToggleWishlist,
       comparisonList,
+      comparisonCategory,
       wishlist,
       onViewSellerProfile,
     }),
@@ -75,6 +84,7 @@ const VirtualizedTileResults: React.FC<VirtualizedTileResultsProps> = ({
       onToggleCompare,
       onToggleWishlist,
       comparisonList,
+      comparisonCategory,
       wishlist,
       onViewSellerProfile,
     ],

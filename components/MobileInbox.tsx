@@ -682,9 +682,16 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
             onChange={handleAttachmentSelected}
           />
           {attachError && (
-            <p className="text-xs text-red-600 px-2 pb-1" role="alert">
-              {attachError}
-            </p>
+            <div className="flex items-center justify-between gap-2 px-2 pb-1" role="alert">
+              <p className="text-xs text-red-600 flex-1">{attachError}</p>
+              <button
+                type="button"
+                className="text-xs font-semibold text-[#0084FF] shrink-0"
+                onClick={handlePickAttachment}
+              >
+                Retry
+              </button>
+            </div>
           )}
           {voiceRecorder.error && (
             <p className="text-xs text-red-600 px-2 pb-1" role="alert">

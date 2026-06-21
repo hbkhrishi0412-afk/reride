@@ -12,6 +12,14 @@ interface MobileSellCarPageProps {
   addToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
+/** Digits-only storage; display with Indian grouping (e.g. 5,00,000). */
+const formatIndianPriceInput = (digits: string): string => {
+  if (!digits) return '';
+  return Number(digits).toLocaleString('en-IN');
+};
+
+const parsePriceDigits = (value: string): string => value.replace(/\D/g, '');
+
 interface MobilePickerListProps {
   fieldId: string;
   label: string;
@@ -377,6 +385,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
   };
 
   const [currentStep, setCurrentStep] = useState(0);
+  const [stepError, setStepError] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [carDetails, setCarDetails] = useState({
     registration: '',
@@ -517,12 +526,74 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
   }, [carDetails.make, carDetails.model, carDetails.year]);
 
   const handleNextStep = () => {
+    setStepError('');
     prepareWizardStepChange();
     setCurrentStep(prev => Math.min(prev + 1, totalSteps - 1));
     resetSellCarScrollPositions();
   };
 
+  const validateCurrentStep = (): string | null => {
+    switch (currentStep) {
+      case 3:
+        if (!carDetails.make) return 'Please select the car make';
+        if (!carDetails.model) return 'Please select the car model';
+        if (!carDetails.year) return 'Please select the manufacturing year';
+        return null;
+      case 4:
+        if (!carDetails.state) return 'Please select your state';
+        if (!carDetails.district) return 'Please select your district';
+        if (!carDetails.noOfOwners) return 'Please select number of owners';
+        return null;
+      case 5:
+        if (!carDetails.kilometers) return 'Please select kilometers driven';
+        if (!carDetails.fuelType) return 'Please select fuel type';
+        if (!carDetails.transmission) return 'Please select transmission';
+        return null;
+      case 6:
+        if (!carDetails.condition) return 'Please select vehicle condition';
+        if (carDetails.expectedPrice && parseInt(carDetails.expectedPrice, 10) <= 0) {
+          return 'Please enter a valid expected price';
+        }
+        return null;
+      default:
+        return null;
+    }
+  };
+
+  const handleContinueStep = () => {
+    const error = validateCurrentStep();
+    if (error) {
+      setStepError(error);
+      addToast?.(error, 'warning');
+      return;
+    }
+    handleNextStep();
+  };
+
+  const handleSelectIndividual = () => {
+    handleNextStep();
+  };
+
+  const handleSelectDealer = () => {
+    onNavigate(ViewEnum.SELLER_LOGIN);
+  };
+
+  const handleFillManually = () => {
+    setCarDetails(prev => ({
+      ...prev,
+      registration: prev.registration?.trim() || `MANUAL-${Date.now()}`,
+    }));
+    handleNextStep();
+  };
+
+  const getRegistrationForSubmit = (): string => {
+    const reg = carDetails.registration?.trim();
+    if (reg) return reg;
+    return `MANUAL-${Date.now()}`;
+  };
+
   const handlePrevStep = () => {
+    setStepError('');
     prepareWizardStepChange();
     setCurrentStep(prev => Math.max(prev - 1, 0));
     resetSellCarScrollPositions();
@@ -543,12 +614,47 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
       setContactError('Enter a valid Indian mobile number (starts with 6–9)');
       return;
     }
+    const missingFields: string[] = [];
+    if (!carDetails.make) missingFields.push('make');
+    if (!carDetails.model) missingFields.push('model');
+    if (!carDetails.year) missingFields.push('year');
+    if (!carDetails.state) missingFields.push('state');
+    if (!carDetails.district) missingFields.push('district');
+    if (!carDetails.noOfOwners) missingFields.push('number of owners');
+    if (!carDetails.kilometers) missingFields.push('kilometers');
+    if (!carDetails.fuelType) missingFields.push('fuel type');
+    if (!carDetails.transmission) missingFields.push('transmission');
+    if (missingFields.length > 0) {
+      const message = `Please complete all required details: ${missingFields.join(', ')}`;
+      setSubmitError(message);
+      addToast?.(message, 'error');
+      return;
+    }
+
     setContactError('');
     setSubmitError('');
     setIsSubmitting(true);
     try {
+      const expectedPriceNum = carDetails.expectedPrice
+        ? parseInt(carDetails.expectedPrice, 10)
+        : undefined;
+
+      let imagesForSubmit: string[] = [];
+      if (vehicleImages.length > 0) {
+        imagesForSubmit = await Promise.all(
+          vehicleImages.map((img) => compress(img, 1200, 1200, 0.72)),
+        );
+        const approxBytes = imagesForSubmit.reduce((sum, img) => sum + img.length, 0);
+        if (approxBytes > 12 * 1024 * 1024) {
+          const message = 'Photos are too large to submit. Remove a few photos or retake at lower resolution.';
+          setSubmitError(message);
+          addToast?.(message, 'error');
+          return;
+        }
+      }
+
       const result = await sellCarAPI.submitCarData({
-        registration: carDetails.registration?.trim() || 'MANUAL',
+        registration: getRegistrationForSubmit(),
         make: carDetails.make,
         model: carDetails.model,
         variant: carDetails.variant?.trim() || 'Not specified',
@@ -560,10 +666,16 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
         fuelType: carDetails.fuelType,
         transmission: carDetails.transmission,
         customerContact: trimmed,
+        sellerType: 'individual',
+        ...(carDetails.condition ? { condition: carDetails.condition } : {}),
+        ...(expectedPriceNum && expectedPriceNum > 0 ? { expectedPrice: expectedPriceNum } : {}),
+        ...(carDetails.engineNumber?.trim() ? { engineNumber: carDetails.engineNumber.trim() } : {}),
+        ...(carDetails.chassisNumber?.trim() ? { chassisNumber: carDetails.chassisNumber.trim() } : {}),
+        ...(imagesForSubmit.length > 0 ? { vehicleImages: imagesForSubmit } : {}),
       });
       if (result.success) {
         prepareWizardStepChange();
-        setCurrentStep(8);
+        setCurrentStep(9);
         resetSellCarScrollPositions();
       } else {
         const message = result.error || result.message || 'Could not submit. Please try again.';
@@ -626,7 +738,8 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">I am a</h2>
             <button
-              onClick={handleNextStep}
+              type="button"
+              onClick={handleSelectIndividual}
               className="w-full p-6 bg-white rounded-xl border-2 border-gray-200 text-left active:scale-[0.98] transition-transform"
             >
               <div className="flex items-center gap-4">
@@ -642,7 +755,8 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
               </div>
             </button>
             <button
-              onClick={handleNextStep}
+              type="button"
+              onClick={handleSelectDealer}
               className="w-full p-6 bg-white rounded-xl border-2 border-gray-200 text-left active:scale-[0.98] transition-transform"
             >
               <div className="flex items-center gap-4">
@@ -888,12 +1002,16 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
               </label>
               <input
                 id="sell-expected-price"
-                type="number"
-                inputMode="decimal"
+                type="text"
+                inputMode="numeric"
                 enterKeyHint="done"
-                placeholder="Enter expected price"
-                value={carDetails.expectedPrice}
-                onChange={(e) => setCarDetails(prev => ({ ...prev, expectedPrice: e.target.value }))}
+                placeholder="e.g. 5,00,000"
+                value={formatIndianPriceInput(carDetails.expectedPrice)}
+                onChange={(e) => {
+                  const digits = parsePriceDigits(e.target.value);
+                  setCarDetails(prev => ({ ...prev, expectedPrice: digits }));
+                  setStepError('');
+                }}
                 onFocus={(e) => {
                   activateInputKeyboardPadding();
                   scrollFieldIntoComfortableView(e.currentTarget);
@@ -933,7 +1051,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
                     if (photos && photos.length > 0) {
                       // Compress images
                       const compressedPhotos = await Promise.all(
-                        photos.map(photo => compress(photo, 1920, 1920, 0.8))
+                        photos.map(photo => compress(photo, 1200, 1200, 0.75))
                       );
                       setVehicleImages(prev => [...prev, ...compressedPhotos]);
                     }
@@ -961,7 +1079,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
                 onClick={async () => {
                   const photo = await capture({ sourceType: 'camera' });
                   if (photo) {
-                    const compressed = await compress(photo, 1920, 1920, 0.8);
+                    const compressed = await compress(photo, 1200, 1200, 0.75);
                     setVehicleImages(prev => [...prev, compressed]);
                   }
                 }}
@@ -979,7 +1097,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
                 onClick={async () => {
                   const photo = await capture({ sourceType: 'library' });
                   if (photo) {
-                    const compressed = await compress(photo, 1920, 1920, 0.8);
+                    const compressed = await compress(photo, 1200, 1200, 0.75);
                     setVehicleImages(prev => [...prev, compressed]);
                   }
                 }}
@@ -1136,7 +1254,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
               </button>
               <button
                 type="button"
-                onClick={handleNextStep}
+                onClick={handleFillManually}
                 className="w-full py-3 text-center text-sm font-medium text-gray-600 underline decoration-gray-400 underline-offset-4 active:text-orange-600 active:decoration-orange-400 touch-manipulation"
                 style={{ minHeight: '44px' }}
               >
@@ -1161,14 +1279,21 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
               </button>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={handleNextStep}
-              className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold"
-              style={{ minHeight: '56px' }}
-            >
-              Continue
-            </button>
+            <div className="space-y-2">
+              {stepError ? (
+                <p className="text-red-600 text-sm text-center px-1" role="alert">
+                  {stepError}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={handleContinueStep}
+                className="w-full py-4 bg-orange-500 text-white rounded-xl font-semibold"
+                style={{ minHeight: '56px' }}
+              >
+                Continue
+              </button>
+            </div>
           )}
         </div>
       )}

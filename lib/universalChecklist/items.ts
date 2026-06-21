@@ -109,7 +109,6 @@ export const TWO_WHEELER_ITEMS: UniversalChecklistItemDef[] = [
     ['stand', 'Side stand / center stand spring and function', 'B', false],
     ['mirrors', 'Mirrors present, unbroken, properly mounted', 'S/B', false],
     ['test_ride', 'Test ride conducted (straight line + braking + turning)', 'B', false],
-    ['hypo_clear', 'RTO hypothecation cleared on RC if previously financed', 'S/B', false],
     ['duplicate_key', 'Duplicate key available', 'S', false],
   ]),
 ];

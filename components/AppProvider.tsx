@@ -14,6 +14,13 @@ import i18n from '../lib/i18n';
 import { useNavigate as useRouterNavigate, useLocation } from 'react-router-dom';
 import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan, ChatMessage } from '../types';
 import { View, VehicleCategory as CategoryEnum } from '../types';
+import {
+  computeCompareToggle,
+  getCategoryDisplayName,
+  getComparisonCategory,
+  MAX_COMPARE_VEHICLES,
+  sanitizeComparisonList,
+} from '../utils/compareList.js';
 import { getConversations, saveConversations } from '../services/chatService';
 import { putConversationOfferResponse } from '../services/conversationService';
 import {
@@ -454,6 +461,8 @@ interface AppContextType {
   vehiclesCatalogReady: boolean;
   currentUser: User | null;
   comparisonList: number[];
+  /** Normalized category for vehicles currently in the compare list (null when empty). */
+  comparisonCategory: string | null;
   ratings: { [key: string]: number[] };
   sellerRatings: { [key: string]: number[] };
   wishlist: number[];
@@ -758,6 +767,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } catch (error) { logWarn('Failed to persist comparison list:', error); }
   }, [comparisonList]);
+  useEffect(() => {
+    if (!vehicles.length || !comparisonList.length) return;
+    const sanitized = sanitizeComparisonList(vehicles, comparisonList);
+    const changed =
+      sanitized.length !== comparisonList.length ||
+      sanitized.some((id, index) => id !== comparisonList[index]);
+    if (changed) {
+      setComparisonList(sanitized);
+    }
+  }, [vehicles, comparisonList]);
   useEffect(() => {
     try {
       if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
@@ -3856,10 +3875,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const onOnline = () => {
       void syncConversationsNow();
+      void processSyncQueue();
     };
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
         void syncConversationsNow();
+        void processSyncQueue();
       }
     };
 
@@ -3870,6 +3891,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [currentUser?.email, currentUser?.role]);
+
+  // Capacitor: flush offline message queue when app returns to foreground.
+  useEffect(() => {
+    if (!isCapacitorNative()) return;
+    let listener: { remove: () => Promise<void> } | undefined;
+    void (async () => {
+      try {
+        const { App } = await import('@capacitor/app');
+        listener = await App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) {
+            void processSyncQueue();
+          }
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      void listener?.remove();
+    };
+  }, []);
 
   // Helper function to join all relevant conversation rooms
   const joinAllConversationRooms = useCallback(() => {
@@ -4787,6 +4829,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // But including them is harmless and makes the intent clear
   }, [vehicles, addToast, currentUser, t, syncVehicleCachesById]);
 
+  const comparisonCategory = useMemo(
+    () => getComparisonCategory(vehicles, comparisonList),
+    [vehicles, comparisonList],
+  );
+
   const contextValue: AppContextType = useMemo(() => {
     const inboxMarkRead: { fn?: AppContextType['markAsRead'] } = {};
     return {
@@ -4799,6 +4846,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     vehiclesCatalogReady,
     currentUser,
     comparisonList,
+    comparisonCategory,
     ratings,
     sellerRatings,
     wishlist,
@@ -5909,7 +5957,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (!sendResult.success || !sendResult.persisted) {
           const retry = await addMessageWithSync(conversationId, newMessage);
-          if (!retry.synced && !retry.queued) {
+          if (retry.queued) {
+            addToast(t('toast.messageQueuedOffline'), 'info');
+          } else if (!retry.synced && !retry.queued) {
             logError('❌ Failed to send message:', sendResult.error);
             addToast(t('toast.failedSendMessageGeneric'), 'error');
           }
@@ -5958,7 +6008,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           timestamp: new Date().toISOString(),
           isRead: false,
           type: resolvedType,
-          ...(payload && (resolvedType === 'offer' || resolvedType === 'image' || resolvedType === 'voice')
+          ...(payload && (resolvedType === 'offer' || resolvedType === 'image' || resolvedType === 'voice' || resolvedType === 'test_drive_request')
             ? { payload }
             : {}),
         };
@@ -6010,7 +6060,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
         if (!sendResult.success || !sendResult.persisted) {
           const retry = await addMessageWithSync(conversationId, newMessage);
-          if (!retry.synced && !retry.queued) {
+          if (retry.queued) {
+            addToast(t('toast.messageQueuedOffline'), 'info');
+          } else if (!retry.synced && !retry.queued) {
             logError('❌ Failed to send message:', sendResult.error);
             addToast(t('toast.failedSendMessageGeneric'), 'error');
           }
@@ -6760,12 +6812,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     },
     toggleCompare: (vehicleId: number) => {
-      setComparisonList(prev => {
-        const safePrev = Array.isArray(prev) ? prev : [];
-        return safePrev.includes(vehicleId) 
-          ? safePrev.filter(id => id !== vehicleId)
-          : safePrev.length < 3 ? [...safePrev, vehicleId] : safePrev;
-      });
+      const result = computeCompareToggle(comparisonList, vehicleId, vehicles);
+      if (result.added || result.removed) {
+        setComparisonList(result.nextList);
+        return;
+      }
+      if (result.blockedReason === 'category_mismatch' && result.requiredCategory) {
+        addToast(
+          t('compare.sameCategoryRequired', {
+            category: getCategoryDisplayName(result.requiredCategory),
+          }),
+          'error',
+        );
+        return;
+      }
+      if (result.blockedReason === 'max') {
+        addToast(t('compare.maxReached', { max: MAX_COMPARE_VEHICLES }), 'error');
+      }
     },
     onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => {
       void (async () => {
@@ -6829,7 +6892,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
   }, [
     currentView, previousView, selectedVehicle, vehicles, isLoading, vehiclesCatalogReady, currentUser,
-    comparisonList, ratings, sellerRatings, wishlist, conversations, toasts,
+    comparisonList, comparisonCategory, ratings, sellerRatings, wishlist, conversations, toasts,
     forgotPasswordRole, typingStatus, chatPeerOnlineByConversationId, selectedCategory, publicSellerProfile,
     activeChat, isAnnouncementVisible, recommendations, initialSearchQuery,
     isCommandPaletteOpen, userLocation, selectedCity, users, platformSettings,

@@ -14,6 +14,22 @@ function qrFileStem(fileName: string): string {
   return safe || 'seller-qr';
 }
 
+const QR_FETCH_TIMEOUT_MS = 15_000;
+
+async function fetchQrBlob(qrImageUrl: string): Promise<Blob> {
+  const ac = new AbortController();
+  const tid = window.setTimeout(() => ac.abort(), QR_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(qrImageUrl, { signal: ac.signal });
+    if (!response.ok) {
+      throw new Error('Failed to fetch QR code');
+    }
+    return await response.blob();
+  } finally {
+    window.clearTimeout(tid);
+  }
+}
+
 async function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -108,11 +124,7 @@ export async function saveQrCodePngFromUrl(
   addToast?: QrSaveToast
 ): Promise<void> {
   try {
-    const response = await fetch(qrImageUrl);
-    if (!response.ok) {
-      throw new Error('Failed to fetch QR code');
-    }
-    const blob = await response.blob();
+    const blob = await fetchQrBlob(qrImageUrl);
 
     if (isCapacitorNative()) {
       try {
@@ -140,7 +152,13 @@ export async function saveQrCodePngFromUrl(
     addToast?.('QR code downloaded successfully!', 'success');
   } catch (error) {
     console.error('saveQrCodePngFromUrl:', error);
-    addToast?.('Failed to download QR code. Please try again.', 'error');
+    const timedOut = error instanceof Error && error.name === 'AbortError';
+    addToast?.(
+      timedOut
+        ? 'QR download timed out. Check your connection and try again.'
+        : 'Failed to download QR code. Please try again.',
+      'error',
+    );
     try {
       if (isCapacitorNative()) {
         const { Browser } = await import('@capacitor/browser');

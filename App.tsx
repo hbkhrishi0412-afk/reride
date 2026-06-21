@@ -29,6 +29,7 @@ import MobileLayout from './components/MobileLayout';
 import MobileSearch from './components/MobileSearch';
 import MobilePushNotificationManager from './components/MobilePushNotificationManager';
 import NativePushRegistration from './components/NativePushRegistration';
+import WebPushRegistration from './components/WebPushRegistration';
 import AppRatingPrompt from './components/AppRatingPrompt';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates, type SearchFilters } from './types';
 import { persistReRideNotifications } from './utils/notificationLocalStorage';
@@ -967,11 +968,14 @@ const AppContent: React.FC = () => {
       const normalized = sellerEmail?.toLowerCase().trim() ?? '';
       if (!normalized) return;
       const match = users.find((u) => u?.email && u.email.toLowerCase().trim() === normalized);
+      const listingSellerName = vehicles.find(
+        (v) => v.sellerEmail?.toLowerCase().trim() === normalized
+      )?.sellerName;
       setPublicProfile(
         match ??
           ({
             email: normalized,
-            name: 'Seller',
+            name: listingSellerName || 'Seller',
             mobile: '',
             role: 'seller',
             location: '',
@@ -982,7 +986,7 @@ const AppContent: React.FC = () => {
       // Pass email in params so the URL is correct in the same tick (navigate() used to read stale publicSellerProfile).
       navigate(ViewEnum.SELLER_PROFILE, { sellerEmail: normalized });
     },
-    [users, setPublicProfile, navigate]
+    [users, vehicles, setPublicProfile, navigate]
   );
 
   // Simple handler for service cart submissions (wire to real API as needed)
@@ -1811,6 +1815,8 @@ const AppContent: React.FC = () => {
         return 'Messages';
       case ViewEnum.WISHLIST:
         return 'Wishlist';
+      case ViewEnum.COMPARISON:
+        return 'Compare Vehicles';
       case ViewEnum.ADMIN_PANEL:
         return 'Admin Panel';
       case ViewEnum.LOGIN_PORTAL:
@@ -1916,6 +1922,7 @@ const AppContent: React.FC = () => {
     const shouldHideHeader =
       currentView === ViewEnum.HOME ||
       currentView === ViewEnum.PROFILE ||
+      currentView === ViewEnum.COMPARISON ||
       isMobileAuthView;
     // Vehicle detail: full-bleed listing UX (no tab bar) — matches native listing apps / reference
     const hideBottomNavOnDetail =
@@ -1926,6 +1933,10 @@ const AppContent: React.FC = () => {
       <>
         <SEO {...seoMeta} />
         <NativePushRegistration userEmail={currentUser?.email} />
+        <WebPushRegistration
+          userEmail={currentUser?.email}
+          enabled={currentUser?.role === 'seller'}
+        />
         <AppRatingPrompt />
         {/* Mobile Feature Managers */}
         <MobilePushNotificationManager
@@ -1956,6 +1967,7 @@ const AppContent: React.FC = () => {
           currentUser={currentUser}
           onLogout={handleLogoutAll}
           wishlistCount={wishlist.length}
+          compareCount={comparisonList.length}
           inboxCount={unreadMessagesCount}
           unreadNotificationCount={unreadNotificationsCount}
           serviceProvider={serviceProvider}
@@ -2041,6 +2053,10 @@ const AppContent: React.FC = () => {
     <>
       <SEO {...seoMeta} />
       <NativePushRegistration userEmail={currentUser?.email} />
+      <WebPushRegistration
+        userEmail={currentUser?.email}
+        enabled={currentUser?.role === 'seller'}
+      />
       <AppRatingPrompt />
       {/* Mobile Feature Managers (also work on desktop) */}
       <MobilePushNotificationManager

@@ -12,7 +12,6 @@ import {
 } from '../lib/universalChecklist';
 import { mergeBuyerResponses } from '../lib/universalChecklist/helpers';
 import { submitBuyerInspection } from '../services/vehicleTrustService';
-import { uploadImages, validateImageFile } from '../services/imageUploadService';
 
 const STATUS_OPTIONS: { value: ChecklistItemStatus; label: string }[] = [
   { value: 'pass', label: 'Pass' },
@@ -42,7 +41,6 @@ export const BuyerInspectionForm: React.FC<BuyerInspectionFormProps> = ({
   );
   const [generalNotes, setGeneralNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [flaggedCount, setFlaggedCount] = useState(0);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({ 'core.docs': true });
@@ -81,21 +79,6 @@ export const BuyerInspectionForm: React.FC<BuyerInspectionFormProps> = ({
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
   };
 
-  const handlePhoto = async (id: string, file: File) => {
-    const v = validateImageFile(file);
-    if (!v.valid) {
-      alert(v.error);
-      return;
-    }
-    setUploadingId(id);
-    try {
-      const res = await uploadImages([file], 'vehicles', buyerEmail);
-      if (res[0]?.url) updateItem(id, { photoUrl: res[0].url });
-    } finally {
-      setUploadingId(null);
-    }
-  };
-
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
@@ -115,7 +98,7 @@ export const BuyerInspectionForm: React.FC<BuyerInspectionFormProps> = ({
       <div>
         <h3 className="font-bold text-gray-900">Buyer verification checklist</h3>
         <p className="text-xs text-gray-600 mt-0.5">
-          Same Universal Checklist — verify in person before you buy. Flag anything the seller did not disclose.
+          Verify in person before you buy. Mark Pass / Fail / N/A and flag anything the seller did not disclose.
         </p>
       </div>
 
@@ -141,19 +124,7 @@ export const BuyerInspectionForm: React.FC<BuyerInspectionFormProps> = ({
                     const sellerItem = sellerChecklist?.items.find((s) => s.id === def.id);
                     return (
                       <div key={def.id} className="border border-gray-100 rounded-lg p-2">
-                        <div className="flex justify-between gap-2 mb-1">
-                          <p className="text-xs font-medium text-gray-900">{def.label}</p>
-                          <label className="flex items-center gap-1 text-[10px] shrink-0">
-                            <input
-                              type="checkbox"
-                              checked={item.matchesSellerClaim}
-                              onChange={(e) =>
-                                updateItem(def.id, { matchesSellerClaim: e.target.checked })
-                              }
-                            />
-                            Matches seller
-                          </label>
-                        </div>
+                        <p className="text-xs font-medium text-gray-900 mb-1">{def.label}</p>
                         {def.buyerHint && (
                           <p className="text-[10px] text-gray-500 mb-1">{def.buyerHint}</p>
                         )}
@@ -162,6 +133,16 @@ export const BuyerInspectionForm: React.FC<BuyerInspectionFormProps> = ({
                             Seller: <strong className="uppercase">{sellerItem.status}</strong>
                             {sellerItem.notes ? ` — ${sellerItem.notes}` : ''}
                           </p>
+                        )}
+                        {sellerItem?.photoUrl && (
+                          <div className="mb-1.5">
+                            <img
+                              src={sellerItem.photoUrl}
+                              alt="Seller evidence"
+                              className="w-16 h-16 rounded object-cover border border-gray-200"
+                            />
+                            <p className="text-[10px] text-gray-500 mt-0.5">Seller photo</p>
+                          </div>
                         )}
                         <div className="flex flex-wrap gap-1 mb-1">
                           {STATUS_OPTIONS.map((opt) => (
@@ -184,22 +165,8 @@ export const BuyerInspectionForm: React.FC<BuyerInspectionFormProps> = ({
                           value={item.notes || ''}
                           onChange={(e) => updateItem(def.id, { notes: e.target.value })}
                           placeholder="Your notes"
-                          className="w-full text-xs border rounded px-2 py-1 mb-1"
+                          className="w-full text-xs border rounded px-2 py-1"
                         />
-                        <label className="text-[10px] cursor-pointer text-blue-600">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            disabled={uploadingId === def.id}
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) void handlePhoto(def.id, f);
-                              e.target.value = '';
-                            }}
-                          />
-                          {uploadingId === def.id ? 'Uploading…' : item.photoUrl ? '📷 Photo added' : '+ Photo'}
-                        </label>
                       </div>
                     );
                   })}

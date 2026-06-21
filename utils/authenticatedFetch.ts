@@ -468,6 +468,17 @@ export const authenticatedFetch = async (
       ? 'omit'
       : (fetchOptions.credentials ?? 'include');
 
+    const timeoutMs =
+      resolvedUrl.includes('/upload-image') || resolvedUrl.includes('/sell-car')
+        ? 120_000
+        : 60_000;
+    const timeoutSignal =
+      !fetchOptions.signal &&
+      typeof AbortSignal !== 'undefined' &&
+      typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(timeoutMs)
+        : undefined;
+
     // First attempt - wrap in try-catch to handle network errors
     let response: Response;
     try {
@@ -475,20 +486,26 @@ export const authenticatedFetch = async (
         ...fetchOptions,
         headers: mergedHeaders,
         credentials: credentialsMode,
+        ...(timeoutSignal ? { signal: timeoutSignal } : {}),
       });
     } catch (fetchError) {
       // Network error, CORS error, or other fetch failures
       // Return a Response-like object that indicates failure
       // This prevents the error from propagating to ErrorBoundary
       logWarn('⚠️ Fetch error in authenticatedFetch:', fetchError);
+      const timedOut =
+        fetchError instanceof Error &&
+        (fetchError.name === 'TimeoutError' || fetchError.name === 'AbortError');
       // Response() requires status in [200, 599]; never use 0 — it throws.
       return createJsonErrorResponse(
-        503,
-        'Network Unavailable',
+        timedOut ? 408 : 503,
+        timedOut ? 'Request Timeout' : 'Network Unavailable',
         {
           success: false,
-          error: 'Network error',
-          reason: 'Unable to connect to server. Please check your internet connection.',
+          error: timedOut ? 'Request timed out' : 'Network error',
+          reason: timedOut
+            ? 'The request took too long. Please check your connection and try again.'
+            : 'Unable to connect to server. Please check your internet connection.',
         }
       );
     }

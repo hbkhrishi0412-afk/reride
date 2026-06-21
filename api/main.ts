@@ -6,16 +6,17 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  */
 import { randomBytes, createHmac, randomInt } from 'crypto';
 import { PLAN_DETAILS } from '../constants/plans.js';
+import {
+  buildListingRenewalUpdates,
+  computeListingExpiresAtForSeller,
+  isSellerPlanExpired,
+  validateListingRenewal,
+} from '../utils/listingPlanRules.js';
 import type { User as UserType, Vehicle as VehicleType, VerificationStatus } from '../types.js';
 import { VehicleCategory } from '../vehicle-category.js';
 // Supabase services
 import { supabaseUserService } from '../services/supabase-user-service.js';
 import { supabaseVehicleService } from '../services/supabase-vehicle-service.js';
-import {
-  scheduleAutoAIInspection,
-  scheduleBackfillAIInspectionOnView,
-  shouldRegenerateAIInspection,
-} from '../server/handlers/vehicle-ai-inspection.js';
 import { supabaseConversationService } from '../services/supabase-conversation-service.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
@@ -24,6 +25,7 @@ import { userRolesEqual, normalizeUserRoleString } from '../utils/user-role.js';
 import { verifySupabaseToken } from '../server/supabase-auth.js';
 import { readVehicleCatalogFromSupabase, writeVehicleCatalogToSupabase } from '../lib/vehicleCatalogSupabase.js';
 import { sendInquiryNotificationToSeller } from '../lib/email.js';
+import { notifySellerInquiryChannels } from '../lib/sellerInquiryAlerts.js';
 import {
   parseVehicleIdentityFromBody,
   hasResolvableVehicleIdentity,
@@ -31,6 +33,7 @@ import {
   MUTATION_IDENTITY_REFRESH_MESSAGE,
   sanitizeVehicleMediaUrls,
 } from '../utils/vehicleIdentity.js';
+import { isPublicBuyListing } from '../services/listingLifecycleService.js';
 import { lookupVehicleSpecsFromCarQuery } from '../lib/carquerySpecs.js';
 // Supabase admin database utilities (replaces Firebase admin functions)
 import { 
@@ -877,6 +880,9 @@ async function mainHandler(
     } else if (pathname.includes('/vehicle-pricing') || pathname.endsWith('/vehicle-pricing')) {
       const { handleVehiclePricing } = await import('../server/handlers/vehicle-pricing.js');
       return await handleVehiclePricing(req, res, handlerOptions);
+    } else if (pathname.includes('/geocode') || pathname.endsWith('/geocode')) {
+      const { handleGeocode } = await import('../server/handlers/geocode.js');
+      return await handleGeocode(req, res);
     } else if (pathname.includes('/vehicle-trust') || pathname.endsWith('/vehicle-trust')) {
       const { handleVehicleTrust } = await import('../server/handlers/vehicle-trust.js');
       return await handleVehicleTrust(req, res, handlerOptions);
@@ -2432,6 +2438,45 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             success: false,
             reason:
               'Push token storage is not available. Create table push_device_tokens (see scripts/add-push-device-tokens.sql).',
+          });
+        }
+        return res.status(200).json({ success: true });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        return res.status(500).json({ success: false, reason: msg });
+      }
+    }
+
+    // PWA Web Push subscription (VAPID) — requires `web_push_subscriptions` table (see scripts/add-web-push-subscriptions.sql).
+    if (action === 'save-web-push-subscription') {
+      const auth = await authenticateRequestDual(req);
+      if (!auth.isValid || !auth.user?.email) {
+        return res.status(401).json({ success: false, reason: 'Authentication required.' });
+      }
+      const subscription = (req.body as { subscription?: Record<string, unknown> })?.subscription;
+      const endpoint =
+        subscription && typeof subscription.endpoint === 'string' ? subscription.endpoint.trim() : '';
+      if (!endpoint) {
+        return res.status(400).json({ success: false, reason: 'subscription.endpoint is required' });
+      }
+      try {
+        const supabase = getSupabaseAdminClient();
+        const user_email = auth.user.email.toLowerCase().trim();
+        const { error } = await supabase.from('web_push_subscriptions').upsert(
+          {
+            endpoint,
+            user_email,
+            subscription,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'endpoint' },
+        );
+        if (error) {
+          logWarn('save-web-push-subscription:', error.message);
+          return res.status(503).json({
+            success: false,
+            reason:
+              'Web push storage is not available. Create table web_push_subscriptions (see scripts/add-web-push-subscriptions.sql).',
           });
         }
         return res.status(200).json({ success: true });
@@ -4678,6 +4723,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         console.log(`📊 Refreshed ${finalVehicles.length} published vehicles after ${vehicleUpdates.length} updates`);
       }
       
+      // Always hide expired listings from the public catalog (even when skipExpiryCheck skips DB writes)
+      finalVehicles = finalVehicles.filter(isPublicBuyListing);
+      
       // Normalize sellerEmail to lowercase for consistent filtering
       const normalizedVehicles = normalizeVehiclesList(
         finalVehicles.map((v) => ({
@@ -4738,9 +4786,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           views: currentViews + 1,
         });
 
-        // Backfill AI report for legacy/seed listings missing one (fire-and-forget, deduped).
-        scheduleBackfillAIInspectionOnView(mutation.vehicle, vehicleService);
-
         return res.status(200).json({ success: true, views: updated.views });
       } catch (error) {
         logWarn('⚠️ track-view failed (non-fatal):', error);
@@ -4797,8 +4842,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         }
         // Check plan expiry
         const nowIso = new Date();
-        const planExpiryDate = seller.planExpiryDate ? new Date(seller.planExpiryDate) : undefined;
-        const planExpired = !!(planExpiryDate && planExpiryDate.getTime() < nowIso.getTime());
+        const planExpired = isSellerPlanExpired(seller);
         if (planExpired) {
           return res.status(403).json({
             success: false,
@@ -4852,7 +4896,26 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         updates.views = 0;
         updates.inquiriesCount = 0;
       } else if (refreshAction === 'renew') {
-        updates.listingExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        const seller = await userService.findByEmail(normalizedRequestSellerEmail);
+        if (!seller) {
+          return res.status(404).json({ success: false, reason: 'Seller not found' });
+        }
+
+        const sellerVehicles = await vehicleService.findBySellerEmail(normalizedRequestSellerEmail);
+        const validation = validateListingRenewal(seller, vehicle, sellerVehicles);
+        if (!validation.allowed) {
+          return res.status(403).json({
+            success: false,
+            reason: validation.reason,
+            planExpired: validation.planExpired,
+            limitReached: validation.limitReached,
+            activeListings: validation.activeListings,
+            limit: validation.limit,
+            expiredOn: validation.expiredOn,
+          });
+        }
+
+        Object.assign(updates, buildListingRenewalUpdates(seller, vehicle));
       }
 
       const updatedVehicle = await vehicleService.update(mutation.primaryKey, updates);
@@ -5275,29 +5338,13 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
     }
     
-    // Set listingExpiresAt based on seller's plan expiry date
+    // Set listingExpiresAt based on seller's plan
     let listingExpiresAt: string | undefined;
     if (req.body.sellerEmail) {
-      // Sanitize email input
       const sanitizedEmail = (await sanitizeString(String(req.body.sellerEmail))).toLowerCase().trim();
       const seller = await userService.findByEmail(sanitizedEmail);
       if (seller) {
-        // Plan is not expired (checked above), so compute expiry for active plans
-        if (seller.subscriptionPlan === 'premium') {
-          if (seller.planExpiryDate) {
-            // Premium plan active: use plan expiry date
-            listingExpiresAt = seller.planExpiryDate;
-          } else {
-            // Premium without expiry date: leave undefined (no expiry)
-            listingExpiresAt = undefined;
-          }
-        } else if (seller.subscriptionPlan === 'free' || seller.subscriptionPlan === 'pro') {
-          // Free and Pro plans get 30-day expiry from today
-          const expiryDate = new Date();
-          expiryDate.setDate(expiryDate.getDate() + 30);
-          listingExpiresAt = expiryDate.toISOString();
-        }
-        // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
+        listingExpiresAt = computeListingExpiresAtForSeller(seller);
       }
     }
     
@@ -5425,9 +5472,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       } else {
         console.log('✅ Vehicle creation verified in database', { id: verifyVehicle.id });
       }
-
-      // Auto-generate AI photo inspection report in the background (every new listing with photos)
-      scheduleAutoAIInspection(verifyVehicle, vehicleService);
       
       return res.status(201).json(verifyVehicle);
     } catch (error) {
@@ -5543,10 +5587,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       const updatedVehicle = await vehicleService.update(rowPk, sanitizedUpdate);
       console.log('✅ Vehicle updated and saved successfully:', rowPk);
-
-      if (shouldRegenerateAIInspection(existingVehicle, sanitizedUpdate)) {
-        scheduleAutoAIInspection(updatedVehicle, vehicleService, { forceRegenerate: true });
-      }
 
       return res.status(200).json(updatedVehicle);
     } catch (error) {
@@ -8872,9 +8912,22 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
             ).catch((mailErr) => {
               console.warn('⚠️ API: inquiry email failed (non-fatal):', mailErr);
             });
+
+            const msgType = typeof message.type === 'string' ? message.type : 'text';
+            const payload = message.payload && typeof message.payload === 'object' ? message.payload as Record<string, unknown> : {};
+            notifySellerInquiryChannels({
+              sellerEmail: recipientEmail,
+              buyerName: senderName || 'A buyer',
+              vehicleTitle,
+              messagePreview: preview || '(new message)',
+              conversationId: String(conversationId),
+              isTestDrive: msgType === 'test_drive_request',
+              testDriveDate: typeof payload.date === 'string' ? payload.date : undefined,
+              testDriveTime: typeof payload.time === 'string' ? payload.time : undefined,
+            });
           }
         } catch (mailErr) {
-          console.warn('⚠️ API: inquiry email dispatch failed (non-fatal):', mailErr);
+          console.warn('⚠️ API: seller inquiry alerts failed (non-fatal):', mailErr);
         }
 
         console.log('✅ API: Message added successfully:', { conversationId, messageId: message?.id, messageCount: updatedConversation.messages?.length });

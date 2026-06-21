@@ -46,67 +46,58 @@ export async function sendKarixOTP(
   otp: string,
   config: KarixConfig
 ): Promise<KarixOTPResult> {
-  try {
-    const message = `Your OTP for ReRide is ${otp}. Valid for 10 minutes. Do not share this with anyone.`;
+  const message = `Your OTP for ReRide is ${otp}. Valid for 10 minutes. Do not share this with anyone.`;
+  return sendKarixTransactionalSMS(phoneNumber, message, config);
+}
 
-    // Karix API endpoint for sending SMS
+/** Send a transactional SMS via Karix (seller alerts, etc.). */
+export async function sendKarixTransactionalSMS(
+  phoneNumber: string,
+  message: string,
+  config: KarixConfig,
+): Promise<KarixOTPResult> {
+  try {
     const apiUrl = config.apiUrl || 'https://api.karix.io/message/';
-    
-    // Create Basic Auth header
     const credentials = Buffer.from(`${config.apiKey}:${config.apiSecret}`).toString('base64');
-    
+
     const requestBody = {
       channel: ['sms'],
-      source: 'ReRide', // Sender ID (must be registered with Karix)
+      source: 'ReRide',
       destination: [phoneNumber],
-      content: {
-        text: message
-      }
+      content: { text: message.slice(0, 160) },
     };
 
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Basic ${credentials}`
+        Authorization: `Basic ${credentials}`,
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       return {
         success: false,
-        error: `Karix API error: ${response.status} ${response.statusText} - ${errorText}`
+        error: `Karix API error: ${response.status} ${response.statusText} - ${errorText}`,
       };
     }
 
     const result = await response.json();
-    
-    // Check if Karix returned an error in the response
     if (result.error || result.status === 'failed') {
       return {
         success: false,
-        error: result.error || result.message || 'Failed to send SMS via Karix'
+        error: result.error || result.message || 'Failed to send SMS via Karix',
       };
     }
 
-    return {
-      success: true
-    };
-  } catch (error: any) {
+    return { success: true };
+  } catch (error: unknown) {
     return {
       success: false,
-      error: error.message || 'Failed to send OTP via Karix'
+      error: error instanceof Error ? error.message : 'Failed to send SMS via Karix',
     };
   }
 }
-
-
-
-
-
-
-
-
 

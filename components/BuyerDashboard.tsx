@@ -8,9 +8,8 @@ import LazyImage from './LazyImage';
 import { getFirstValidImage } from '../utils/imageUtils';
 import { StatCard, StatCardGrid, EmptyState } from './dashboard/shared';
 import PendingDealsBanner from './PendingDealsBanner';
-
-// Compare list maximum — must match VehicleCard/marketplace behaviour
-const MAX_COMPARE = 4;
+import { useApp } from './AppProvider';
+import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 
 const ServiceCart = lazy(() => import('./ServiceCart'));
 
@@ -40,6 +39,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   onViewSellerProfile,
 }) => {
   const { t } = useTranslation();
+  const { comparisonCategory } = useApp();
   const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity' | 'alerts' | 'serviceTrack'>('overview');
   // Removed unused showSaveSearchModal state
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(
@@ -320,7 +320,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                           isSelectedForCompare={comparisonList.includes(vehicle.id)}
                           onToggleWishlist={onToggleWishlist}
                           isInWishlist={wishlist.includes(vehicle.id)}
-                          isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= MAX_COMPARE}
+                          isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
                           onViewSellerProfile={onViewSellerProfile}
                         />
                       ))}
@@ -344,7 +344,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                           isSelectedForCompare={comparisonList.includes(vehicle.id)}
                           onToggleWishlist={onToggleWishlist}
                           isInWishlist={wishlist.includes(vehicle.id)}
-                          isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= MAX_COMPARE}
+                          isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
                           onViewSellerProfile={onViewSellerProfile}
                         />
                       ))}
@@ -499,7 +499,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                         isSelectedForCompare={comparisonList.includes(vehicle.id)}
                         onToggleWishlist={onToggleWishlist}
                         isInWishlist={wishlist.includes(vehicle.id)}
-                        isCompareDisabled={comparisonList.length >= MAX_COMPARE && !comparisonList.includes(vehicle.id)}
+                        isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
                         onViewSellerProfile={onViewSellerProfile}
                       />
                     ))}

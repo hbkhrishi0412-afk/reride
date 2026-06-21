@@ -5,12 +5,15 @@ import { getFirstValidImage } from '../utils/imageUtils';
 import { matchesCity, primaryLocationLabel } from '../utils/cityMapping';
 import { countCityVehicles } from '../utils/storefrontDiscoveryCounts';
 import MobileVehicleCard from './MobileVehicleCard';
+import { useApp } from './AppProvider';
+import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import LazyImage from './LazyImage';
 
 // Lazy-load the shared LocationModal — only costs the user the bundle when they
 // actually tap the location pill on the mobile hero.
 const LocationModal = lazy(() => import('./LocationModal'));
 import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
+import { isPublicBuyListing } from '../services/listingLifecycleService';
 import { showVerifiedListingBadge } from '../utils/listingTrust';
 import {
   getHomeDesktopCityStyle,
@@ -113,6 +116,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   onRetryCatalogLoad,
 }) => {
   const { t } = useTranslation();
+  const { comparisonCategory } = useApp();
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
   const canUseLocationPicker = typeof onLocationChange === 'function';
@@ -217,7 +221,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   } | null>(null);
 
   const publishedVehicles = useMemo(
-    () => allVehicles.filter(vehicle => vehicle && vehicle.status === 'published' && vehicle.listingType !== 'rental'),
+    () => allVehicles.filter(vehicle => vehicle && isPublicBuyListing(vehicle) && vehicle.listingType !== 'rental'),
     [allVehicles]
   );
 
@@ -1374,6 +1378,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 onSelect={onSelectVehicle}
                 isInWishlist={wishlist.includes(vehicle.id)}
                 isInCompare={comparisonList.includes(vehicle.id)}
+                isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
                 onToggleWishlist={onToggleWishlist}
                 onToggleCompare={onToggleCompare}
               />

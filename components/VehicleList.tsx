@@ -17,9 +17,11 @@ import { parseSearchQuery, getSearchSuggestions } from '../services/geminiServic
 import VehicleTile from './VehicleTile.js';
 import VehicleTileSkeleton from './VehicleTileSkeleton.js';
 import VirtualizedTileResults from './VehicleList/VirtualizedTileResults.js';
+import CompareListBanner from './CompareListBanner.js';
 import { saveSearch as saveBuyerSearch } from '../services/buyerService.js';
 import { getVehicleData } from '../services/vehicleDataService.js';
 import { logInfo, logError } from '../utils/logger.js';
+import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import { analyzeVehiclePricing, findSimilarVehicles } from '../utils/vehiclePricing.js';
 import type { BuyerVisibleDealLabel } from '../utils/vehiclePricing.js';
 import type { VehicleData } from '../types.js';
@@ -31,8 +33,10 @@ interface VehicleListProps {
   onSelectVehicle: (vehicle: Vehicle) => void;
   isLoading: boolean;
   comparisonList: number[];
+  comparisonCategory?: string | null;
   onToggleCompare: (id: number) => void;
   onClearCompare: () => void;
+  onOpenCompare?: () => void;
   wishlist: number[];
   onToggleWishlist: (id: number) => void;
   categoryTitle?: string;
@@ -88,26 +92,21 @@ function getScrollableAncestor(el: Element | null): Element | null {
 
 // Amazon/Flipkart-style skeleton loader with shimmer effect
 const VehicleCardSkeleton: React.FC = () => (
-    <div className="bg-white rounded-xl shadow-soft-lg overflow-hidden relative">
-      {/* Image skeleton with shimmer - Amazon/Flipkart style */}
-      <div className="w-full h-40 sm:h-56 skeleton relative overflow-hidden"></div>
-      <div className="p-3 sm:p-5">
-        <div className="flex justify-between items-start mb-2">
-          <div className="h-5 sm:h-6 skeleton rounded w-3/5"></div>
-          <div className="h-5 sm:h-6 skeleton rounded w-1/5"></div>
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden relative border border-gray-100">
+      <div className="w-full aspect-[16/10] skeleton relative overflow-hidden"></div>
+      <div className="p-3">
+        <div className="flex justify-between items-start mb-1.5">
+          <div className="h-4 skeleton rounded w-3/5"></div>
+          <div className="h-4 skeleton rounded w-1/5"></div>
         </div>
-        <div className="h-3 sm:h-4 skeleton rounded w-1/3 mb-4"></div>
-        <div className="h-px bg-gray-200 my-3 sm:my-4"></div>
-        <div className="grid grid-cols-2 gap-2">
-           <div className="h-4 sm:h-5 skeleton rounded w-full"></div>
-           <div className="h-4 sm:h-5 skeleton rounded w-full"></div>
-           <div className="h-4 sm:h-5 skeleton rounded w-full"></div>
-           <div className="h-4 sm:h-5 skeleton rounded w-full"></div>
+        <div className="h-3 skeleton rounded w-1/3 mb-2"></div>
+        <div className="grid grid-cols-3 gap-1 mb-2">
+           <div className="h-3 skeleton rounded w-full"></div>
+           <div className="h-3 skeleton rounded w-full"></div>
+           <div className="h-3 skeleton rounded w-full"></div>
         </div>
-        <div className="flex justify-between items-center mt-4 sm:mt-6">
-           <div className="h-7 sm:h-8 skeleton rounded w-2/5"></div>
-           <div className="h-5 sm:h-6 skeleton rounded w-1/4"></div>
-        </div>
+        <div className="h-px bg-gray-200 my-2"></div>
+        <div className="h-5 skeleton rounded w-2/5"></div>
       </div>
     </div>
 );
@@ -315,8 +314,10 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   onSelectVehicle, 
   isLoading, 
   comparisonList, 
+  comparisonCategory = null,
   onToggleCompare, 
-  onClearCompare, 
+  onClearCompare,
+  onOpenCompare,
   wishlist, 
   onToggleWishlist, 
   categoryTitle, 
@@ -2129,7 +2130,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           ) : paginatedVehicles.length > 0 ? (
             <>
               {paginatedVehicles.map(vehicle => (
-                <VehicleCard key={vehicle.id} vehicle={vehicle} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(vehicle.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(vehicle.id)} isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} dealLabel={dealLabelByVehicleId.get(vehicle.id)} />
+                <VehicleCard key={vehicle.id} vehicle={vehicle} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(vehicle.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(vehicle.id)} isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)} onViewSellerProfile={onViewSellerProfile} dealLabel={dealLabelByVehicleId.get(vehicle.id)} />
               ))}
               {hasMore && (
                 <div ref={loadMoreRef} className="col-span-full flex justify-center py-6">
@@ -2397,11 +2398,13 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
   // Mobile App UI
   if (isMobileApp) {
+    const showCompareBanner = comparisonList.length > 0 && Boolean(onOpenCompare);
     return (
       <div 
         className="w-full min-h-0"
         style={{
           background: 'linear-gradient(180deg, #FAFAFA 0%, #FFFFFF 100%)',
+          paddingBottom: showCompareBanner ? '5.5rem' : undefined,
         }}
       >
         {/* Premium Search Bar — single pill with embedded submit button.
@@ -2612,6 +2615,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     onToggleCompare={onToggleCompare}
                     isInWishlist={wishlist.includes(vehicle.id)}
                     isInCompare={comparisonList.includes(vehicle.id)}
+                    isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
                     showActions={true}
                   />
                 ))}
@@ -2737,11 +2741,21 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           t={t}
         />
 
+        {showCompareBanner && onOpenCompare && (
+          <CompareListBanner
+            count={comparisonList.length}
+            comparisonCategory={comparisonCategory}
+            onOpenCompare={onOpenCompare}
+            aboveBottomNav
+          />
+        )}
+
       </div>
     );
   }
 
   // Desktop UI (existing)
+  const showCompareBanner = comparisonList.length > 0 && Boolean(onOpenCompare);
   return (
     <>
       <div className="min-h-screen bg-white lg:bg-gradient-to-br lg:from-slate-50 lg:via-white lg:to-orange-50/60 relative overflow-hidden">
@@ -2858,7 +2872,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           </div>
 
           <div 
-            className={isMobileApp ? "flex flex-col gap-3" : viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6" : "flex flex-col gap-3 lg:gap-4"}
+            className={isMobileApp ? "flex flex-col gap-3" : viewMode === 'grid' ? "grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4" : "flex flex-col gap-3 lg:gap-4"}
             data-testid="vehicle-results"
             style={isMobileApp ? { paddingTop: '0.5rem' } : {}}
           >
@@ -2877,6 +2891,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                       onToggleCompare={onToggleCompare}
                       onToggleWishlist={onToggleWishlist}
                       comparisonList={comparisonList}
+                      comparisonCategory={comparisonCategory}
                       wishlist={wishlist}
                       onViewSellerProfile={onViewSellerProfile}
                     />
@@ -2894,6 +2909,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                           onToggleCompare={onToggleCompare}
                           isInWishlist={wishlist.includes(vehicle.id)}
                           isInCompare={comparisonList.includes(vehicle.id)}
+                          isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
                           showActions={true}
                         />
                       );
@@ -2909,7 +2925,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                         isSelectedForCompare={comparisonList.includes(vehicle.id)}
                         onToggleWishlist={onToggleWishlist}
                         isInWishlist={wishlist.includes(vehicle.id)}
-                        isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
+                        isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
                         onViewSellerProfile={onViewSellerProfile}
                         dealLabel={dealLabelByVehicleId.get(vehicle.id)}
                       />
@@ -2922,7 +2938,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                         isSelectedForCompare={comparisonList.includes(vehicle.id)}
                         onToggleWishlist={onToggleWishlist}
                         isInWishlist={wishlist.includes(vehicle.id)}
-                        isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
+                        isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
                         onViewSellerProfile={onViewSellerProfile}
                       />
                     );
@@ -3054,6 +3070,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 `}</style>
             </div>
         </div>
+      )}
+
+      {showCompareBanner && onOpenCompare && (
+        <CompareListBanner
+          count={comparisonList.length}
+          comparisonCategory={comparisonCategory}
+          onOpenCompare={onOpenCompare}
+        />
       )}
 
     </div>

@@ -6,7 +6,11 @@ import { isTokenLikelyValid, refreshAuthToken } from '../utils/authenticatedFetc
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 import { logout as rerideLogout } from '../services/userService';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
-import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
+import {
+  buildSellerQrCodeUrl,
+  buildSellerShareUrl,
+  sellerQrDownloadFileName,
+} from '../utils/sellerQrCode';
 import { downloadProfileExport, requestAccountDeletion } from '../services/accountPrivacyService';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 
@@ -113,10 +117,11 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   };
 
   const handleDownloadQRCode = async () => {
-    const origin = getPublicWebOriginForShareLinks();
-    const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(shareUrl)}`;
-    const fileName = `seller-qr-${(currentUser.dealershipName || currentUser.name || 'profile').toString().replace(/\s+/g, '-')}.png`;
+    const shareUrl = buildSellerShareUrl(currentUser.email);
+    const qrUrl = buildSellerQrCodeUrl(shareUrl, 240);
+    const fileName = sellerQrDownloadFileName(
+      (currentUser.dealershipName || currentUser.name || 'profile').toString(),
+    );
     await saveQrCodePngFromUrl(qrUrl, fileName, addToast);
   };
 
@@ -456,9 +461,8 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
 
             {/* Seller QR Code Section */}
             {currentUser.role === 'seller' && !isEditing && (() => {
-              const origin = getPublicWebOriginForShareLinks();
-              const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
-              const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(shareUrl)}`;
+              const shareUrl = buildSellerShareUrl(currentUser.email);
+              const qrUrl = buildSellerQrCodeUrl(shareUrl, 240);
               
               return (
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">

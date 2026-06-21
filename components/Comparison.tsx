@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
 import PageHeader from './PageHeader';
+import { getCategoryDisplayName } from '../utils/compareList.js';
 
 interface ComparisonProps {
   vehicles: Vehicle[];
+  comparisonCategory?: string | null;
   onBack: () => void;
   onToggleCompare: (id: number) => void;
   onClearCompare: () => void;
@@ -22,7 +24,7 @@ const XIcon: React.FC = () => (
 );
 
 
-const Comparison: React.FC<ComparisonProps> = ({ vehicles, onBack: onBackToHome, onToggleCompare, onClearCompare }) => {
+const Comparison: React.FC<ComparisonProps> = ({ vehicles, comparisonCategory = null, onBack: onBackToHome, onToggleCompare, onClearCompare }) => {
   const { t, i18n } = useTranslation();
   const [highlightDiffs, setHighlightDiffs] = useState(true);
 
@@ -116,6 +118,11 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, onBack: onBackToHome,
           </div>
         }
       />
+      {comparisonCategory && (
+        <p className="mb-4 text-sm font-medium text-gray-600">
+          {t('compare.categoryLabel', { category: getCategoryDisplayName(comparisonCategory) })}
+        </p>
+      )}
       
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">

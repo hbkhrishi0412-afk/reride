@@ -830,9 +830,19 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
               onChange={handlePhotoChange}
             />
             {attachError && (
-              <p className="text-xs text-red-600 mb-2 px-1" role="alert">
-                {attachError}
-              </p>
+              <div className="flex items-center justify-between gap-2 mb-2 px-1" role="alert">
+                <p className="text-xs text-red-600 flex-1">{attachError}</p>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-blue-600 shrink-0"
+                  onClick={() => {
+                    setAttachError(null);
+                    attachmentInputRef.current?.click();
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
             )}
             {voiceRecorder.error && (
               <p className="text-xs text-red-600 mb-2 px-1" role="alert">

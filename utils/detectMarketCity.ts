@@ -1,8 +1,12 @@
 import { CITY_COORDINATES, CITIES_BY_STATE, INDIAN_STATES } from '../constants/location.js';
 import { HOME_DISCOVERY_CITY_ORDER } from '../constants/homeDiscovery.js';
 import { calculateDistance } from '../services/locationService.js';
-import { CITY_MAPPING, getCityNamesForDisplay, getDisplayNameForCity } from './cityMapping.js';
+import { CITY_MAPPING, getCityNamesForDisplay, getDisplayNameForCity, primaryLocationLabel } from './cityMapping.js';
 import { getCurrentPositionUnified } from './getCurrentPositionUnified.js';
+import {
+  fetchReverseGeocodeAddress,
+  resolveDisplayLocationFromAddress,
+} from './reverseGeocode.js';
 
 export type DetectedMarketCity = {
   /** Display name from HOME_DISCOVERY / CITY_MAPPING (e.g. "Delhi NCR", "Mumbai"). */
@@ -59,17 +63,35 @@ function locationLabelForCity(displayCity: string): string {
   return displayCity;
 }
 
-/** Browser / Capacitor geolocation → nearest tier-1 market city (no default filter applied). */
+const ALL_CITY_ROWS = Object.entries(CITIES_BY_STATE).flatMap(([stateCode, cities]) =>
+  cities.map((city) => ({ city, stateCode })),
+);
+
+/** Browser / Capacitor geolocation → market city (same reverse-geocode path as LocationModal). */
 export async function detectNearestMarketCity(): Promise<DetectedMarketCity | null> {
   try {
     const position = await getCurrentPositionUnified();
     const lat = position.coords.latitude;
     const lng = position.coords.longitude;
-    const catalog = nearestCatalogCityName(lat, lng);
-    const city = toHomeDiscoveryCityName(catalog);
+
+    let locationLabel = locationLabelForCity(toHomeDiscoveryCityName(nearestCatalogCityName(lat, lng)));
+    try {
+      const address = await fetchReverseGeocodeAddress(lat, lng);
+      locationLabel = resolveDisplayLocationFromAddress(
+        address,
+        ALL_CITY_ROWS,
+        INDIAN_STATES,
+        lat,
+        lng,
+      );
+    } catch {
+      /* nearest-catalog fallback already set */
+    }
+
+    const city = toHomeDiscoveryCityName(primaryLocationLabel(locationLabel));
     return {
       city,
-      locationLabel: locationLabelForCity(city),
+      locationLabel,
       lat,
       lng,
     };

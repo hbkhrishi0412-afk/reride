@@ -225,6 +225,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
             iconGradient="from-emerald-500 to-green-600"
             accent="emerald"
             dense
+            onClick={() => onNavigate(ViewEnum.COMPARISON)}
           />
         </StatCardGrid>
       </div>

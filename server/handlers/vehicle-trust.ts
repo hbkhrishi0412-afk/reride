@@ -16,7 +16,7 @@ import {
   type SellerDisclosureChecklist,
 } from '../../lib/vehicleDisclosureChecklist.js';
 import { VehicleCategory } from '../../vehicle-category.js';
-import type { RatingEligibility, VehicleTrustDeal } from '../../types.js';
+import type { RatingEligibility, VehicleTrustDeal, Vehicle } from '../../types.js';
 
 function firstQueryParam(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value[0];
@@ -46,11 +46,12 @@ async function resolveVehicleId(vehicleIdRaw: string): Promise<{
   vehicle: Awaited<ReturnType<typeof supabaseVehicleService.resolveVehicleIdentity>>['vehicle'];
 } | null> {
   try {
-    const num = Number(vehicleIdRaw);
+    const trimmed = vehicleIdRaw.trim();
+    const num = Number(trimmed);
+    const isPlainNumericId =
+      Number.isFinite(num) && num > 0 && String(num) === trimmed;
     const result = await supabaseVehicleService.resolveVehicleIdentity(
-      Number.isFinite(num) && num > 0
-        ? { id: num, databaseId: vehicleIdRaw }
-        : { databaseId: vehicleIdRaw },
+      isPlainNumericId ? { id: num, databaseId: trimmed } : { databaseId: trimmed },
     );
     return { primaryKey: result.primaryKey, vehicle: result.vehicle };
   } catch {
@@ -122,7 +123,7 @@ export async function handleVehicleTrust(
       if (vehicleIdRaw) {
         const resolved = await resolveVehicleId(vehicleIdRaw);
         if (resolved) {
-          const updates: Record<string, unknown> = {
+          const updates: Partial<Vehicle> = {
             registrationNumber,
             vahanVerifiedAt: snapshot?.verifiedAt || new Date().toISOString(),
           };
@@ -130,10 +131,18 @@ export async function handleVehicleTrust(
             updates.vahanSnapshot = snapshot;
             if (snapshot.engineNumber) updates.engineNumber = snapshot.engineNumber;
             if (snapshot.chassisNumber) updates.chassisNumber = snapshot.chassisNumber;
-            if (snapshot.ownerCount) updates.noOfOwners = snapshot.ownerCount;
+            if (snapshot.ownerCount != null) updates.noOfOwners = snapshot.ownerCount;
             if (snapshot.insuranceUpto) updates.insuranceValidity = snapshot.insuranceUpto;
+            if (snapshot.manufacturer) updates.make = snapshot.manufacturer;
+            if (snapshot.model) updates.model = snapshot.model;
+            if (snapshot.fuelType) updates.fuelType = snapshot.fuelType;
+            if (snapshot.rtoCode) updates.rto = snapshot.rtoCode;
           }
-          await supabaseVehicleService.update(resolved.primaryKey, updates);
+          try {
+            await supabaseVehicleService.update(resolved.primaryKey, updates);
+          } catch (persistError) {
+            console.warn('Vahan verify: could not persist to vehicle row', persistError);
+          }
         }
       }
 

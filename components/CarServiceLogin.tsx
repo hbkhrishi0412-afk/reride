@@ -285,16 +285,15 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
           </div>
           {mode === 'login' && (
             <div className="flex items-center justify-between">
-              <label className="flex items-center cursor-pointer select-none">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   id="car-service-remember-me"
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 border-gray-300 rounded"
-                  style={{ accentColor: '#2563EB' }}
+                  className="shrink-0"
                 />
-                <span className="ml-2 text-sm text-gray-700">Remember me</span>
+                <span className="text-sm text-gray-700 leading-none">Remember me</span>
               </label>
               <button
                 type="button"

@@ -163,8 +163,23 @@ function supabaseRowToVehicle(row: any): Vehicle {
   };
 }
 
+function getSupabaseErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 // Helper to convert Vehicle type to Supabase row
-function vehicleToSupabaseRow(vehicle: Partial<Vehicle>): any {
+function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, options?: { partial?: boolean }): any {
+  const partial = options?.partial ?? false;
+  const has = (key: keyof Vehicle) => Object.prototype.hasOwnProperty.call(vehicle, key);
   const metadata: any = {};
   
   // Extract fields that should go in metadata
@@ -189,7 +204,7 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>): any {
   ];
   
   metadataFields.forEach(field => {
-    if (vehicle[field as keyof Vehicle] !== undefined) {
+    if (partial ? has(field as keyof Vehicle) : vehicle[field as keyof Vehicle] !== undefined) {
       metadata[field] = vehicle[field as keyof Vehicle];
     }
   });
@@ -201,42 +216,56 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>): any {
     metadata.qualityReport = { fixesDone: Array.isArray(fixesDone) ? fixesDone : [] };
   }
 
-  const row: any = {
-    id: vehicle.id?.toString() || undefined,
-    category: vehicle.category || null,
-    make: vehicle.make || '',
-    model: vehicle.model || '',
-    variant: vehicle.variant || null,
-    year: vehicle.year || null,
-    price: vehicle.price || 0,
-    mileage: vehicle.mileage || null,
-    images: vehicle.images || [],
-    features: vehicle.features || [],
-    description: vehicle.description || null,
-    seller_email: vehicle.sellerEmail || null,
-    seller_name: vehicle.sellerName || null,
-    engine: vehicle.engine || null,
-    transmission: vehicle.transmission || null,
-    fuel_type: vehicle.fuelType || null,
-    fuel_efficiency: vehicle.fuelEfficiency || null,
-    color: vehicle.color || null,
-    status: vehicle.status || 'published',
-    is_featured: vehicle.isFeatured || false,
-    views: vehicle.views || 0,
-    inquiries_count: vehicle.inquiriesCount || 0,
-    registration_year: vehicle.registrationYear || null,
-    insurance_validity: vehicle.insuranceValidity || null,
-    insurance_type: vehicle.insuranceType || null,
-    rto: vehicle.rto || null,
-    city: vehicle.city || null,
-    state: vehicle.state || null,
-    no_of_owners: vehicle.noOfOwners || null,
-    displacement: vehicle.displacement || null,
-    ground_clearance: vehicle.groundClearance || null,
-    boot_space: vehicle.bootSpace || null,
-    created_at: vehicle.createdAt || new Date().toISOString(),
-    updated_at: vehicle.updatedAt || new Date().toISOString(),
+  const row: any = {};
+
+  const setColumn = (vehicleKey: keyof Vehicle, rowKey: string, value: unknown) => {
+    if (partial && !has(vehicleKey)) return;
+    row[rowKey] = value;
   };
+
+  if (!partial) {
+    row.id = vehicle.id?.toString() || undefined;
+  } else if (has('id') && vehicle.id != null) {
+    row.id = String(vehicle.id);
+  }
+
+  setColumn('category', 'category', vehicle.category || null);
+  setColumn('make', 'make', vehicle.make || '');
+  setColumn('model', 'model', vehicle.model || '');
+  setColumn('variant', 'variant', vehicle.variant || null);
+  setColumn('year', 'year', vehicle.year ?? null);
+  setColumn('price', 'price', vehicle.price ?? 0);
+  setColumn('mileage', 'mileage', vehicle.mileage ?? null);
+  setColumn('images', 'images', vehicle.images || []);
+  setColumn('features', 'features', vehicle.features || []);
+  setColumn('description', 'description', vehicle.description || null);
+  setColumn('sellerEmail', 'seller_email', vehicle.sellerEmail || null);
+  setColumn('sellerName', 'seller_name', vehicle.sellerName || null);
+  setColumn('engine', 'engine', vehicle.engine || null);
+  setColumn('transmission', 'transmission', vehicle.transmission || null);
+  setColumn('fuelType', 'fuel_type', vehicle.fuelType || null);
+  setColumn('fuelEfficiency', 'fuel_efficiency', vehicle.fuelEfficiency || null);
+  setColumn('color', 'color', vehicle.color || null);
+  setColumn('status', 'status', vehicle.status || 'published');
+  setColumn('isFeatured', 'is_featured', vehicle.isFeatured || false);
+  setColumn('views', 'views', vehicle.views ?? 0);
+  setColumn('inquiriesCount', 'inquiries_count', vehicle.inquiriesCount ?? 0);
+  setColumn('registrationYear', 'registration_year', vehicle.registrationYear ?? null);
+  setColumn('insuranceValidity', 'insurance_validity', vehicle.insuranceValidity ?? null);
+  setColumn('insuranceType', 'insurance_type', vehicle.insuranceType ?? null);
+  setColumn('rto', 'rto', vehicle.rto ?? null);
+  setColumn('city', 'city', vehicle.city ?? null);
+  setColumn('state', 'state', vehicle.state ?? null);
+  setColumn('noOfOwners', 'no_of_owners', vehicle.noOfOwners ?? null);
+  setColumn('displacement', 'displacement', vehicle.displacement ?? null);
+  setColumn('groundClearance', 'ground_clearance', vehicle.groundClearance ?? null);
+  setColumn('bootSpace', 'boot_space', vehicle.bootSpace ?? null);
+  setColumn('createdAt', 'created_at', vehicle.createdAt || new Date().toISOString());
+  setColumn('updatedAt', 'updated_at', vehicle.updatedAt || new Date().toISOString());
+
+  if (partial) {
+    row.updated_at = vehicle.updatedAt || new Date().toISOString();
+  }
 
   // Only include metadata if it has values (don't include null/empty metadata to avoid schema errors)
   if (Object.keys(metadata).length > 0) {
@@ -415,15 +444,10 @@ export const supabaseVehicleService = {
       throw new Error(`Failed to fetch existing vehicle: ${fetchError.message}`);
     }
 
-    const row = vehicleToSupabaseRow(updates);
+    const row = vehicleToSupabaseRow(updates, { partial: true });
 
     // Never overwrite the primary key on update
     delete row.id;
-
-    // Preserve NOT NULL seller_email on partial updates.
-    if (!Object.prototype.hasOwnProperty.call(updates, 'sellerEmail')) {
-      delete row.seller_email;
-    }
 
     Object.keys(row).forEach(key => {
       if (row[key] === undefined) {
@@ -464,14 +488,13 @@ export const supabaseVehicleService = {
     try {
       return await applyUpdate(row);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getSupabaseErrorMessage(error);
       if (message.includes('metadata') || message.includes('Could not find')) {
         delete row.metadata;
         try {
           return await applyUpdate(row);
         } catch (retryError: unknown) {
-          const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
-          throw new Error(`Failed to update vehicle: ${retryMessage}`);
+          throw new Error(`Failed to update vehicle: ${getSupabaseErrorMessage(retryError)}`);
         }
       }
       throw new Error(`Failed to update vehicle: ${message}`);

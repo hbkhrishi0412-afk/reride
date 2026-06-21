@@ -10,7 +10,11 @@ import BoostListingModal from './BoostListingModal';
 import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
-import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
+import {
+  buildSellerQrCodeUrl,
+  buildSellerShareUrl,
+  sellerQrDownloadFileName,
+} from '../utils/sellerQrCode';
 import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { formatRelativeTime } from '../utils/date';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
@@ -21,7 +25,7 @@ import {
   type ListingEnhancementResult 
 } from '../services/listingEnhancementService';
 import SellerDisclosureForm from './SellerDisclosureForm';
-import { validateSellerDisclosure } from '../lib/vehicleDisclosureChecklist';
+import { formatIndianNumberInput, parseIndianNumberDigits } from '../utils/indianNumberInput.js';
 import {
   clearChecklistPhotoByUrl,
   countAiReadyPhotos,
@@ -1830,10 +1834,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   };
 
   const handleDownloadQRCode = async () => {
-    const origin = getPublicWebOriginForShareLinks();
-    const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(shareUrl)}`;
-    const fileName = `seller-qr-${(currentUser.dealershipName || currentUser.name || 'profile').toString().replace(/\s+/g, '-')}.png`;
+    const shareUrl = buildSellerShareUrl(currentUser.email);
+    const qrUrl = buildSellerQrCodeUrl(shareUrl, 240);
+    const fileName = sellerQrDownloadFileName(
+      (currentUser.dealershipName || currentUser.name || 'profile').toString(),
+    );
     await saveQrCodePngFromUrl(qrUrl, fileName, addToast);
   };
 
@@ -2078,9 +2083,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
         {/* Seller QR card */}
         {isSeller && (() => {
-          const origin = getPublicWebOriginForShareLinks();
-          const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(shareUrl)}&bgcolor=ffffff&color=0B0B0F&margin=8`;
+          const shareUrl = buildSellerShareUrl(currentUser.email);
+          const qrUrl = buildSellerQrCodeUrl(shareUrl, 240);
           const onCopy = async () => {
             try {
               await navigator.clipboard.writeText(shareUrl);
@@ -2336,10 +2340,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   const handleAddFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    const numericFields = ['year', 'price', 'mileage', 'noOfOwners', 'registrationYear'];
     setAddFormData(prev => ({
       ...prev,
-      [name]: name === 'year' || name === 'price' || name === 'mileage' || name === 'noOfOwners' || name === 'registrationYear'
-        ? (value === '' ? 0 : Number(value))
+      [name]: numericFields.includes(name)
+        ? (() => {
+            const digits = parseIndianNumberDigits(String(value));
+            return digits === '' ? 0 : Number(digits);
+          })()
         : value
     }));
     // Clear error when user starts typing
@@ -2369,14 +2377,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     }
     if (addFormData.mileage < 0) {
       newErrors.mileage = t('sellerListing.error.mileage');
-    }
-
-    const disclosure = validateSellerDisclosure(
-      addFormData.sellerDisclosureChecklist,
-      addFormData.category || VehicleCategory.FOUR_WHEELER,
-    );
-    if (!disclosure.valid) {
-      newErrors.disclosure = disclosure.errors[0] || 'Complete disclosure checklist';
     }
 
     setAddErrors(newErrors);
@@ -2436,6 +2436,15 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       // Upload images
       const uploadResults = await uploadImages(files, 'vehicles', currentUser.email);
       
+      const failed = uploadResults.filter((r) => !r.success);
+      if (failed.length > 0) {
+        notify(
+          failed[0]?.error ||
+            `${failed.length} photo(s) failed to upload. Please try again.`,
+          'error',
+        );
+      }
+
       // Get successful uploads
       const successfulUrls = uploadResults
         .filter(r => r.success && r.url)
@@ -2483,6 +2492,13 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const isPlanExpired =
+      !!currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date();
+    if (isPlanExpired) {
+      notify('Your subscription plan has expired. Please renew your plan to create new listings.', 'error');
+      return;
+    }
     
     if (!validateAddForm()) {
       return;
@@ -2490,7 +2506,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
     setIsAddingVehicle(true);
     try {
-      // Run enhancement pipeline (validation + AI inspection + quality scoring)
       const enhancementResult = await enhanceVehicleListing(addFormData, {
         runValidation: true,
         runAIInspection: false,
@@ -2499,17 +2514,19 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       });
 
       if (!enhancementResult.success) {
-        // Show validation errors
         const newErrors: Record<string, string> = {};
         enhancementResult.validation.errors.forEach(err => {
           newErrors[err.field] = err.message;
         });
         setAddErrors(newErrors);
-        setIsAddingVehicle(false);
+        notify(
+          enhancementResult.validation.errors.map((e) => e.message).join(' ') ||
+            'Please fix validation errors before saving.',
+          'error',
+        );
         return;
       }
 
-      // Use enhanced vehicle data
       if (onAddVehicle) {
         await onAddVehicle(enhancementResult.vehicle, false);
         setAddFormData(initialAddFormData);
@@ -2517,12 +2534,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       }
     } catch (error) {
       console.error('Failed to add vehicle:', error);
-      // Fallback to direct save if enhancement fails
-      if (onAddVehicle) {
-        await onAddVehicle(addFormData, false);
-        setAddFormData(initialAddFormData);
-        setActiveTab('listings');
-      }
+      notify('Failed to add listing. Please check your connection and try again.', 'error');
     } finally {
       setIsAddingVehicle(false);
     }
@@ -2647,12 +2659,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   {t('sellerListing.label.price')} <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   name="price"
-                  value={addFormData.price || ''}
+                  value={formatIndianNumberInput(addFormData.price || '')}
                   onChange={handleAddFormChange}
                   placeholder={t('sellerListing.placeholder.price')}
-                  min="0"
                   className={`native-input ${addErrors.price ? 'bg-red-50' : ''}`}
                   required
                 />
@@ -2669,12 +2681,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   {t('sellerListing.label.mileage')} <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   name="mileage"
-                  value={addFormData.mileage || ''}
+                  value={formatIndianNumberInput(addFormData.mileage || '')}
                   onChange={handleAddFormChange}
                   placeholder={t('sellerListing.placeholder.mileage')}
-                  min="0"
                   className={`native-input ${addErrors.mileage ? 'bg-red-50' : ''}`}
                   required
                 />
@@ -2789,9 +2801,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           </div>
 
           <div className="pt-6 border-t border-gray-200">
-            {addErrors.disclosure && (
-              <p className="text-sm text-red-600 mb-2">{addErrors.disclosure}</p>
-            )}
             <SellerDisclosureForm
               compact
               category={addFormData.category || VehicleCategory.FOUR_WHEELER}
@@ -2799,19 +2808,28 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               sellerEmail={currentUser.email}
               registrationNumber={addFormData.registrationNumber}
               vahanVerified={Boolean(addFormData.vahanVerifiedAt || addFormData.vahanSnapshot)}
+              vahanSnapshot={addFormData.vahanSnapshot}
               onChange={handleChecklistChange}
               onVerifyVahan={async (registrationNumber) => {
-                const result = await verifyVahanRegistration(registrationNumber);
-                setAddFormData((prev) => ({
-                  ...prev,
-                  registrationNumber,
-                  vahanVerifiedAt: result.snapshot?.verifiedAt || new Date().toISOString(),
-                  vahanSnapshot: result.snapshot ?? prev.vahanSnapshot,
-                }));
-                notify(
-                  result.verified ? 'RC verified' : result.message || 'RC saved',
-                  result.verified ? 'success' : 'warning',
-                );
+                try {
+                  const result = await verifyVahanRegistration(registrationNumber);
+                  setAddFormData((prev) => ({
+                    ...prev,
+                    registrationNumber,
+                    vahanVerifiedAt: result.snapshot?.verifiedAt || new Date().toISOString(),
+                    vahanSnapshot: result.snapshot ?? prev.vahanSnapshot,
+                    engineNumber: result.snapshot?.engineNumber || prev.engineNumber,
+                    chassisNumber: result.snapshot?.chassisNumber || prev.chassisNumber,
+                    noOfOwners: result.snapshot?.ownerCount ?? prev.noOfOwners,
+                    insuranceValidity: result.snapshot?.insuranceUpto || prev.insuranceValidity,
+                  }));
+                  notify(
+                    result.verified ? 'RC verified' : result.message || 'RC saved',
+                    result.verified ? 'success' : 'warning',
+                  );
+                } catch (e) {
+                  notify(e instanceof Error ? e.message : 'Verification failed', 'error');
+                }
               }}
             />
           </div>
@@ -2860,7 +2878,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   </div>
                   <div>
                     <span className="text-sm font-semibold text-blue-700">{t('sellerListing.tapToUpload', 'Add Extra Photos')}</span>
-                    <p className="text-xs text-blue-600">{t('sellerListing.photoFormats', 'Optional — JPG, PNG up to 10MB each')}</p>
+                    <p className="text-xs text-blue-600">{t('sellerListing.photoFormats', 'Optional — JPG, PNG up to 25MB each (compressed on upload)')}</p>
                   </div>
                 </>
               )}
@@ -3038,12 +3056,16 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       const { name, value } = e.target;
+      const numericFields = ['year', 'price', 'mileage', 'noOfOwners', 'registrationYear'];
       setEditFormData(prev => {
         if (!prev) return prev;
         return {
           ...prev,
-          [name]: name === 'year' || name === 'price' || name === 'mileage' || name === 'noOfOwners' || name === 'registrationYear'
-            ? (value === '' ? 0 : Number(value))
+          [name]: numericFields.includes(name)
+            ? (() => {
+                const digits = parseIndianNumberDigits(String(value));
+                return digits === '' ? 0 : Number(digits);
+              })()
             : value
         };
       });
@@ -3074,14 +3096,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       }
       if (formData.mileage < 0) {
         newErrors.mileage = t('sellerListing.error.mileage');
-      }
-
-      const disclosure = validateSellerDisclosure(
-        formData.sellerDisclosureChecklist,
-        formData.category || VehicleCategory.FOUR_WHEELER,
-      );
-      if (!disclosure.valid) {
-        newErrors.disclosure = disclosure.errors[0] || 'Complete disclosure checklist';
       }
 
       setEditErrors(newErrors);
@@ -3213,9 +3227,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   {t('sellerListing.label.price')} <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   name="price"
-                  value={formData.price}
+                  value={formatIndianNumberInput(formData.price)}
                   onChange={handleChange}
                   className={`w-full px-3 py-2 border rounded-lg ${editErrors.price ? 'border-red-500' : 'border-gray-300'}`}
                   required
@@ -3228,9 +3243,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   {t('sellerListing.label.mileage')} <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   name="mileage"
-                  value={formData.mileage}
+                  value={formatIndianNumberInput(formData.mileage)}
                   onChange={handleChange}
                   className={`w-full px-3 py-2 border rounded-lg ${editErrors.mileage ? 'border-red-500' : 'border-gray-300'}`}
                   required
@@ -3459,9 +3475,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
           <div className="space-y-4 pt-4 border-t">
             <h4 className="font-semibold text-gray-900">Condition disclosure checklist</h4>
-            {editErrors.disclosure && (
-              <p className="text-sm text-red-600">{editErrors.disclosure}</p>
-            )}
+            <p className="text-xs text-gray-500">Optional — complete for a Verified Listing badge</p>
             <SellerDisclosureForm
               compact
               category={formData.category || VehicleCategory.FOUR_WHEELER}
@@ -3469,26 +3483,35 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               sellerEmail={currentUser.email}
               registrationNumber={formData.registrationNumber}
               vahanVerified={Boolean(formData.vahanVerifiedAt || formData.vahanSnapshot)}
+              vahanSnapshot={formData.vahanSnapshot}
               onChange={handleEditChecklistChange}
               onVerifyVahan={async (registrationNumber) => {
-                const result = await verifyVahanRegistration(
-                  registrationNumber,
-                  editingVehicle?.id ?? editingVehicle?.databaseId,
-                );
-                setEditFormData((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        registrationNumber,
-                        vahanVerifiedAt: result.snapshot?.verifiedAt || new Date().toISOString(),
-                        vahanSnapshot: result.snapshot ?? prev.vahanSnapshot,
-                      }
-                    : prev,
-                );
-                notify(
-                  result.verified ? 'RC verified' : result.message || 'RC saved',
-                  result.verified ? 'success' : 'warning',
-                );
+                try {
+                  const result = await verifyVahanRegistration(
+                    registrationNumber,
+                    editingVehicle?.databaseId ?? editingVehicle?.id,
+                  );
+                  setEditFormData((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          registrationNumber,
+                          vahanVerifiedAt: result.snapshot?.verifiedAt || new Date().toISOString(),
+                          vahanSnapshot: result.snapshot ?? prev.vahanSnapshot,
+                          engineNumber: result.snapshot?.engineNumber || prev.engineNumber,
+                          chassisNumber: result.snapshot?.chassisNumber || prev.chassisNumber,
+                          noOfOwners: result.snapshot?.ownerCount ?? prev.noOfOwners,
+                          insuranceValidity: result.snapshot?.insuranceUpto || prev.insuranceValidity,
+                        }
+                      : prev,
+                  );
+                  notify(
+                    result.verified ? 'RC verified' : result.message || 'RC saved',
+                    result.verified ? 'success' : 'warning',
+                  );
+                } catch (e) {
+                  notify(e instanceof Error ? e.message : 'Verification failed', 'error');
+                }
               }}
             />
           </div>

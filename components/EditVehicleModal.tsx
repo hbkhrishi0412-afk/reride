@@ -28,8 +28,7 @@ interface EditVehicleModalProps {
 const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, onSave }) => {
     const [formData, setFormData] = useState<Vehicle>(vehicle);
     const [featureInput, setFeatureInput] = useState('');
-    const [fixInput, setFixInput] = useState('');
-    const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'media' | 'quality' | 'offer'>('basic');
+    const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'media' | 'offer'>('basic');
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [enhancementResult, setEnhancementResult] = useState<ListingEnhancementResult | null>(null);
@@ -152,27 +151,6 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
   
     const handleRemoveFeature = (featureToRemove: string) => {
         setFormData(prev => ({ ...prev, features: prev.features.filter(f => f !== featureToRemove) }));
-    };
-
-    const handleAddFix = () => {
-        if (fixInput.trim() && !formData.qualityReport?.fixesDone.includes(fixInput.trim())) {
-            setFormData(prev => ({
-                ...prev,
-                qualityReport: {
-                    fixesDone: [...(prev.qualityReport?.fixesDone || []), fixInput.trim()]
-                }
-            }));
-            setFixInput('');
-        }
-    };
-
-    const handleRemoveFix = (fixToRemove: string) => {
-        setFormData(prev => ({
-            ...prev,
-            qualityReport: {
-                fixesDone: (prev.qualityReport?.fixesDone || []).filter(f => f !== fixToRemove)
-            }
-        }));
     };
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -364,7 +342,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
         </div>
     );
 
-    type TabId = 'basic' | 'specs' | 'media' | 'quality' | 'offer';
+    type TabId = 'basic' | 'specs' | 'media' | 'offer';
     const TabButton = ({ tab, label, icon }: { tab: TabId; label: string; icon: string }) => (
         <button
             type="button"
@@ -404,7 +382,6 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                         <TabButton tab="basic" label="Basic Info" icon="🚗" />
                         <TabButton tab="specs" label="Specifications" icon="⚙️" />
                         <TabButton tab="media" label="Media & Features" icon="📷" />
-                        <TabButton tab="quality" label="Quality Report" icon="✅" />
                         <TabButton tab="offer" label="Listing Offer" icon="🎁" />
                     </div>
 
@@ -554,13 +531,9 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                     <span>⚙️</span> Technical Specifications
                                 </h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <FormInput label="Engine" name="engine" value={formData.engine} placeholder="2.3L Diesel" />
                                     <FormInput label="Transmission" name="transmission" value={formData.transmission} placeholder="DCT" />
                                     <FormInput label="Fuel Type" name="fuelType" value={formData.fuelType} placeholder="CNG" />
                                     <FormInput label="Fuel Efficiency" name="fuelEfficiency" value={formData.fuelEfficiency} placeholder="25 KMPL" />
-                                    <FormInput label="Displacement (cc)" name="displacement" value={formData.displacement} placeholder="2393" />
-                                    <FormInput label="Ground Clearance (mm)" name="groundClearance" value={formData.groundClearance} placeholder="170" />
-                                    <FormInput label="Boot Space (litres)" name="bootSpace" value={formData.bootSpace} placeholder="300" />
                                 </div>
                             </div>
                         )}
@@ -682,60 +655,6 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                             ))}
                                         </div>
                                     )}
-                                </div>
-                            </div>
-                        )}
-
-                        {activeTab === 'quality' && (
-                            <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
-                                <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-6 flex items-center gap-2">
-                                    <span>✅</span> Quality Report
-                                </h3>
-                                <div className="space-y-6">
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                        Tip: edit the overall condition and history in the <span className="font-semibold">Vehicle Description</span> on the Basic Info tab. Use this section to highlight specific fixes and upgrades.
-                                    </p>
-                                    <div>
-                                        <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
-                                            Fixes Done / Upgrades
-                                        </label>
-                                        <div className="flex gap-2 mb-4">
-                                            <input 
-                                                type="text" 
-                                                value={fixInput} 
-                                                onChange={(e) => setFixInput(e.target.value)} 
-                                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFix(); } }} 
-                                                placeholder="e.g., New tires, Brake pads replaced, AC service" 
-                                                className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent" 
-                                            />
-                                            <button 
-                                                type="button" 
-                                                onClick={handleAddFix} 
-                                                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
-                                            >
-                                                Add Fix
-                                            </button>
-                                        </div>
-                                        {formData.qualityReport?.fixesDone && formData.qualityReport.fixesDone.length > 0 && (
-                                            <div className="flex flex-wrap gap-2">
-                                                {formData.qualityReport.fixesDone.map(fix => (
-                                                    <span 
-                                                        key={fix} 
-                                                        className="bg-green-100 text-green-700 text-sm font-medium px-3 py-1 rounded-full flex items-center gap-2 border border-green-200"
-                                                    >
-                                                        {fix}
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={() => handleRemoveFix(fix)} 
-                                                            className="text-green-700 hover:text-red-500 transition-colors"
-                                                        >
-                                                            ×
-                                                        </button>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
                                 </div>
                             </div>
                         )}

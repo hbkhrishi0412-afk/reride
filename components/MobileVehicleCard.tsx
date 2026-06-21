@@ -12,6 +12,7 @@ interface MobileVehicleCardProps {
   onToggleCompare?: (vehicleId: number) => void;
   isInWishlist?: boolean;
   isInCompare?: boolean;
+  isCompareDisabled?: boolean;
   showActions?: boolean;
 }
 
@@ -27,6 +28,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
   onToggleCompare,
   isInWishlist = false,
   isInCompare = false,
+  isCompareDisabled = false,
   showActions = true
 }) => {
   const { t } = useTranslation();
@@ -57,10 +59,9 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
 
   const handleCompareClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onToggleCompare) {
-      onToggleCompare(vehicle.id);
-    }
-  }, [onToggleCompare, vehicle.id]);
+    if (isCompareDisabled || !onToggleCompare) return;
+    onToggleCompare(vehicle.id);
+  }, [onToggleCompare, vehicle.id, isCompareDisabled]);
 
   const handleSelectClick = useCallback(() => {
     if (suppressClickRef.current) return;
@@ -250,6 +251,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
             {onToggleCompare && (
               <button
                 type="button"
+                disabled={isCompareDisabled}
                 onPointerDown={(e) => e.stopPropagation()}
                 onPointerUp={(e) => e.stopPropagation()}
                 onTouchStart={(e) => e.stopPropagation()}
@@ -257,7 +259,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
                 onClick={handleCompareClick}
                 className={`mobile-tap-target backdrop-blur-sm rounded-full p-2 shadow-md active:scale-90 transition-transform ${
                   isInCompare ? 'bg-orange-500/90' : 'bg-white/90'
-                }`}
+                } ${isCompareDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}
                 aria-label={
                   isInCompare ? t('vehicle.card.compareRemoveShort') : t('vehicle.card.compareAddShort')
                 }

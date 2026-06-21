@@ -20,6 +20,12 @@ interface SellCarSubmission {
   status: 'pending' | 'contacted' | 'completed' | 'rejected';
   adminNotes?: string;
   estimatedPrice?: number;
+  expectedPrice?: number;
+  condition?: string;
+  sellerType?: 'individual' | 'dealer';
+  engineNumber?: string;
+  chassisNumber?: string;
+  vehicleImages?: string[];
   _id?: string;
 }
 
@@ -43,8 +49,11 @@ class SellCarAPI {
     } catch (error) {
       console.error('Error submitting car data:', error);
       
-      // Fallback for demo purposes when API is not available
-      if (error instanceof Error && error.message.includes('Failed to fetch')) {
+      // Fallback for local dev only when API is unreachable
+      const isProduction =
+        (typeof import.meta !== 'undefined' && (import.meta as { env?: { PROD?: boolean } }).env?.PROD) ||
+        (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production');
+      if (!isProduction && error instanceof Error && error.message.includes('Failed to fetch')) {
         console.log('API not available, using demo mode');
         return {
           success: true,

@@ -2,7 +2,85 @@
  * server/handlers/sell-car.ts — Sell car submission handler
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { USE_SUPABASE, adminRead, adminReadAll, adminCreate, adminUpdate, adminDelete, HandlerOptions, sanitizeObject, sanitizeString, requireAdmin } from '../handler-shared.js';
+import { randomBytes } from 'crypto';
+import { getSupabaseAdminClient } from '../../lib/supabase-admin.js';
+import {
+  USE_SUPABASE,
+  adminRead,
+  adminReadAll,
+  adminCreate,
+  adminUpdate,
+  adminDelete,
+  HandlerOptions,
+  sanitizeObject,
+  sanitizeString,
+  requireAdmin,
+} from '../handler-shared.js';
+
+const MAX_SELL_CAR_IMAGES = 10;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+async function uploadSellCarImageFromDataUrl(
+  dataUrl: string,
+  submissionId: string,
+  index: number,
+): Promise<string | null> {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/i);
+  if (!match) return null;
+
+  const mime = match[1].toLowerCase().split(';')[0].trim();
+  const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (!allowed.includes(mime)) return null;
+
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(match[2], 'base64');
+  } catch {
+    return null;
+  }
+  if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) return null;
+
+  const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+  const filePath = `sell-car-submissions/${submissionId}/${index + 1}_${randomBytes(4).toString('hex')}.${ext}`;
+
+  try {
+    const supabase = getSupabaseAdminClient();
+    const { error } = await supabase.storage.from('Images').upload(filePath, buffer, {
+      contentType: mime === 'image/jpg' ? 'image/jpeg' : mime,
+      cacheControl: '3600',
+      upsert: false,
+    });
+    if (error) return null;
+    const { data } = supabase.storage.from('Images').getPublicUrl(filePath);
+    return data.publicUrl || null;
+  } catch {
+    return null;
+  }
+}
+
+async function normalizeVehicleImages(
+  raw: unknown,
+  submissionId: string,
+): Promise<string[]> {
+  if (!Array.isArray(raw)) return [];
+
+  const urls: string[] = [];
+  for (let i = 0; i < Math.min(raw.length, MAX_SELL_CAR_IMAGES); i++) {
+    const item = raw[i];
+    if (typeof item !== 'string' || !item.trim()) continue;
+
+    if (/^https?:\/\//i.test(item)) {
+      urls.push(item);
+      continue;
+    }
+
+    if (item.startsWith('data:')) {
+      const uploaded = await uploadSellCarImageFromDataUrl(item, submissionId, i);
+      if (uploaded) urls.push(uploaded);
+    }
+  }
+  return urls;
+}
 
 export async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   if (!USE_SUPABASE) {
@@ -31,8 +109,16 @@ export async function handleSellCar(req: VercelRequest, res: VercelResponse, _op
           return res.status(409).json({ error: 'Registration already submitted' });
         }
 
-        const sanitized = await sanitizeObject(data);
         const id = `submission_${Date.now()}`;
+        const vehicleImages = await normalizeVehicleImages(data.vehicleImages, id);
+
+        const { vehicleImages: _rawImages, ...rest } = data;
+        const payload = {
+          ...rest,
+          ...(vehicleImages.length > 0 ? { vehicleImages } : {}),
+        };
+
+        const sanitized = await sanitizeObject(payload);
         await adminCreate(path, sanitized, id);
         return res.status(201).json({ success: true, id, message: 'Submission received' });
       }

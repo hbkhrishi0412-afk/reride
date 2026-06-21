@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import type { Vehicle } from '../types';
 import VehicleCard from './VehicleCard';
+import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 
 interface VirtualizedVehicleListProps {
   vehicles: Vehicle[];
@@ -9,6 +10,7 @@ interface VirtualizedVehicleListProps {
   onToggleCompare: (vehicleId: number) => void;
   onToggleWishlist: (vehicleId: number) => void;
   comparisonList: number[];
+  comparisonCategory?: string | null;
   wishlist: number[];
   onViewSellerProfile: (sellerEmail: string) => void;
   height?: number;
@@ -24,6 +26,7 @@ interface VehicleRowProps {
     onToggleCompare: (vehicleId: number) => void;
     onToggleWishlist: (vehicleId: number) => void;
     comparisonList: number[];
+    comparisonCategory?: string | null;
     wishlist: number[];
     onViewSellerProfile: (sellerEmail: string) => void;
   };
@@ -36,6 +39,7 @@ const VehicleRow = memo<VehicleRowProps>(({ index, style, data }) => {
     onToggleCompare,
     onToggleWishlist,
     comparisonList,
+    comparisonCategory = null,
     wishlist,
     onViewSellerProfile
   } = data;
@@ -57,7 +61,7 @@ const VehicleRow = memo<VehicleRowProps>(({ index, style, data }) => {
         onToggleWishlist={() => onToggleWishlist(vehicle.id)}
         isSelectedForCompare={comparisonList.includes(vehicle.id)}
         isInWishlist={wishlist.includes(vehicle.id)}
-        isCompareDisabled={comparisonList.length >= 3 && !comparisonList.includes(vehicle.id)}
+        isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, data.comparisonCategory ?? null)}
         onViewSellerProfile={onViewSellerProfile}
       />
     </div>
@@ -72,6 +76,7 @@ const VirtualizedVehicleList: React.FC<VirtualizedVehicleListProps> = ({
   onToggleCompare,
   onToggleWishlist,
   comparisonList,
+  comparisonCategory = null,
   wishlist,
   onViewSellerProfile,
   height = 600,
@@ -83,6 +88,7 @@ const VirtualizedVehicleList: React.FC<VirtualizedVehicleListProps> = ({
     onToggleCompare,
     onToggleWishlist,
     comparisonList,
+    comparisonCategory,
     wishlist,
     onViewSellerProfile
   };

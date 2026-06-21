@@ -1,18 +1,12 @@
 import React, { useState, useMemo, useEffect, useCallback, memo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, User, Conversation, VehicleData, ChatMessage, VehicleDocument } from '../types';
+import type { Vehicle, User, Conversation, VehicleData, ChatMessage } from '../types';
 import { View, VehicleCategory } from '../types';
-import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService';
-import {
-  fetchVehicleSpecs,
-  cacheAISpecs,
-  buildSpecFieldUpdates,
-  type VehicleSpecs,
-} from '../services/vehicleSpecsService';
 import { enhanceVehicleListing } from '../services/listingEnhancementService';
 import { getSafeImageSrc } from '../utils/imageUtils';
 import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
 import { formatSalesValue } from '../utils/numberUtils';
+import { formatIndianNumberInput, parseIndianNumberDigits } from '../utils/indianNumberInput.js';
 import { findUserByParticipantId } from '../utils/chatContact';
 import VehicleCard from './VehicleCard';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController } from 'chart.js';
@@ -25,7 +19,6 @@ import { planService } from '../services/planService';
 import BulkUploadModal from './BulkUploadModal';
 import SellerDisclosureForm from './SellerDisclosureForm';
 import MarkSoldDealModal from './MarkSoldDealModal';
-import { validateSellerDisclosure } from '../lib/vehicleDisclosureChecklist';
 import {
   clearChecklistPhotoByUrl,
   countAiReadyPhotos,
@@ -59,6 +52,11 @@ import PricingGuidance from './PricingGuidance';
 // NEW FEATURES
 import BoostListingModal from './BoostListingModal';
 import ListingLifecycleIndicator from './ListingLifecycleIndicator';
+import { isListingExpired } from '../services/listingLifecycleService';
+import {
+  validateListingRenewal,
+  type ListingRenewalValidation,
+} from '../utils/listingPlanRules';
 import PaymentStatusCard from './PaymentStatusCard';
 import { PaymentErrorBoundary } from './ErrorBoundaries';
 import { VehicleOfferBanner } from './VehicleOfferBanner';
@@ -330,11 +328,20 @@ const ComboboxInput: React.FC<{
   );
 };
 
-const FormInput: React.FC<{ label: string; name: keyof Vehicle | 'summary'; type?: string; value: string | number; onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void; onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; error?: string; tooltip?: string; required?: boolean; children?: React.ReactNode; disabled?: boolean; placeholder?: string; rows?: number; prefix?: React.ReactNode; suffix?: React.ReactNode }> =
-  ({ label, name, type = 'text', value, onChange, onBlur, error, tooltip, required = false, children, disabled = false, placeholder, rows, prefix, suffix }) => {
+const FormInput: React.FC<{ label: string; name: keyof Vehicle | 'summary'; type?: string; value: string | number; onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void; onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; error?: string; tooltip?: string; required?: boolean; children?: React.ReactNode; disabled?: boolean; placeholder?: string; rows?: number; prefix?: React.ReactNode; suffix?: React.ReactNode; indianNumberFormat?: boolean }> =
+  ({ label, name, type = 'text', value, onChange, onBlur, error, tooltip, required = false, children, disabled = false, placeholder, rows, prefix, suffix, indianNumberFormat = false }) => {
   const baseInputClasses = `block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300 hover:border-gray-300'}`;
   const focusOn = (e: React.FocusEvent<HTMLElement>) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.15)');
   const focusOff = (e: React.FocusEvent<HTMLElement>) => (e.currentTarget.style.boxShadow = '');
+  const inputType = indianNumberFormat ? 'text' : type;
+  const displayValue = indianNumberFormat ? formatIndianNumberInput(value) : value;
+  const handleFormattedNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = parseIndianNumberDigits(e.target.value);
+    onChange({
+      ...e,
+      target: { ...e.target, name: e.target.name, value: digits },
+    } as React.ChangeEvent<HTMLInputElement>);
+  };
   return (
   <div>
     <label htmlFor={String(name)} className="flex items-center text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
@@ -355,14 +362,15 @@ const FormInput: React.FC<{ label: string; name: keyof Vehicle | 'summary'; type
                 </span>
             )}
             <input
-                type={type}
+                type={inputType}
                 id={String(name)}
                 name={String(name)}
-                value={value}
-                onChange={onChange}
+                value={displayValue}
+                onChange={indianNumberFormat ? handleFormattedNumberChange : onChange}
                 required={required}
                 disabled={disabled}
                 placeholder={placeholder}
+                inputMode={indianNumberFormat ? 'numeric' : undefined}
                 className={`${baseInputClasses} ${prefix ? 'pl-8' : ''} ${suffix ? 'pr-10' : ''}`}
                 onFocus={focusOn}
                 onBlur={(e) => { focusOff(e); if (onBlur) onBlur(e); }}
@@ -1170,10 +1178,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     const [indianStates, setIndianStates] = useState<Array<{name: string, code: string}>>([]);
     const [citiesByState, setCitiesByState] = useState<Record<string, string[]>>({});
     
-    const [documentType, setDocumentType] = useState<VehicleDocument['name']>('Service Record');
     const [featureInput, setFeatureInput] = useState('');
-    const [fixInput, setFixInput] = useState('');
-    const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
     const [errors, setErrors] = useState<Partial<Record<keyof Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>, string>>>({});
     // Real-time update state for expiry dates
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -1189,114 +1194,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     const [isUploading, setIsUploading] = useState(false);
     const [isFeaturing, setIsFeaturing] = useState(false);
     
-    const [aiSuggestions, setAiSuggestions] = useState<{
-        structuredSpecs: Partial<Pick<Vehicle, 'engine' | 'transmission' | 'fuelType' | 'fuelEfficiency' | 'displacement' | 'groundClearance' | 'bootSpace'>>;
-        featureSuggestions: Record<string, string[]>;
-    } | null>(null);
-    const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
-    
-    // Track the last vehicle specs fetched to avoid duplicate API calls
-    const lastFetchedVehicleKey = useRef<string>('');
-    const autoFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-    // Auto-fetch vehicle specifications when Vehicle Overview is filled
-    useEffect(() => {
-        const { make, model, year } = formData;
-        
-        // Don't fetch if any required field is missing
-        if (!make || !model || !year) {
-            return;
-        }
-        
-        // Create a unique key for this vehicle
-        const vehicleKey = `${make}_${model}_${year}`;
-        
-        // Don't fetch if we already fetched for this vehicle
-        if (lastFetchedVehicleKey.current === vehicleKey) {
-            return;
-        }
-        
-        // Check if specs are already filled (user may have entered manually)
-        const hasExistingSpecs = !!(formData.engine || formData.displacement || formData.fuelEfficiency);
-        if (hasExistingSpecs && !editingVehicle) {
-            // User has already entered some specs, don't overwrite
-            lastFetchedVehicleKey.current = vehicleKey;
-            return;
-        }
-        
-        // Clear any pending timeout
-        if (autoFetchTimeoutRef.current) {
-            clearTimeout(autoFetchTimeoutRef.current);
-        }
-        
-        // Debounce the fetch to avoid too many API calls during rapid changes
-        autoFetchTimeoutRef.current = setTimeout(async () => {
-            console.log('🚗 Auto-fetching vehicle specs for:', { make, model, year });
-            lastFetchedVehicleKey.current = vehicleKey;
-            setIsGeneratingSuggestions(true);
-            
-            try {
-                // First try free API/local database
-                const specs = await fetchVehicleSpecs(make, model, year);
-                
-                const currentSpecs: Partial<VehicleSpecs> = {
-                    engine: formData.engine,
-                    transmission: formData.transmission,
-                    fuelType: formData.fuelType,
-                    fuelEfficiency: formData.fuelEfficiency,
-                    displacement: formData.displacement,
-                    groundClearance: formData.groundClearance,
-                    bootSpace: formData.bootSpace,
-                };
-
-                let updates = specs ? buildSpecFieldUpdates(currentSpecs, specs) : {};
-                if (Object.keys(updates).length > 0) {
-                    console.log('✅ Auto-fill specs from local/API:', updates);
-                    setFormData(prev => ({ ...prev, ...updates }));
-                    currentSpecs.engine = updates.engine ?? currentSpecs.engine;
-                    Object.assign(currentSpecs, updates);
-                }
-
-                if (!currentSpecs.engine?.trim()) {
-                    console.log('🤖 Falling back to Gemini AI for specs...');
-                    const suggestions = await getAiVehicleSuggestions({
-                        make,
-                        model,
-                        year,
-                        variant: formData.variant,
-                        category: formData.category,
-                    });
-
-                    if (suggestions.structuredSpecs) {
-                        setAiSuggestions(suggestions);
-                        const aiUpdates = buildSpecFieldUpdates(
-                            { ...currentSpecs, ...updates },
-                            suggestions.structuredSpecs,
-                        );
-                        if (Object.keys(aiUpdates).length > 0) {
-                            console.log('✅ Auto-filling from Gemini AI:', aiUpdates);
-                            setFormData(prev => ({ ...prev, ...aiUpdates }));
-                            cacheAISpecs(make, model, year, {
-                                ...updates,
-                                ...aiUpdates,
-                            } as VehicleSpecs);
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('❌ Failed to auto-fetch vehicle specs:', error);
-            } finally {
-                setIsGeneratingSuggestions(false);
-            }
-        }, 800); // 800ms debounce delay
-        
-        return () => {
-            if (autoFetchTimeoutRef.current) {
-                clearTimeout(autoFetchTimeoutRef.current);
-            }
-        };
-    }, [formData.make, formData.model, formData.year, formData.variant]);
-
     // Ensure seller email is always set in form data
     useEffect(() => {
         if (!formData.sellerEmail && seller.email) {
@@ -1407,73 +1304,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         return formData.category && vehicleData[formData.category] && vehicleData[formData.category].length > 0;
     }, [formData.category, vehicleData]);
 
-    const handleGetAiSuggestions = async () => {
-        const { make, model, year, variant, category } = formData;
-        if (!make || !model || !year) {
-            notify('Please select a Make, Model, and Year first.');
-            return;
-        }
-
-        setIsGeneratingSuggestions(true);
-        setAiSuggestions(null);
-        try {
-            const currentSpecs: Partial<VehicleSpecs> = {
-                engine: formData.engine,
-                transmission: formData.transmission,
-                fuelType: formData.fuelType,
-                fuelEfficiency: formData.fuelEfficiency,
-                displacement: formData.displacement,
-                groundClearance: formData.groundClearance,
-                bootSpace: formData.bootSpace,
-            };
-
-            const localOrApi = await fetchVehicleSpecs(make, model, year);
-            let updates = localOrApi ? buildSpecFieldUpdates(currentSpecs, localOrApi) : {};
-            if (Object.keys(updates).length > 0) {
-                setFormData(prev => ({ ...prev, ...updates }));
-                Object.assign(currentSpecs, updates);
-            }
-
-            if (!currentSpecs.engine?.trim()) {
-                console.log('🤖 Fetching AI suggestions for:', { make, model, year, variant, category });
-                const suggestions = await getAiVehicleSuggestions({ make, model, year, variant, category });
-                setAiSuggestions(suggestions);
-
-                if (suggestions.structuredSpecs) {
-                    const aiUpdates = buildSpecFieldUpdates(currentSpecs, suggestions.structuredSpecs);
-                    if (Object.keys(aiUpdates).length > 0) {
-                        setFormData(prev => ({ ...prev, ...aiUpdates }));
-                        cacheAISpecs(make, model, year, { ...updates, ...aiUpdates } as VehicleSpecs);
-                        updates = { ...updates, ...aiUpdates };
-                    }
-                }
-
-                const errList = suggestions.featureSuggestions?.Error;
-                if (!updates.engine?.trim() && errList?.length) {
-                    notify(errList[0]);
-                }
-            }
-
-            const filledAnySpec = Boolean(
-                updates.engine || updates.displacement || updates.fuelEfficiency || updates.groundClearance,
-            );
-            if (!filledAnySpec) {
-                notify('Could not find specifications for this vehicle. Try filling fields manually or check that the dev API server is running.');
-            }
-        } catch (error) {
-            console.error('❌ Failed to fetch vehicle specifications:', error);
-            const msg = error instanceof Error ? error.message : 'Unknown error';
-            if (msg.includes('AI_API_UNAVAILABLE')) {
-                notify('AI service is unavailable. Restart the dev server (npm run dev) and ensure GEMINI_API_KEY is set for AI fallback.');
-            } else {
-                notify(`Could not auto-fill specifications: ${msg}`);
-            }
-            setAiSuggestions({ structuredSpecs: {}, featureSuggestions: { Error: ['Could not fetch suggestions.'] } });
-        } finally {
-            setIsGeneratingSuggestions(false);
-        }
-    };
-    
     const validateField = (name: keyof Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>, value: any): string => {
       switch(name) {
           case 'make': case 'model': return value.trim().length < 2 ? `${name} must be at least 2 characters long.` : '';
@@ -1540,39 +1370,8 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     const handleRemoveFeature = (featureToRemove: string) => {
       setFormData(prev => ({ ...prev, features: prev.features.filter(f => f !== featureToRemove) }));
     };
-
-    const handleAddFix = () => {
-        if (fixInput.trim() && !formData.qualityReport?.fixesDone.includes(fixInput.trim())) {
-            setFormData(prev => ({
-                ...prev,
-                qualityReport: {
-                    fixesDone: [...(prev.qualityReport?.fixesDone || []), fixInput.trim()]
-                }
-            }));
-            setFixInput('');
-        }
-    };
-
-    const handleRemoveFix = (fixToRemove: string) => {
-        setFormData(prev => ({
-            ...prev,
-            qualityReport: {
-                fixesDone: (prev.qualityReport?.fixesDone || []).filter(f => f !== fixToRemove)
-            }
-        }));
-    };
-
-    const handleSuggestedFeatureToggle = (feature: string) => {
-        setFormData(prev => {
-            const currentFeatures = prev.features;
-            const newFeatures = currentFeatures.includes(feature)
-                ? currentFeatures.filter(f => f !== feature)
-                : [...currentFeatures, feature];
-            return { ...prev, features: newFeatures.sort() };
-        });
-    };
     
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'document') => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const input = e.target;
         if (!input.files) return;
 
@@ -1585,14 +1384,12 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             
             // Validate all files first
             for (const file of files) {
-                if (type === 'image') {
-                    const validation = validateImageFile(file);
-                    if (!validation.valid) {
-                        notify(validation.error || 'Invalid image file');
-                        setIsUploading(false);
-                        if (input) input.value = '';
-                        return;
-                    }
+                const validation = validateImageFile(file);
+                if (!validation.valid) {
+                    notify(validation.error || 'Invalid image file');
+                    setIsUploading(false);
+                    if (input) input.value = '';
+                    return;
                 }
             }
             
@@ -1617,36 +1414,26 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 .map(r => r.url!);
             
             if (successfulUrls.length > 0) {
-                if (type === 'image') {
-                    // Limit total images to prevent vehicle object from becoming too large
-                    // Firebase Realtime Database has 16MB limit per node
-                    const currentImages = formData.images || [];
-                    const maxImages = 10; // Limit to 10 images per vehicle
-                    const remainingSlots = maxImages - currentImages.length;
-                    
-                    if (remainingSlots <= 0) {
-                        notify(`Maximum ${maxImages} images allowed per vehicle. Please remove some images before adding more.`);
-                        setIsUploading(false);
-                        if (input) input.value = '';
-                        return;
-                    }
-                    
-                    const imagesToAdd = successfulUrls.slice(0, remainingSlots);
-                    if (successfulUrls.length > remainingSlots) {
-                        notify(`Only ${remainingSlots} image(s) added. Maximum ${maxImages} images allowed per vehicle.`);
-                    }
-                    
-                    setFormData(prev => ({ ...prev, images: [...prev.images, ...imagesToAdd] }));
-                    console.log(`✅ Successfully uploaded ${imagesToAdd.length} image(s) (${currentImages.length + imagesToAdd.length}/${maxImages} total)`);
-                } else {
-                    const docType = documentType;
-                    const newDocs: VehicleDocument[] = successfulUrls.map((url, idx) => ({ 
-                        name: docType, 
-                        url, 
-                        fileName: files[idx]?.name || 'document' 
-                    }));
-                    setFormData(prev => ({ ...prev, documents: [...(prev.documents || []), ...newDocs] }));
+                // Limit total images to prevent vehicle object from becoming too large
+                // Firebase Realtime Database has 16MB limit per node
+                const currentImages = formData.images || [];
+                const maxImages = 10; // Limit to 10 images per vehicle
+                const remainingSlots = maxImages - currentImages.length;
+                
+                if (remainingSlots <= 0) {
+                    notify(`Maximum ${maxImages} images allowed per vehicle. Please remove some images before adding more.`);
+                    setIsUploading(false);
+                    if (input) input.value = '';
+                    return;
                 }
+                
+                const imagesToAdd = successfulUrls.slice(0, remainingSlots);
+                if (successfulUrls.length > remainingSlots) {
+                    notify(`Only ${remainingSlots} image(s) added. Maximum ${maxImages} images allowed per vehicle.`);
+                }
+                
+                setFormData(prev => ({ ...prev, images: [...prev.images, ...imagesToAdd] }));
+                console.log(`✅ Successfully uploaded ${imagesToAdd.length} image(s) (${currentImages.length + imagesToAdd.length}/${maxImages} total)`);
             } else {
                 console.warn('⚠️ No images were successfully uploaded');
                 notify('No images were uploaded. Please try again.');
@@ -1692,25 +1479,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     };
 
     const aiReadyPhotoCount = countAiReadyPhotos(formData.sellerDisclosureChecklist);
-
-    const handleRemoveDocument = (urlToRemove: string) => {
-        setFormData(prev => ({ ...prev, documents: (prev.documents || []).filter(doc => doc.url !== urlToRemove) }));
-    };
   
-    const handleGenerateDescription = async () => {
-      if (!formData.make || !formData.model || !formData.year) {
-        notify('Please enter Make, Model, and Year before generating a description.');
-        return;
-      }
-      setIsGeneratingDesc(true);
-      try {
-        const description = await generateVehicleDescription(formData);
-        if (description.includes("Failed to generate")) notify(description);
-        else setFormData(prev => ({ ...prev, description }));
-      } catch (error) { console.error(error); notify('There was an error generating the description.'); }
-      finally { setIsGeneratingDesc(false); }
-    };
-
     // Determine if seller's plan is expired (client-side UX guard; server still enforces)
     // Use currentTime for real-time updates
     const isPlanExpired = !!seller?.planExpiryDate && new Date(seller.planExpiryDate) < currentTime;
@@ -1743,15 +1512,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             return;
         }
 
-        const disclosureCheck = validateSellerDisclosure(
-          formData.sellerDisclosureChecklist,
-          formData.category || VehicleCategory.FOUR_WHEELER,
-        );
-        if (!disclosureCheck.valid) {
-            notify(disclosureCheck.errors[0] || 'Complete the disclosure checklist');
-            return;
-        }
-        
         // FIX: Ensure all numeric fields are actual numbers before submission
         const sanitizedFormData = {
             ...formData,
@@ -1819,11 +1579,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         images: formData.images.length > 0 ? formData.images : [getPlaceholderImage(formData.make, formData.model)],
     };
 
-    const applyAiSpec = (specKey: 'engine' | 'transmission' | 'fuelType' | 'fuelEfficiency' | 'displacement' | 'groundClearance' | 'bootSpace') => {
-        if (aiSuggestions?.structuredSpecs?.[specKey]) {
-            setFormData(prev => ({ ...prev, [specKey]: aiSuggestions.structuredSpecs[specKey] }));
-        }
-    };
 
     // Listing completion checklist – drives the progress bar & sidebar health card
     const listingChecklist = [
@@ -1839,29 +1594,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     const completedCount = listingChecklist.filter(i => i.done).length;
     const completionPercent = Math.round((completedCount / listingChecklist.length) * 100);
     const completionColor = completionPercent < 40 ? '#EF4444' : completionPercent < 75 ? '#F59E0B' : '#10B981';
-
-    const aiButton = (
-        <button
-            type="button"
-            onClick={handleGetAiSuggestions}
-            disabled={isGeneratingSuggestions || !formData.make || !formData.model || !formData.year}
-            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3 py-1.5 rounded-full border border-reride-orange/30 text-reride-orange bg-reride-orange-light hover:bg-reride-orange hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-reride-orange-light disabled:hover:text-reride-orange"
-            title={!formData.make || !formData.model || !formData.year ? 'Fill Make, Model & Year first' : 'Auto-fill specs with AI'}
-        >
-            {isGeneratingSuggestions ? (
-                <>
-                    <span className="w-3.5 h-3.5 border-2 border-dashed rounded-full animate-spin border-current" />
-                    <span>Generating…</span>
-                </>
-            ) : (
-                <>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l1.5 4.5L16 8l-4.5 1.5L10 14l-1.5-4.5L4 8l4.5-1.5L10 2z" /></svg>
-                    <span className="hidden sm:inline">Auto-fill with AI</span>
-                    <span className="sm:hidden">AI</span>
-                </>
-            )}
-        </button>
-    );
 
     return (
       <div className="bg-gradient-to-b from-gray-50 to-white p-4 sm:p-6 lg:p-8 rounded-2xl shadow-md">
@@ -1915,15 +1647,12 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 step={1}
                 description="Core details buyers see first"
                 actions={
-                    <div className="flex items-center gap-2">
-                        {hasVehicleData && (
-                            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-                                Admin Managed
-                            </span>
-                        )}
-                        {aiButton}
-                    </div>
+                    hasVehicleData ? (
+                        <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                            Admin Managed
+                        </span>
+                    ) : undefined
                 }
             >
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
@@ -1978,7 +1707,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     <FormInput label="Make Year" name="year" type="number" value={formData.year} onChange={handleChange} onBlur={handleBlur} error={errors.year} required />
                     <FormInput label="Registration Year" name="registrationYear" type="number" value={formData.registrationYear} onChange={handleChange} onBlur={handleBlur} required />
                     <div>
-                        <FormInput label="Price" name="price" type="number" value={formData.price} onChange={handleChange} onBlur={handleBlur} error={errors.price} tooltip="Enter the listing price without commas or symbols." prefix="₹" required />
+                        <FormInput label="Price" name="price" value={formData.price} onChange={handleChange} onBlur={handleBlur} error={errors.price} tooltip="Enter the listing price in rupees." prefix="₹" indianNumberFormat required />
                         <PricingGuidance
                           vehicleDetails={formData}
                           allVehicles={allVehicles}
@@ -1987,7 +1716,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                           }
                         />
                     </div>
-                    <FormInput label="Km Driven" name="mileage" type="number" value={formData.mileage} onChange={handleChange} onBlur={handleBlur} error={errors.mileage} suffix="km" />
+                    <FormInput label="Km Driven" name="mileage" value={formData.mileage} onChange={handleChange} onBlur={handleBlur} error={errors.mileage} suffix="km" indianNumberFormat />
                     <FormInput label="No. of Owners" name="noOfOwners" type="number" value={formData.noOfOwners} onChange={handleChange} onBlur={handleBlur} />
                     <FormInput label="RTO" name="rto" value={formData.rto} onChange={handleChange} placeholder="e.g., MH01" />
                     <FormInput label="State" name="state" type="select" value={formData.state} onChange={handleChange} required>
@@ -2010,91 +1739,24 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             <FormFieldset 
                 title="Vehicle Specifications" 
                 step={2} 
-                description="Engine, transmission and performance details"
-                actions={
-                    <div className="flex items-center gap-2">
-                        {isGeneratingSuggestions && (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-reride-orange animate-pulse">
-                                <span className="w-3 h-3 border-2 border-dashed rounded-full animate-spin border-current" />
-                                Auto-filling specs...
-                            </span>
-                        )}
-                        {!isGeneratingSuggestions && formData.make && formData.model && formData.year && formData.engine && (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                                Auto-filled
-                            </span>
-                        )}
-                        {aiButton}
-                    </div>
-                }
+                description="Transmission and performance details"
             >
                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
-                    <div>
-                        <FormInput label="Engine" name="engine" value={formData.engine} onChange={handleChange} tooltip="e.g., 1.5L Petrol, 150kW Motor"/>
-                        {aiSuggestions?.structuredSpecs.engine && formData.engine !== aiSuggestions.structuredSpecs.engine && (<button type="button" onClick={() => applyAiSpec('engine')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.engine}"</button>)}
-                    </div>
-                    <div>
-                        <FormInput label="Displacement" name="displacement" value={formData.displacement} onChange={handleChange} placeholder="e.g., 1497 cc"/>
-                        {aiSuggestions?.structuredSpecs.displacement && formData.displacement !== aiSuggestions.structuredSpecs.displacement && (<button type="button" onClick={() => applyAiSpec('displacement')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.displacement}"</button>)}
-                    </div>
-                     <div>
-                        <FormInput label="Transmission" name="transmission" type="select" value={formData.transmission} onChange={handleChange}>
+                     <FormInput label="Transmission" name="transmission" type="select" value={formData.transmission} onChange={handleChange}>
                             <option>Automatic</option><option>Manual</option><option>CVT</option><option>DCT</option>
                         </FormInput>
-                        {aiSuggestions?.structuredSpecs.transmission && formData.transmission !== aiSuggestions.structuredSpecs.transmission && (<button type="button" onClick={() => applyAiSpec('transmission')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.transmission}"</button>)}
-                    </div>
-                    <div>
-                        <FormInput label="Fuel Type" name="fuelType" type="select" value={formData.fuelType} onChange={handleChange}>
+                    <FormInput label="Fuel Type" name="fuelType" type="select" value={formData.fuelType} onChange={handleChange}>
                             <option>Petrol</option><option>Diesel</option><option>Electric</option><option>CNG</option><option>Hybrid</option>
                         </FormInput>
-                         {aiSuggestions?.structuredSpecs.fuelType && formData.fuelType !== aiSuggestions.structuredSpecs.fuelType && (<button type="button" onClick={() => applyAiSpec('fuelType')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.fuelType}"</button>)}
-                    </div>
-                    <div>
-                        <FormInput label="Mileage / Range" name="fuelEfficiency" value={formData.fuelEfficiency} onChange={handleChange} tooltip="e.g., 18 KMPL or 300 km range"/>
-                         {aiSuggestions?.structuredSpecs.fuelEfficiency && formData.fuelEfficiency !== aiSuggestions.structuredSpecs.fuelEfficiency && (<button type="button" onClick={() => applyAiSpec('fuelEfficiency')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.fuelEfficiency}"</button>)}
-                    </div>
-                     <div>
-                        <FormInput label="Ground Clearance" name="groundClearance" value={formData.groundClearance} onChange={handleChange} placeholder="e.g., 190 mm"/>
-                        {aiSuggestions?.structuredSpecs.groundClearance && formData.groundClearance !== aiSuggestions.structuredSpecs.groundClearance && (<button type="button" onClick={() => applyAiSpec('groundClearance')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.groundClearance}"</button>)}
-                    </div>
-                    <div>
-                        <FormInput label="Boot Space" name="bootSpace" value={formData.bootSpace} onChange={handleChange} placeholder="e.g., 433 litres"/>
-                        {aiSuggestions?.structuredSpecs.bootSpace && formData.bootSpace !== aiSuggestions.structuredSpecs.bootSpace && (<button type="button" onClick={() => applyAiSpec('bootSpace')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.bootSpace}"</button>)}
-                    </div>
+                    <FormInput label="Mileage / Range" name="fuelEfficiency" value={formData.fuelEfficiency} onChange={handleChange} tooltip="e.g., 18 KMPL or 300 km range"/>
                     <FormInput label="Color" name="color" value={formData.color} onChange={handleChange} onBlur={handleBlur} />
                  </div>
-            </FormFieldset>
-
-            <FormFieldset title="Quality Report" step={3} description="List recent fixes and upgrades to build buyer trust" defaultOpen={false}>
-                <div className="space-y-4">
-                    <p className="text-xs text-gray-500 -mt-1">
-                        Tip: write the overall condition and history in the <span className="font-semibold">Vehicle Description</span> below (Step 4). Use this section to highlight specific fixes and upgrades.
-                    </p>
-                    <div>
-                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Fixes Done / Upgrades</label>
-                        <div className="flex gap-2">
-                            <input type="text" value={fixInput} onChange={(e) => setFixInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFix(); } }} placeholder="e.g., New tires installed" className="flex-grow p-3 border border-gray-200 dark:border-gray-300 rounded-lg" />
-                            <button type="button" onClick={handleAddFix} className="bg-gray-100 dark:bg-white font-bold py-2 px-4 rounded-lg">Add Fix</button>
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                            {(formData.qualityReport?.fixesDone || []).map(fix => (
-                                <span key={fix} className="bg-reride-orange-light text-reride-orange text-sm font-semibold px-3 py-1 rounded-full flex items-center gap-2">
-                                    {fix}
-                                    <button type="button" onClick={() => handleRemoveFix(fix)}>&times;</button>
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                </div>
             </FormFieldset>
 
             <FormFieldset
               title="Condition disclosure checklist"
               step={3}
-              description="Required — structured condition with photo evidence per item"
+              description="Optional — complete all items for a Verified Listing badge"
               defaultOpen={true}
             >
               <SellerDisclosureForm
@@ -2103,12 +1765,13 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 sellerEmail={seller.email}
                 registrationNumber={formData.registrationNumber}
                 vahanVerified={Boolean(formData.vahanVerifiedAt || formData.vahanSnapshot)}
+                vahanSnapshot={formData.vahanSnapshot}
                 onChange={handleChecklistChange}
                 onVerifyVahan={async (registrationNumber) => {
                   try {
                     const result = await verifyVahanRegistration(
                       registrationNumber,
-                      editingVehicle?.id ?? editingVehicle?.databaseId,
+                      editingVehicle?.databaseId ?? editingVehicle?.id,
                     );
                     setFormData((prev) => ({
                       ...prev,
@@ -2131,7 +1794,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
               />
             </FormFieldset>
             
-            <FormFieldset title="Description, Features & Extra Photos" step={4} description="Optional marketing shots — mandatory photos are uploaded in the checklist above">
+            <FormFieldset title="Description, Features & Extra Photos" step={4} description="Optional extras — photos and documents (RC, Insurance, PUC, service records) come from the checklist above">
                 <div className="space-y-6">
                     {/* IMAGES */}
                     <div>
@@ -2203,7 +1866,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                                 <p className="text-sm text-gray-600">or drag & drop images here</p>
                                 <p className="text-xs text-gray-500 mt-1">Optional — JPG, PNG up to 10MB • First image = cover photo</p>
                             </div>
-                            <input id="file-upload" type="file" className="sr-only" multiple accept="image/png, image/jpeg" onChange={(e) => handleFileUpload(e, 'image')} disabled={isUploading} />
+                            <input id="file-upload" type="file" className="sr-only" multiple accept="image/png, image/jpeg" onChange={handleFileUpload} disabled={isUploading} />
                         </label>
                         {formData.images.length > 0 && (
                             <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -2228,70 +1891,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                                         </div>
                                     </div>
                                 ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* DOCUMENTS */}
-                    <div>
-                        <label className="block text-sm font-medium text-reride-text-dark mb-2">
-                            Additional documents
-                            <span className="text-xs text-gray-500 ml-2 font-normal">(Service records, etc.)</span>
-                        </label>
-                        <p className="text-xs text-gray-600 mb-2">
-                            RC, Insurance & PUC are uploaded in the disclosure checklist above — not here.
-                        </p>
-                        <div className="flex flex-col sm:flex-row items-stretch gap-2">
-                            <select
-                                id="document-type"
-                                className="flex-grow p-3 border border-gray-200 rounded-lg bg-white text-reride-text-dark focus:outline-none focus:border-reride-orange transition"
-                                value={documentType}
-                                onChange={(e) => setDocumentType(e.target.value as VehicleDocument['name'])}
-                                onFocus={(e) => (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.15)')}
-                                onBlur={(e) => (e.currentTarget.style.boxShadow = '')}
-                            >
-                                <option>Service Record</option>
-                                <option>Other</option>
-                            </select>
-                            <label
-                                htmlFor="doc-upload"
-                                className={`cursor-pointer inline-flex items-center justify-center gap-2 font-semibold text-white py-3 px-5 rounded-lg whitespace-nowrap shadow-sm hover:shadow-md transition-shadow ${isUploading ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}
-                            >
-                                {isUploading ? (
-                                    <span className="w-4 h-4 border-2 border-dashed rounded-full animate-spin border-current" />
-                                ) : (
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                                )}
-                                <span>{isUploading ? 'Uploading…' : 'Upload Document'}</span>
-                                <input id="doc-upload" type="file" className="sr-only" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => handleFileUpload(e, 'document')} disabled={isUploading} />
-                            </label>
-                        </div>
-                        {(formData.documents?.length || 0) > 0 && (
-                            <div className="mt-3 space-y-2">
-                                {(formData.documents || []).map(doc => {
-                                    const isPdf = (doc.fileName || '').toLowerCase().endsWith('.pdf');
-                                    return (
-                                        <div key={doc.url} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg hover:border-reride-orange transition-colors">
-                                            <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${isPdf ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                            </div>
-                                            <div className="flex-grow min-w-0">
-                                                <p className="text-sm font-semibold text-reride-text-dark truncate">{doc.fileName}</p>
-                                                <p className="text-xs text-gray-500">{doc.name}</p>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRemoveDocument(doc.url)}
-                                                className="flex-shrink-0 w-8 h-8 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors"
-                                                title="Remove document"
-                                                aria-label="Remove document"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                                            </button>
-                                        </div>
-                                    );
-                                })}
                             </div>
                         )}
                     </div>
@@ -2349,31 +1948,10 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
 
                     {/* DESCRIPTION */}
                     <div>
-                        <div className="flex justify-between items-center mb-2">
-                            <label htmlFor="description" className="block text-sm font-medium text-reride-text-dark">
-                                Vehicle Description
-                                <span className="text-xs text-gray-500 ml-2 font-normal">(optional but recommended)</span>
-                            </label>
-                            <button
-                                type="button"
-                                onClick={handleGenerateDescription}
-                                disabled={isGeneratingDesc || !formData.make || !formData.model}
-                                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-reride-orange/30 text-reride-orange bg-reride-orange-light hover:bg-reride-orange hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-reride-orange-light disabled:hover:text-reride-orange"
-                                title={!formData.make || !formData.model ? 'Fill Make & Model first' : 'Generate description with AI'}
-                            >
-                                {isGeneratingDesc ? (
-                                    <>
-                                        <span className="w-3.5 h-3.5 border-2 border-dashed rounded-full animate-spin border-current" />
-                                        <span>Generating…</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l1.5 4.5L16 8l-4.5 1.5L10 14l-1.5-4.5L4 8l4.5-1.5L10 2z" /></svg>
-                                        <span>Generate with AI</span>
-                                    </>
-                                )}
-                            </button>
-                        </div>
+                        <label htmlFor="description" className="block text-sm font-medium text-reride-text-dark mb-2">
+                            Vehicle Description
+                            <span className="text-xs text-gray-500 ml-2 font-normal">(optional but recommended)</span>
+                        </label>
                         <div className="relative">
                             <textarea
                                 id="description"
@@ -2634,35 +2212,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                           </div>
                       )}
                   </div>
-
-                   {aiSuggestions && Object.keys(aiSuggestions.featureSuggestions).length > 0 && (
-                     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100">
-                            <h3 className="text-sm font-semibold text-reride-text-dark flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-reride-orange" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l1.5 4.5L16 8l-4.5 1.5L10 14l-1.5-4.5L4 8l4.5-1.5L10 2z" /></svg>
-                                Suggested Features
-                            </h3>
-                        </div>
-                        <div className="p-4 max-h-96 overflow-y-auto">
-                            {Object.entries(aiSuggestions.featureSuggestions).map(([category, features]) => {
-                                if (!Array.isArray(features) || features.length === 0) return null;
-                                return (
-                                    <div key={category} className="mb-4 last:mb-0">
-                                        <h4 className="font-semibold text-xs uppercase tracking-wider text-gray-500 mb-2 pb-1 border-b border-gray-100">{category}</h4>
-                                        <div className="space-y-2">
-                                            {features.map(feature => (
-                                                <label key={feature} className="flex items-center space-x-3 cursor-pointer group">
-                                                    <input type="checkbox" checked={formData.features.includes(feature)} onChange={() => handleSuggestedFeatureToggle(feature)} className="h-4 w-4 rounded border-gray-300 bg-transparent" style={{ accentColor: '#FF6B35' }} />
-                                                    <span className="text-sm text-reride-text-dark group-hover:text-reride-orange transition-colors">{feature}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
               </div>
           </aside>
         </div>
@@ -3408,6 +2957,25 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     setActiveView(view);
   };
 
+  const sellerPlan = useMemo(
+    () => ({
+      subscriptionPlan: seller?.subscriptionPlan,
+      planExpiryDate: seller?.planExpiryDate,
+    }),
+    [seller?.subscriptionPlan, seller?.planExpiryDate],
+  );
+
+  const isVehicleListingExpired = useCallback(
+    (vehicle: Vehicle) => isListingExpired(vehicle, sellerPlan),
+    [sellerPlan],
+  );
+
+  const getListingRenewalValidation = useCallback(
+    (vehicle: Vehicle): ListingRenewalValidation =>
+      validateListingRenewal(sellerPlan, vehicle, safeSellerVehicles),
+    [sellerPlan, safeSellerVehicles],
+  );
+
   const handleRefreshVehicle = async (vehicleId: number) => {
     try {
       const response = await authenticatedFetch('/api/vehicles?action=refresh', {
@@ -3450,6 +3018,18 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   };
 
   const handleRenewVehicle = async (vehicleId: number) => {
+    const vehicle = safeSellerVehicles.find((v) => v && v.id === vehicleId);
+    if (!vehicle) {
+      dashboardNotify(onNotify, 'Listing not found. Please refresh and try again.', 'error');
+      return;
+    }
+
+    const validation = validateListingRenewal(sellerPlan, vehicle, safeSellerVehicles);
+    if (!validation.allowed) {
+      dashboardNotify(onNotify, validation.reason || 'Cannot renew this listing.', 'error');
+      return;
+    }
+
     try {
       const response = await authenticatedFetch('/api/vehicles?action=refresh', {
         method: 'POST',
@@ -3467,23 +3047,33 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           try {
             const result = await response.json();
             if (result && result.success && result.vehicle) {
-              // Update local state instead of reloading page
               onUpdateVehicle(result.vehicle);
-              if (process.env.NODE_ENV === 'development') {
-                console.log('✅ Vehicle renewed successfully');
-              }
+              dashboardNotify(
+                onNotify,
+                'Listing renewed successfully. It is visible to buyers again.',
+                'success',
+              );
+            } else {
+              dashboardNotify(onNotify, result?.reason || 'Failed to renew listing. Please try again.', 'error');
             }
           } catch (jsonError) {
             console.warn('⚠️ Failed to parse renew response:', jsonError);
+            dashboardNotify(onNotify, 'Failed to renew listing. Please try again.', 'error');
           }
         }
       } else {
+        try {
+          const err = await response.json();
+          dashboardNotify(onNotify, err?.reason || 'Failed to renew listing. Please try again.', 'error');
+        } catch {
+          dashboardNotify(onNotify, 'Failed to renew listing. Please try again.', 'error');
+        }
         if (process.env.NODE_ENV === 'development') {
           console.warn(`⚠️ Failed to renew vehicle: ${response.status} ${response.statusText}`);
         }
       }
     } catch (error) {
-      // Silently handle errors to prevent dashboard crashes
+      dashboardNotify(onNotify, 'Failed to renew listing. Please try again.', 'error');
       if (process.env.NODE_ENV === 'development') {
         console.error('❌ Error renewing vehicle:', error);
       }
@@ -3829,7 +3419,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             </div>
             <PlanStatusCard
               seller={seller}
-              activeListingsCount={activeListings.length}
+              activeListingsCount={publishedListings.length}
               featuredListingsCount={safeSellerVehicles.filter(v => v && v.isFeatured).length}
               onNavigate={onNavigate}
             />
@@ -4018,7 +3608,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
-                      {paginatedListings.map((v) => (
+                      {paginatedListings.map((v) => {
+                      const renewalValidation = getListingRenewalValidation(v);
+                      return (
                       <tr 
                         key={v.id}
                         onClick={() => {
@@ -4076,6 +3668,21 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                           <div className="hidden lg:flex flex-col space-y-1">
                             {/* First Row - 4 buttons */}
                             <div className="flex items-center space-x-1">
+                              {isVehicleListingExpired(v) && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleRenewVehicle(v.id);
+                                  }}
+                                  disabled={!renewalValidation.allowed}
+                                  className="px-2 py-0.5 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={renewalValidation.allowed ? 'Renew expired listing' : renewalValidation.reason}
+                                >
+                                  ♻️ Renew
+                                </button>
+                              )}
                               <button 
                                 type="button"
                                 onClick={(e) => {
@@ -4156,6 +3763,21 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             <div className="flex flex-col space-y-1">
                               {/* First Row - 4 buttons */}
                               <div className="flex items-center space-x-1">
+                                {isVehicleListingExpired(v) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleRenewVehicle(v.id);
+                                    }}
+                                    disabled={!renewalValidation.allowed}
+                                    className="px-1.5 py-0.5 bg-red-600 text-white rounded text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title={renewalValidation.allowed ? 'Renew expired listing' : renewalValidation.reason}
+                                  >
+                                    ♻️
+                                  </button>
+                                )}
                                 <button 
                                   type="button"
                                   onClick={(e) => {
@@ -4230,7 +3852,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                      })}
                   </tbody>
                 </table>
               </div>

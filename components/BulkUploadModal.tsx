@@ -1,4 +1,5 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
 import { VehicleCategory } from '../types';
@@ -62,13 +63,36 @@ const parseCSV = (csvText: string): Record<string, string>[] => {
     return rows;
 };
 
-// CSV Template Content
-const CSV_TEMPLATE = `category,make,model,variant,year,price,mileage,fuelType,transmission,color,noOfOwners,city,state,rto,registrationYear,insuranceValidity,insuranceType,features,description
-four-wheeler,Tata,Nexon,XZ+,2022,950000,22000,Petrol,Manual,Red,1,Pune,MH,MH12,2022,Aug 2025,Comprehensive,"Sunroof|Alloy Wheels","Excellent condition Nexon with low mileage."
-two-wheeler,Royal Enfield,Classic 350,Halcyon,2023,210000,5000,Petrol,Manual,Black,1,Jaipur,RJ,RJ14,2023,Mar 2026,Comprehensive,ABS,"Almost new, single owner bike."
+const VALID_CATEGORIES = new Set<string>(Object.values(VehicleCategory));
+
+/** Column order matches the New Vehicle listing form (Overview → Specs → Description). */
+const CSV_TEMPLATE = `category,make,model,variant,year,registrationYear,price,mileage,noOfOwners,rto,state,city,insuranceType,insuranceValidity,transmission,fuelType,fuelEfficiency,color,features,description,imageUrls
+four-wheeler,Tata,Nexon,XZ+,2022,2022,950000,22000,1,MH12,MH,Pune,Comprehensive,Aug 2026,Manual,Petrol,18 KMPL,Red,"Sunroof|Alloy Wheels|ABS","Excellent condition Nexon with low mileage.",
+two-wheeler,Royal Enfield,Classic 350,Halcyon,2023,2023,210000,5000,1,RJ14,RJ,Jaipur,Comprehensive,Mar 2026,Manual,Petrol,35 KMPL,Black,ABS,"Almost new single-owner bike.",
 `;
 
-const REQUIRED_FIELDS: (keyof Vehicle)[] = ['category', 'make', 'model', 'year', 'price', 'mileage', 'fuelType', 'transmission', 'city', 'state'];
+const REQUIRED_FIELDS = [
+  'category',
+  'make',
+  'model',
+  'year',
+  'registrationYear',
+  'price',
+  'mileage',
+  'state',
+  'city',
+] as const;
+
+function parsePipeList(value?: string): string[] {
+  if (!value?.trim()) return [];
+  return value.split('|').map((s) => s.trim()).filter(Boolean);
+}
+
+function parseOptionalInt(value: string | undefined, fallback?: number): number {
+  if (value == null || String(value).trim() === '') return fallback ?? NaN;
+  const n = parseInt(String(value).replace(/[^\d]/g, ''), 10);
+  return Number.isFinite(n) ? n : NaN;
+}
 
 const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipleVehicles, sellerEmail }) => {
     const { t } = useTranslation();
@@ -95,7 +119,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
             jsonData.forEach((row, index) => {
                 let hasError = false;
                 for (const field of REQUIRED_FIELDS) {
-                    if (!row[field]) {
+                    if (!String(row[field] ?? '').trim()) {
                         validationErrors.push(
                             t('dashboard.bulkModal.error.missingField', { row: index + 2, field })
                         );
@@ -103,35 +127,47 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
                     }
                 }
 
+                const category = String(row.category ?? '').trim().toLowerCase();
+                if (category && !VALID_CATEGORIES.has(category)) {
+                    validationErrors.push(
+                        `Row ${index + 2}: invalid category "${row.category}". Use four-wheeler, two-wheeler, three-wheeler, commercial, farm, or construction.`,
+                    );
+                    hasError = true;
+                }
+
                 if (hasError) return;
 
+                const year = parseOptionalInt(row.year);
+                const registrationYear = parseOptionalInt(row.registrationYear, year);
+                const price = parseOptionalInt(row.price);
+                const mileage = parseOptionalInt(row.mileage, 0);
+                const noOfOwners = parseOptionalInt(row.noOfOwners, 1);
+                const imageUrls = parsePipeList(row.imageUrls);
+
                 const newVehicle: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'> = {
-                    category: row.category as VehicleCategory,
-                    make: row.make,
-                    model: row.model,
-                    variant: row.variant,
-                    year: parseInt(row.year, 10),
-                    price: parseInt(row.price, 10),
-                    mileage: parseInt(row.mileage, 10),
-                    fuelType: row.fuelType,
-                    transmission: row.transmission,
-                    color: row.color,
-                    noOfOwners: parseInt(row.noOfOwners, 10) || 1,
-                    city: row.city,
-                    state: row.state,
-                    location: `${row.city}, ${row.state}`,
-                    rto: row.rto,
-                    registrationYear: parseInt(row.registrationYear, 10) || parseInt(row.year, 10),
-                    insuranceValidity: row.insuranceValidity,
-                    insuranceType: row.insuranceType,
-                    features: row.features ? row.features.split('|').map(f => f.trim()) : [],
-                    description: row.description,
-                    engine: row.engine || '',
-                    fuelEfficiency: row.fuelEfficiency || '',
-                    displacement: row.displacement || '',
-                    groundClearance: row.groundClearance || '',
-                    bootSpace: row.bootSpace || '',
-                    images: [`https://picsum.photos/seed/${row.make}${row.model}${index}/800/600`], // Placeholder image
+                    category: category as VehicleCategory,
+                    make: row.make.trim(),
+                    model: row.model.trim(),
+                    variant: row.variant?.trim() || undefined,
+                    year,
+                    registrationYear,
+                    price,
+                    mileage,
+                    fuelType: row.fuelType?.trim() || 'Petrol',
+                    transmission: row.transmission?.trim() || 'Automatic',
+                    color: row.color?.trim() || '',
+                    noOfOwners: Number.isFinite(noOfOwners) ? noOfOwners : 1,
+                    city: row.city.trim(),
+                    state: row.state.trim(),
+                    location: `${row.city.trim()}, ${row.state.trim()}`,
+                    rto: row.rto?.trim() || '',
+                    insuranceValidity: row.insuranceValidity?.trim() || '',
+                    insuranceType: row.insuranceType?.trim() || 'Comprehensive',
+                    fuelEfficiency: row.fuelEfficiency?.trim() || '',
+                    features: parsePipeList(row.features),
+                    description: row.description?.trim() || '',
+                    engine: '',
+                    images: imageUrls,
                     sellerEmail,
                     status: 'published',
                     isFeatured: false,
@@ -143,8 +179,14 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
                     accidentHistory: [],
                 };
 
-                // More validation
-                if (isNaN(newVehicle.year) || isNaN(newVehicle.price) || isNaN(newVehicle.mileage)) {
+                if (
+                    !Number.isFinite(newVehicle.year) ||
+                    !Number.isFinite(newVehicle.registrationYear) ||
+                    !Number.isFinite(newVehicle.price) ||
+                    newVehicle.price <= 0 ||
+                    !Number.isFinite(newVehicle.mileage) ||
+                    newVehicle.mileage < 0
+                ) {
                     validationErrors.push(
                         t('dashboard.bulkModal.error.numericFields', { row: index + 2 })
                     );
@@ -185,20 +227,31 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
         boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
     };
 
-    return (
+    useEffect(() => {
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prev;
+        };
+    }, []);
+
+    const modalContent = (
         <div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
+            className="fixed inset-0 z-[2147483002] flex items-center justify-center p-4 animate-fade-in"
             style={{ background: 'rgba(8,8,12,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bulk-upload-title"
             onClick={onClose}
         >
             <div
-                className="w-full sm:max-w-2xl rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col overflow-hidden animate-slide-in-up"
+                className="w-full sm:max-w-2xl min-h-0 max-h-[92vh] sm:max-h-[min(92vh,100dvh)] flex flex-col overflow-hidden rounded-3xl animate-slide-in-up -translate-y-24"
                 style={{ background: '#FFFFFF', border: '1px solid rgba(15,23,42,0.06)', boxShadow: '0 30px 60px -20px rgba(0,0,0,0.40)' }}
                 onClick={e => e.stopPropagation()}
             >
                 {/* Premium obsidian header */}
                 <div
-                    className="relative overflow-hidden px-5 pt-5 pb-5 sm:px-6 sm:pt-6 text-white"
+                    className="relative shrink-0 overflow-hidden px-5 pt-5 pb-5 sm:px-6 sm:pt-6 text-white"
                     style={{ background: 'linear-gradient(180deg, #0B0B0F 0%, #16161D 70%, #1C1C24 100%)' }}
                 >
                     <div aria-hidden className="pointer-events-none absolute inset-0">
@@ -224,7 +277,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
                             </span>
                             <div className="min-w-0">
                                 <p className="text-[10.5px] uppercase tracking-[0.22em] text-white/45 font-semibold">Bulk upload</p>
-                                <h2 className="text-white font-semibold tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, letterSpacing: '-0.02em' }}>
+                                <h2 id="bulk-upload-title" className="text-white font-semibold tracking-tight" style={{ fontSize: 22, lineHeight: 1.15, letterSpacing: '-0.02em' }}>
                                     {t('dashboard.bulkModal.title')}
                                 </h2>
                                 <p className="mt-1.5 text-[12px] text-white/55 font-medium">{t('dashboard.bulkModal.subtitle')}</p>
@@ -271,7 +324,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
                 </div>
 
                 {/* Body */}
-                <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
                     {step === 1 && (
                         <div className="space-y-4">
                             <div className="rounded-2xl p-4" style={cardStyle}>
@@ -384,7 +437,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
 
                 {/* Footer */}
                 <div
-                    className="px-5 sm:px-6 py-3.5 flex gap-2.5"
+                    className="shrink-0 px-5 sm:px-6 py-3.5 flex gap-2.5"
                     style={{ background: 'rgba(248,250,252,0.85)', borderTop: '1px solid rgba(15,23,42,0.06)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}
                 >
                     <button
@@ -432,6 +485,12 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
             </div>
         </div>
     );
+
+    if (typeof document === 'undefined') {
+        return modalContent;
+    }
+
+    return createPortal(modalContent, document.body);
 };
 
 export default BulkUploadModal;

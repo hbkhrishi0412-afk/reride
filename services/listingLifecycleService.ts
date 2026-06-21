@@ -76,6 +76,14 @@ export function filterActiveListings(vehicles: Vehicle[], sellerPlan?: { subscri
   return vehicles.filter(v => !isListingExpired(v, sellerPlan) && v.status === 'published');
 }
 
+/** Whether a listing should appear in the public buy/sale catalog. */
+export function isPublicBuyListing(vehicle: Vehicle): boolean {
+  if (!vehicle || vehicle.status !== 'published') return false;
+  if (vehicle.listingStatus === 'expired' || vehicle.listingStatus === 'suspended') return false;
+  if (isListingExpired(vehicle)) return false;
+  return true;
+}
+
 // ============================================
 // AUTO-REFRESH MANAGEMENT
 // ============================================
@@ -107,17 +115,17 @@ export function refreshListing(vehicle: Vehicle): Vehicle {
 // ============================================
 
 // Renew expired listing
-export async function renewListing(vehicle: Vehicle, autoRenew: boolean = false): Promise<Vehicle> {
-  const renewalCount = (vehicle.listingRenewalCount || 0) + 1;
-  
+export async function renewListing(
+  vehicle: Vehicle,
+  autoRenew: boolean = false,
+  sellerPlan?: { subscriptionPlan?: string; planExpiryDate?: string },
+): Promise<Vehicle> {
+  const { buildListingRenewalUpdates } = await import('../utils/listingPlanRules.js');
+
   return {
     ...vehicle,
-    listingExpiresAt: await calculateExpiryDate(),
-    listingRenewalCount: renewalCount,
+    ...buildListingRenewalUpdates(sellerPlan || {}, vehicle),
     listingAutoRenew: autoRenew,
-    listingLastRefreshed: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    status: 'published',
   };
 }
 

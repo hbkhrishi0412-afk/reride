@@ -1,10 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, ProsAndCons, User, AIInspectionReport as AIInspectionReportType, RatingEligibility } from '../types';
+import type { Vehicle, ProsAndCons, User, RatingEligibility } from '../types';
 import { generateProsAndCons } from '../services/geminiService';
-import { generateAIInspection } from '../services/aiInspectionService';
-import AIInspectionReportComponent from './AIInspectionReport';
 import { getFirstValidImage, getValidImages } from '../utils/imageUtils';
 import { MobileImageGallery } from './MobileImageGallery';
 import { MobileShareSheet } from './MobileShareSheet';
@@ -21,12 +19,14 @@ import { ListingStockBadge } from './ListingStockBadge.js';
 import { ListingTrustChips } from './ListingTrustChips.js';
 import { isListingAvailable } from '../utils/listingStock.js';
 import StarRating from './StarRating';
-import { useApp } from './AppProvider';
 import { PriceInsights } from './PriceInsights';
 import { findSimilarVehicles } from '../utils/vehiclePricing';
 import SellerDisclosureDisplay from './SellerDisclosureDisplay';
 import BuyerInspectionForm from './BuyerInspectionForm';
 import { fetchRatingEligibility, submitPeerRating } from '../services/vehicleTrustService';
+import { useApp } from './AppProvider';
+import { isCompareDisabledForVehicle } from '../utils/compareList.js';
+import { enrichVehicleWithSellerInfo, resolveVehicleSellerEmail } from '../utils/vehicleEnrichment';
 
 interface MobileVehicleDetailProps {
   vehicle: Vehicle;
@@ -76,60 +76,53 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   onSelectVehicle
 }) => {
   const { t } = useTranslation();
-  const { updateVehicle, vehicles: contextVehicles, refreshVehicles } = useApp();
+  const { vehicles: contextVehicles, comparisonCategory } = useApp();
   const ratingSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [showEMICalculator, setShowEMICalculator] = useState(false);
   const [showTestDriveModal, setShowTestDriveModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'specs' | 'features' | 'vahan' | 'price' | 'aiReport'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'features' | 'vahan' | 'price'>('overview');
   const detailTabsRef = useRef<HTMLDivElement>(null);
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState(false);
-  const [aiInspectionReport, setAiInspectionReport] = useState<AIInspectionReportType | null>(null);
-  const [isGeneratingAIInspection, setIsGeneratingAIInspection] = useState(false);
-  const [aiInspectionError, setAiInspectionError] = useState<string | null>(null);
-  const [aiReportPollExhausted, setAiReportPollExhausted] = useState(false);
   const [ratingEligibility, setRatingEligibility] = useState<RatingEligibility | null>(null);
   const [ratingDealId, setRatingDealId] = useState<string | undefined>();
 
-  const vehicleWithLiveReport = useMemo(() => {
-    const live = contextVehicles.find((v) => v.id === vehicle.id);
-    if (live?.aiInspectionReport) {
-      return { ...vehicle, aiInspectionReport: live.aiInspectionReport };
-    }
-    return vehicle;
-  }, [vehicle, contextVehicles]);
-
-  const safeVehicle = useMemo(() => ({
-    ...vehicleWithLiveReport,
-    images: Array.isArray(vehicle.images) ? vehicle.images : [],
-    features: Array.isArray(vehicle.features) ? vehicle.features : [],
-    description: vehicle.description || '',
-    engine: vehicle.engine || '',
-    transmission: vehicle.transmission || '',
-    fuelType: vehicle.fuelType || '',
-    fuelEfficiency: vehicle.fuelEfficiency || '',
-    color: vehicle.color || '',
-    registrationYear: vehicle.registrationYear || vehicle.year,
-    insuranceValidity: vehicle.insuranceValidity || '',
-    rto: vehicle.rto || '',
-    city: vehicle.city || '',
-    state: vehicle.state || '',
-    noOfOwners: vehicle.noOfOwners || 1,
-    displacement: vehicle.displacement || '',
-    groundClearance: vehicle.groundClearance || '',
-    bootSpace: vehicle.bootSpace || '',
-    averageRating: vehicle.averageRating || 0,
-    ratingCount: vehicle.ratingCount || 0,
-    sellerName: vehicle.sellerName || '',
-    sellerBadges: vehicle.sellerBadges || [],
-    status: vehicle.status || 'published',
-    isFeatured: vehicle.isFeatured || false,
-    views: vehicle.views || 0,
-    inquiriesCount: vehicleWithLiveReport.inquiriesCount || 0
-  }), [vehicleWithLiveReport]);
+  const safeVehicle = useMemo(() => {
+    const sellerEmail = resolveVehicleSellerEmail(vehicle, contextVehicles);
+    const enriched = enrichVehicleWithSellerInfo({ ...vehicle, sellerEmail }, users);
+    return {
+    ...enriched,
+    images: Array.isArray(enriched.images) ? enriched.images : [],
+    features: Array.isArray(enriched.features) ? enriched.features : [],
+    description: enriched.description || '',
+    engine: enriched.engine || '',
+    transmission: enriched.transmission || '',
+    fuelType: enriched.fuelType || '',
+    fuelEfficiency: enriched.fuelEfficiency || '',
+    color: enriched.color || '',
+    registrationYear: enriched.registrationYear || enriched.year,
+    insuranceValidity: enriched.insuranceValidity || '',
+    rto: enriched.rto || '',
+    city: enriched.city || '',
+    state: enriched.state || '',
+    noOfOwners: enriched.noOfOwners || 1,
+    displacement: enriched.displacement || '',
+    groundClearance: enriched.groundClearance || '',
+    bootSpace: enriched.bootSpace || '',
+    averageRating: enriched.averageRating || 0,
+    ratingCount: enriched.ratingCount || 0,
+    sellerName: enriched.sellerName || '',
+    sellerEmail,
+    sellerBadges: enriched.sellerBadges || [],
+    status: enriched.status || 'published',
+    isFeatured: enriched.isFeatured || false,
+    views: enriched.views || 0,
+    inquiriesCount: enriched.inquiriesCount || 0
+  };
+  }, [vehicle, contextVehicles, users]);
 
   const seller = useMemo(() => {
     if (!safeVehicle.sellerEmail) return undefined;
@@ -140,7 +133,33 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     });
   }, [users, safeVehicle.sellerEmail]);
 
+  const sellerProfileEmail = useMemo(() => {
+    const direct = (safeVehicle.sellerEmail || seller?.email || '').toLowerCase().trim();
+    if (direct) return direct;
+
+    const name = (seller?.dealershipName || seller?.name || safeVehicle.sellerName || '').trim().toLowerCase();
+    if (!name || name === 'seller') return '';
+
+    const byName = users.find((u) => {
+      if (!u?.email) return false;
+      const dealership = u.dealershipName?.toLowerCase().trim();
+      const userName = u.name?.toLowerCase().trim();
+      return dealership === name || userName === name;
+    });
+    return byName?.email?.toLowerCase().trim() || '';
+  }, [safeVehicle.sellerEmail, safeVehicle.sellerName, seller, users]);
+
+  const handleViewSellerProfile = () => {
+    if (!sellerProfileEmail) return;
+    onViewSellerProfile(sellerProfileEmail);
+  };
+
   const isComparing = comparisonList.includes(safeVehicle.id);
+  const isCompareDisabled = isCompareDisabledForVehicle(
+    safeVehicle,
+    comparisonList,
+    comparisonCategory,
+  );
   const isInWishlist = wishlist.includes(safeVehicle.id);
   const canRate = Boolean(ratingEligibility?.canRateSeller);
 
@@ -219,74 +238,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     }
   };
 
-  const handleGenerateAIInspection = async () => {
-    if (!safeVehicle.images || safeVehicle.images.length < 1) {
-      setAiInspectionError('At least 1 photo is required for AI inspection');
-      return;
-    }
-    setIsGeneratingAIInspection(true);
-    setAiInspectionError(null);
-    try {
-      const report = await generateAIInspection({
-        vehicleId: safeVehicle.id,
-        imageUrls: safeVehicle.images,
-        vehicleDetails: {
-          make: safeVehicle.make,
-          model: safeVehicle.model,
-          year: safeVehicle.year,
-          mileage: safeVehicle.mileage,
-          fuelType: safeVehicle.fuelType,
-          color: safeVehicle.color,
-        },
-      });
-      setAiInspectionReport(report);
-      setActiveTab('aiReport');
-
-      const isListingSeller =
-        currentUser?.email &&
-        safeVehicle.sellerEmail &&
-        currentUser.email.toLowerCase().trim() === safeVehicle.sellerEmail.toLowerCase().trim();
-      if (isListingSeller) {
-        await updateVehicle(
-          safeVehicle.id,
-          { aiInspectionReport: report },
-          { skipToast: true },
-        );
-      }
-    } catch (error) {
-      setAiInspectionError(error instanceof Error ? error.message : 'Failed to generate AI inspection');
-    } finally {
-      setIsGeneratingAIInspection(false);
-    }
-  };
-
-  const currentAIReport = safeVehicle.aiInspectionReport || aiInspectionReport;
-  const hasListingPhotos = Boolean(safeVehicle.images && safeVehicle.images.length > 0);
-  const isAIReportPending = hasListingPhotos && !currentAIReport && !aiInspectionError && !aiReportPollExhausted;
-
-  useEffect(() => {
-    setAiReportPollExhausted(false);
-  }, [safeVehicle.id]);
-
-  useEffect(() => {
-    if (!hasListingPhotos || currentAIReport) return;
-
-    let attempts = 0;
-    const maxAttempts = 12;
-    void refreshVehicles();
-
-    const intervalId = window.setInterval(() => {
-      attempts += 1;
-      void refreshVehicles();
-      if (attempts >= maxAttempts) {
-        window.clearInterval(intervalId);
-        setAiReportPollExhausted(true);
-      }
-    }, 5000);
-
-    return () => window.clearInterval(intervalId);
-  }, [safeVehicle.id, hasListingPhotos, currentAIReport, refreshVehicles]);
-
   const handleChat = () => {
     onStartChat(safeVehicle);
   };
@@ -325,9 +276,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     setShowTestDriveModal(false);
     setProsAndCons(null);
     setIsGeneratingProsCons(false);
-    setAiInspectionReport(null);
-    setAiInspectionError(null);
-    setIsGeneratingAIInspection(false);
     scrollAppToTop();
     requestAnimationFrame(() => scrollAppToTop());
   }, [vehicle.id]);
@@ -460,12 +408,12 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
 
   return (
     <div className="relative z-0 w-full bg-gray-50 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))]">
-      {/* Image Gallery Header */}
-      <div className="relative w-full" style={{ height: '50vh', minHeight: '300px' }}>
+      {/* Image Gallery Header — contain (not cover) so wide listing photos aren't cropped */}
+      <div className="relative flex w-full max-w-full items-center justify-center overflow-hidden bg-gray-100 aspect-[16/10] max-h-[min(42vh,300px)]">
         <img
           src={getFirstValidImage(safeVehicle.images, safeVehicle.id)}
           alt={`${safeVehicle.make} ${safeVehicle.model}`}
-          className="w-full h-full object-cover"
+          className="max-h-full max-w-full h-full w-full object-contain object-center"
           loading="eager"
           decoding="async"
           fetchPriority="high"
@@ -544,10 +492,17 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           </div>
         </div>
 
-        {/* Seller Information Card with Chat Button */}
+        {/* Seller Information Card */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           {(seller || safeVehicle.sellerName || safeVehicle.sellerEmail) && (
-            <div className="flex items-center gap-3 mb-4">
+            <button
+              type="button"
+              onClick={handleViewSellerProfile}
+              disabled={!sellerProfileEmail}
+              className={`w-full flex items-center gap-3 mb-3 text-left rounded-xl p-1 -m-1 transition-colors ${
+                sellerProfileEmail ? 'active:bg-gray-50' : ''
+              }`}
+            >
               <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
                 {seller?.name?.charAt(0).toUpperCase() || 
                  seller?.dealershipName?.charAt(0).toUpperCase() || 
@@ -566,22 +521,25 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                   {followersForSeller} {t('vehicle.detail.followers')}
                 </p>
               </div>
-              {safeVehicle.sellerEmail && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onViewSellerProfile(safeVehicle.sellerEmail);
-                  }}
-                  className="text-sm text-orange-500 font-semibold flex-shrink-0"
-                  style={{ minHeight: '44px', padding: '0 8px' }}
-                >
+              {sellerProfileEmail ? (
+                <span className="text-sm text-orange-500 font-semibold flex-shrink-0 flex items-center gap-0.5">
                   {t('vehicle.detail.viewProfile')}
-                </button>
-              )}
-            </div>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </span>
+              ) : null}
+            </button>
           )}
+          {sellerProfileEmail ? (
+            <button
+              type="button"
+              onClick={handleViewSellerProfile}
+              className="w-full rounded-xl border-2 border-orange-200 bg-orange-50 py-2.5 text-sm font-semibold text-orange-600 mb-1"
+            >
+              {t('vehicle.detail.viewSellerPage', { defaultValue: 'View seller page' })}
+            </button>
+          ) : null}
           {!currentUser && (
             <p className="text-xs text-center text-gray-500 -mt-1 mb-0">{t('vehicle.detail.signInToMessageSeller')}</p>
           )}
@@ -611,9 +569,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           <div className="mb-2">
             <span className="text-3xl font-bold text-purple-600">{formatCurrency(safeVehicle.price)}</span>
           </div>
-          <p className="text-xs text-gray-500 mb-4">
-            {t('vehicle.detail.price.includesRcTransfer')}
-          </p>
           
           {/* EMI Information */}
           <div className="flex items-center justify-between mb-3">
@@ -659,21 +614,15 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
         {/* Additional Details Section */}
         <div className="bg-white rounded-2xl p-4 shadow-sm" ref={detailTabsRef}>
           <div className="flex border-b border-gray-200 mb-4 overflow-x-auto scrollbar-hide">
-            {(['overview', 'specs', 'features', 'vahan', 'price', ...(hasListingPhotos ? (['aiReport'] as const) : [])] as const).map((tab) => {
+            {(['overview', 'features', 'vahan', 'price'] as const).map((tab) => {
               const label =
                 tab === 'overview'
                   ? t('vehicle.detail.tabs.overview')
-                  : tab === 'specs'
+                  : tab === 'features'
                     ? t('vehicle.detail.tabs.featureSpecs')
                     : tab === 'vahan'
                       ? t('vehicle.detail.tabs.vahan')
-                      : tab === 'price'
-                        ? t('vehicle.detail.tabs.price', 'Price')
-                        : tab === 'aiReport'
-                        ? (isAIReportPending || isGeneratingAIInspection)
-                          ? t('vehicle.detail.ai.analyzing', 'Analyzing…')
-                          : t('vehicle.detail.tabs.aiReport', 'AI Report')
-                        : t('vehicle.detail.tabs.features');
+                      : t('vehicle.detail.tabs.price', 'Price');
               return (
                 <button
                   key={tab}
@@ -698,13 +647,17 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                   category={safeVehicle.category}
                   vahanSnapshot={safeVehicle.vahanSnapshot}
                 />
-                <BuyerInspectionForm
-                  vehicleId={safeVehicle.databaseId || safeVehicle.id}
-                  category={safeVehicle.category}
-                  sellerChecklist={safeVehicle.sellerDisclosureChecklist}
-                  buyerEmail={currentUser?.email}
-                  onRequireLogin={onRequestLogin}
-                />
+                {(!currentUser || currentUser.role === 'customer') &&
+                  currentUser?.email?.toLowerCase().trim() !==
+                    safeVehicle.sellerEmail?.toLowerCase().trim() && (
+                  <BuyerInspectionForm
+                    vehicleId={safeVehicle.databaseId || safeVehicle.id}
+                    category={safeVehicle.category}
+                    sellerChecklist={safeVehicle.sellerDisclosureChecklist}
+                    buyerEmail={currentUser?.role === 'customer' ? currentUser.email : undefined}
+                    onRequireLogin={onRequestLogin}
+                  />
+                )}
                 {safeVehicle.description && (
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -765,109 +718,55 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               </div>
             )}
 
-            {activeTab === 'aiReport' && currentAIReport && (
-              <AIInspectionReportComponent report={currentAIReport} />
-            )}
-
-            {activeTab === 'aiReport' && isAIReportPending && (
-              <div className="text-center py-8 space-y-3">
-                <div className="inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm text-gray-700">
-                  {t('vehicle.detail.ai.generatingReport', 'AI Photo Inspection report is being generated automatically…')}
-                </p>
-                <button
-                  type="button"
-                  onClick={handleGenerateAIInspection}
-                  className="text-sm font-semibold text-blue-600 underline"
-                >
-                  {t('vehicle.detail.ai.generateNow', 'Generate now instead')}
-                </button>
-              </div>
-            )}
-
-            {activeTab === 'aiReport' && aiReportPollExhausted && !currentAIReport && !aiInspectionError && (
-              <div className="text-center py-8 space-y-3 px-2">
-                <p className="text-sm font-medium text-gray-800">
-                  {t('vehicle.detail.ai.reportUnavailable', 'AI inspection report is not available for this listing yet.')}
-                </p>
-                <p className="text-sm text-gray-600">
-                  {t(
-                    'vehicle.detail.ai.reportUnavailableHint',
-                    'We tried to generate one automatically. You can request it again or contact the seller for more details.',
-                  )}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAiReportPollExhausted(false);
-                    void handleGenerateAIInspection();
-                  }}
-                  className="text-sm font-semibold text-purple-700 underline"
-                >
-                  {t('vehicle.detail.ai.generateNow', 'Generate now instead')}
-                </button>
-              </div>
-            )}
-
-            {activeTab === 'aiReport' && !currentAIReport && aiInspectionError && (
-              <div className="space-y-3">
-                <p className="text-sm text-red-600">{aiInspectionError}</p>
-                <button
-                  type="button"
-                  onClick={handleGenerateAIInspection}
-                  className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl font-semibold"
-                >
-                  {t('vehicle.detail.ai.retry', 'Try again')}
-                </button>
-              </div>
-            )}
-
-            {activeTab === 'specs' && (
-              <div className="grid grid-cols-2 gap-4">
-                <SpecCard label={t('vehicle.year')} value={safeVehicle.year?.toString()} />
-                <SpecCard
-                  label={t('vehicle.spec.registrationYear')}
-                  value={safeVehicle.registrationYear?.toString() || safeVehicle.year?.toString()}
-                />
-                <SpecCard label={t('vehicle.fuel')} value={safeVehicle.fuelType} />
-                <SpecCard
-                  label={t('vehicle.mileage')}
-                  value={`${safeVehicle.mileage.toLocaleString()} km`}
-                />
-                <SpecCard label={t('vehicle.transmission')} value={safeVehicle.transmission} />
-                <SpecCard
-                  label={t('vehicle.spec.ownersShort')}
-                  value={safeVehicle.noOfOwners?.toString() || '1'}
-                />
-                <SpecCard
-                  label={t('vehicle.detail.specs.insurance')}
-                  value={safeVehicle.insuranceValidity || t('common.notAvailable')}
-                />
-                <SpecCard
-                  label={t('vehicle.detail.specs.rto')}
-                  value={safeVehicle.rto || t('common.notAvailable')}
-                />
-              </div>
-            )}
-
             {activeTab === 'features' && (
-              <div>
-                {safeVehicle.features.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    {safeVehicle.features.map((feature, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-sm text-gray-700">
-                        <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                        <span>{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-500 text-center py-8">
-                    {t('vehicle.detail.noFeaturesListed')}
-                  </p>
-                )}
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <SpecCard label={t('vehicle.year')} value={safeVehicle.year?.toString()} />
+                  <SpecCard
+                    label={t('vehicle.spec.registrationYear')}
+                    value={safeVehicle.registrationYear?.toString() || safeVehicle.year?.toString()}
+                  />
+                  <SpecCard label={t('vehicle.fuel')} value={safeVehicle.fuelType} />
+                  <SpecCard
+                    label={t('vehicle.mileage')}
+                    value={`${safeVehicle.mileage.toLocaleString()} km`}
+                  />
+                  <SpecCard label={t('vehicle.transmission')} value={safeVehicle.transmission} />
+                  <SpecCard
+                    label={t('vehicle.spec.ownersShort')}
+                    value={safeVehicle.noOfOwners?.toString() || '1'}
+                  />
+                  <SpecCard
+                    label={t('vehicle.detail.specs.insurance')}
+                    value={safeVehicle.insuranceValidity || t('common.notAvailable')}
+                  />
+                  <SpecCard
+                    label={t('vehicle.detail.specs.rto')}
+                    value={safeVehicle.rto || t('common.notAvailable')}
+                  />
+                </div>
+
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 mb-3">
+                    {t('vehicle.detail.includedFeatures')}
+                  </h3>
+                  {safeVehicle.features.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {safeVehicle.features.map((feature, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-sm text-gray-700">
+                          <svg className="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                          <span>{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-center py-4">
+                      {t('vehicle.detail.noFeaturesListed')}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 

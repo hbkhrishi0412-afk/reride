@@ -129,7 +129,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
   return (
     <AuthLayout
       title={isLogin ? 'Seller Login' : 'Create Account'}
-      subtitle={isLogin ? 'Welcome back to your dashboard' : 'Join thousands of successful sellers'}
+      subtitle={isLogin ? 'Welcome back to your dashboard' : 'Create your free seller account'}
       backgroundClass="bg-gradient-to-br from-slate-50 via-white to-blue-50"
       iconGradientFrom="from-blue-500"
       iconGradientTo="to-purple-600"
@@ -168,8 +168,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
         {isLogin && (
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <input id="remember-me" name="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="h-4 w-4 border-brand-gray-300 rounded" style={{ accentColor: '#FF6B35' }} />
-              <label htmlFor="remember-me" className="ml-2 block text-sm text-brand-gray-900 dark:text-brand-gray-300">Remember me</label>
+              <label htmlFor="remember-me" className="flex items-center gap-2 cursor-pointer select-none">
+                <input id="remember-me" name="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="shrink-0" />
+                <span className="text-sm text-brand-gray-900 dark:text-brand-gray-300 leading-none">Remember me</span>
+              </label>
             </div>
             <div className="text-sm">
               <button type="button" onClick={onForgotPassword} className="font-medium transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}>Forgot your password?</button>

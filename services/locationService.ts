@@ -41,29 +41,19 @@ function toRadians(degrees: number): number {
 // USER LOCATION
 // ============================================
 
-// Get user's current location using browser Geolocation API
+/** Capacitor-native permission flow + timeouts (shared with LocationModal). */
 export async function getUserLocation(): Promise<LocationCoordinates | null> {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      console.error('Geolocation not supported');
-      resolve(null);
-      return;
-    }
-    
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        });
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
-        resolve(null);
-      },
-      { timeout: 10000, enableHighAccuracy: false }
-    );
-  });
+  try {
+    const { getCurrentPositionUnified } = await import('../utils/getCurrentPositionUnified.js');
+    const position = await getCurrentPositionUnified();
+    return {
+      lat: position.coords.latitude,
+      lng: position.coords.longitude,
+    };
+  } catch (error) {
+    console.error('Geolocation error:', error);
+    return null;
+  }
 }
 
 // Get city coordinates

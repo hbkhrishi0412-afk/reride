@@ -2,10 +2,12 @@ import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
+import { getCategoryDisplayName } from '../utils/compareList.js';
 
 interface MobileComparisonProps {
   vehicles: Vehicle[];
   comparisonList: number[];
+  comparisonCategory?: string | null;
   onRemoveFromCompare: (vehicleId: number) => void;
   onSelectVehicle: (vehicle: Vehicle) => void;
   onBack?: () => void;
@@ -22,6 +24,7 @@ interface MobileComparisonProps {
 export const MobileComparison: React.FC<MobileComparisonProps> = ({
   vehicles,
   comparisonList,
+  comparisonCategory = null,
   onRemoveFromCompare,
   onSelectVehicle,
   onBack,
@@ -78,18 +81,45 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
 
   if (comparisonVehicles.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-24 flex items-center justify-center">
-        <div className="text-center px-4">
-          <svg
-            className="w-20 h-20 text-gray-300 mx-auto mb-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-          </svg>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">{t('compare.mobile.emptyTitle')}</h2>
-          <p className="text-gray-600">{t('compare.mobile.emptyHint')}</p>
+      <div className="min-h-screen bg-gray-50 pb-24">
+        {onBack && (
+          <div className="bg-white border-b border-gray-200 p-4 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="p-2 -ml-2"
+              style={{ minWidth: '44px', minHeight: '44px' }}
+              aria-label={t('compare.backToListings')}
+            >
+              <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <h1 className="text-xl font-bold text-gray-900 flex-1 min-w-0">{t('compare.pageTitle')}</h1>
+          </div>
+        )}
+        <div className="flex flex-1 items-center justify-center px-4 py-16">
+          <div className="text-center">
+            <svg
+              className="w-20 h-20 text-gray-300 mx-auto mb-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+            </svg>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">{t('compare.mobile.emptyTitle')}</h2>
+            <p className="text-gray-600 mb-6">{t('compare.mobile.emptyHint')}</p>
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white active:scale-[0.98]"
+              >
+                {t('compare.backToListings')}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -120,6 +150,14 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
               {t('compare.clearAll')}
             </button>
           )}
+        </div>
+      )}
+
+      {comparisonCategory && (
+        <div className="bg-orange-50 border-b border-orange-100 px-4 py-2">
+          <p className="text-sm font-medium text-orange-800">
+            {t('compare.categoryLabel', { category: getCategoryDisplayName(comparisonCategory) })}
+          </p>
         </div>
       )}
 

@@ -44,7 +44,6 @@ export interface BuyerInspectionItem {
   status: ChecklistItemStatus;
   notes?: string;
   photoUrl?: string;
-  matchesSellerClaim: boolean;
 }
 
 export interface BuyerInspectionReport {

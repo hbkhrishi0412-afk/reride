@@ -1,5 +1,5 @@
 /**
- * Auto-generate AI photo inspection reports when vehicles are listed or photos change.
+ * AI photo inspection helpers (auto-generation disabled — no longer scheduled on listing create/update/view).
  */
 import type { Vehicle, AIInspectionReport } from '../../types.js';
 import { generateAIInspectionForServer } from '../../services/aiInspectionService.js';

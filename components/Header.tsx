@@ -166,18 +166,10 @@ const Header: React.FC<HeaderProps> = memo(({
         <>
             <header className="bg-white/80 backdrop-blur-xl border-b border-white/20 sticky top-0 z-[1200] shadow-lg">
                 {/* Premium Top Bar */}
+                {(showHomeLocationActions && isMdUp) || !isHomePage ? (
                 <div className="bg-gradient-to-r from-blue-50/50 to-purple-50/50 border-b border-gray-100/50">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center py-1.5">
-                        <div className="flex items-center gap-6">
-                            <span className="flex items-center gap-2">
-                                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20" style={{ color: '#1E88E5' }}>
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
-                                </svg>
-                                <span className="font-medium text-sm">{t('header.trustedCustomers')}</span>
-                            </span>
-                        </div>
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-end items-center py-1.5">
                         <div className="flex items-center gap-3">
-                            {/* Location buttons for home page - shown in top bar */}
                             {showHomeLocationActions ? (
                                 <div className="hidden md:flex items-center gap-2">
                                     <HomeLocationActionButtons
@@ -189,7 +181,6 @@ const Header: React.FC<HeaderProps> = memo(({
                                     />
                                 </div>
                             ) : null}
-                            {/* Location selector for non-home pages */}
                             {!isHomePage ? (
                             <button 
                                 type="button"
@@ -217,6 +208,7 @@ const Header: React.FC<HeaderProps> = memo(({
                         </div>
                     </div>
                 </div>
+                ) : null}
 
                 {showHomeLocationActions ? (
                     <div className="md:hidden border-b border-gray-100 bg-gray-50" data-testid="header-mobile-home-location">

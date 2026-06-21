@@ -10,6 +10,8 @@ import { buildVehicleMutationBody } from '../../utils/vehicleIdentity';
 import { authenticatedFetch } from '../../utils/authenticatedFetch';
 import { planService } from '../../services/planService';
 import { logInfo, logWarn, logError } from '../../utils/logger';
+import { isPublicBuyListing } from '../../services/listingLifecycleService';
+import { computeListingExpiresAtForSeller } from '../../utils/listingPlanRules';
 import { parseDeepLink } from '../../utils/mobileFeatures';
 import { randomIntBelow } from '../../utils/secureRandom.js';
 import { isCapacitorNativeApp } from '../../utils/isCapacitorNative';
@@ -178,6 +180,7 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     users,
     currentUser,
     comparisonList,
+    comparisonCategory,
     wishlist,
     conversations,
     recommendations,
@@ -303,13 +306,7 @@ switch (currentView) {
             users
           )}
           onSelectVehicle={selectVehicle}
-          onToggleCompare={(id) => {
-            setComparisonList(prev => 
-              prev.includes(id) 
-                ? prev.filter(vId => vId !== id)
-                : [...prev, id]
-            );
-          }}
+          onToggleCompare={toggleCompare}
           comparisonList={comparisonList}
           onToggleWishlist={(id) => {
             setWishlist(prev => 
@@ -354,13 +351,7 @@ switch (currentView) {
           users
         )}
         onSelectVehicle={selectVehicle}
-        onToggleCompare={(id) => {
-          setComparisonList(prev => 
-            prev.includes(id) 
-              ? prev.filter(vId => vId !== id)
-              : [...prev, id]
-          );
-        }}
+        onToggleCompare={toggleCompare}
         comparisonList={comparisonList}
         onToggleWishlist={(id) => {
           setWishlist(prev => 
@@ -400,20 +391,20 @@ switch (currentView) {
     const cityFilter = selectedCity || '';
     const filteredVehicles = vehicles.filter(v => {
       if (!v) return false;
-      const isPublished = v.status === 'published';
+      const isBuyable = isPublicBuyListing(v);
       // Exclude rental vehicles from buy/sale listings
       const isNotRental = v.listingType !== 'rental' || v.listingType === undefined;
       // Apply city filter only if a city is explicitly selected (using city mapping for accurate matching)
       const matchesCityFilter = matchesCity(v.city, cityFilter);
       
-      return isPublished && isNotRental && matchesCityFilter;
+      return isBuyable && isNotRental && matchesCityFilter;
     });
     
     // Debug logging in development
     if (process.env.NODE_ENV === 'development') {
       logInfo('USED_CARS filter results:', {
         totalVehicles: vehicles.length,
-        publishedVehicles: vehicles.filter(v => v.status === 'published').length,
+        publishedVehicles: vehicles.filter(v => isPublicBuyListing(v)).length,
         rentalVehicles: vehicles.filter(v => v.listingType === 'rental').length,
         selectedCity: selectedCity || 'none',
         filteredVehicles: filteredVehicles.length,
@@ -428,14 +419,10 @@ switch (currentView) {
           onSelectVehicle={selectVehicle}
           isLoading={isLoading || (!vehiclesCatalogReady && vehicles.length === 0)}
           comparisonList={comparisonList}
-          onToggleCompare={(id) => {
-            setComparisonList(prev => 
-              prev.includes(id) 
-                ? prev.filter(vId => vId !== id)
-                : [...prev, id]
-            );
-          }}
+          comparisonCategory={comparisonCategory}
+          onToggleCompare={toggleCompare}
           onClearCompare={() => setComparisonList([])}
+          onOpenCompare={() => navigate(ViewEnum.COMPARISON)}
           wishlist={wishlist}
           onToggleWishlist={(id) => {
             setWishlist(prev => 
@@ -614,6 +601,7 @@ switch (currentView) {
         <MobileComparison
           vehicles={vehicles}
           comparisonList={comparisonList}
+          comparisonCategory={comparisonCategory}
           onRemoveFromCompare={(id) => {
             setComparisonList(prev => prev.filter(vId => vId !== id));
           }}
@@ -626,14 +614,9 @@ switch (currentView) {
     return (
       <Comparison 
         vehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => comparisonList.includes(v.id)), users)}
+        comparisonCategory={comparisonCategory}
         onBack={() => goBack(ViewEnum.USED_CARS)}
-        onToggleCompare={(id: number) => {
-          setComparisonList(prev => 
-            prev.includes(id) 
-              ? prev.filter(vId => vId !== id)
-              : [...prev, id]
-          );
-        }}
+        onToggleCompare={toggleCompare}
         onClearCompare={() => setComparisonList([])}
       />
     );
@@ -661,14 +644,10 @@ switch (currentView) {
         onSelectVehicle={selectVehicle}
         isLoading={isLoading || (!vehiclesCatalogReady && vehicles.length === 0)}
         comparisonList={comparisonList}
-        onToggleCompare={(id) => {
-          setComparisonList(prev => 
-            prev.includes(id) 
-              ? prev.filter(vId => vId !== id)
-              : [...prev, id]
-          );
-        }}
+        comparisonCategory={comparisonCategory}
+        onToggleCompare={toggleCompare}
         onClearCompare={() => setComparisonList([])}
+        onOpenCompare={() => navigate(ViewEnum.COMPARISON)}
         wishlist={wishlist}
         onToggleWishlist={(id) => {
           setWishlist(prev => 
@@ -792,14 +771,7 @@ switch (currentView) {
                       return;
                     }
                   }
-                  let listingExpiresAt: string | undefined;
-                  if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
-                    listingExpiresAt = currentUser.planExpiryDate;
-                  } else if (currentUser.subscriptionPlan !== 'premium') {
-                    const expiryDate = new Date();
-                    expiryDate.setDate(expiryDate.getDate() + 30);
-                    listingExpiresAt = expiryDate.toISOString();
-                  }
+                  const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
                   const newVehicles = vehiclesData.map(vehicle => ({
                     ...vehicle,
                     id: Date.now() + randomIntBelow(1000),
@@ -986,15 +958,7 @@ switch (currentView) {
               onViewVehicle={selectVehicle}
               onAddVehicle={async (vehicleData, isFeaturing = false) => {
                 try {
-                  // Set listingExpiresAt based on subscription plan expiry date
-                  let listingExpiresAt: string | undefined;
-                  if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
-                    listingExpiresAt = currentUser.planExpiryDate;
-                  } else if (currentUser.subscriptionPlan !== 'premium') {
-                    const expiryDate = new Date();
-                    expiryDate.setDate(expiryDate.getDate() + 30);
-                    listingExpiresAt = expiryDate.toISOString();
-                  }
+                  const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
                   
                   const { addVehicle, getVehicles } = await import('../../services/vehicleService');
                   const vehicleToAdd = {
@@ -1078,18 +1042,7 @@ switch (currentView) {
           reportedVehicles={sellerReportedVehicles}
           onAddVehicle={async (vehicleData, isFeaturing = false) => {
             try {
-              // Set listingExpiresAt based on subscription plan expiry date
-              let listingExpiresAt: string | undefined;
-              if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
-                // Premium plan: use plan expiry date
-                listingExpiresAt = currentUser.planExpiryDate;
-              } else if (currentUser.subscriptionPlan !== 'premium') {
-                // Free and Pro plans get 30-day expiry from today
-                const expiryDate = new Date();
-                expiryDate.setDate(expiryDate.getDate() + 30);
-                listingExpiresAt = expiryDate.toISOString();
-              }
-              // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
+              const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
               
               const newVehicle = {
                 ...vehicleData,
@@ -1139,18 +1092,7 @@ switch (currentView) {
                 }
               }
               
-              // Set listingExpiresAt based on subscription plan expiry date
-              let listingExpiresAt: string | undefined;
-              if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
-                // Premium plan: use plan expiry date
-                listingExpiresAt = currentUser.planExpiryDate;
-              } else if (currentUser.subscriptionPlan !== 'premium') {
-                // Free and Pro plans get 30-day expiry from today
-                const expiryDate = new Date();
-                expiryDate.setDate(expiryDate.getDate() + 30);
-                listingExpiresAt = expiryDate.toISOString();
-              }
-              // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
+              const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
               
               const newVehicles = vehiclesData.map(vehicle => ({
                 ...vehicle,
@@ -1424,13 +1366,7 @@ switch (currentView) {
                 : [...prev, id]
             );
           }}
-          onToggleCompare={(id) => {
-            setComparisonList(prev => 
-              prev.includes(id) 
-                ? prev.filter(vId => vId !== id)
-                : [...prev, id]
-            );
-          }}
+          onToggleCompare={toggleCompare}
           comparisonList={comparisonList}
           onViewSellerProfile={openSellerProfileByEmail}
           onLogout={handleLogoutAll}
@@ -1455,13 +1391,7 @@ switch (currentView) {
               : [...prev, id]
           );
         }}
-        onToggleCompare={(id) => {
-          setComparisonList(prev => 
-            prev.includes(id) 
-              ? prev.filter(vId => vId !== id)
-              : [...prev, id]
-          );
-        }}
+        onToggleCompare={toggleCompare}
         comparisonList={comparisonList}
         onViewSellerProfile={openSellerProfileByEmail}
       />

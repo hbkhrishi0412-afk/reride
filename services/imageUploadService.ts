@@ -23,16 +23,14 @@ interface UploadResult {
  */
 export const uploadImage = async (file: File, folder: string = 'vehicles', userEmail?: string): Promise<UploadResult> => {
   try {
-    // Validate file first
-    const validation = validateImageFile(file);
-    if (!validation.valid) {
+    const typeValidation = validateImageMimeType(file);
+    if (!typeValidation.valid) {
       return {
         success: false,
-        error: validation.error || 'Invalid image file'
+        error: typeValidation.error || 'Invalid image file',
       };
     }
 
-    // Use Supabase Storage for image storage
     return await uploadToSupabaseStorage(file, folder, userEmail);
   } catch (error) {
     console.error('❌ Image upload error:', error);
@@ -51,8 +49,11 @@ export const uploadImage = async (file: File, folder: string = 'vehicles', userE
  * @returns Promise with array of upload results
  */
 export const uploadImages = async (files: File[], folder: string = 'vehicles', userEmail?: string): Promise<UploadResult[]> => {
-  const uploadPromises = files.map(file => uploadImage(file, folder, userEmail));
-  return Promise.all(uploadPromises);
+  const results: UploadResult[] = [];
+  for (const file of files) {
+    results.push(await uploadImage(file, folder, userEmail));
+  }
+  return results;
 };
 
 function blobToBase64Payload(blob: Blob): Promise<string> {
@@ -528,28 +529,49 @@ async function convertFileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Validates if a file is a valid image
+ * Validates if a file is a valid image (type + sane original size before compression).
  */
 export const validateImageFile = (file: File): { valid: boolean; error?: string } => {
-  // Normalize MIME type before validation
-  const normalizedType = normalizeMimeType(file.type);
+  const typeValidation = validateImageMimeType(file);
+  if (!typeValidation.valid) return typeValidation;
+
+  // Large originals are OK — we resize before upload (matches API 10MB post-compress limit).
+  const maxOriginalSize = 25 * 1024 * 1024;
+  if (file.size > maxOriginalSize) {
+    return {
+      valid: false,
+      error: 'Image is too large. Please use a photo under 25MB or take a new picture.',
+    };
+  }
+
+  return { valid: true };
+};
+
+function validateImageMimeType(file: File): { valid: boolean; error?: string } {
+  const normalizedType = normalizeMimeType(file.type || 'image/jpeg');
   const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  
-  // Check against normalized type
+
   if (!validTypes.includes(normalizedType)) {
     return { valid: false, error: 'Invalid image type. Please upload JPEG, PNG, WebP, or GIF.' };
   }
-  
-  // Increased max size to 5MB since we resize images before uploading
-  // Images will be resized to max 1200x800px, so even large originals will be compressed
-  const maxSize = 5 * 1024 * 1024; // 5MB (will be resized and compressed)
-  
-  if (file.size > maxSize) {
-    return { valid: false, error: 'Image size exceeds 5MB limit. Please use a smaller image file.' };
-  }
-  
   return { valid: true };
-};
+}
+
+/** Convert a canvas/data-URL preview to a File for upload. */
+export function dataUrlToFile(dataUrl: string, fileName: string): File {
+  const [header, base64Payload] = dataUrl.split(',');
+  if (!base64Payload) {
+    throw new Error('Invalid image data');
+  }
+  const mimeMatch = header.match(/data:([^;]+);/);
+  const mime = normalizeMimeType(mimeMatch?.[1] || 'image/jpeg');
+  const binary = atob(base64Payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new File([bytes], fileName, { type: mime, lastModified: Date.now() });
+}
 
 /**
  * Retrieves an image from Supabase Storage

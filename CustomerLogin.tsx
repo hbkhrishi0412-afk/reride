@@ -195,9 +195,11 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
         {isLogin && (
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <input id="remember-me" name="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 text-reride-orange focus:ring-reride-orange-light border-brand-gray-300 rounded" />
-              <label htmlFor="remember-me" className="ml-2 block text-sm text-brand-gray-900 dark:text-brand-gray-300">Remember me</label>
+              <label htmlFor="remember-me" className="flex items-center gap-2 cursor-pointer select-none">
+                <input id="remember-me" name="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}
+                  className="shrink-0" />
+                <span className="text-sm text-brand-gray-900 dark:text-brand-gray-300 leading-none">Remember me</span>
+              </label>
             </div>
             <div className="text-sm">
               <button
