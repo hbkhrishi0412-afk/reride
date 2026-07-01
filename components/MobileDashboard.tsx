@@ -10,6 +10,7 @@ import BoostListingModal from './BoostListingModal';
 import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
+import { getFirstValidImage, swapToPlaceholderOnError } from '../utils/imageUtils';
 import {
   buildSellerQrCodeUrl,
   buildSellerShareUrl,
@@ -1297,7 +1298,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       ) : (
         <div className="space-y-3">
           {safeUserVehicles.map((vehicle) => {
-            const heroImage = (vehicle.images && vehicle.images[0]) || '';
+            const heroImage = vehicle.images && vehicle.images.length ? getFirstValidImage(vehicle.images, vehicle.id) : '';
             const statusMeta =
               vehicle.status === 'published'
                 ? { bg: 'rgba(16,185,129,0.10)', color: '#047857', label: t('sellerListing.badgeActive') }
@@ -1328,7 +1329,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     }}
                   >
                     {heroImage ? (
-                      <img src={heroImage} alt="" loading="lazy" className="w-full h-full object-cover" />
+                      <img src={heroImage} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={(e) => swapToPlaceholderOnError(e.currentTarget)} />
                     ) : (
                       <span className="text-slate-400"><IconCar size={32} stroke={1.6} /></span>
                     )}
@@ -3860,7 +3861,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         ) : (
           <div className="space-y-3">
             {soldVehicles.map((vehicle) => {
-              const heroImage = (vehicle.images && vehicle.images[0]) || '';
+              const heroImage = vehicle.images && vehicle.images.length ? getFirstValidImage(vehicle.images, vehicle.id) : '';
               return (
                 <div
                   key={vehicle.id}
@@ -3877,7 +3878,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                       style={{ background: 'linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%)', border: '1px solid rgba(15,23,42,0.05)' }}
                     >
                       {heroImage ? (
-                        <img src={heroImage} alt="" loading="lazy" className="w-full h-full object-cover" />
+                        <img src={heroImage} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={(e) => swapToPlaceholderOnError(e.currentTarget)} />
                       ) : (
                         <span className="text-slate-400"><IconCar size={28} stroke={1.6} /></span>
                       )}

@@ -49,8 +49,14 @@ function supabaseRowToUser(row: any): User {
     authProvider: (row.auth_provider || 'email') as 'email' | 'google' | 'phone',
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString(),
+    // Plan dates from dedicated columns (preferred) or metadata fallback
+    planActivatedDate: row.plan_activated_at || (row.metadata?.planActivatedDate) || undefined,
+    planExpiryDate: row.plan_expires_at || (row.metadata?.planExpiryDate) || undefined,
     // Extract additional fields from metadata
     ...(row.metadata || {}),
+    // Re-assert plan dates from columns so metadata doesn't override them
+    ...(row.plan_activated_at ? { planActivatedDate: row.plan_activated_at } : {}),
+    ...(row.plan_expires_at ? { planExpiryDate: row.plan_expires_at } : {}),
   } as User;
 
   (user as { rerideRecommended?: boolean }).rerideRecommended = isRerideStaffPick(
@@ -109,6 +115,8 @@ function userToSupabaseRow(user: Partial<User>): any {
     pincode: user.pincode || null,
     firebase_uid: user.firebaseUid || null,
     auth_provider: user.authProvider || 'email',
+    plan_activated_at: (user as any).planActivatedDate || null,
+    plan_expires_at: (user as any).planExpiryDate || null,
     created_at: user.createdAt || new Date().toISOString(),
     updated_at: (user as any).updatedAt || new Date().toISOString(),
     metadata: Object.keys(metadata).length > 0 ? metadata : null,
@@ -535,6 +543,8 @@ export const supabaseUserService = {
       pincode: 'pincode',
       firebaseUid: 'firebase_uid',
       authProvider: 'auth_provider',
+      planActivatedDate: 'plan_activated_at',
+      planExpiryDate: 'plan_expires_at',
       createdAt: 'created_at',
       updatedAt: 'updated_at',
     };
@@ -580,16 +590,13 @@ export const supabaseUserService = {
     });
     
     // CRITICAL: Merge metadata instead of replacing it
-    // This preserves existing metadata fields when updating partnerBanks or other metadata fields
     if (hasMetadataUpdates) {
       if (existingUser?.metadata) {
-        // Merge new metadata with existing metadata
         row.metadata = {
           ...(existingUser.metadata || {}),
           ...metadata
         };
       } else {
-        // New metadata, no existing metadata - use as is
         row.metadata = metadata;
       }
     }
@@ -643,11 +650,8 @@ export const supabaseUserService = {
       throw new Error(`Failed to fetch existing user: ${fetchError.message}`);
     }
     
-    // CRITICAL FIX: Only convert fields that are actually in the updates object
-    // This prevents undefined fields from being converted to empty strings and clearing existing data
     const row: any = {};
     
-    // Map of User fields to Supabase column names
     const fieldMapping: Record<string, string> = {
       email: 'email',
       name: 'name',
@@ -672,20 +676,20 @@ export const supabaseUserService = {
       pincode: 'pincode',
       firebaseUid: 'firebase_uid',
       authProvider: 'auth_provider',
+      planActivatedDate: 'plan_activated_at',
+      planExpiryDate: 'plan_expires_at',
       createdAt: 'created_at',
       updatedAt: 'updated_at',
     };
     
-    // Only include fields that are actually in the updates
     Object.keys(updates).forEach(key => {
-      if (key === 'id') return; // Skip id field
+      if (key === 'id') return;
       
       const value = updates[key as keyof User];
-      if (value === undefined) return; // Skip undefined values
+      if (value === undefined) return;
       
       const columnName = fieldMapping[key];
       if (columnName) {
-        // Handle special cases
         if (key === 'email' && typeof value === 'string') {
           row[columnName] = value.toLowerCase().trim();
         } else if (key === 'password') {
@@ -696,7 +700,6 @@ export const supabaseUserService = {
       }
     });
     
-    // Handle metadata fields separately
     const metadataFields = [
       'averageRating', 'ratingCount', 'badges', 'responseTime', 'responseRate',
       'joinedDate', 'lastActiveAt', 'activeListings', 'soldListings', 'totalViews',
@@ -716,29 +719,23 @@ export const supabaseUserService = {
       }
     });
     
-    // CRITICAL: Merge metadata instead of replacing it
     if (hasMetadataUpdates) {
       if (existingUser?.metadata) {
-        // Merge new metadata with existing metadata
         row.metadata = {
           ...(existingUser.metadata || {}),
           ...metadata
         };
       } else {
-        // New metadata, no existing - use as is
         row.metadata = metadata;
       }
     }
     
-    // Only include metadata if it has values
     if (row.metadata && Object.keys(row.metadata).length === 0) {
       delete row.metadata;
     }
     
-    // Always update updated_at timestamp
     row.updated_at = new Date().toISOString();
     
-    // If no fields to update (after filtering), throw an error
     if (Object.keys(row).length === 0) {
       throw new Error('No valid fields to update');
     }

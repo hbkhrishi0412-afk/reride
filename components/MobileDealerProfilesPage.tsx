@@ -17,6 +17,7 @@ import { resolveSellerLogoUrl, sellerInitialsAvatarDataUri } from '../utils/imag
 import { sellerMatchesHeaderRegion } from '../utils/dealerRegionFilter';
 import { isRerideStaffPick } from '../utils/staffPick';
 import { getPublicDealerRating } from '../utils/dealerRatingDisplay';
+import { copyTextToClipboard } from '../utils/copyToClipboard';
 
 // Fix for default marker icons in Leaflet (when map is used)
 if (typeof L !== 'undefined' && L.Icon?.Default?.prototype) {
@@ -404,6 +405,18 @@ const MobileDealerCard: React.FC<{
     !base && !pin
       ? 'Address not available'
       : [base || null, pin ? `PIN ${pin}` : null].filter(Boolean).join(' · ');
+  const addressCopyable = address !== 'Address not available';
+  const [addressCopied, setAddressCopied] = useState(false);
+
+  const handleCopyAddress = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!addressCopyable) return;
+    const ok = await copyTextToClipboard(address);
+    if (ok) {
+      setAddressCopied(true);
+      window.setTimeout(() => setAddressCopied(false), 2000);
+    }
+  };
   const languages = ['Hindi', 'English'];
 
   const handleCall = (e: React.MouseEvent) => {
@@ -495,13 +508,34 @@ const MobileDealerCard: React.FC<{
             <p className="text-[11px] text-slate-400 -mt-0.5 mb-1.5">{statusSubtext}</p>
 
             {/* Address */}
-            <p className="text-[12px] text-slate-600 mb-1.5 line-clamp-2">
-              <svg className="inline w-3 h-3 text-slate-400 mr-1 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              {address}
-            </p>
+            <div className="flex items-start gap-1.5 mb-1.5 min-w-0">
+              <p className="text-[12px] text-slate-600 line-clamp-2 flex-1 min-w-0">
+                <svg className="inline w-3 h-3 text-slate-400 mr-1 -mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {addressCopyable ? address : <span className="text-slate-400 italic">{address}</span>}
+              </p>
+              {addressCopyable ? (
+                <button
+                  type="button"
+                  onClick={(e) => void handleCopyAddress(e)}
+                  aria-label={addressCopied ? 'Address copied' : 'Copy address'}
+                  title={addressCopied ? 'Copied!' : 'Copy address'}
+                  className="shrink-0 p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                >
+                  {addressCopied ? (
+                    <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                </button>
+              ) : null}
+            </div>
 
             {/* Inline meta */}
             <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-semibold flex-wrap">
@@ -614,15 +648,10 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
     }
   }, []);
 
+  // Always fetch public directory — AppProvider `users` cache may lack map location fields.
   useEffect(() => {
-    if (!propSellers || propSellers.length === 0) {
-      void fetchDealers();
-    } else {
-      setSellers(propSellers);
-      setIsLoadingSellers(false);
-      setSellersLoadError(null);
-    }
-  }, [propSellers, fetchDealers]);
+    void fetchDealers();
+  }, [fetchDealers]);
 
   useEffect(() => {
     const fetchCoords = async () => {

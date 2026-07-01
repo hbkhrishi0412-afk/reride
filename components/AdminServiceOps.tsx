@@ -332,9 +332,34 @@ const AdminServiceOps: React.FC = () => {
     ? new Date(metrics.generatedAt).toLocaleString()
     : '-';
 
+  const [actionDropdownId, setActionDropdownId] = useState<string | null>(null);
+
+  const handleStatusUpdate = async (requestId: string, nextStatus: string) => {
+    try {
+      setUpdatingRequestId(requestId);
+      setStatusNotice(null);
+      const resp = await authenticatedFetch('/api/service-requests', {
+        method: 'PATCH',
+        body: JSON.stringify({ id: requestId, status: nextStatus }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to set status ${nextStatus}`);
+      }
+      const updated = await resp.json();
+      setRequests((prev) => prev.map((req) => (req.id === requestId ? { ...req, ...updated } : req)));
+      setStatusNotice(`Request updated to ${nextStatus.replace('_', ' ')}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update request status');
+    } finally {
+      setUpdatingRequestId(null);
+      setActionDropdownId(null);
+    }
+  };
+
   const renderRequests = () => (
     <section className="bg-white border border-gray-100 rounded-xl shadow-sm">
-      <div className="sticky top-0 z-10 bg-white border-b px-4 py-3 flex flex-wrap gap-2 items-center">
+      <div className="sticky top-0 z-10 bg-white border-b px-5 py-3 flex flex-wrap gap-3 items-center">
         <div className="flex gap-1 flex-wrap">
           {statusChips.map((chip) => (
             <button
@@ -343,26 +368,27 @@ const AdminServiceOps: React.FC = () => {
                 setFilters((prev) => ({ ...prev, status: chip.key }));
                 setRequestPage(1);
               }}
-              className={`px-3 py-1 rounded-full text-sm border ${
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 filters.status === chip.key
-                  ? 'bg-blue-50 border-blue-200 text-blue-700'
-                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
               {chip.label}
             </button>
           ))}
         </div>
+        <div className="h-5 w-px bg-gray-200" />
         <input
           value={filters.city}
           onChange={(e) => {
             setFilters((prev) => ({ ...prev, city: e.target.value }));
             setRequestPage(1);
           }}
-          placeholder="City"
-          className="px-3 py-2 border rounded-lg text-sm"
+          placeholder="Filter by city..."
+          className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm w-36 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
         />
-        <label className="inline-flex items-center gap-2 px-3 py-2 border rounded-lg text-sm text-gray-700 bg-white">
+        <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={filters.unassignedOnly}
@@ -370,7 +396,7 @@ const AdminServiceOps: React.FC = () => {
               setFilters((prev) => ({ ...prev, unassignedOnly: e.target.checked }));
               setRequestPage(1);
             }}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
           Unassigned only
         </label>
@@ -380,7 +406,7 @@ const AdminServiceOps: React.FC = () => {
             setFilters((prev) => ({ ...prev, providerId: e.target.value }));
             setRequestPage(1);
           }}
-          className="px-3 py-2 border rounded-lg text-sm"
+          className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300"
         >
           <option value="all">All providers</option>
           {providers.map((p) => (
@@ -390,205 +416,219 @@ const AdminServiceOps: React.FC = () => {
           ))}
         </select>
         {activeQuickFilterLabel && (
-          <div className="ml-auto inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800">
-            <span>{activeQuickFilterLabel}</span>
-            <button
-              type="button"
-              onClick={() => {
-                setFilters((prev) => ({ ...prev, status: 'all', providerId: 'all', unassignedOnly: false }));
-                setRequestPage(1);
-              }}
-              className="rounded-full border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
-            >
-              Reset
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setFilters((prev) => ({ ...prev, status: 'all', providerId: 'all', unassignedOnly: false }));
+              setRequestPage(1);
+            }}
+            className="ml-auto text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2"
+          >
+            Clear filters
+          </button>
         )}
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
+        <table className="min-w-full">
           <thead>
-            <tr className="text-gray-600 border-b">
-              <th className="py-2 pr-4 text-left">Title</th>
-              <th className="py-2 pr-4 text-left">Service</th>
-              <th className="py-2 pr-4 text-left">Location</th>
-              <th className="py-2 pr-4 text-left">Provider(s)</th>
-              <th className="py-2 pr-4 text-left">Status</th>
-              <th className="py-2 pr-4 text-left">Actions</th>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Service</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Location</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Mobile</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Provider</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+              <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-gray-100">
             {pagedRequests.map((r) => {
               const expanded = expandedRequestId === r.id;
+              const assignedProvider = r.providerId ? providerMap[r.providerId] : null;
               return (
                 <React.Fragment key={r.id}>
                   <tr
-                    className="border-b last:border-none hover:bg-gray-50 cursor-pointer"
+                    className="hover:bg-blue-50/40 transition-colors cursor-pointer"
                     onClick={() => setExpandedRequestId(expanded ? null : r.id)}
                   >
-                    <td className="py-2 pr-4 font-semibold text-gray-900">{r.title}</td>
-                    <td className="py-2 pr-4 text-gray-800">{r.serviceType || '-'}</td>
-                    <td className="py-2 pr-4 text-gray-700">
-                      <div>{r.city || '-'}</div>
-                      {r.scheduledAt && <div className="text-xs text-gray-500">Sched: {r.scheduledAt}</div>}
-                    </td>
-                    <td className="py-2 pr-4 text-gray-700">
-                      <div className="space-y-1">
-                        {r.providerId && (
-                          <div className="text-xs text-blue-700">
-                            Assigned: {providerMap[r.providerId]?.name || r.providerId}
-                          </div>
-                        )}
-                        {r.candidateProviderIds && r.candidateProviderIds.length > 0 && (
-                          <div className="text-xs text-gray-600">
-                            Pool:{' '}
-                            {r.candidateProviderIds.map((id) => providerMap[id]?.name || id).join(', ')}
-                          </div>
-                        )}
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                          {(r.customerName || r.title || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{r.customerName || r.title}</p>
+                          {r.customerEmail && (
+                            <p className="text-xs text-gray-500 truncate">{r.customerEmail}</p>
+                          )}
+                        </div>
                       </div>
                     </td>
-                    <td className="py-2 pr-4">
+                    <td className="px-5 py-4">
+                      <p className="text-sm text-gray-900">{r.serviceType || '-'}</p>
+                      {r.scheduledAt && (
+                        <p className="text-xs text-gray-500 mt-0.5">Scheduled: {new Date(r.scheduledAt).toLocaleDateString()}</p>
+                      )}
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="text-sm text-gray-900">{r.city || '-'}</p>
+                      {r.addressLine && (
+                        <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[160px]">{r.addressLine}</p>
+                      )}
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="text-sm text-gray-900 font-mono">{r.customerPhone || '-'}</p>
+                    </td>
+                    <td className="px-5 py-4">
+                      {assignedProvider ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-6 w-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                            {assignedProvider.name.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="text-sm text-gray-900">{assignedProvider.name}</span>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">
+                          Unassigned
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4">
                       <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
                           statusColors[r.status] || 'bg-gray-100 text-gray-700 border border-gray-200'
                         }`}
                       >
                         {r.status.replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="py-2 pr-4">
-                      <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
-                        {(['accepted', 'in_progress', 'completed', 'cancelled'] as const).map((next) => (
-                          <button
-                            key={next}
-                            type="button"
-                            disabled={updatingRequestId === r.id || r.status === next}
-                            onClick={async () => {
-                              try {
-                                setUpdatingRequestId(r.id);
-                                setStatusNotice(null);
-                                const resp = await authenticatedFetch('/api/service-requests', {
-                                  method: 'PATCH',
-                                  body: JSON.stringify({ id: r.id, status: next }),
-                                });
-                                if (!resp.ok) {
-                                  const data = await resp.json().catch(() => ({}));
-                                  throw new Error(data.error || `Failed to set status ${next}`);
-                                }
-                                const updated = await resp.json();
-                                setRequests((prev) => prev.map((req) => (req.id === r.id ? { ...req, ...updated } : req)));
-                                setStatusNotice(`Request ${r.id} updated to ${next.replace('_', ' ')}`);
-                              } catch (e) {
-                                setError(e instanceof Error ? e.message : 'Failed to update request status');
-                              } finally {
-                                setUpdatingRequestId(null);
-                              }
-                            }}
-                            className="px-2 py-1 text-xs rounded border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50"
-                          >
-                            {next.replace('_', ' ')}
-                          </button>
-                        ))}
+                    <td className="px-5 py-4 text-right">
+                      <div className="relative inline-block" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setActionDropdownId(actionDropdownId === r.id ? null : r.id)}
+                          disabled={updatingRequestId === r.id}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-50 transition-colors"
+                        >
+                          Update
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        {actionDropdownId === r.id && (
+                          <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
+                            {(['accepted', 'in_progress', 'completed', 'cancelled'] as const).map((next) => (
+                              <button
+                                key={next}
+                                type="button"
+                                disabled={r.status === next}
+                                onClick={() => handleStatusUpdate(r.id, next)}
+                                className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                                  r.status === next
+                                    ? 'text-gray-400 cursor-not-allowed bg-gray-50'
+                                    : 'text-gray-700 hover:bg-gray-100'
+                                }`}
+                              >
+                                <span className="flex items-center gap-2">
+                                  <span className={`h-2 w-2 rounded-full ${
+                                    next === 'accepted' ? 'bg-blue-400' :
+                                    next === 'in_progress' ? 'bg-indigo-400' :
+                                    next === 'completed' ? 'bg-emerald-400' :
+                                    'bg-gray-400'
+                                  }`} />
+                                  {next.replace('_', ' ').replace(/^\w/, c => c.toUpperCase())}
+                                  {r.status === next && <span className="ml-auto text-gray-400">(current)</span>}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
                   {expanded && (
-                    <tr className="bg-gray-50 border-b">
-                      <td colSpan={6} className="p-3 text-sm text-gray-700">
-                        <div className="grid md:grid-cols-2 gap-3">
-                          <div>
-                            <div className="font-semibold">Customer</div>
-                            <div>{r.customerName || '-'}</div>
-                            <div className="text-xs text-gray-600">
-                              {r.customerPhone || ''} {r.customerEmail ? `• ${r.customerEmail}` : ''}
-                            </div>
+                    <tr className="bg-gray-50/70">
+                      <td colSpan={7} className="px-5 py-4">
+                        <div className="grid md:grid-cols-3 gap-4">
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Vehicle</p>
+                            <p className="text-sm text-gray-800">{r.carDetails || r.vehicle || '-'}</p>
                           </div>
-                          <div>
-                            <div className="font-semibold">Address</div>
-                            <div className="text-xs text-gray-600">
-                              {r.addressLine || '-'} {r.pincode ? `, ${r.pincode}` : ''}
-                            </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Full Address</p>
+                            <p className="text-sm text-gray-800">{r.addressLine || '-'}{r.pincode ? `, ${r.pincode}` : ''}</p>
                           </div>
-                          <div>
-                            <div className="font-semibold">Notes</div>
-                            <div className="text-xs text-gray-700">{r.notes || '-'}</div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Notes</p>
+                            <p className="text-sm text-gray-800">{r.notes || '-'}</p>
                           </div>
-                          <div>
-                            <div className="font-semibold">Vehicle</div>
-                            <div className="text-xs text-gray-700">{r.carDetails || r.vehicle || '-'}</div>
-                          </div>
-                          <div>
-                            <div className="font-semibold">Progress Timeline</div>
-                            <div className="my-2">
-                              <div className="flex items-center gap-2">
-                                {TRACKING_STEPS.map((step, idx) => {
-                                  const state = getStepState(r.status, step.key);
-                                  return (
-                                    <React.Fragment key={step.key}>
-                                      <div className="flex flex-col items-center min-w-[56px]">
-                                        <button
-                                          type="button"
-                                          disabled={!STEP_TO_STATUS[step.key] || updatingRequestId === r.id}
-                                          onClick={async () => {
-                                            const targetStatus = STEP_TO_STATUS[step.key];
-                                            if (!targetStatus) return;
-                                            try {
-                                              setUpdatingRequestId(r.id);
-                                              setStatusNotice(null);
-                                              const resp = await authenticatedFetch('/api/service-requests', {
-                                                method: 'PATCH',
-                                                body: JSON.stringify({ id: r.id, status: targetStatus }),
-                                              });
-                                              if (!resp.ok) {
-                                                const data = await resp.json().catch(() => ({}));
-                                                throw new Error(data.error || `Failed to set status ${targetStatus}`);
-                                              }
-                                              const updated = await resp.json();
-                                              setRequests((prev) => prev.map((req) => (req.id === r.id ? { ...req, ...updated } : req)));
-                                              setStatusNotice(`Request ${r.id} updated to ${targetStatus.replace('_', ' ')}`);
-                                            } catch (e) {
-                                              setError(e instanceof Error ? e.message : 'Failed to update request status');
-                                            } finally {
-                                              setUpdatingRequestId(null);
-                                            }
-                                          }}
-                                          className={`h-6 w-6 rounded-full text-[10px] font-bold flex items-center justify-center transition-opacity ${
-                                            state === 'done'
-                                              ? 'bg-emerald-500 text-white'
-                                              : state === 'cancelled'
-                                                ? 'bg-gray-300 text-gray-600'
-                                                : 'bg-gray-200 text-gray-500'
-                                          } ${!STEP_TO_STATUS[step.key] ? 'cursor-default' : 'hover:opacity-90'} disabled:opacity-60`}
-                                          title={STEP_TO_STATUS[step.key] ? `Set status to ${step.label}` : step.label}
-                                        >
-                                          {idx + 1}
-                                        </button>
-                                        <span className="mt-1 text-[10px] text-gray-600 text-center">{step.label}</span>
-                                      </div>
-                                      {idx < TRACKING_STEPS.length - 1 && (
-                                        <div
-                                          className={`h-1 flex-1 rounded ${
-                                            getStepState(r.status, TRACKING_STEPS[idx + 1].key) === 'done'
-                                              ? 'bg-emerald-400'
-                                              : r.status === 'cancelled'
-                                                ? 'bg-gray-300'
-                                                : 'bg-gray-200'
-                                          }`}
-                                        />
-                                      )}
-                                    </React.Fragment>
-                                  );
-                                })}
+                          {r.candidateProviderIds && r.candidateProviderIds.length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Provider Pool</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {r.candidateProviderIds.map((id) => (
+                                  <span key={id} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700 border border-blue-100">
+                                    {providerMap[id]?.name || id}
+                                  </span>
+                                ))}
                               </div>
                             </div>
-                            <div className="text-xs text-gray-700">
-                              Raised: {r.createdAt || '-'}
-                              <br />
-                              Accepted: {r.claimedAt || '-'}
-                              <br />
-                              In progress: {r.startedAt || '-'}
-                              <br />
-                              Completed: {r.completedAt || '-'}
+                          )}
+                          <div className="md:col-span-3 pt-2 border-t border-gray-200">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Progress Timeline</p>
+                            <div className="flex items-center gap-3">
+                              {TRACKING_STEPS.map((step, idx) => {
+                                const state = getStepState(r.status, step.key);
+                                return (
+                                  <React.Fragment key={step.key}>
+                                    <div className="flex flex-col items-center min-w-[56px]">
+                                      <button
+                                        type="button"
+                                        disabled={!STEP_TO_STATUS[step.key] || updatingRequestId === r.id}
+                                        onClick={async () => {
+                                          const targetStatus = STEP_TO_STATUS[step.key];
+                                          if (!targetStatus) return;
+                                          await handleStatusUpdate(r.id, targetStatus);
+                                        }}
+                                        className={`h-7 w-7 rounded-full text-[11px] font-bold flex items-center justify-center transition-all ${
+                                          state === 'done'
+                                            ? 'bg-emerald-500 text-white shadow-sm'
+                                            : state === 'cancelled'
+                                              ? 'bg-gray-300 text-gray-600'
+                                              : 'bg-gray-200 text-gray-500'
+                                        } ${!STEP_TO_STATUS[step.key] ? 'cursor-default' : 'hover:scale-110'} disabled:opacity-60`}
+                                        title={STEP_TO_STATUS[step.key] ? `Set status to ${step.label}` : step.label}
+                                      >
+                                        {state === 'done' ? (
+                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                          </svg>
+                                        ) : (
+                                          idx + 1
+                                        )}
+                                      </button>
+                                      <span className="mt-1.5 text-[10px] font-medium text-gray-600 text-center">{step.label}</span>
+                                    </div>
+                                    {idx < TRACKING_STEPS.length - 1 && (
+                                      <div
+                                        className={`h-0.5 flex-1 rounded-full ${
+                                          getStepState(r.status, TRACKING_STEPS[idx + 1].key) === 'done'
+                                            ? 'bg-emerald-400'
+                                            : r.status === 'cancelled'
+                                              ? 'bg-gray-300'
+                                              : 'bg-gray-200'
+                                        }`}
+                                      />
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                            <div className="mt-3 grid grid-cols-4 gap-2 text-xs text-gray-500">
+                              <span>Raised: {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '-'}</span>
+                              <span>Accepted: {r.claimedAt ? new Date(r.claimedAt).toLocaleDateString() : '-'}</span>
+                              <span>Started: {r.startedAt ? new Date(r.startedAt).toLocaleDateString() : '-'}</span>
+                              <span>Completed: {r.completedAt ? new Date(r.completedAt).toLocaleDateString() : '-'}</span>
                             </div>
                           </div>
                         </div>
@@ -600,34 +640,43 @@ const AdminServiceOps: React.FC = () => {
             })}
             {pagedRequests.length === 0 && (
               <tr>
-                <td className="py-3 text-gray-600" colSpan={6}>
-                  No requests found.
+                <td className="px-5 py-8 text-center text-sm text-gray-500" colSpan={7}>
+                  No requests found matching your filters.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-      <div className="flex justify-end items-center gap-2 p-3">
-        <button
-          className="px-3 py-1 border rounded text-sm"
-          disabled={requestPage === 1}
-          onClick={() => setRequestPage((p) => Math.max(1, p - 1))}
-        >
-          Prev
-        </button>
-        <span className="text-xs text-gray-600">
-          Page {requestPage} / {Math.max(1, Math.ceil(filteredRequests.length / itemsPerPage))}
+      <div className="flex justify-between items-center px-5 py-3 border-t border-gray-100">
+        <span className="text-xs text-gray-500">
+          Showing {pagedRequests.length} of {filteredRequests.length} requests
         </span>
-        <button
-          className="px-3 py-1 border rounded text-sm"
-          disabled={requestPage >= Math.ceil(filteredRequests.length / itemsPerPage)}
-          onClick={() => setRequestPage((p) => p + 1)}
-        >
-          Next
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            disabled={requestPage === 1}
+            onClick={() => setRequestPage((p) => Math.max(1, p - 1))}
+          >
+            Previous
+          </button>
+          <span className="text-xs text-gray-600 px-2">
+            {requestPage} / {Math.max(1, Math.ceil(filteredRequests.length / itemsPerPage))}
+          </span>
+          <button
+            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            disabled={requestPage >= Math.ceil(filteredRequests.length / itemsPerPage)}
+            onClick={() => setRequestPage((p) => p + 1)}
+          >
+            Next
+          </button>
+        </div>
       </div>
-      {statusNotice && <div className="px-3 pb-2 text-xs text-emerald-700">{statusNotice}</div>}
+      {statusNotice && (
+        <div className="px-5 pb-3">
+          <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{statusNotice}</div>
+        </div>
+      )}
     </section>
   );
 

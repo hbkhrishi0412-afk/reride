@@ -123,6 +123,7 @@ export async function getSellerMapCoordinates(seller: User): Promise<CompanyLoca
   const pc = normalizeIndianPincode(seller.pincode);
   const addr = (seller.address || '').trim();
 
+  // Best case: full address + pincode → precise Nominatim geocode
   if (addr && pc) {
     const g = await geocodeNominatim({ address: addr, pincode: pc, cityHint });
     if (g) return jitterCoords(g.lat, g.lng, seed);
@@ -136,7 +137,15 @@ export async function getSellerMapCoordinates(seller: User): Promise<CompanyLoca
     if (g) return jitterCoords(g.lat, g.lng, seed);
   }
 
+  // Fast path: city centroid from expanded CITY_COORDINATES (90+ cities)
   const cityCoords = await resolveCityCoordsFromLocation(seller.location);
   if (cityCoords) return jitterCoords(cityCoords.lat, cityCoords.lng, seed);
+
+  // Last resort: Nominatim geocode with just the city name from location
+  if (cityHint) {
+    const g = await geocodeNominatim({ cityHint });
+    if (g) return jitterCoords(g.lat, g.lng, seed);
+  }
+
   return null;
 }

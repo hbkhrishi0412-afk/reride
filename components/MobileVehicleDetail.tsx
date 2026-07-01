@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle, ProsAndCons, User, RatingEligibility } from '../types';
 import { generateProsAndCons } from '../services/geminiService';
-import { getFirstValidImage, getValidImages } from '../utils/imageUtils';
+import { getFirstValidImage, getValidImages, swapToPlaceholderOnError } from '../utils/imageUtils';
 import { MobileImageGallery } from './MobileImageGallery';
 import { MobileShareSheet } from './MobileShareSheet';
 import { MobileEMICalculator } from './MobileEMICalculator';
@@ -441,6 +441,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           decoding="async"
           fetchPriority="high"
           onClick={() => setShowGallery(true)}
+          onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
         />
         {safeVehicle.images.length > 1 && (
           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 backdrop-blur-sm rounded-full px-4 py-2 text-white text-sm z-20">
@@ -1018,6 +1019,9 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                     src={getFirstValidImage(rec.images, rec.id)}
                     alt={`${rec.make} ${rec.model}`}
                     className="w-24 h-24 rounded-lg object-cover"
+                    loading="lazy"
+                    decoding="async"
+                    onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
                   />
                   <div className="flex-1">
                     <h3 className="font-semibold text-gray-900">{rec.year} {rec.make} {rec.model}</h3>

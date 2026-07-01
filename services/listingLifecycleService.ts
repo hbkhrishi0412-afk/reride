@@ -15,11 +15,20 @@ export async function calculateExpiryDate(daysFromNow?: number): Promise<string>
   return date.toISOString();
 }
 
-// Check if listing is expired
-// For Premium plans, listings don't expire if the plan hasn't expired
-// Optional currentTime parameter for real-time updates (defaults to now)
+/**
+ * Check if listing is expired.
+ * A listing is expired if:
+ * 1. Its listing_status is explicitly 'expired', OR
+ * 2. Its listing_expires_at timestamp has passed
+ *
+ * For Premium plans with an active plan, the listing is NOT expired
+ * even if listing_expires_at has passed (the plan date takes precedence).
+ */
 export function isListingExpired(vehicle: Vehicle, sellerPlan?: { subscriptionPlan?: string; planExpiryDate?: string }, currentTime?: Date): boolean {
-  // If no listing expiry date, it's not expired
+  // If listing_status is already marked expired, trust the DB
+  if (vehicle.listingStatus === 'expired') return true;
+
+  // If no listing expiry date, not expired
   if (!vehicle.listingExpiresAt) return false;
   
   const now = currentTime || new Date();
@@ -27,14 +36,11 @@ export function isListingExpired(vehicle: Vehicle, sellerPlan?: { subscriptionPl
   // For Premium plans: if plan hasn't expired, listing doesn't expire
   if (sellerPlan?.subscriptionPlan === 'premium' && sellerPlan?.planExpiryDate) {
     const planExpiry = new Date(sellerPlan.planExpiryDate);
-    // If plan is still active, listing is not expired
     if (planExpiry > now) {
       return false;
     }
-    // If plan expired, check listing expiry
   }
   
-  // For Free/Pro plans or Premium plans that expired, check listing expiry
   return new Date(vehicle.listingExpiresAt) < now;
 }
 
@@ -76,11 +82,20 @@ export function filterActiveListings(vehicles: Vehicle[], sellerPlan?: { subscri
   return vehicles.filter(v => !isListingExpired(v, sellerPlan) && v.status === 'published');
 }
 
-/** Whether a listing should appear in the public buy/sale catalog. */
+/**
+ * Whether a listing should appear in the public buy/sale catalog.
+ * This is the single source of truth for listing visibility across the app.
+ */
 export function isPublicBuyListing(vehicle: Vehicle): boolean {
   if (!vehicle || vehicle.status !== 'published') return false;
   if (vehicle.listingStatus === 'expired' || vehicle.listingStatus === 'suspended') return false;
-  if (isListingExpired(vehicle)) return false;
+
+  // Check listing_expires_at directly (no seller plan context needed for public view)
+  if (vehicle.listingExpiresAt) {
+    const now = new Date();
+    if (new Date(vehicle.listingExpiresAt) < now) return false;
+  }
+
   return true;
 }
 

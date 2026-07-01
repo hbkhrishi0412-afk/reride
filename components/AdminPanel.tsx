@@ -3751,28 +3751,22 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         }}
                         onSave={async (expiryDate: string | null) => {
                             try {
-                                // Prepare update data
                                 const updateData: Partial<User> = {};
                                 
-                                // Handle expiry date update
                                 if (expiryDate !== null && expiryDate !== '') {
-                                    // Ensure date is in ISO string format
                                     const dateObj = new Date(expiryDate);
                                     if (isNaN(dateObj.getTime())) {
                                         throw new Error('Invalid date format');
                                     }
                                     updateData.planExpiryDate = dateObj.toISOString();
                                 } else {
-                                    // Remove expiry date
-                                    updateData.planExpiryDate = undefined;
+                                    // Default to 30 days from now instead of removing expiry
+                                    const defaultExpiry = new Date();
+                                    defaultExpiry.setDate(defaultExpiry.getDate() + 30);
+                                    updateData.planExpiryDate = defaultExpiry.toISOString();
                                 }
                                 
-                                console.log('Updating user expiry date:', {
-                                    email: editingExpiryUser.email,
-                                    planExpiryDate: updateData.planExpiryDate
-                                });
-                                
-                                // Update via onAdminUpdateUser which updates both local state and Supabase
+                                // This triggers vehicle expiry cascade in the API
                                 await onAdminUpdateUser(editingExpiryUser.email, updateData);
                                 
                                 // Close modal
@@ -3823,30 +3817,24 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         }}
                         onAssign={async (activatedDate: string, expiryDate: string | null) => {
                             try {
-                                // Update plan
-                                await onUpdateUserPlan(assigningUser.email, assigningPlan);
-                                
-                                // Update user with dates via API
+                                // Single API call that sets plan + dates + cascades to vehicle expiry
                                 const { updateUser } = await import('../services/userService');
                                 await updateUser({
                                     email: assigningUser.email,
                                     subscriptionPlan: assigningPlan,
                                     planActivatedDate: activatedDate,
-                                    planExpiryDate: expiryDate || undefined
+                                    planExpiryDate: expiryDate || undefined,
                                 });
                                 
                                 setShowPlanAssignmentModal(false);
                                 setAssigningUser(null);
                                 setAssigningPlan(null);
                                 
-                                // Show success message
-                                alert(`Plan "${assigningPlan}" assigned successfully with dates.`);
-                                
-                                // Refresh users list - this would typically trigger a reload
+                                alert(`Plan "${assigningPlan}" assigned successfully. Vehicle listing expiry dates have been updated.`);
                                 window.location.reload();
                             } catch (error) {
                                 console.error('Failed to assign plan with dates:', error);
-                                alert('Failed to save plan dates. Plan was assigned but dates may not be saved.');
+                                alert('Failed to save plan dates. Please try again.');
                             }
                         }}
                     />

@@ -160,6 +160,9 @@ function supabaseRowToVehicle(row: any): Vehicle {
     ...meta,
     ...(metaSellerPhone ? { sellerPhone: String(metaSellerPhone).trim() } : {}),
     ...(metaSellerWa ? { sellerWhatsApp: String(metaSellerWa).trim() } : {}),
+    // Ensure DB columns for listing lifecycle override metadata values
+    listingExpiresAt: row.listing_expires_at || meta?.listingExpiresAt || undefined,
+    listingStatus: row.listing_status || meta?.listingStatus || 'active',
   };
 }
 
@@ -183,14 +186,15 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, options?: { partial?: b
   const metadata: any = {};
   
   // Extract fields that should go in metadata
+  // NOTE: listingExpiresAt and listingStatus are written to real DB columns (not just metadata)
   const metadataFields = [
     'certificationStatus', 'certifiedInspection', 'videoUrl', 'serviceRecords',
     'accidentHistory', 'documents', 'listingType', 'isFlagged', 'flagReason',
     'flaggedAt', 'averageRating', 'ratingCount', 'sellerAverageRating',
     'sellerRatingCount', 'sellerBadges', 'qualityReport', 'featuredAt',
     'soldAt', 'sellerPhone', 'sellerWhatsApp', 'showPhoneNumber',
-    'preferredContactMethod', 'listingExpiresAt', 'listingLastRefreshed',
-    'listingStatus', 'listingAutoRenew', 'listingRenewalCount', 'daysActive',
+    'preferredContactMethod', 'listingLastRefreshed',
+    'listingAutoRenew', 'listingRenewalCount', 'daysActive',
     'isPremiumListing', 'isUrgentSale', 'isBestPrice', 'boostExpiresAt',
     'viewsLast7Days', 'viewsLast30Days', 'uniqueViewers', 'phoneViews',
     'shareCount', 'keywords', 'nearbyLandmarks', 'exactLocation',
@@ -198,7 +202,6 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, options?: { partial?: b
     'descriptionQuality', 'activeBoosts', 'hideExactLocation',
     'offerEnabled', 'offerTitle', 'offerStartDate', 'offerEndDate', 'offerDateLabel',
     'offerDescription', 'offerHighlight', 'offerDisclaimer',
-    // Vahan verification fields
     'registrationNumber', 'engineNumber', 'chassisNumber', 'vahanVerifiedAt',
     'aiInspectionReport', 'sellerDisclosureChecklist', 'vahanSnapshot',
   ];
@@ -262,6 +265,14 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, options?: { partial?: b
   setColumn('bootSpace', 'boot_space', vehicle.bootSpace ?? null);
   setColumn('createdAt', 'created_at', vehicle.createdAt || new Date().toISOString());
   setColumn('updatedAt', 'updated_at', vehicle.updatedAt || new Date().toISOString());
+
+  // Write listing lifecycle fields to real DB columns
+  if (partial ? has('listingExpiresAt') : vehicle.listingExpiresAt !== undefined) {
+    row.listing_expires_at = vehicle.listingExpiresAt || null;
+  }
+  if (partial ? has('listingStatus') : vehicle.listingStatus !== undefined) {
+    row.listing_status = vehicle.listingStatus || 'active';
+  }
 
   if (partial) {
     row.updated_at = vehicle.updatedAt || new Date().toISOString();
@@ -559,11 +570,15 @@ export const supabaseVehicleService = {
     const applyNonRental = (q: any) =>
       q.or('metadata->>listingType.is.null,metadata->>listingType.neq.rental');
 
+    const nowIso = new Date().toISOString();
+
     const countForCategory = async (cat: VehicleCategory, useRentalExclusion: boolean): Promise<number> => {
       let q = supabase
         .from('vehicles')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'published')
+        .or('listing_status.is.null,listing_status.eq.active')
+        .or('listing_expires_at.is.null,listing_expires_at.gt.' + nowIso)
         .eq('category', cat);
       if (useRentalExclusion) {
         q = applyNonRental(q);
@@ -586,6 +601,8 @@ export const supabaseVehicleService = {
         .from('vehicles')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'published')
+        .or('listing_status.is.null,listing_status.eq.active')
+        .or('listing_expires_at.is.null,listing_expires_at.gt.' + nowIso)
         .or(orClause);
       if (useRentalExclusion) {
         q = applyNonRental(q);
@@ -651,12 +668,17 @@ export const supabaseVehicleService = {
     const limit = options?.limit ?? 100;
     const offset = options?.offset ?? 0;
     
-    // CRITICAL FIX: Use select with specific columns instead of '*' for better performance
-    // This reduces data transfer and query time
     let query = supabase
       .from('vehicles')
-      .select('id, make, model, variant, year, price, mileage, category, seller_email, status, is_featured, images, description, engine, fuel_type, transmission, fuel_efficiency, color, registration_year, insurance_validity, insurance_type, rto, city, state, location, no_of_owners, displacement, ground_clearance, boot_space, features, created_at, updated_at, listing_expires_at, listing_status, views, inquiries_count, certification_status, metadata')
-      .eq('status', status); // Uses idx_vehicles_status_created_at index
+      .select('id, make, model, variant, year, price, mileage, category, seller_email, seller_name, status, is_featured, images, description, engine, fuel_type, transmission, fuel_efficiency, color, registration_year, insurance_validity, insurance_type, rto, city, state, location, no_of_owners, displacement, ground_clearance, boot_space, features, created_at, updated_at, listing_expires_at, listing_status, views, inquiries_count, certification_status, metadata')
+      .eq('status', status);
+    
+    // For published vehicles, also exclude expired listings at the DB level
+    if (status === 'published') {
+      query = query
+        .or('listing_status.is.null,listing_status.eq.active')
+        .or('listing_expires_at.is.null,listing_expires_at.gt.' + new Date().toISOString());
+    }
     
     // Apply database-level sorting (much faster than in-memory sorting)
     // Uses composite index idx_vehicles_status_created_at for optimal performance

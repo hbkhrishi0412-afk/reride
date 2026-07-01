@@ -3594,37 +3594,22 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
               for (const vehicle of sellerVehicles) {
                 const vehicleUpdateFields: Record<string, unknown> = {};
                 
-                if (updatedUser.subscriptionPlan === 'premium') {
-                  if (newPlanExpiryDate && (typeof newPlanExpiryDate === 'string' || newPlanExpiryDate instanceof Date)) {
-                    // Premium plan with expiry: set vehicle expiry to plan expiry
-                    const expiryDate = typeof newPlanExpiryDate === 'string' ? new Date(newPlanExpiryDate) : newPlanExpiryDate;
-                    vehicleUpdateFields.listingExpiresAt = expiryDate.toISOString();
-                    
-                    // If vehicle was expired but plan is now extended, reactivate it
-                    if (vehicle.listingExpiresAt && new Date(vehicle.listingExpiresAt) < now && expiryDate >= now) {
-                      vehicleUpdateFields.listingStatus = 'active';
-                      vehicleUpdateFields.status = 'published';
-                    }
-                  } else {
-                    // Premium plan without expiry: remove vehicle expiry
-                    vehicleUpdateFields.listingExpiresAt = null;
+                if (updatedUser.subscriptionPlan === 'premium' && newPlanExpiryDate) {
+                  const expiryDate = typeof newPlanExpiryDate === 'string' ? new Date(newPlanExpiryDate) : newPlanExpiryDate;
+                  vehicleUpdateFields.listingExpiresAt = expiryDate.toISOString();
+                  
+                  if (expiryDate >= now) {
                     vehicleUpdateFields.listingStatus = 'active';
-                    // Ensure status is published
                     if (vehicle.status !== 'published') {
                       vehicleUpdateFields.status = 'published';
                     }
                   }
                 } else {
-                  // Free/Pro plans: set 30-day expiry from today
+                  // Free/Pro plans (or premium without expiry): 30-day listing window
                   const expiryDate = new Date();
                   expiryDate.setDate(expiryDate.getDate() + 30);
                   vehicleUpdateFields.listingExpiresAt = expiryDate.toISOString();
-                  
-                  // Reactivate if was expired
-                  if (vehicle.listingExpiresAt && new Date(vehicle.listingExpiresAt) < now) {
-                    vehicleUpdateFields.listingStatus = 'active';
-                    vehicleUpdateFields.status = 'published';
-                  }
+                  vehicleUpdateFields.listingStatus = 'active';
                 }
                 
                 if (Object.keys(vehicleUpdateFields).length > 0) {
@@ -4527,20 +4512,21 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         });
       }
       
-      // PERFORMANCE: Skip expensive seller expiry checks for fast initial loads
-      // These checks can be done in background or on-demand
+      // Expiry enforcement: always run to keep listings accurate
       const sellerMap = new Map<string, UserType>();
       const vehicleUpdates: Array<{ id: number; primaryKey: string; updates: Partial<VehicleType> }> = [];
       
-      if (!skipExpiryCheck) {
-        // Only do expiry checks if explicitly requested (not for initial fast load)
+      {
         const now = new Date();
         const sellerEmails = new Set<string>();
         
-        // Only collect seller emails for vehicles that need expiry checks
+        // Collect seller emails for vehicles missing expiry or needing plan checks
         vehicles.forEach(vehicle => {
-          if (!vehicle.listingExpiresAt && vehicle.sellerEmail) {
-            sellerEmails.add(vehicle.sellerEmail.toLowerCase());
+          if (vehicle.sellerEmail) {
+            const email = vehicle.sellerEmail.toLowerCase();
+            if (!vehicle.listingExpiresAt || vehicle.status === 'published') {
+              sellerEmails.add(email);
+            }
           }
         });
         
@@ -4619,7 +4605,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         if (vehicle.listingExpiresAt && vehicle.status === 'published') {
           const expiryDate = new Date(vehicle.listingExpiresAt);
           const seller = sellerMap.get(vehicle.sellerEmail?.toLowerCase());
-          const isPremiumNoExpiry = seller?.subscriptionPlan === 'premium' && !seller?.planExpiryDate;
           
           // Sync expiry date with plan expiry if they don't match (for Premium plans)
           if (seller?.subscriptionPlan === 'premium' && seller?.planExpiryDate) {
@@ -4638,13 +4623,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             }
           }
           
-          // Only auto-unpublish if listing has expired AND it's not a Premium plan without expiry
-          if (expiryDate < now && !isPremiumNoExpiry) {
+          // Auto-unpublish if listing has expired
+          if (expiryDate < now) {
             updateFields.status = 'unpublished';
             updateFields.listingStatus = 'expired';
-          } else if (isPremiumNoExpiry && expiryDate < now) {
-            // For Premium plans without expiry, remove the listingExpiresAt to prevent future expiry
-            updateFields.listingExpiresAt = undefined;
           }
         }
         
@@ -4656,11 +4638,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           });
         }
       });
-      } // End of if (!skipExpiryCheck) block
+      } // End of expiry check block
       
       // Enforce plan listing limits: keep most recent listings within limit, unpublish extras
-      // Only enforce if not skipping expiry checks
-      if (!skipExpiryCheck) {
+      {
       try {
         // Build per-seller published vehicles list (newest first)
         const sellerToPublished: Map<string, VehicleType[]> = new Map();
@@ -4708,8 +4689,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
       } // End of plan limits check
       
-      // Apply all updates in background to not block response (only if not skipping)
-      if (!skipExpiryCheck && vehicleUpdates.length > 0) {
+      // Apply all updates in background to not block response
+      if (vehicleUpdates.length > 0) {
         // Do updates in background to not block response
         Promise.all(vehicleUpdates.map(update => 
           vehicleService.update(update.primaryKey, update.updates).catch(err => 
@@ -4721,9 +4702,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         });
       }
       
-      // PERFORMANCE OPTIMIZATION: Skip refresh if we skipped expiry checks (for speed)
       let finalVehicles = vehicles;
-      if (!skipExpiryCheck && vehicleUpdates.length > 0) {
+      if (vehicleUpdates.length > 0) {
         // Only refresh published vehicles after updates (with database sorting)
         const refreshOffset = limit > 0 ? (page - 1) * limit : 0;
         finalVehicles = await vehicleService.findByStatus('published', {
@@ -5460,7 +5440,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         certificationStatus: 'none',
       }),
       createdAt: new Date().toISOString(),
-      listingExpiresAt
+      listingExpiresAt,
+      listingStatus: 'active',
     };
     
     try {

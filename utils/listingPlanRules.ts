@@ -22,14 +22,21 @@ export function isSellerPlanExpired(seller: SellerPlanContext, now: Date = new D
   return !Number.isNaN(expiry.getTime()) && expiry < now;
 }
 
-/** Listing expiry aligned with plan rules used on create. */
-export function computeListingExpiresAtForSeller(seller: SellerPlanContext): string | undefined {
+/**
+ * Listing expiry aligned with plan rules.
+ * Every listing MUST have an expiry date — no infinite listings.
+ * Premium listings expire when the plan expires.
+ * Free/Pro listings expire after LISTING_EXPIRY_DAYS (30 days).
+ */
+export function computeListingExpiresAtForSeller(seller: SellerPlanContext): string {
   const plan = seller.subscriptionPlan || 'free';
 
-  if (plan === 'premium') {
-    return seller.planExpiryDate || undefined;
+  // Premium: listing expires when the plan expires
+  if (plan === 'premium' && seller.planExpiryDate) {
+    return seller.planExpiryDate;
   }
 
+  // All plans (including premium without a set expiry): default 30-day window
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + LISTING_EXPIRY_DAYS);
   return expiryDate.toISOString();

@@ -1353,30 +1353,6 @@ const params = new URLSearchParams();
       }
       const data = await resp.json();
       const normalized = Array.isArray(data) ? data.map((req) => normalizeServiceRequest(req as ServiceRequest)) : [];
-      // Dev-only telemetry hook (avoid noisy localhost calls in production).
-      if (process.env.NODE_ENV !== 'production') {
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0a2ed1' },
-          body: JSON.stringify({
-            sessionId: '0a2ed1',
-            runId: 'post-fix',
-            hypothesisId: 'H1-H5',
-            location: 'CarServiceDashboard.tsx:fetchOpenRequests',
-            message: 'open pool client response',
-            data: {
-              query: params.toString(),
-              cityFilterSent: Boolean(cityQuery),
-              cityFilterRawLen: cityRaw.length,
-              isPlaceholderCityFilter: cityRaw.toLowerCase() === 'pending setup',
-              serviceType: openFilters.serviceType,
-              ok: resp.ok,
-              resultCount: normalized.length,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-      }
       setOpenRequests(normalized);
       setLastOpenRefreshAt(new Date().toISOString());
       setRefreshNotice(`Open requests refreshed (${normalized.length})`);
@@ -1399,7 +1375,7 @@ const params = new URLSearchParams();
   useEffect(() => {
     if (!provider) return;
     const tick = () => handleRefreshRef.current();
-    const interval = window.setInterval(tick, 30000);
+    const interval = window.setInterval(tick, 60000);
     const onVisibility = () => {
       if (document.visibilityState === 'visible') tick();
     };
@@ -1413,22 +1389,51 @@ const params = new URLSearchParams();
   useEffect(() => {
     if (!provider) return;
     let active = true;
-    const supabase = getSupabaseClient();
-    const channel = supabase
-      .channel(`provider-open-requests-${provider.email || provider.name || 'unknown'}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'service_requests' },
-        () => {
-          if (!active) return;
-          handleRefreshRef.current();
-        },
-      )
-      .subscribe();
-    return () => {
-      active = false;
-      void supabase.removeChannel(channel);
-    };
+    try {
+      const supabase = getSupabaseClient();
+      const providerKey = provider.email || provider.name || 'unknown';
+
+      const requestsChannel = supabase
+        .channel(`provider-requests-${providerKey}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'service_requests' },
+          () => {
+            if (!active) return;
+            handleRefreshRef.current();
+          },
+        )
+        .subscribe();
+
+      const providerEmail = (provider.email || '').toLowerCase().trim();
+      let notifChannel: ReturnType<typeof supabase.channel> | null = null;
+      if (providerEmail) {
+        notifChannel = supabase
+          .channel(`provider-notifications-${providerKey}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'notifications',
+              filter: `recipient_email=eq.${providerEmail}`,
+            },
+            () => {
+              if (!active) return;
+              handleRefreshRef.current();
+            },
+          )
+          .subscribe();
+      }
+
+      return () => {
+        active = false;
+        void supabase.removeChannel(requestsChannel);
+        if (notifChannel) void supabase.removeChannel(notifChannel);
+      };
+    } catch {
+      return () => { active = false; };
+    }
   }, [provider]);
 
   const claimRequest = async (id: string) => {

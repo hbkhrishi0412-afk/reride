@@ -16,6 +16,22 @@ export const VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI = `data:image/svg+xml,${enc
 export const isInlineImagePlaceholder = (url: string | undefined | null): boolean =>
   typeof url === 'string' && url.startsWith('data:image/svg+xml,');
 
+/**
+ * Shared `<img>` error handler: swap a broken vehicle image for the branded inline
+ * placeholder exactly once (guards against infinite onError loops). Pass
+ * `e.currentTarget` from a React onError handler, or any HTMLImageElement.
+ */
+export function swapToPlaceholderOnError(
+  img: HTMLImageElement | null | undefined,
+  placeholder: string = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI,
+): void {
+  if (!img) return;
+  // Already showing (any) inline placeholder — don't loop.
+  if (isInlineImagePlaceholder(img.src)) return;
+  if (img.src === placeholder) return;
+  img.src = placeholder;
+}
+
 const DEFAULT_PLACEHOLDER = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
 
 function parseHttpImageUrl(url: string): URL | null {
@@ -60,6 +76,14 @@ export function isSupabaseRenderTransformPublicUrl(urlStr: string): boolean {
   if (!parsed) return false;
   if (!isSupabaseProjectHost(parsed.hostname)) return false;
   return parsed.pathname.includes('/storage/v1/render/image/public/');
+}
+
+/**
+ * Kept for backward compatibility with callers (e.g. LazyImage). We no longer
+ * generate Supabase render-transform URLs, so there is nothing to disable.
+ */
+export function markSupabaseTransformsDisabled(): void {
+  /* no-op: transforms are not used (see getOptimizedImageUrl) */
 }
 
 /**
@@ -108,34 +132,32 @@ export const getOptimizedImageUrl = (url: string, width?: number, quality: numbe
     return `${url}${sep}${params.join('&')}`;
   }
 
-  // Supabase: on-the-fly transforms live at `/storage/v1/render/image/public/...`
-  // (Pro+ or projects with image transformations enabled). Rewrite the raw
-  // `/object/public/...` URL to the render endpoint only when a width was
-  // requested — without this, cards would always download the full-size
-  // original (e.g. a 425 KB PNG for the 2023 Toyota Innova hero), which can
-  // stall/fail on slower connections and render as a blank gray tile while
-  // lighter WebP siblings load fine. LazyImage falls back to the raw object
-  // URL on error if transforms are not enabled for the project.
+  // Supabase Storage: always serve the raw `/object/public/...` URL.
+  //
+  // We intentionally do NOT use Supabase's on-the-fly render transform endpoint
+  // (`/storage/v1/render/image/public/...`). Under the burst of concurrent
+  // requests a listing page fires on load, that endpoint throttles/rate-limits
+  // and returns intermittent 4xx — which showed up as *different* cards going
+  // blank on each refresh. Raw object URLs never rate-limit, and our images are
+  // already small (uploads are resized to max 1200x800 @ 0.85, auto-fetched
+  // renders are ~30 KB), so skipping transforms is both reliable and cheap.
   if (
     parsedHttp &&
     isSupabaseProjectHost(hostLower) &&
     parsedHttp.pathname.includes('/storage/v1/object/public/')
   ) {
-    const raw = url.split('?')[0];
-    if (!width) return raw;
-    const rendered = raw.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
-    const params: string[] = [`width=${width}`];
-    if (quality) params.push(`quality=${quality}`);
-    params.push('resize=contain');
-    return `${rendered}?${params.join('&')}`;
+    return url.split('?')[0];
   }
-  // Already a render/transform URL — avoid double-appending params
+  // Legacy/stored render-transform URL — normalize back to the raw object URL
+  // (see reliability note above) instead of hitting the throttled render endpoint.
   if (
     parsedHttp &&
     isSupabaseProjectHost(hostLower) &&
     parsedHttp.pathname.includes('/storage/v1/render/image/public/')
   ) {
-    return url;
+    return url
+      .replace('/storage/v1/render/image/public/', '/storage/v1/object/public/')
+      .split('?')[0];
   }
 
   // Firebase Storage / Google Cloud Storage — do not append w=/q=; those are not supported, and using

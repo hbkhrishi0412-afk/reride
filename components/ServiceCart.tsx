@@ -506,30 +506,7 @@ const ServiceCart: React.FC<Props> = ({
 
     const loadCustomerRequests = useCallback(async (source = 'unknown') => {
         const silentRefresh =
-            source === 'interval-5s' || source === 'visibility' || source === 'supabase-realtime';
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
-            body: JSON.stringify({
-                sessionId: 'ad4bf7',
-                hypothesisId: 'H1-H5',
-                runId: 'post-fix',
-                location: 'ServiceCart.tsx:loadCustomerRequests:start',
-                message: 'loadCustomerRequests start',
-                data: {
-                    source,
-                    silentRefresh,
-                    isLoggedIn,
-                    activeTab,
-                    customerUserId: customerUserId ?? null,
-                    inFlight: loadCustomerRequestsInFlightRef.current,
-                    foregroundLoads: requestsForegroundLoadsRef.current,
-                },
-                timestamp: Date.now(),
-            }),
-        }).catch(() => {});
-        // #endregion
+            source === 'interval' || source === 'visibility' || source === 'supabase-realtime';
         loadCustomerRequestsInFlightRef.current += 1;
         const t0 = Date.now();
         let startedForegroundSpinner = false;
@@ -570,29 +547,6 @@ const ServiceCart: React.FC<Props> = ({
                     setRequestsLoading(false);
                 }
             }
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
-                body: JSON.stringify({
-                    sessionId: 'ad4bf7',
-                    hypothesisId: 'H1-H4',
-                    runId: 'post-fix',
-                    location: 'ServiceCart.tsx:loadCustomerRequests:finally',
-                    message: 'loadCustomerRequests end',
-                    data: {
-                        source,
-                        silentRefresh,
-                        startedForegroundSpinner,
-                        durationMs: Date.now() - t0,
-                        isLoggedIn,
-                        inFlight: loadCustomerRequestsInFlightRef.current,
-                        foregroundLoads: requestsForegroundLoadsRef.current,
-                    },
-                    timestamp: Date.now(),
-                }),
-            }).catch(() => {});
-            // #endregion
         }
     }, [activeTab, customerUserId, isLoggedIn]);
 
@@ -703,45 +657,15 @@ const ServiceCart: React.FC<Props> = ({
     };
 
     useEffect(() => {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
-            body: JSON.stringify({
-                sessionId: 'ad4bf7',
-                hypothesisId: 'H2',
-                runId: 'pre-fix',
-                location: 'ServiceCart.tsx:useEffect[track-deps]',
-                message: 'effect activeTab isLoggedIn',
-                data: { activeTab, isLoggedIn },
-                timestamp: Date.now(),
-            }),
-        }).catch(() => {});
-        // #endregion
         if (activeTab !== 'track') return;
         void loadCustomerRequests('effect-activeTab-isLoggedIn');
     }, [activeTab, isLoggedIn, loadCustomerRequests]);
 
     useEffect(() => {
         if (activeTab !== 'track' || !isLoggedIn) return;
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
-            body: JSON.stringify({
-                sessionId: 'ad4bf7',
-                hypothesisId: 'H4',
-                runId: 'pre-fix',
-                location: 'ServiceCart.tsx:useEffect[interval-5s]',
-                message: 'interval armed',
-                data: { activeTab, isLoggedIn },
-                timestamp: Date.now(),
-            }),
-        }).catch(() => {});
-        // #endregion
         const timer = setInterval(() => {
-            void loadCustomerRequestsRef.current('interval-5s');
-        }, 5000);
+            void loadCustomerRequestsRef.current('interval');
+        }, 30000);
         return () => clearInterval(timer);
     }, [activeTab, isLoggedIn]);
 
@@ -758,23 +682,9 @@ const ServiceCart: React.FC<Props> = ({
 
     useEffect(() => {
         if (activeTab !== 'track' || !isLoggedIn || !customerUserId) return;
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
-            body: JSON.stringify({
-                sessionId: 'ad4bf7',
-                hypothesisId: 'H3',
-                runId: 'pre-fix',
-                location: 'ServiceCart.tsx:useEffect[supabase]',
-                message: 'subscribe service_requests',
-                data: { customerUserId },
-                timestamp: Date.now(),
-            }),
-        }).catch(() => {});
-        // #endregion
         const sb = getSupabaseClient();
-        const channel = sb
+
+        const requestsChannel = sb
             .channel(`service_requests_customer_${customerUserId}`)
             .on(
                 'postgres_changes',
@@ -785,27 +695,13 @@ const ServiceCart: React.FC<Props> = ({
                     filter: `user_id=eq.${customerUserId}`,
                 },
                 () => {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
-                        body: JSON.stringify({
-                            sessionId: 'ad4bf7',
-                            hypothesisId: 'H3',
-                            runId: 'pre-fix',
-                            location: 'ServiceCart.tsx:supabase:postgres_changes',
-                            message: 'realtime event',
-                            data: { customerUserId },
-                            timestamp: Date.now(),
-                        }),
-                    }).catch(() => {});
-                    // #endregion
                     void loadCustomerRequestsRef.current('supabase-realtime');
                 },
             )
             .subscribe();
+
         return () => {
-            void sb.removeChannel(channel);
+            void sb.removeChannel(requestsChannel);
         };
     }, [activeTab, isLoggedIn, customerUserId]);
 

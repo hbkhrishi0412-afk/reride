@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import type { User, Vehicle } from '../types';
-import { getFirstValidImage } from '../utils/imageUtils';
+import { getFirstValidImage, swapToPlaceholderOnError } from '../utils/imageUtils';
 import VerifiedBadge, { isUserVerified } from './VerifiedBadge';
 import { getSellerTrustChecklistSummary } from '../lib/sellerTrustChecklist';
 import BadgeDisplay from './BadgeDisplay';
@@ -779,6 +779,7 @@ const MobileSellerProfilePageContent: React.FC<MobileSellerProfilePageProps & { 
                     className="w-24 h-24 rounded-xl object-cover flex-shrink-0 bg-slate-100"
                     loading="lazy"
                     decoding="async"
+                    onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
                   />
                   <div className="flex-1 min-w-0">
                     <h4 className="font-black text-slate-900 text-[14px] leading-tight mb-0.5 truncate">

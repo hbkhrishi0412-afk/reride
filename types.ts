@@ -363,6 +363,7 @@ export interface PlanDetails {
     id: SubscriptionPlan;
     name: string;
     price: number; // per month
+    durationDays?: number; // plan validity in days (default 30)
     features: string[];
     listingLimit: number | 'unlimited';
     featuredCredits: number;
@@ -621,7 +622,7 @@ export interface Notification {
   targetId: string | number;
   /** Vehicle ID when targetType is vehicle or price_drop */
   vehicleId?: number;
-  targetType: 'vehicle' | 'conversation' | 'price_drop' | 'insurance_expiry' | 'general_admin';
+  targetType: 'vehicle' | 'conversation' | 'price_drop' | 'insurance_expiry' | 'general_admin' | 'service_request';
   type?: string;
   isRead: boolean;
   timestamp: string; // ISO String

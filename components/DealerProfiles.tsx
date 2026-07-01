@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { User, Vehicle } from '../types.js';
@@ -13,6 +13,8 @@ import { resolveSellerLogoUrl, sellerInitialsAvatarDataUri } from '../utils/imag
 import { sellerMatchesHeaderRegion } from '../utils/dealerRegionFilter.js';
 import { isRerideStaffPick } from '../utils/staffPick.js';
 import { getPublicDealerRating } from '../utils/dealerRatingDisplay.js';
+import { searchLocations } from '../utils/reverseGeocode.js';
+import { copyTextToClipboard } from '../utils/copyToClipboard.js';
 
 // Fix for default marker icons in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -808,31 +810,72 @@ const CompanyCard: React.FC<{
   const showStaffPickRibbon = isRerideStaffPick(seller.rerideRecommended);
   const dealerRating = getPublicDealerRating(seller);
   
-  // Determine status based on current time (Indian Standard Time)
   const getStatus = () => {
     const now = new Date();
     const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const day = istTime.getDay();
     const hour = istTime.getHours();
-    const isWeekend = day === 0 || day === 6;
-    const isBusinessHours = hour >= 8 && hour < 20;
-    const isOpen = !isWeekend && isBusinessHours;
-    const statusText = isOpen ? 'Open now' : 'Closed';
-    const statusSubtext = isOpen ? '· Closes 8:00 PM' : '· Opens Monday 8:30 AM';
-    return { isOpen, statusText, statusSubtext };
+    const minute = istTime.getMinutes();
+    const currentMinutes = hour * 60 + minute;
+
+    const openHour = 9, openMin = 30, closeHour = 20, closeMin = 0;
+    const openMinutes = openHour * 60 + openMin;
+    const closeMinutes = closeHour * 60 + closeMin;
+
+    const isSunday = day === 0;
+    const isBusinessHours = currentMinutes >= openMinutes && currentMinutes < closeMinutes;
+    const isOpen = !isSunday && isBusinessHours;
+
+    const fmt = (h: number, m: number) => {
+      const suffix = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return m > 0 ? `${h12}:${String(m).padStart(2, '0')} ${suffix}` : `${h12} ${suffix}`;
+    };
+
+    let statusSubtext: string;
+    if (isOpen) {
+      statusSubtext = `· Closes ${fmt(closeHour, closeMin)}`;
+    } else if (isSunday) {
+      statusSubtext = `· Opens Monday ${fmt(openHour, openMin)}`;
+    } else if (currentMinutes < openMinutes) {
+      statusSubtext = `· Opens today ${fmt(openHour, openMin)}`;
+    } else {
+      const tomorrow = (day + 1) % 7;
+      const nextDay = tomorrow === 0 ? 'Monday' : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][tomorrow === 0 ? 1 : tomorrow];
+      statusSubtext = `· Opens ${nextDay} ${fmt(openHour, openMin)}`;
+    }
+
+    return { isOpen, statusText: isOpen ? 'Open now' : 'Closed', statusSubtext };
   };
   
   const { isOpen, statusText, statusSubtext } = getStatus();
   
   const pin = normalizeIndianPincode(seller.pincode);
-  const base = (seller.address || seller.location || '').trim();
-  const address =
-    !base && !pin
-      ? 'Address not available'
-      : [base || null, pin ? `PIN ${pin}` : null].filter(Boolean).join(' · ');
-  
-  // Languages - default to Hindi and English for Indian dealers
-  const languages = ['Hindi', 'English'];
+  const locationCity = (seller.location || '').split(',')[0]?.trim() || '';
+  const fullAddress = (seller.address || '').trim();
+  const addressParts: string[] = [];
+  if (fullAddress) addressParts.push(fullAddress);
+  if (locationCity && !fullAddress.toLowerCase().includes(locationCity.toLowerCase())) {
+    addressParts.push(locationCity);
+  }
+  if (pin) addressParts.push(`PIN ${pin}`);
+  const address = addressParts.length > 0 ? addressParts.join(' · ') : 'Address not available';
+  const addressCopyable = address !== 'Address not available';
+  const [addressCopied, setAddressCopied] = useState(false);
+
+  const handleCopyAddress = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!addressCopyable) return;
+    const ok = await copyTextToClipboard(address);
+    if (ok) {
+      setAddressCopied(true);
+      window.setTimeout(() => setAddressCopied(false), 2000);
+    }
+  };
+
+  const languages = (seller as any).languages?.length
+    ? (seller as any).languages
+    : locationCity ? ['Hindi', 'English'] : ['Hindi', 'English'];
   
   const handleCall = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -947,17 +990,38 @@ const CompanyCard: React.FC<{
             <p className="text-[11px] text-slate-400 -mt-1 mb-2">{statusSubtext}</p>
 
             {/* Address */}
-            <p className="dp-address text-[12.5px] text-slate-600 mb-2 line-clamp-2">
-              <svg className="inline w-3.5 h-3.5 text-slate-400 mr-1 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              {address === 'Address not available' ? (
-                <span className="text-slate-400 italic">{address}</span>
-              ) : (
-                address
-              )}
-            </p>
+            <div className="flex items-start gap-1.5 mb-2 min-w-0">
+              <p className="dp-address text-[12.5px] text-slate-600 line-clamp-2 flex-1 min-w-0">
+                <svg className="inline w-3.5 h-3.5 text-slate-400 mr-1 -mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {addressCopyable ? (
+                  address
+                ) : (
+                  <span className="text-slate-400 italic">{address}</span>
+                )}
+              </p>
+              {addressCopyable ? (
+                <button
+                  type="button"
+                  onClick={(e) => void handleCopyAddress(e)}
+                  aria-label={addressCopied ? 'Address copied' : 'Copy address'}
+                  title={addressCopied ? 'Copied!' : 'Copy address'}
+                  className="shrink-0 mt-0.5 p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                >
+                  {addressCopied ? (
+                    <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                </button>
+              ) : null}
+            </div>
 
             {/* Languages */}
             <p
@@ -1032,47 +1096,96 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
   const [isLoadingSellers, setIsLoadingSellers] = useState(!propSellers || propSellers.length === 0);
   const [sellerLoadError, setSellerLoadError] = useState<string | null>(null);
   const [mapBounds, setMapBounds] = useState<L.LatLngBounds | null>(null);
-  const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]); // Default to India center
+  const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]);
   const [selectedDealerCenter, setSelectedDealerCenter] = useState<[number, number] | null>(null);
   const [selectedDealerEmail, setSelectedDealerEmail] = useState<string | null>(null);
+  const [mapSearchSuggestions, setMapSearchSuggestions] = useState<Array<{ displayName: string; lat: number; lon: number }>>([]);
+  const [isMapSearching, setIsMapSearching] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const mapSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mapSearchAbortRef = useRef<AbortController | null>(null);
 
-  // Fetch dealers (sellers + service providers).
-  // The Dealer page merges both roles; we differentiate by `role` below.
-  useEffect(() => {
-    if (!propSellers || propSellers.length === 0) {
-      const fetchDealers = async () => {
-        setIsLoadingSellers(true);
-        setSellerLoadError(null);
-        try {
-          const [fetchedSellers, fetchedServices] = await Promise.all([
-            getSellers().catch(() => [] as User[]),
-            getServiceProviders().catch(() => [] as User[]),
-          ]);
-          const combined = [...fetchedSellers, ...fetchedServices].filter(
-            (u) => u.role === 'seller' || u.role === 'service_provider'
-          );
-          setSellers(combined);
+  const handleMapSearchChange = useCallback((query: string) => {
+    setMapSearchQuery(query);
+    if (mapSearchTimerRef.current) clearTimeout(mapSearchTimerRef.current);
+    if (mapSearchAbortRef.current) mapSearchAbortRef.current.abort();
 
-          if (combined.length === 0) {
-            setSellerLoadError('No dealers found. Please check back later.');
-          }
-        } catch (error) {
-          console.error('Error fetching dealers:', error);
-          setSellerLoadError('Failed to load dealers. Please try refreshing the page.');
-          setSellers([]);
-        } finally {
-          setIsLoadingSellers(false);
-        }
-      };
-      fetchDealers();
-    } else {
-      setSellers(propSellers);
-      setIsLoadingSellers(false);
+    if (!query || query.trim().length < 2) {
+      setMapSearchSuggestions([]);
+      setIsMapSearching(false);
+      return;
     }
-  }, [propSellers]);
+
+    setIsMapSearching(true);
+    mapSearchTimerRef.current = setTimeout(async () => {
+      const ac = new AbortController();
+      mapSearchAbortRef.current = ac;
+      try {
+        const results = await searchLocations(query.trim(), ac.signal);
+        if (!ac.signal.aborted) {
+          setMapSearchSuggestions(
+            results
+              .filter((r) => r.lat && r.lon)
+              .map((r) => ({
+                displayName: r.city && r.state ? `${r.city}, ${r.state}` : r.displayName.split(',').slice(0, 2).join(',').trim(),
+                lat: r.lat,
+                lon: r.lon,
+              }))
+          );
+          setIsMapSearching(false);
+        }
+      } catch {
+        if (!ac.signal.aborted) {
+          setMapSearchSuggestions([]);
+          setIsMapSearching(false);
+        }
+      }
+    }, 400);
+  }, []);
+
+  const handleMapSearchSelect = useCallback((suggestion: { displayName: string; lat: number; lon: number }) => {
+    setMapSearchQuery(suggestion.displayName);
+    setSelectedDealerCenter([suggestion.lat, suggestion.lon]);
+    setMapSearchSuggestions([]);
+  }, []);
+
+  // Always fetch the public dealer directory (location/address for map pins).
+  // Do not reuse AppProvider `users` — that cache often lacks address fields and would overwrite API data.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchDealers = async () => {
+      setIsLoadingSellers(true);
+      setSellerLoadError(null);
+      try {
+        const [fetchedSellers, fetchedServices] = await Promise.all([
+          getSellers().catch(() => [] as User[]),
+          getServiceProviders().catch(() => [] as User[]),
+        ]);
+        if (cancelled) return;
+        const combined = [...fetchedSellers, ...fetchedServices].filter(
+          (u) => u.role === 'seller' || u.role === 'service_provider'
+        );
+        setSellers(combined);
+
+        if (combined.length === 0) {
+          setSellerLoadError('No dealers found. Please check back later.');
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Error fetching dealers:', error);
+        setSellerLoadError('Failed to load dealers. Please try refreshing the page.');
+        setSellers([]);
+      } finally {
+        if (!cancelled) setIsLoadingSellers(false);
+      }
+    };
+    void fetchDealers();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // State for sellers with coordinates
   const [sellersWithCoords, setSellersWithCoords] = useState<Array<{ seller: User; coords: CompanyLocation | null }>>([]);
@@ -1131,17 +1244,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
       });
     }
 
-    if (mapSearchQuery.trim()) {
-      const query = mapSearchQuery.toLowerCase();
-      const qDigits = query.replace(/\D/g, '');
-      filtered = filtered.filter(seller => {
-        const location = (seller.location || '').toLowerCase();
-        const address = (seller.address || '').toLowerCase();
-        const pin = normalizeIndianPincode(seller.pincode);
-        const pinMatch = qDigits.length >= 3 && pin.includes(qDigits);
-        return location.includes(query) || address.includes(query) || pinMatch;
-      });
-    }
+    // Map search is now geocoding-based (fly to city) — no text filtering needed
 
     if (companyTypeFilter !== 'all') {
       filtered = filtered.filter(seller => {
@@ -1155,7 +1258,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
     }
 
     return filtered;
-  }, [sellers, searchQuery, mapSearchQuery, companyTypeFilter, userLocation]);
+  }, [sellers, searchQuery, companyTypeFilter, userLocation]);
 
   // Get filtered sellers with coordinates
   const filteredSellersWithCoords = useMemo(() => {
@@ -1393,7 +1496,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
 
         {/* Right Map Section */}
         <div className="flex-1 relative min-h-[300px] lg:min-h-0 dp-map-wrap">
-          {/* Map Search - filter by city/location */}
+          {/* Map Search - geocode city/area and fly to it */}
           <div className="absolute top-4 left-4 right-4 lg:right-auto z-[1000] lg:w-80">
             <div className="dp-map-search">
               <svg className="dp-search-ic w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
@@ -1402,16 +1505,22 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
               </svg>
               <input
                 type="search"
-                placeholder="Filter by city or area"
+                placeholder="Search city or area to fly on map"
                 value={mapSearchQuery}
-                onChange={(e) => setMapSearchQuery(e.target.value)}
-                aria-label="Filter dealers by city or area"
+                onChange={(e) => handleMapSearchChange(e.target.value)}
+                aria-label="Search city to fly to on map"
                 className="dp-search-input"
               />
-              {mapSearchQuery && (
+              {isMapSearching && (
+                <svg className="animate-spin w-4 h-4 mr-2 text-slate-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              )}
+              {mapSearchQuery && !isMapSearching && (
                 <button
                   type="button"
-                  onClick={() => setMapSearchQuery('')}
+                  onClick={() => { setMapSearchQuery(''); setMapSearchSuggestions([]); }}
                   aria-label="Clear filter"
                   className="dp-search-clear"
                 >
@@ -1421,6 +1530,24 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
                 </button>
               )}
             </div>
+            {mapSearchSuggestions.length > 0 && (
+              <div className="mt-1 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden max-h-60 overflow-y-auto">
+                {mapSearchSuggestions.map((s, i) => (
+                  <button
+                    key={`${s.lat}-${s.lon}-${i}`}
+                    type="button"
+                    className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-2"
+                    onClick={() => handleMapSearchSelect(s)}
+                  >
+                    <svg className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    {s.displayName}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Map legend */}

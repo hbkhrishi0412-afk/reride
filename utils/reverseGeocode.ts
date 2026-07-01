@@ -7,6 +7,18 @@ import { publicApiFetch } from './apiFetch.js';
 export type CityRow = { city: string; stateCode: string };
 export type StateRow = { name: string; code: string };
 
+export type LocationSearchResult = {
+  placeId: number;
+  displayName: string;
+  city: string;
+  state: string;
+  district: string;
+  lat: number;
+  lon: number;
+  type: string;
+  importance: number;
+};
+
 function formatCityAndState(
   cityCanonical: string,
   stateCode: string,
@@ -94,6 +106,98 @@ export async function fetchReverseGeocodeAddress(
   return {};
 }
 
+/**
+ * Forward geocode search via server proxy.
+ * Returns real-time location results from Nominatim for live autocomplete.
+ */
+export async function searchLocations(
+  query: string,
+  signal?: AbortSignal,
+): Promise<LocationSearchResult[]> {
+  if (!query || query.trim().length < 2) return [];
+
+  try {
+    const response = await publicApiFetch(
+      `/api/geocode/search?q=${encodeURIComponent(query.trim())}&limit=8&country=in`,
+      { method: 'GET', signal },
+    );
+    if (!response.ok) return [];
+    const data = (await response.json()) as { success?: boolean; results?: LocationSearchResult[] };
+    if (data.success && data.results) return data.results;
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === 'AbortError') return [];
+  }
+
+  // Direct Nominatim fallback for when server proxy is unreachable
+  if (typeof window !== 'undefined') {
+    try {
+      const url =
+        `https://nominatim.openstreetmap.org/search?format=json` +
+        `&q=${encodeURIComponent(query.trim())}` +
+        `&countrycodes=in&limit=8` +
+        `&addressdetails=1&accept-language=en` +
+        `&email=${encodeURIComponent(supportEmail)}`;
+
+      const resp = await fetch(url, {
+        signal,
+        headers: {
+          'User-Agent': 'ReRide-App/1.0 (https://www.reride.co.in)',
+          Accept: 'application/json',
+          'Accept-Language': 'en,en-IN,en-GB',
+        },
+      });
+      if (!resp.ok) return [];
+      type NominatimResult = {
+        place_id: number;
+        lat: string;
+        lon: string;
+        display_name: string;
+        type: string;
+        address?: Record<string, string>;
+        importance: number;
+      };
+      const results = (await resp.json()) as NominatimResult[];
+      return results.map((r) => {
+        const addr = r.address ?? {};
+        return {
+          placeId: r.place_id,
+          displayName: r.display_name,
+          city: addr.city || addr.town || addr.municipality || addr.village || addr.city_district || addr.suburb || addr.county || '',
+          state: addr.state || addr.state_district || '',
+          district: addr.state_district || addr.county || '',
+          lat: parseFloat(r.lat),
+          lon: parseFloat(r.lon),
+          type: r.type,
+          importance: r.importance,
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
+/** Extract the best city name from a Nominatim address response, trying multiple fields. */
+function extractCityFromAddress(address: Record<string, string>): string | null {
+  const candidates = [
+    address.city,
+    address.town,
+    address.municipality,
+    address.city_district,
+    address.village,
+    address.suburb,
+    address.neighbourhood,
+    address.locality,
+    address.district,
+    address.state_district,
+    address.county,
+  ].filter(Boolean) as string[];
+
+  return candidates[0] ?? null;
+}
+
 export function resolveDisplayLocationFromAddress(
   address: Record<string, string>,
   allCities: CityRow[],
@@ -102,48 +206,67 @@ export function resolveDisplayLocationFromAddress(
   lon: number,
 ): string {
   const allCitiesList = allCities.map((r) => r.city);
-  const detectedCity =
-    address.city ||
-    address.town ||
-    address.municipality ||
-    address.city_district ||
-    address.district ||
-    address.village ||
-    address.suburb ||
-    address.neighbourhood ||
-    address.locality ||
-    address.state_district ||
-    address.county;
+  const detectedCity = extractCityFromAddress(address);
+  const detectedState = address.state || '';
+
+  // Try all candidate fields against the catalog, not just the first match
+  const candidateNames = [
+    address.city,
+    address.town,
+    address.municipality,
+    address.city_district,
+    address.village,
+    address.suburb,
+    address.district,
+    address.state_district,
+    address.county,
+  ].filter(Boolean) as string[];
 
   let matchedCity: string | null = null;
-  if (detectedCity) {
-    const dLower = String(detectedCity).toLowerCase();
-    matchedCity =
-      allCitiesList.find((city) => city.toLowerCase() === dLower) ||
-      allCitiesList.find((city) => getDisplayNameForCity(city).toLowerCase() === dLower) ||
-      allCitiesList.find(
-        (city) =>
-          city.toLowerCase().includes(dLower) ||
-          dLower.includes(city.toLowerCase()) ||
-          getDisplayNameForCity(city).toLowerCase().includes(dLower),
-      ) ||
-      null;
+  let matchedRow: CityRow | null = null;
+
+  for (const candidate of candidateNames) {
+    const cLower = candidate.toLowerCase().trim();
+
+    // Exact match on canonical name
+    const exact = allCitiesList.find((city) => city.toLowerCase() === cLower);
+    if (exact) { matchedCity = exact; break; }
+
+    // Exact match on display alias (e.g. Bangalore → Bengaluru)
+    const byDisplay = allCitiesList.find((city) => getDisplayNameForCity(city).toLowerCase() === cLower);
+    if (byDisplay) { matchedCity = byDisplay; break; }
+
+    // Partial match: candidate contains a catalog city name or vice-versa
+    const partial = allCitiesList.find(
+      (city) => {
+        const cl = city.toLowerCase();
+        const dl = getDisplayNameForCity(city).toLowerCase();
+        return cl.includes(cLower) || cLower.includes(cl) || dl.includes(cLower) || cLower.includes(dl);
+      },
+    );
+    if (partial) { matchedCity = partial; break; }
   }
 
-  const row = matchedCity
-    ? allCities.find(
-        (c) =>
-          c.city.toLowerCase() === matchedCity!.toLowerCase() ||
-          getDisplayNameForCity(c.city).toLowerCase() ===
-            getDisplayNameForCity(matchedCity!).toLowerCase(),
-      )
-    : null;
-
-  if (row) {
-    return formatCityAndState(row.city, row.stateCode, indianStates);
-  }
   if (matchedCity) {
-    return getDisplayNameForCity(matchedCity);
+    matchedRow = allCities.find(
+      (c) =>
+        c.city.toLowerCase() === matchedCity!.toLowerCase() ||
+        getDisplayNameForCity(c.city).toLowerCase() === getDisplayNameForCity(matchedCity!).toLowerCase(),
+    ) ?? null;
   }
+
+  if (matchedRow) {
+    return formatCityAndState(matchedRow.city, matchedRow.stateCode, indianStates);
+  }
+
+  // If we have a detected city and state from Nominatim but no catalog match,
+  // return the raw Nominatim city + state (real-time, not limited to catalog)
+  if (detectedCity && detectedState) {
+    return `${detectedCity}, ${detectedState}`;
+  }
+  if (detectedCity) {
+    return detectedCity;
+  }
+
   return labelFromNearestCatalogCoordinate(lat, lon, allCities, indianStates);
 }

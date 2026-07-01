@@ -6,6 +6,7 @@ import {
   isInlineImagePlaceholder,
   isPlaceholderService,
   isSupabaseRenderTransformPublicUrl,
+  markSupabaseTransformsDisabled,
 } from '../utils/imageUtils';
 import { logError, logInfo, logWarn } from '../utils/logger';
 
@@ -128,6 +129,9 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
       // empty gray when the optimized variant 404s.
       const failedUrl = target.src;
       if (isSupabaseRenderTransformPublicUrl(failedUrl)) {
+        // Transforms are not available for this project — disable them app-wide so
+        // no other image requests the broken render endpoint again this session.
+        markSupabaseTransformsDisabled();
         const rawUrl = failedUrl
           .replace('/storage/v1/render/image/public/', '/storage/v1/object/public/')
           .split('?')[0];

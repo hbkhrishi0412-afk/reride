@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
-import { getFirstValidImage } from '../utils/imageUtils';
+import { getFirstValidImage, swapToPlaceholderOnError } from '../utils/imageUtils';
 import { getCategoryDisplayName } from '../utils/compareList.js';
 
 interface MobileComparisonProps {
@@ -215,6 +215,9 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
                     src={getFirstValidImage(vehicle.images, vehicle.id)}
                     alt={`${vehicle.make} ${vehicle.model}`}
                     className="w-full aspect-[4/3] object-cover rounded-lg mb-2"
+                    loading="lazy"
+                    decoding="async"
+                    onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
                   />
                   <p className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">
                     {vehicle.year} {vehicle.make} {vehicle.model}

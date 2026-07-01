@@ -713,14 +713,29 @@ export const getUsers = async (role?: 'seller' | 'customer' | 'admin' | 'service
   }
 };
 
+/** Public dealer directory — always prefer live API (includes location/address for map). */
+async function getPublicDirectoryUsers(
+  role: 'seller' | 'service_provider',
+): Promise<User[]> {
+  try {
+    const result = await getUsersApi(role);
+    if (Array.isArray(result) && result.length > 0) {
+      return result;
+    }
+  } catch {
+    // Fall back to dev localStorage / prod cache below
+  }
+  return getUsers(role);
+}
+
 // Convenience function to fetch sellers only (public access)
 export const getSellers = async (): Promise<User[]> => {
-  return getUsers('seller');
+  return getPublicDirectoryUsers('seller');
 };
 
 // Convenience function to fetch car-service providers only (public access)
 export const getServiceProviders = async (): Promise<User[]> => {
-  return getUsers('service_provider');
+  return getPublicDirectoryUsers('service_provider');
 };
 export const updateUser = async (userData: Partial<User> & { email: string }): Promise<User> => {
   if (!isDevelopment) {

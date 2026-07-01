@@ -121,18 +121,23 @@ function hasLikelyRefreshSource(): boolean {
   return false;
 }
 
-/** Merge local + server messages without duplicates (realtime + optimistic UI). */
+/** Merge local + server messages without duplicates (realtime + optimistic UI).
+ *  Remote (server) wins when both exist so persisted read-state / payload updates propagate,
+ *  but locally-only messages (optimistic sends not yet on server) are always kept. */
 function mergeConversationMessagesForRealtime(local: ChatMessage[], remote: ChatMessage[]): ChatMessage[] {
   const byId = new Map<number, ChatMessage>();
+  const remoteIds = new Set<number>();
   for (const m of remote || []) {
     if (m?.id != null) {
-      byId.set(Number(m.id), sanitizePersistedChatMessage(m));
+      const k = Number(m.id);
+      byId.set(k, sanitizePersistedChatMessage(m));
+      remoteIds.add(k);
     }
   }
   for (const m of local || []) {
     if (m?.id != null) {
       const k = Number(m.id);
-      if (!byId.has(k)) {
+      if (!remoteIds.has(k)) {
         byId.set(k, sanitizePersistedChatMessage(m));
       }
     }
@@ -140,6 +145,40 @@ function mergeConversationMessagesForRealtime(local: ChatMessage[], remote: Chat
   return Array.from(byId.values()).sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
   );
+}
+
+/** Merge full conversation lists: keep optimistic local messages while absorbing server updates. */
+function mergeConversationLists(local: Conversation[], remote: Conversation[]): Conversation[] {
+  const remoteMap = new Map<string, Conversation>();
+  for (const c of remote) {
+    if (c?.id) remoteMap.set(String(c.id), c);
+  }
+
+  const merged: Conversation[] = [];
+  const seen = new Set<string>();
+
+  for (const rc of remote) {
+    if (!rc?.id) continue;
+    const key = String(rc.id);
+    seen.add(key);
+    const lc = local.find((l) => l && String(l.id) === key);
+    if (lc) {
+      const msgs = mergeConversationMessagesForRealtime(lc.messages || [], rc.messages || []);
+      merged.push({ ...rc, messages: msgs });
+    } else {
+      merged.push(rc);
+    }
+  }
+
+  for (const lc of local) {
+    if (!lc?.id) continue;
+    const key = String(lc.id);
+    if (!seen.has(key)) {
+      merged.push(lc);
+    }
+  }
+
+  return merged;
 }
 
 // PERFORMANCE: Helper function for user-friendly error messages
@@ -4599,7 +4638,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         
         if (result.success && result.data) {
-          // Normalize sellerId and customerId in conversations to ensure proper matching
           const normalizedConversations = result.data.map(conv => ({
             ...conv,
             sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
@@ -4607,13 +4645,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }));
 
           setConversations((prev) => {
+            const merged = mergeConversationLists(prev, normalizedConversations);
             const prevUnread = prev.filter(
               (c) =>
                 c &&
                 !c.isReadBySeller &&
                 conversationBelongsToSeller(c, normalizedSellerEmail, currentUser.id),
             ).length;
-            const nextUnread = normalizedConversations.filter((c) => c && !c.isReadBySeller).length;
+            const nextUnread = merged.filter((c) => c && !c.isReadBySeller).length;
             if (
               currentUser.role === 'seller' &&
               nextUnread > prevUnread &&
@@ -4622,13 +4661,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ) {
               addToast('You have new buyer messages', 'info');
             }
-            return normalizedConversations;
+            try {
+              saveConversations(merged);
+            } catch (error) {
+              logError('Failed to save refreshed conversations:', error);
+            }
+            return merged;
           });
-          try {
-            saveConversations(normalizedConversations);
-          } catch (error) {
-            logError('Failed to save refreshed conversations:', error);
-          }
         } else if (process.env.NODE_ENV === 'development') {
           logWarn('⚠️ Failed to load seller conversations:', {
             success: result.success,
@@ -4648,7 +4687,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadSellerConversations();
     
     // Fallback sync if Realtime/WebSocket misses an update (keep well under perceived “10s lag”)
-    const refreshInterval = setInterval(loadSellerConversations, 4000);
+    const refreshInterval = setInterval(loadSellerConversations, 3000);
     
     return () => clearInterval(refreshInterval);
   }, [currentUser?.email, currentUser?.role, currentUser?.id, addToast]);
@@ -4673,12 +4712,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
           customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
         }));
-        setConversations(normalizedConversations);
-        try {
-          saveConversations(normalizedConversations);
-        } catch (_) {
-          /* ignore */
-        }
+        setConversations((prev) => {
+          const merged = mergeConversationLists(prev, normalizedConversations);
+          try {
+            saveConversations(merged);
+          } catch (_) {
+            /* ignore */
+          }
+          return merged;
+        });
       } catch (e) {
         if (process.env.NODE_ENV === 'development') {
           logWarn('Failed to refresh customer conversations:', e);
@@ -4687,9 +4729,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     loadCustomerConversations();
-    const interval = setInterval(loadCustomerConversations, 4000);
+    const interval = setInterval(loadCustomerConversations, 3000);
     return () => clearInterval(interval);
   }, [currentUser?.email, currentUser?.role]);
+
+  // Keep activeChat in sync with the conversations array so polling updates appear instantly.
+  useEffect(() => {
+    if (!activeChat?.id) return;
+    const match = conversations.find((c) => c && String(c.id) === String(activeChat.id));
+    if (!match) return;
+    const localLen = activeChat.messages?.length ?? 0;
+    const matchLen = match.messages?.length ?? 0;
+    if (
+      matchLen > localLen ||
+      match.lastMessageAt !== activeChat.lastMessageAt ||
+      match.isReadBySeller !== activeChat.isReadBySeller ||
+      match.isReadByCustomer !== activeChat.isReadByCustomer
+    ) {
+      setActiveChat(match);
+    }
+  }, [conversations, activeChat?.id]);
 
   // While a thread is open, poll that conversation directly (fast path; bypasses bulk list + queue backlog).
   useEffect(() => {

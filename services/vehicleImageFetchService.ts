@@ -6,9 +6,36 @@
 
 const IMAGES_BUCKET = 'Images';
 
+/** imagin.studio automotive CDN — real, model-specific car renders (public demo customer). */
+const IMAGIN_CUSTOMER = process.env.IMAGIN_CUSTOMER || process.env.VITE_IMAGIN_CUSTOMER || 'img';
+
+const imaginSlug = (s: string): string =>
+  String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const IMAGIN_MAKE_ALIASES: Record<string, string> = { 'maruti-suzuki': 'suzuki' };
+
+/** Builds a real car image URL from imagin.studio for the given make/model. */
+function buildImaginUrl(make: string, model: string): string {
+  const makeSlug = IMAGIN_MAKE_ALIASES[imaginSlug(make)] || imaginSlug(make);
+  const u = new URL('https://cdn.imagin.studio/getimage');
+  u.searchParams.set('customer', IMAGIN_CUSTOMER);
+  u.searchParams.set('make', makeSlug);
+  u.searchParams.set('modelFamily', imaginSlug(model));
+  u.searchParams.set('angle', '23');
+  u.searchParams.set('width', '800');
+  u.searchParams.set('fileType', 'webp');
+  return u.toString();
+}
+
 /**
  * Get an image URL for a vehicle (make, model, year).
- * Tries Unsplash first; falls back to a deterministic placeholder.
+ * Tries Unsplash first; falls back to a real car render from imagin.studio
+ * (never a gray placeholder, so cards always show an actual vehicle image).
  */
 export async function getImageUrlForVehicle(
   make: string,
@@ -33,13 +60,12 @@ export async function getImageUrlForVehicle(
         if (regular) return regular;
       }
     } catch (e) {
-      console.warn('Unsplash fetch failed, using placeholder:', e);
+      console.warn('Unsplash fetch failed, falling back to imagin.studio:', e);
     }
   }
 
-  // Placeholder: deterministic image per make/model/year (no API key needed)
-  const text = encodeURIComponent(`${year} ${make} ${model}`);
-  return `https://placehold.co/800x600/e2e8f0/64748b?text=${text}`;
+  // Real, deterministic car render per make/model (no API key needed).
+  return buildImaginUrl(make, model);
 }
 
 /**

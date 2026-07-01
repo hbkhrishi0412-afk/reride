@@ -14,13 +14,16 @@
     "isVerified": true,
     "subscriptionPlan": "premium",
     "featuredCredits": 5,
-    "usedCertifications": 1
+    "usedCertifications": 1,
+    "location": "Hyderabad, Telangana",
+    "address": "Road No. 36, Jubilee Hills",
+    "pincode": "500033"
   },
   {
     "name": "Demo Seller",
     "email": "seller1@test.com",
     "password": "password",
-    "mobile": "555-123-4567",
+    "mobile": "+91-91234-56780",
     "role": "seller",
     "status": "active",
     "createdAt": "2025-10-20T07:59:39.444Z",
@@ -31,13 +34,16 @@
     "isVerified": true,
     "subscriptionPlan": "premium",
     "featuredCredits": 5,
-    "usedCertifications": 1
+    "usedCertifications": 1,
+    "location": "Mumbai, Maharashtra",
+    "address": "Andheri West, Link Road",
+    "pincode": "400053"
   },
   {
     "name": "Auto World",
     "email": "seller2@test.com",
     "password": "password",
-    "mobile": "555-234-5678",
+    "mobile": "+91-98010-12345",
     "role": "seller",
     "status": "active",
     "createdAt": "2025-10-20T07:59:39.444Z",
@@ -48,13 +54,16 @@
     "isVerified": true,
     "subscriptionPlan": "pro",
     "featuredCredits": 3,
-    "usedCertifications": 0
+    "usedCertifications": 0,
+    "location": "New Delhi, Delhi",
+    "address": "Rajouri Garden, Main Market",
+    "pincode": "110027"
   },
   {
     "name": "City Motors",
     "email": "seller3@test.com",
     "password": "password",
-    "mobile": "555-345-6789",
+    "mobile": "+91-94567-89012",
     "role": "seller",
     "status": "active",
     "createdAt": "2025-10-20T07:59:39.444Z",
@@ -65,13 +74,16 @@
     "isVerified": false,
     "subscriptionPlan": "basic",
     "featuredCredits": 1,
-    "usedCertifications": 0
+    "usedCertifications": 0,
+    "location": "Bengaluru, Karnataka",
+    "address": "Koramangala, 80 Feet Road",
+    "pincode": "560034"
   },
   {
     "name": "Elite Cars",
     "email": "seller4@test.com",
     "password": "password",
-    "mobile": "555-456-7890",
+    "mobile": "+91-87654-32100",
     "role": "seller",
     "status": "active",
     "createdAt": "2025-10-20T07:59:39.444Z",
@@ -82,13 +94,16 @@
     "isVerified": true,
     "subscriptionPlan": "premium",
     "featuredCredits": 5,
-    "usedCertifications": 2
+    "usedCertifications": 2,
+    "location": "Pune, Maharashtra",
+    "address": "Baner Road, Near Westend Mall",
+    "pincode": "411045"
   },
   {
     "name": "Family Wheels",
     "email": "seller5@test.com",
     "password": "password",
-    "mobile": "555-567-8901",
+    "mobile": "+91-99887-76655",
     "role": "seller",
     "status": "active",
     "createdAt": "2025-10-20T07:59:39.444Z",
@@ -99,23 +114,27 @@
     "isVerified": true,
     "subscriptionPlan": "pro",
     "featuredCredits": 2,
-    "usedCertifications": 1
+    "usedCertifications": 1,
+    "location": "Chennai, Tamil Nadu",
+    "address": "Anna Nagar, 2nd Avenue",
+    "pincode": "600040"
   },
   {
     "name": "Mock Customer",
     "email": "customer@test.com",
     "password": "password",
-    "mobile": "555-987-6543",
+    "mobile": "+91-91234-00000",
     "role": "customer",
     "status": "active",
     "createdAt": "2025-10-20T07:59:39.444Z",
-    "avatarUrl": "https://i.pravatar.cc/150?u=customer@test.com"
+    "avatarUrl": "https://i.pravatar.cc/150?u=customer@test.com",
+    "location": "Hyderabad, Telangana"
   },
   {
     "name": "Mock Admin",
     "email": "admin@test.com",
     "password": "password",
-    "mobile": "111-222-3333",
+    "mobile": "+91-80000-11111",
     "role": "admin",
     "status": "active",
     "createdAt": "2025-10-20T07:59:39.444Z",

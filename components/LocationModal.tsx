@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     CITY_MAPPING,
@@ -13,7 +13,9 @@ import {
     fetchReverseGeocodeAddress,
     labelFromNearestCatalogCoordinate,
     resolveDisplayLocationFromAddress,
+    searchLocations,
 } from '../utils/reverseGeocode';
+import type { LocationSearchResult } from '../utils/reverseGeocode';
 
 interface LocationModalProps {
     isOpen: boolean;
@@ -42,10 +44,15 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
     const [selectedCity, setSelectedCity] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [isDetecting, setIsDetecting] = useState(false);
+    const [liveResults, setLiveResults] = useState<LocationSearchResult[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [selectedLiveResult, setSelectedLiveResult] = useState<LocationSearchResult | null>(null);
     const detectingInFlightRef = useRef(false);
     const detectGenerationRef = useRef(0);
     const userEditedRef = useRef(false);
     const prevIsOpenRef = useRef(false);
+    const searchAbortRef = useRef<AbortController | null>(null);
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const markUserEdited = () => {
         userEditedRef.current = true;
@@ -53,6 +60,35 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
 
     const indianStates = INDIAN_STATES;
     const citiesByState = CITIES_BY_STATE;
+
+    const debouncedSearch = useCallback((query: string) => {
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        if (searchAbortRef.current) searchAbortRef.current.abort();
+
+        if (!query || query.trim().length < 2) {
+            setLiveResults([]);
+            setIsSearching(false);
+            return;
+        }
+
+        setIsSearching(true);
+        searchTimerRef.current = setTimeout(async () => {
+            const ac = new AbortController();
+            searchAbortRef.current = ac;
+            try {
+                const results = await searchLocations(query.trim(), ac.signal);
+                if (!ac.signal.aborted) {
+                    setLiveResults(results);
+                    setIsSearching(false);
+                }
+            } catch {
+                if (!ac.signal.aborted) {
+                    setLiveResults([]);
+                    setIsSearching(false);
+                }
+            }
+        }, 400);
+    }, []);
 
     useEffect(() => {
         const body = document.body;
@@ -71,12 +107,17 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         return () => document.removeEventListener('keydown', onKey);
     }, [isOpen, onClose]);
 
-    /** Abort stale detection when modal closes or user switches away from auto-detect. */
+    /** Abort stale detection and live search when modal closes. */
     useEffect(() => {
         if (!isOpen) {
             detectGenerationRef.current += 1;
             detectingInFlightRef.current = false;
             setIsDetecting(false);
+            setLiveResults([]);
+            setSelectedLiveResult(null);
+            setIsSearching(false);
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+            if (searchAbortRef.current) searchAbortRef.current.abort();
         }
     }, [isOpen]);
 
@@ -347,6 +388,18 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             return;
         }
 
+        // Live search result selected
+        if (selectedLiveResult) {
+            const lr = selectedLiveResult;
+            const label = lr.city && lr.state
+                ? `${lr.city}, ${lr.state}`
+                : lr.city || lr.displayName.split(',').slice(0, 2).join(',').trim();
+            onLocationChange(label);
+            addToast(t('locationModal.toast.setTo', { place: label }), 'success');
+            onClose();
+            return;
+        }
+
         if (selectedOption === 'city') {
             let city = selectedCity;
             let stateCode = selectedDistrict;
@@ -399,7 +452,21 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         setSelectedOption('city');
         setSelectedCity(cityName);
         setSelectedDistrict(stateCode);
+        setSelectedLiveResult(null);
         setSearchTerm('');
+    };
+
+    const handleLiveResultSelect = (result: LocationSearchResult) => {
+        markUserEdited();
+        setSelectedLiveResult(result);
+        setSelectedOption('city');
+        setSelectedCity('');
+        setSelectedDistrict('');
+        const label = result.city && result.state
+            ? `${result.city}, ${result.state}`
+            : result.city || result.displayName.split(',').slice(0, 2).join(',').trim();
+        setSearchTerm(label);
+        setLiveResults([]);
     };
 
     if (!isOpen) return null;
@@ -463,10 +530,13 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                 value={searchTerm}
                             onChange={(e) => {
                                 markUserEdited();
-                                setSearchTerm(e.target.value);
-                                if (e.target.value) {
+                                const val = e.target.value;
+                                setSearchTerm(val);
+                                setSelectedLiveResult(null);
+                                if (val) {
                                     setSelectedOption('city');
                                 }
+                                debouncedSearch(val);
                             }}
                             placeholder={t('locationModal.searchPlaceholder')}
                             className="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -669,8 +739,68 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                             </div>
                         )}
 
-                        {/* Show popular cities when search is active or city option is selected */}
-                        {searchTerm && filteredCities.length === 0 && (
+                        {/* Live search results from geocoding API */}
+                        {searchTerm && liveResults.length > 0 && (
+                            <div className="mt-3 space-y-1">
+                                <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                                    </svg>
+                                    Live Results
+                                </p>
+                                {liveResults.map((result) => {
+                                    const label = result.city && result.state
+                                        ? `${result.city}, ${result.state}`
+                                        : result.displayName.split(',').slice(0, 3).join(',').trim();
+                                    const isSelected = selectedLiveResult?.placeId === result.placeId;
+                                    return (
+                                        <div
+                                            key={result.placeId}
+                                            role="button"
+                                            tabIndex={0}
+                                            className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${
+                                                isSelected ? 'bg-blue-50 border border-blue-300' : 'hover:bg-gray-50'
+                                            }`}
+                                            onClick={() => handleLiveResultSelect(result)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    handleLiveResultSelect(result);
+                                                }
+                                            }}
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                                            </svg>
+                                            <div className="min-w-0 flex-1">
+                                                <span className="text-sm text-gray-900 block truncate">{label}</span>
+                                                {result.displayName !== label && (
+                                                    <span className="text-xs text-gray-400 block truncate">{result.displayName}</span>
+                                                )}
+                                            </div>
+                                            {isSelected && (
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Searching indicator */}
+                        {searchTerm && isSearching && (
+                            <div className="p-3 text-sm text-gray-400 text-center flex items-center justify-center gap-2">
+                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                Searching locations...
+                            </div>
+                        )}
+
+                        {searchTerm && filteredCities.length === 0 && liveResults.length === 0 && !isSearching && (
                             <div className="p-3 text-sm text-gray-500 text-center">
                                 {t('locationModal.noCities', { term: searchTerm })}
                             </div>

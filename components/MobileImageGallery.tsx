@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { swapToPlaceholderOnError } from '../utils/imageUtils';
 
 interface MobileImageGalleryProps {
   images: string[];
@@ -324,6 +325,7 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
                 ...({ WebkitUserDrag: 'none' } as React.CSSProperties),
               }}
               draggable={false}
+              onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
             />
           </div>
         </div>
@@ -398,6 +400,8 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
                     alt={`${alt} thumbnail ${index + 1}`}
                     className="w-full h-full object-cover"
                     loading="lazy"
+                    decoding="async"
+                    onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
                   />
                 </button>
               ))}
@@ -432,6 +436,7 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
           src={images[currentIndex]}
           alt={`${alt} ${currentIndex + 1}`}
           className="max-h-full max-w-full h-full w-full object-contain object-center rounded-lg"
+          onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
         />
       </div>
     </div>

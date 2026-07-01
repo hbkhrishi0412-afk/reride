@@ -31,6 +31,9 @@ export function buildNotificationDeepLinkPath(notification: Notification): strin
   if (notification.targetType === 'insurance_expiry') {
     return '/profile';
   }
+  if (notification.targetType === 'service_request') {
+    return '/car-services';
+  }
   return '/';
 }
 

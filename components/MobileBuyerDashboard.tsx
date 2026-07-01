@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, lazy, Suspense } from
 import { useTranslation } from 'react-i18next';
 import type { User, Vehicle, Conversation } from '../types';
 import { View as ViewEnum } from '../types';
-import { getFirstValidImage } from '../utils/imageUtils';
+import { getFirstValidImage, swapToPlaceholderOnError } from '../utils/imageUtils';
 import * as buyerService from '../services/buyerService';
 import { getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
@@ -352,6 +352,9 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                         alt=""
                         aria-hidden="true"
                         className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                        loading="lazy"
+                        decoding="async"
+                        onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
                       />
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-gray-900 mb-1 truncate">
@@ -484,6 +487,9 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                         alt=""
                         aria-hidden="true"
                         className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                        loading="lazy"
+                        decoding="async"
+                        onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
                       />
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-gray-900 mb-1 truncate">
@@ -554,6 +560,9 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                               src={getFirstValidImage(vehicle.images, vehicle.id)}
                               alt=""
                               className="h-20 w-24 shrink-0 rounded-lg object-cover"
+                              loading="lazy"
+                              decoding="async"
+                              onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
                             />
                             <div className="min-w-0 flex-1">
                               <p className="font-semibold text-gray-900">

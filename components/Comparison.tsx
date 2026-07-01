@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
-import { getFirstValidImage } from '../utils/imageUtils';
+import { getFirstValidImage, swapToPlaceholderOnError } from '../utils/imageUtils';
 import PageHeader from './PageHeader';
 import { getCategoryDisplayName } from '../utils/compareList.js';
 
@@ -131,7 +131,7 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, comparisonCategory = 
               <th className="text-left font-bold text-lg text-reride-text-dark p-4 sticky left-0 bg-white z-10">{t('compare.featureColumn')}</th>
               {vehicles.map(vehicle => (
                 <th key={vehicle.id} className="p-4 min-w-[220px]">
-                  <img src={getFirstValidImage(vehicle.images, vehicle.id)} alt={`${vehicle.make} ${vehicle.model}`} className="w-full h-40 object-cover rounded-lg mb-2" />
+                  <img src={getFirstValidImage(vehicle.images, vehicle.id)} alt={`${vehicle.make} ${vehicle.model}`} className="w-full h-40 object-cover rounded-lg mb-2" loading="lazy" decoding="async" onError={(e) => swapToPlaceholderOnError(e.currentTarget)} />
                   <h3 className="font-bold text-lg dark:text-reride-text-dark">{vehicle.year} {vehicle.make} {vehicle.model} {vehicle.variant || ''}</h3>
                   <button type="button" onClick={() => onToggleCompare(vehicle.id)} className="mt-2 text-sm text-reride-orange hover:text-reride-orange">{t('compare.remove')}</button>
                 </th>

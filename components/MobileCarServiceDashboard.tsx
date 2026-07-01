@@ -471,11 +471,10 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
     refreshAllRef.current();
   }, [provider]);
 
-  // Background poll every 30s + on visibility change.
   useEffect(() => {
     if (!provider) return;
     const tick = () => refreshAllRef.current();
-    const interval = window.setInterval(tick, 30000);
+    const interval = window.setInterval(tick, 60000);
     const onVisibility = () => {
       if (document.visibilityState === 'visible') tick();
     };
@@ -486,16 +485,17 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
     };
   }, [provider]);
 
-  // Realtime updates from supabase: refresh when a service_requests row changes.
   useEffect(() => {
     if (!provider) return;
     let active = true;
-    let channel: ReturnType<ReturnType<typeof getSupabaseClient>['channel']> | null = null;
+    let requestsChannel: ReturnType<ReturnType<typeof getSupabaseClient>['channel']> | null = null;
+    let notifChannel: ReturnType<ReturnType<typeof getSupabaseClient>['channel']> | null = null;
     try {
       const supabase = getSupabaseClient();
-      const channelName = `mobile-provider-${provider.email || provider.name || 'unknown'}`;
-      channel = supabase
-        .channel(channelName)
+      const providerKey = provider.email || provider.name || 'unknown';
+
+      requestsChannel = supabase
+        .channel(`mobile-provider-requests-${providerKey}`)
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'service_requests' },
@@ -505,16 +505,35 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
           },
         )
         .subscribe();
+
+      const providerEmail = (provider.email || '').toLowerCase().trim();
+      if (providerEmail) {
+        notifChannel = supabase
+          .channel(`mobile-provider-notif-${providerKey}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'notifications',
+              filter: `recipient_email=eq.${providerEmail}`,
+            },
+            () => {
+              if (!active) return;
+              refreshAllRef.current();
+            },
+          )
+          .subscribe();
+      }
     } catch {
       // realtime is best-effort; polling will keep things fresh.
     }
     return () => {
       active = false;
       try {
-        if (channel) {
-          const supabase = getSupabaseClient();
-          void supabase.removeChannel(channel);
-        }
+        const supabase = getSupabaseClient();
+        if (requestsChannel) void supabase.removeChannel(requestsChannel);
+        if (notifChannel) void supabase.removeChannel(notifChannel);
       } catch {
         // ignore
       }

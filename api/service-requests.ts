@@ -69,40 +69,62 @@ function providerMatchesCandidateList(candidateProviderIds: unknown, providerId:
   return candidateProviderIds.some((id) => String(id) === String(providerId));
 }
 
-async function notifyCandidateProvidersOnOpenRequest(
+async function notifyProvidersOnOpenRequest(
   request: ServiceRequestPayload & { id: string },
 ): Promise<void> {
-  const candidateProviderIds = Array.isArray(request.candidateProviderIds)
-    ? request.candidateProviderIds.map((id) => String(id).trim()).filter(Boolean)
-    : [];
-  if (candidateProviderIds.length === 0) return;
-
   try {
-    const providers = await Promise.all(
-      candidateProviderIds.map(async (providerId) => {
-        const provider = await supabaseServiceProviderService.findById(providerId);
-        if (!provider?.email) return null;
-        return { id: providerId, email: String(provider.email).toLowerCase().trim() };
-      }),
-    );
-    const recipients = providers.filter((p): p is { id: string; email: string } => Boolean(p));
+    const candidateProviderIds = Array.isArray(request.candidateProviderIds)
+      ? request.candidateProviderIds.map((id) => String(id).trim()).filter(Boolean)
+      : [];
+
+    let recipients: { id: string; email: string }[] = [];
+
+    if (candidateProviderIds.length > 0) {
+      const providers = await Promise.all(
+        candidateProviderIds.map(async (providerId) => {
+          const provider = await supabaseServiceProviderService.findById(providerId);
+          if (!provider?.email) return null;
+          return { id: providerId, email: String(provider.email).toLowerCase().trim() };
+        }),
+      );
+      recipients = providers.filter((p): p is { id: string; email: string } => Boolean(p));
+    } else {
+      const allProviders = await supabaseServiceProviderService.findAll();
+      const cityLower = (request.city || '').toLowerCase().trim();
+      const matching = allProviders.filter((p) => {
+        if (!p.email) return false;
+        if (!cityLower) return true;
+        const providerCity = String((p as any).city || '').toLowerCase().trim();
+        return !providerCity || providerCity === cityLower;
+      });
+      recipients = matching.map((p) => ({
+        id: String((p as any).id || ''),
+        email: String(p.email).toLowerCase().trim(),
+      }));
+    }
+
     if (recipients.length === 0) return;
 
     const supabase = getSupabaseAdminClient();
     const now = new Date().toISOString();
+    const baseId = Date.now();
     const records = recipients.map((recipient, idx) => ({
-      id: `${Date.now()}_${idx}_${recipient.id}`,
+      id: String(baseId + idx),
       recipient_email: recipient.email,
-      type: 'service_request_open',
+      user_id: recipient.email,
+      type: 'service_request',
       title: 'New service request available',
-      message: `${request.serviceType || 'General'} request in ${request.city || 'your area'}`,
+      message: `${request.serviceType || 'General'} request${request.city ? ` in ${request.city}` : ''} — tap to view & claim`,
       read: false,
       created_at: now,
       metadata: {
+        targetType: 'service_request',
+        targetId: request.id,
         requestId: request.id,
         providerId: recipient.id,
         serviceType: request.serviceType || 'General',
         city: request.city || '',
+        action: 'request_created',
       },
     }));
     const { error } = await supabase.from('notifications').insert(records);
@@ -111,6 +133,144 @@ async function notifyCandidateProvidersOnOpenRequest(
     }
   } catch (error) {
     console.warn('Open request provider notification flow failed:', error);
+  }
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  accepted: 'Accepted',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+async function notifyCustomerOnStatusChange(
+  request: ServiceRequestPayload & { id: string },
+  previousStatus: string | null,
+  newStatus: string,
+  providerId?: string | null,
+): Promise<void> {
+  try {
+    const customerEmail = String(request.customerEmail || '').toLowerCase().trim();
+    const customerId = String(request.customerId || '').trim();
+    if (!customerEmail && !customerId) return;
+
+    let recipientEmail = customerEmail;
+    if (!recipientEmail && customerId) {
+      try {
+        const user = await supabaseUserService.findById(customerId);
+        recipientEmail = String(user?.email || '').toLowerCase().trim();
+      } catch {
+        /* best effort */
+      }
+    }
+    if (!recipientEmail) return;
+
+    let providerName = '';
+    if (providerId) {
+      try {
+        const sp = await supabaseServiceProviderService.findById(providerId);
+        providerName = sp?.name || '';
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const statusLabel = STATUS_LABELS[newStatus] || newStatus;
+    const serviceLabel = request.serviceType || 'General';
+    let title = '';
+    let message = '';
+
+    switch (newStatus) {
+      case 'accepted':
+        title = 'Service request accepted';
+        message = providerName
+          ? `${providerName} accepted your ${serviceLabel} request`
+          : `Your ${serviceLabel} request has been accepted by a workshop`;
+        break;
+      case 'in_progress':
+        title = 'Service started';
+        message = providerName
+          ? `${providerName} has started working on your ${serviceLabel} service`
+          : `Your ${serviceLabel} service is now in progress`;
+        break;
+      case 'completed':
+        title = 'Service completed';
+        message = `Your ${serviceLabel} service is complete! Please review your experience`;
+        break;
+      case 'cancelled':
+        title = 'Service request cancelled';
+        message = `Your ${serviceLabel} request has been cancelled`;
+        break;
+      default:
+        title = `Request status: ${statusLabel}`;
+        message = `Your ${serviceLabel} request status changed to ${statusLabel}`;
+    }
+
+    const supabase = getSupabaseAdminClient();
+    const notificationId = String(Date.now());
+    const now = new Date().toISOString();
+    const { error } = await supabase.from('notifications').insert({
+      id: notificationId,
+      recipient_email: recipientEmail,
+      user_id: recipientEmail,
+      type: 'service_request',
+      title,
+      message,
+      read: false,
+      created_at: now,
+      metadata: {
+        targetType: 'service_request',
+        targetId: request.id,
+        requestId: request.id,
+        previousStatus,
+        newStatus,
+        serviceType: serviceLabel,
+        providerId: providerId || null,
+        providerName: providerName || null,
+      },
+    });
+    if (error) {
+      console.warn('Failed to create customer notification for status change:', error.message);
+    }
+  } catch (error) {
+    console.warn('Customer notification flow failed:', error);
+  }
+}
+
+async function notifyProviderOnCancel(
+  request: ServiceRequestPayload & { id: string },
+): Promise<void> {
+  try {
+    if (!request.providerId) return;
+    const provider = await supabaseServiceProviderService.findById(String(request.providerId));
+    if (!provider?.email) return;
+    const recipientEmail = String(provider.email).toLowerCase().trim();
+    if (!recipientEmail) return;
+
+    const supabase = getSupabaseAdminClient();
+    const now = new Date().toISOString();
+    const { error } = await supabase.from('notifications').insert({
+      id: String(Date.now()),
+      recipient_email: recipientEmail,
+      user_id: recipientEmail,
+      type: 'service_request',
+      title: 'Customer cancelled request',
+      message: `${request.customerName || 'Customer'} cancelled their ${request.serviceType || 'General'} request`,
+      read: false,
+      created_at: now,
+      metadata: {
+        targetType: 'service_request',
+        targetId: request.id,
+        requestId: request.id,
+        action: 'request_cancelled',
+        serviceType: request.serviceType || 'General',
+      },
+    });
+    if (error) {
+      console.warn('Failed to create provider cancel notification:', error.message);
+    }
+  } catch (error) {
+    console.warn('Provider cancel notification flow failed:', error);
   }
 }
 
@@ -322,7 +482,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           candidateCount: Array.isArray(created.candidateProviderIds) ? created.candidateProviderIds.length : 0,
         },
       });
-      await notifyCandidateProvidersOnOpenRequest(created);
+      await notifyProvidersOnOpenRequest(created);
       return res.status(201).json(normalizeServiceRequestResponse(created));
     }
 
@@ -373,6 +533,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           nextStatus: 'cancelled',
           details: { cancelledAt },
         });
+        await notifyProviderOnCancel(existing);
         const updatedCancel = await supabaseServiceRequestService.findById(id);
         return res.status(200).json(normalizeServiceRequestResponse(updatedCancel || existing));
       }
@@ -446,6 +607,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           nextStatus: 'accepted',
           details: { providerId: actorId },
         });
+        await notifyCustomerOnStatusChange(existing, existing.status || 'open', 'accepted', actorId);
         const updatedClaim = await supabaseServiceRequestService.findById(id);
         return res.status(200).json(normalizeServiceRequestResponse(updatedClaim || existing));
       }
@@ -518,6 +680,12 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
             cancelledAt: updates.cancelledAt || null,
           },
         });
+        await notifyCustomerOnStatusChange(
+          existing,
+          existing.status || null,
+          normalizedStatus,
+          existing.providerId || updates.providerId || null,
+        );
         if (normalizedStatus === 'completed') {
           const providerId = String(existing.providerId || updates.providerId || '').trim();
           if (providerId) {

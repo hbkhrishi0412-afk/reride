@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import type { Vehicle, User } from '../types';
 import { View as ViewEnum } from '../types';
-import { getFirstValidImage } from '../utils/imageUtils';
+import { getFirstValidImage, swapToPlaceholderOnError } from '../utils/imageUtils';
 
 interface MobileWishlistProps {
   vehicles: Vehicle[];
@@ -160,6 +160,9 @@ export const MobileWishlist: React.FC<MobileWishlistProps> = ({
                   src={getFirstValidImage(vehicle.images ?? [], vehicle.id)}
                   alt={`${vehicle.make} ${vehicle.model}`}
                   className="w-24 h-24 rounded-xl object-cover flex-shrink-0"
+                  loading="lazy"
+                  decoding="async"
+                  onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
                 />
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-gray-900 mb-1">
@@ -237,6 +240,9 @@ export const MobileWishlist: React.FC<MobileWishlistProps> = ({
                   src={getFirstValidImage(vehicle.images ?? [], vehicle.id)}
                   alt={`${vehicle.make} ${vehicle.model}`}
                   className="w-full h-32 object-cover"
+                  loading="lazy"
+                  decoding="async"
+                  onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
                 />
                 <button
                   onClick={(e) => {
