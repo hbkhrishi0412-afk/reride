@@ -9,6 +9,7 @@ import { getSellerTrustChecklistSummary } from '../lib/sellerTrustChecklist.js';
 import { useApp } from './AppProvider.js';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import { followSeller, unfollowSeller, isFollowingSeller, getFollowersCount, getFollowingCount, getFollowersOfSeller, getFollowedSellers } from '../services/buyerEngagementService.js';
+import { useTranslatedText, useTranslatedFields } from '../hooks/useTranslatedText';
 
 /* ============================================================
    Scoped premium styles for the Seller Profile page.
@@ -463,6 +464,8 @@ interface SellerProfilePageProps {
 
 const SellerProfilePageContent: React.FC<SellerProfilePageProps & { seller: User }> = ({ seller, vehicles, onSelectVehicle, comparisonList, onToggleCompare, wishlist, onToggleWishlist, onBack, onViewSellerProfile, currentUser, onRequireLogin }) => {
     const { comparisonCategory } = useApp();
+    const translatedBio = useTranslatedText(seller.bio);
+    const translatedNames = useTranslatedFields({ dealershipName: seller.dealershipName, name: seller.name });
     const [searchQuery, setSearchQuery] = useState('');
     // Restore logged-in user from storage (used to gate owner-only views)
     let storedUser: User | null = null;
@@ -614,7 +617,7 @@ const SellerProfilePageContent: React.FC<SellerProfilePageProps & { seller: User
                                     <div className="sp-avatar-inner">
                                         <img
                                             src={seller.logoUrl || `https://i.pravatar.cc/150?u=${seller.email}`}
-                                            alt={`${seller.dealershipName || seller.name} logo`}
+                                            alt={`${translatedNames.dealershipName || translatedNames.name} logo`}
                                             loading="lazy"
                                             decoding="async"
                                         />
@@ -630,7 +633,7 @@ const SellerProfilePageContent: React.FC<SellerProfilePageProps & { seller: User
 
                                 {/* Name */}
                                 <h1 className="sp-name mt-3 text-xl md:text-2xl font-black inline-flex items-center gap-2 flex-wrap justify-center">
-                                    <span>{seller.dealershipName || seller.name}</span>
+                                    <span data-no-translate>{translatedNames.dealershipName || translatedNames.name}</span>
                                     <VerifiedBadge show={showVerifiedBadgeOnProfile} size="sm" />
                                 </h1>
 
@@ -784,9 +787,9 @@ const SellerProfilePageContent: React.FC<SellerProfilePageProps & { seller: User
 
                                 {/* Bio */}
                                 {seller.bio && (
-                                    <div className="sp-bio mt-4 w-full text-left">
+                                    <div className="sp-bio mt-4 w-full text-left" data-no-translate>
                                         <span className="block text-[10px] font-black uppercase tracking-wider text-indigo-500 mb-1">About</span>
-                                        {seller.bio}
+                                        {translatedBio}
                                     </div>
                                 )}
 
@@ -853,10 +856,10 @@ const SellerProfilePageContent: React.FC<SellerProfilePageProps & { seller: User
                                         {filteredVehicles.length}
                                     </span>
                                 </h2>
-                                <p className="text-slate-500 text-[13px] mt-1">
+                                <p className="text-slate-500 text-[13px] mt-1" data-no-translate>
                                     {filteredVehicles.length === 0
                                         ? 'No vehicles match right now'
-                                        : `${filteredVehicles.length} ${filteredVehicles.length === 1 ? 'vehicle' : 'vehicles'} available from ${seller.dealershipName || seller.name}`}
+                                        : `${filteredVehicles.length} ${filteredVehicles.length === 1 ? 'vehicle' : 'vehicles'} available from ${translatedNames.dealershipName || translatedNames.name}`}
                                 </p>
                             </div>
 

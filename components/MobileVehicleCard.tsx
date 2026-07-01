@@ -4,6 +4,7 @@ import type { Vehicle } from '../types';
 import { getFirstValidImage, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder } from '../utils/imageUtils';
 import { showVerifiedListingBadge } from '../utils/listingTrust';
 import { ListingStockBadge } from './ListingStockBadge';
+import { useTranslatedFields, useTranslatedArray } from '../hooks/useTranslatedText';
 
 interface MobileVehicleCardProps {
   vehicle: Vehicle;
@@ -32,6 +33,12 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
   showActions = true
 }) => {
   const { t } = useTranslation();
+  const tf = useTranslatedFields({
+    fuelType: vehicle.fuelType,
+    transmission: vehicle.transmission,
+    location: vehicle.location,
+  });
+  const translatedFeatures = useTranslatedArray(vehicle.features);
   const TAP_SLOP_PX = 40;
   const suppressClickRef = useRef(false);
   const pointerStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
@@ -311,8 +318,8 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
 
         {/* Details Row */}
         <div className="flex items-center gap-3 mb-2 flex-wrap">
-          <span className="native-text-caption">
-            {vehicle.year} • {vehicle.fuelType}
+          <span className="native-text-caption" data-no-translate>
+            {vehicle.year} • {tf.fuelType}
           </span>
             {vehicle.mileage && (
             <span className="native-text-caption">
@@ -320,8 +327,8 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
             </span>
           )}
           {vehicle.transmission && (
-            <span className="native-text-caption">
-              • {vehicle.transmission}
+            <span className="native-text-caption" data-no-translate>
+              • {tf.transmission}
             </span>
           )}
         </div>
@@ -333,24 +340,25 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            <span className="native-text-caption">{vehicle.location}</span>
+            <span className="native-text-caption" data-no-translate>{tf.location}</span>
           </div>
         )}
 
         {/* Features Preview */}
-        {vehicle.features && vehicle.features.length > 0 && (
+        {translatedFeatures && translatedFeatures.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
-            {vehicle.features.slice(0, 3).map((feature, index) => (
+            {translatedFeatures.slice(0, 3).map((feature, index) => (
               <span
                 key={index}
                 className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs"
+                data-no-translate
               >
                 {feature}
               </span>
             ))}
-            {vehicle.features.length > 3 && (
+            {translatedFeatures.length > 3 && (
               <span className="text-gray-500 text-xs px-2 py-0.5">
-                {t('vehicle.moreFeaturesShort', { count: vehicle.features.length - 3 })}
+                {t('vehicle.moreFeaturesShort', { count: translatedFeatures.length - 3 })}
               </span>
             )}
           </div>

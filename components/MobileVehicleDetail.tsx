@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle, ProsAndCons, User, RatingEligibility } from '../types';
+import { useTranslatedText, useTranslatedArray, useTranslatedFields } from '../hooks/useTranslatedText';
 import { generateProsAndCons } from '../services/geminiService';
 import { getFirstValidImage, getValidImages, swapToPlaceholderOnError } from '../utils/imageUtils';
 import { MobileImageGallery } from './MobileImageGallery';
@@ -125,6 +126,18 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     inquiriesCount: enriched.inquiriesCount || 0
   };
   }, [vehicle, contextVehicles, users]);
+
+  const translatedDescription = useTranslatedText(safeVehicle.description);
+  const translatedFeatures = useTranslatedArray(safeVehicle.features as string[]);
+  const translatedFields = useTranslatedFields({
+    fuelType: safeVehicle.fuelType,
+    transmission: safeVehicle.transmission,
+    color: safeVehicle.color,
+    city: safeVehicle.city,
+    state: safeVehicle.state,
+    engine: safeVehicle.engine,
+    displacement: safeVehicle.displacement,
+  });
 
   const seller = useMemo(() => {
     if (!safeVehicle.sellerEmail) return undefined;
@@ -470,9 +483,9 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               <div className="flex items-center gap-3 text-sm text-gray-600 mb-2">
                 <span>{safeVehicle.mileage.toLocaleString()} km</span>
                 <span>•</span>
-                <span>{safeVehicle.fuelType}</span>
+                <span data-no-translate>{translatedFields.fuelType}</span>
                 <span>•</span>
-                <span>{safeVehicle.transmission}</span>
+                <span data-no-translate>{translatedFields.transmission}</span>
               </div>
               {/* Location */}
               {(safeVehicle.city || safeVehicle.location) && (
@@ -481,7 +494,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  <span>{safeVehicle.city || safeVehicle.location}{safeVehicle.state ? `, ${safeVehicle.state}` : ''}</span>
+                  <span data-no-translate>{translatedFields.city || safeVehicle.location}{translatedFields.state ? `, ${translatedFields.state}` : ''}</span>
                   {safeVehicle.city && <span className="text-gray-400">&gt;</span>}
                 </div>
               )}
@@ -693,7 +706,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
                       {t('vehicle.detail.descriptionLabel')}
                     </h3>
-                    <p className="text-gray-700 leading-relaxed">{safeVehicle.description}</p>
+                    <p className="text-gray-700 leading-relaxed" data-no-translate>{translatedDescription}</p>
                   </div>
                 )}
 
@@ -756,12 +769,12 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                     label={t('vehicle.spec.registrationYear')}
                     value={safeVehicle.registrationYear?.toString() || safeVehicle.year?.toString()}
                   />
-                  <SpecCard label={t('vehicle.fuel')} value={safeVehicle.fuelType} />
+                  <SpecCard label={t('vehicle.fuel')} value={translatedFields.fuelType} />
                   <SpecCard
                     label={t('vehicle.mileage')}
                     value={`${safeVehicle.mileage.toLocaleString()} km`}
                   />
-                  <SpecCard label={t('vehicle.transmission')} value={safeVehicle.transmission} />
+                  <SpecCard label={t('vehicle.transmission')} value={translatedFields.transmission} />
                   <SpecCard
                     label={t('vehicle.spec.ownersShort')}
                     value={safeVehicle.noOfOwners?.toString() || '1'}
@@ -780,10 +793,10 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                   <h3 className="text-base font-semibold text-gray-900 mb-3">
                     {t('vehicle.detail.includedFeatures')}
                   </h3>
-                  {safeVehicle.features.length > 0 ? (
+                  {translatedFeatures.length > 0 ? (
                     <div className="grid grid-cols-2 gap-3">
-                      {safeVehicle.features.map((feature, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-sm text-gray-700">
+                      {translatedFeatures.map((feature, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-sm text-gray-700" data-no-translate>
                           <svg className="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                           </svg>

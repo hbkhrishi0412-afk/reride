@@ -1,6 +1,7 @@
 import React, { useState, useMemo, memo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle, ProsAndCons, User, CertifiedInspection, VehicleDocument } from '../types';
+import { useTranslatedText, useTranslatedArray, useTranslatedFields } from '../hooks/useTranslatedText';
 import { generateProsAndCons } from '../services/geminiService';
 import { getFirstValidImage, getValidImages, getSafeImageSrc, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, VEHICLE_THUMB_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder, isPlaceholderService } from '../utils/imageUtils';
 import { stringifyVehicleForSession } from '../utils/vehicleSessionCache';
@@ -316,6 +317,18 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     mileage: typeof enriched.mileage === 'number' ? enriched.mileage : 0
   };
   }, [vehicle, contextVehicles, users]);
+
+  const translatedDescription = useTranslatedText(safeVehicle.description);
+  const translatedFeatures = useTranslatedArray(safeVehicle.features as string[]);
+  const translatedFields = useTranslatedFields({
+    fuelType: safeVehicle.fuelType,
+    transmission: safeVehicle.transmission,
+    color: safeVehicle.color,
+    city: safeVehicle.city,
+    state: safeVehicle.state,
+    engine: safeVehicle.engine,
+    displacement: safeVehicle.displacement,
+  });
 
   const [ratingEligibility, setRatingEligibility] = useState<RatingEligibility | null>(null);
   const [ratingDealId, setRatingDealId] = useState<string | undefined>();
@@ -745,9 +758,9 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                       {typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'} km
                     </span>
                     <span className="text-gray-300">•</span>
-                    <span>{safeVehicle.fuelType}</span>
+                    <span data-no-translate>{translatedFields.fuelType}</span>
                     <span className="text-gray-300">•</span>
-                    <span>{safeVehicle.transmission}</span>
+                    <span data-no-translate>{translatedFields.transmission}</span>
                     {safeVehicle.noOfOwners ? (
                       <>
                         <span className="text-gray-300">•</span>
@@ -764,7 +777,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
                       {safeVehicle.location ||
-                        `${safeVehicle.city || ''}, ${safeVehicle.state || ''}`.trim() ||
+                        `${translatedFields.city || ''}, ${translatedFields.state || ''}`.trim() ||
                         t('vehicle.detail.locationNotSpecified')}
                     </span>
                   </div>
@@ -1020,12 +1033,12 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                     label={t('vehicle.spec.registrationYear')}
                                     value={safeVehicle.registrationYear}
                                   />
-                                  <KeySpec label={t('vehicle.fuel')} value={safeVehicle.fuelType} />
+                                  <KeySpec label={t('vehicle.fuel')} value={translatedFields.fuelType} />
                                   <KeySpec
                                     label={t('vehicle.mileage')}
                                     value={typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'}
                                   />
-                                  <KeySpec label={t('vehicle.transmission')} value={safeVehicle.transmission} />
+                                  <KeySpec label={t('vehicle.transmission')} value={translatedFields.transmission} />
                                   <KeySpec label={t('vehicle.spec.ownersShort')} value={safeVehicle.noOfOwners} />
                                   <KeySpec label={t('vehicle.detail.specs.insurance')} value={(() => {
                                     const insurance = safeVehicle.insuranceValidity;
@@ -1050,7 +1063,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                     <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-2">
                                       {t('vehicle.detail.descriptionLabel')}
                                     </h4>
-                                    <p className="text-reride-text-dark dark:text-reride-text-dark whitespace-pre-line">{safeVehicle.description}</p>
+                                    <p className="text-reride-text-dark dark:text-reride-text-dark whitespace-pre-line" data-no-translate>{translatedDescription}</p>
                                   </div>
                                 )}
                               </div>
@@ -1159,14 +1172,14 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 {t('vehicle.detail.detailedSpecifications')}
                               </h3>
                               <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                                <SpecDetail label={t('compare.field.engine')} value={safeVehicle.engine} />
-                                <SpecDetail label={t('compare.field.displacement')} value={safeVehicle.displacement} />
-                                <SpecDetail label={t('vehicle.transmission')} value={safeVehicle.transmission} />
-                                <SpecDetail label={t('vehicle.fuel')} value={safeVehicle.fuelType} />
+                                <SpecDetail label={t('compare.field.engine')} value={translatedFields.engine} />
+                                <SpecDetail label={t('compare.field.displacement')} value={translatedFields.displacement} />
+                                <SpecDetail label={t('vehicle.transmission')} value={translatedFields.transmission} />
+                                <SpecDetail label={t('vehicle.fuel')} value={translatedFields.fuelType} />
                                 <SpecDetail label={t('vehicle.detail.mileageLabel')} value={safeVehicle.fuelEfficiency} />
                                 <SpecDetail label={t('vehicle.detail.specs.groundClearance')} value={safeVehicle.groundClearance} />
                                 <SpecDetail label={t('vehicle.detail.specs.bootSpace')} value={safeVehicle.bootSpace} />
-                                <SpecDetail label={t('compare.field.color')} value={safeVehicle.color} />
+                                <SpecDetail label={t('compare.field.color')} value={translatedFields.color} />
                               </dl>
                             </div>
 
@@ -1176,10 +1189,10 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
                                   {t('vehicle.detail.includedFeatures')}
                                 </h4>
-                                {safeVehicle.features.length > 0 ? (
+                                {translatedFeatures.length > 0 ? (
                                   <div className="flex flex-wrap gap-3">
-                                    {safeVehicle.features.map(feature => (
-                                      <div key={feature} className="flex items-center gap-2 text-reride-text-dark dark:text-reride-text-dark bg-reride-off-white dark:bg-brand-gray-700 px-3 py-1 rounded-full text-sm">
+                                    {translatedFeatures.map((feature, idx) => (
+                                      <div key={safeVehicle.features[idx] || idx} className="flex items-center gap-2 text-reride-text-dark dark:text-reride-text-dark bg-reride-off-white dark:bg-brand-gray-700 px-3 py-1 rounded-full text-sm" data-no-translate>
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-reride-orange" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                                         {feature}
                                       </div>

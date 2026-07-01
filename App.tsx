@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useSearchParams, useNavigate as useRouterNavigate } from 'react-router-dom';
 import { AppProvider, useApp } from './components/AppProvider';
 import ErrorBoundary from './components/ErrorBoundary';
+import TranslationProvider from './components/TranslationProvider';
 import PageTransition from './components/PageTransition';
 import SEO from './components/SEO';
 import CookieConsentBanner from './components/CookieConsentBanner';
@@ -2201,8 +2202,10 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <AppProvider>
-        <AppContent />
-        <CookieConsentBanner />
+        <TranslationProvider>
+          <AppContent />
+          <CookieConsentBanner />
+        </TranslationProvider>
       </AppProvider>
     </ErrorBoundary>
   );

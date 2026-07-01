@@ -4,6 +4,7 @@ import type { Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
 import LazyImage from './LazyImage';
 import StarRating from './StarRating';
+import { useTranslatedFields } from '../hooks/useTranslatedText';
 
 interface VehicleTileProps {
   vehicle: Vehicle;
@@ -18,9 +19,15 @@ interface VehicleTileProps {
 
 const VehicleTile: React.FC<VehicleTileProps> = ({ vehicle, onSelect, onToggleCompare, isSelectedForCompare, onToggleWishlist, isInWishlist, isCompareDisabled, onViewSellerProfile }) => {
   const { t } = useTranslation();
+  const tf = useTranslatedFields({
+    fuelType: vehicle.fuelType,
+    transmission: vehicle.transmission,
+    city: vehicle.city,
+    location: vehicle.location,
+  });
   const hubPlace = useMemo(
-    () => vehicle.location || vehicle.city || t('common.notAvailable'),
-    [vehicle.location, vehicle.city, t]
+    () => tf.location || tf.city || t('common.notAvailable'),
+    [tf.location, tf.city, t]
   );
 
   const handleCompareClick = (e: React.MouseEvent) => {
@@ -65,8 +72,8 @@ const VehicleTile: React.FC<VehicleTileProps> = ({ vehicle, onSelect, onToggleCo
             <span>
               {t('vehicle.card.mileageCompact', { km: Math.round(vehicle.mileage / 1000) })}
             </span>
-            <span>{vehicle.fuelType}</span>
-            <span>{vehicle.transmission || t('common.manual')}</span>
+            <span data-no-translate>{tf.fuelType}</span>
+            <span data-no-translate>{tf.transmission || t('common.manual')}</span>
           </div>
           {/* Second Line: Location, RTO */}
           <div className="grid grid-cols-2 gap-x-4">

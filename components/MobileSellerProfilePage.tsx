@@ -9,6 +9,7 @@ import { followSeller, unfollowSeller, isFollowingSeller, getFollowersCount, get
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 import { useApp } from './AppProvider';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
+import { useTranslatedText, useTranslatedFields } from '../hooks/useTranslatedText';
 
 interface MobileSellerProfilePageProps {
   seller: User | null;
@@ -372,6 +373,8 @@ const MobileSellerProfilePageContent: React.FC<MobileSellerProfilePageProps & { 
   onRequireLogin,
 }) => {
   const { comparisonCategory } = useApp();
+  const translatedBio = useTranslatedText(seller.bio);
+  const translatedNames = useTranslatedFields({ dealershipName: seller.dealershipName, name: seller.name });
   const [searchQuery, setSearchQuery] = useState('');
   let storedUser: User | null = null;
   try {
@@ -482,7 +485,7 @@ const MobileSellerProfilePageContent: React.FC<MobileSellerProfilePageProps & { 
             <div className="msp-avatar-inner">
               <img
                 src={seller.logoUrl || `https://i.pravatar.cc/150?u=${seller.email}`}
-                alt={`${seller.dealershipName || seller.name} logo`}
+                alt={`${translatedNames.dealershipName || translatedNames.name} logo`}
                 loading="lazy" decoding="async"
               />
             </div>
@@ -496,7 +499,7 @@ const MobileSellerProfilePageContent: React.FC<MobileSellerProfilePageProps & { 
           </div>
 
           <h1 className="msp-name mt-3 text-xl font-black inline-flex items-center gap-1.5 flex-wrap justify-center">
-            <span className="truncate max-w-[280px]">{seller.dealershipName || seller.name}</span>
+            <span className="truncate max-w-[280px]" data-no-translate>{translatedNames.dealershipName || translatedNames.name}</span>
             <VerifiedBadge show={showVerifiedBadgeOnProfile} size="sm" />
           </h1>
 
@@ -628,9 +631,9 @@ const MobileSellerProfilePageContent: React.FC<MobileSellerProfilePageProps & { 
 
           {/* Bio */}
           {seller.bio && (
-            <div className="msp-bio mt-4 w-full text-left">
+            <div className="msp-bio mt-4 w-full text-left" data-no-translate>
               <span className="block text-[10px] font-black uppercase tracking-wider text-indigo-500 mb-1">About</span>
-              {seller.bio}
+              {translatedBio}
             </div>
           )}
 
@@ -675,7 +678,7 @@ const MobileSellerProfilePageContent: React.FC<MobileSellerProfilePageProps & { 
                   href={callHref}
                   className="msp-btn-ghost rounded-xl px-4 py-3 font-bold text-sm inline-flex items-center justify-center gap-1.5"
                   style={{ minWidth: 110 }}
-                  aria-label={`Call ${seller.dealershipName || seller.name}`}
+                  aria-label={`Call ${translatedNames.dealershipName || translatedNames.name}`}
                 >
                   <svg className="w-4 h-4 text-slate-600" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />

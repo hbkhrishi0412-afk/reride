@@ -66,10 +66,14 @@ const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({
     return () => document.removeEventListener('touchstart', onDoc);
   }, []);
 
-  const select = (code: AppLanguageCode) => {
-    void i18n.changeLanguage(code);
+  const select = async (code: AppLanguageCode) => {
     setOpen(false);
     setCompactMenuRect(null);
+    try {
+      await i18n.changeLanguage(code);
+    } catch {
+      // fallback — best effort
+    }
     onSelect?.();
   };
 
