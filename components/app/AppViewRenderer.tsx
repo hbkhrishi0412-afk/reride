@@ -5,7 +5,7 @@ import { View as ViewEnum, Vehicle, User, Notification, Conversation, Subscripti
 import { useApp } from '../AppProvider';
 import useIsMobileApp from '../../hooks/useIsMobileApp';
 import { enrichVehiclesWithSellerInfo } from '../../utils/vehicleEnrichment';
-import { matchesCity } from '../../utils/cityMapping';
+import { matchesLocation } from '../../utils/cityMapping';
 import { buildVehicleMutationBody } from '../../utils/vehicleIdentity';
 import { addSellerListing, addSellerListingsBulk } from '../../utils/sellerAddListing.js';
 import { authenticatedFetch } from '../../utils/authenticatedFetch';
@@ -397,7 +397,7 @@ switch (currentView) {
       // Exclude rental vehicles from buy/sale listings
       const isNotRental = v.listingType !== 'rental' || v.listingType === undefined;
       // Apply city filter only if a city is explicitly selected (using city mapping for accurate matching)
-      const matchesCityFilter = matchesCity(v.city, cityFilter);
+      const matchesCityFilter = matchesLocation(v.city, v.state, cityFilter);
       
       return isBuyable && isNotRental && matchesCityFilter;
     });

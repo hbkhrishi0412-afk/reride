@@ -54,8 +54,14 @@ const TranslationProvider: React.FC<TranslationProviderProps> = ({ children }) =
   }, []);
 
   useEffect(() => {
-    i18n.on('languageChanged', onLanguageChanged);
-    return () => { i18n.off('languageChanged', onLanguageChanged); };
+    const handler = (lng: string) => {
+      onLanguageChanged(lng);
+      setTimeout(forceRescan, 80);
+      setTimeout(forceRescan, 300);
+      setTimeout(forceRescan, 900);
+    };
+    i18n.on('languageChanged', handler);
+    return () => { i18n.off('languageChanged', handler); };
   }, [i18n, onLanguageChanged]);
 
   useEffect(() => {

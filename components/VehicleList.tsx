@@ -21,6 +21,7 @@ import CompareListBanner from './CompareListBanner.js';
 import { saveSearch as saveBuyerSearch } from '../services/buyerService.js';
 import { getVehicleData } from '../services/vehicleDataService.js';
 import { logInfo, logError } from '../utils/logger.js';
+import { matchesLocation } from '../utils/cityMapping.js';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import { analyzeVehiclePricing, findSimilarVehicles } from '../utils/vehiclePricing.js';
 import type { BuyerVisibleDealLabel } from '../utils/vehiclePricing.js';
@@ -292,7 +293,9 @@ function matchesVehicleFilters(vehicle: Vehicle, snap: VehicleListFilterSnapshot
     if (snap.yearBounds.max != null && vehicle.year > snap.yearBounds.max) return false;
   }
   const cityScopeActive = Boolean(snap.selectedCity?.trim());
-  if (snap.stateFilter && snap.stateFilter.trim() !== '' && snap.isStateFilterUserSet && !cityScopeActive) {
+  if (cityScopeActive) {
+    if (!matchesLocation(vehicle.city, vehicle.state, snap.selectedCity)) return false;
+  } else if (snap.stateFilter && snap.stateFilter.trim() !== '' && snap.isStateFilterUserSet) {
     if (vehicle.state?.trim() !== snap.stateFilter.trim()) return false;
   }
   if (snap.transmissionFilter && snap.transmissionFilter.trim() !== '') {

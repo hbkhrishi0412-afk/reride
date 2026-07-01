@@ -47,6 +47,8 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
     const [liveResults, setLiveResults] = useState<LocationSearchResult[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [selectedLiveResult, setSelectedLiveResult] = useState<LocationSearchResult | null>(null);
+    /** State whose city sub-list is expanded (independent of city vs state-only selection). */
+    const [expandedDistrict, setExpandedDistrict] = useState('');
     const detectingInFlightRef = useRef(false);
     const detectGenerationRef = useRef(0);
     const userEditedRef = useRef(false);
@@ -116,6 +118,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             setLiveResults([]);
             setSelectedLiveResult(null);
             setIsSearching(false);
+            setExpandedDistrict('');
             if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
             if (searchAbortRef.current) searchAbortRef.current.abort();
         }
@@ -158,6 +161,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             setSelectedDistrict('');
             setSelectedCity('');
             setSearchTerm('');
+            setExpandedDistrict('');
             return;
         }
         if (/^all of india$/i.test(loc)) {
@@ -165,6 +169,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             setSelectedDistrict('');
             setSelectedCity('');
             setSearchTerm('');
+            setExpandedDistrict('');
             return;
         }
 
@@ -174,6 +179,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             setSelectedDistrict(stateExact.code);
             setSelectedCity('');
             setSearchTerm('');
+            setExpandedDistrict(stateExact.code);
             return;
         }
 
@@ -191,6 +197,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             setSelectedCity(cityHit.city);
             setSelectedDistrict(cityHit.stateCode);
             setSearchTerm('');
+            setExpandedDistrict(cityHit.stateCode);
             return;
         }
 
@@ -201,6 +208,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                 setSelectedCity(row.city);
                 setSelectedDistrict(row.stateCode);
                 setSearchTerm('');
+                setExpandedDistrict(row.stateCode);
                 return;
             }
         }
@@ -209,14 +217,26 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         setSelectedCity(locPrimary);
         setSelectedDistrict('');
         setSearchTerm('');
+        setExpandedDistrict('');
     }, [isOpen, currentLocation, indianStates, allCities]);
+
+    // When a state is expanded, city search / browse is limited to that state.
+    const scopedCityPool = useMemo(() => {
+        if (selectedDistrict) {
+            return (citiesByState[selectedDistrict] || []).map((city) => ({
+                city,
+                stateCode: selectedDistrict,
+            }));
+        }
+        return allCities;
+    }, [selectedDistrict, allCities, citiesByState]);
 
     // Filter cities: match canonical name, display alias (e.g. Bangalore ↔ Bengaluru), or state name
     const filteredCities = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
         if (!term) {
             if (selectedOption === 'district' && selectedDistrict) {
-                return citiesByState[selectedDistrict]?.map((city) => ({ city, stateCode: selectedDistrict })) || [];
+                return scopedCityPool;
             }
             return [];
         }
@@ -225,12 +245,14 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             const disp = getDisplayNameForCity(city).toLowerCase();
             return c.includes(term) || disp.includes(term);
         };
-        const fromCities = allCities.filter(({ city }) => cityMatchesSearch(city));
+        const fromCities = scopedCityPool.filter(({ city }) => cityMatchesSearch(city));
         const fromStates: Array<{ city: string; stateCode: string }> = [];
-        for (const s of indianStates) {
-            if (s.name.toLowerCase().includes(term)) {
-                for (const city of citiesByState[s.code] || []) {
-                    fromStates.push({ city, stateCode: s.code });
+        if (!selectedDistrict) {
+            for (const s of indianStates) {
+                if (s.name.toLowerCase().includes(term)) {
+                    for (const city of citiesByState[s.code] || []) {
+                        fromStates.push({ city, stateCode: s.code });
+                    }
                 }
             }
         }
@@ -253,7 +275,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         };
         merged.sort((a, b) => rank(a) - rank(b));
         return merged.slice(0, 200);
-    }, [searchTerm, allCities, selectedDistrict, selectedOption, citiesByState, indianStates]);
+    }, [searchTerm, scopedCityPool, selectedDistrict, selectedOption, citiesByState, indianStates]);
 
     // All states & UTs (A–Z) for pan-India browsing; search still narrows cities quickly
     const browseStates = useMemo(
@@ -367,6 +389,91 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         })();
     };
     
+    const handleCitySelect = (cityName: string, stateCode: string, applyNow = false) => {
+        markUserEdited();
+        setSelectedOption('city');
+        setSelectedCity(cityName);
+        setSelectedDistrict(stateCode);
+        setExpandedDistrict(stateCode);
+        setSelectedLiveResult(null);
+        setSearchTerm('');
+        setLiveResults([]);
+
+        if (applyNow) {
+            const label = formatCityAndState(cityName, stateCode, indianStates);
+            onLocationChange(label);
+            addToast(t('locationModal.toast.setTo', { place: label }), 'success');
+            onClose();
+        }
+    };
+
+    /** Resolve city + state from search text when user typed but did not tap a row. */
+    const resolveCityFromSearchTerm = (term: string): { city: string; stateCode: string } | null => {
+        const tl = term.trim().toLowerCase();
+        if (!tl) return null;
+
+        const pool = selectedDistrict
+            ? (citiesByState[selectedDistrict] || []).map((city) => ({ city, stateCode: selectedDistrict }))
+            : allCities;
+
+        const exact = pool.filter(({ city: c }) => c.toLowerCase() === tl);
+        if (exact.length === 1) {
+            return { city: exact[0].city, stateCode: exact[0].stateCode };
+        }
+
+        const byDisplay = pool.filter(
+            ({ city: c }) => getDisplayNameForCity(c).toLowerCase() === tl,
+        );
+        if (byDisplay.length === 1) {
+            return { city: byDisplay[0].city, stateCode: byDisplay[0].stateCode };
+        }
+
+        const starts = pool.filter(({ city: c }) => c.toLowerCase().startsWith(tl));
+        if (starts.length === 1) {
+            return { city: starts[0].city, stateCode: starts[0].stateCode };
+        }
+
+        const dispStarts = pool.filter(({ city: c }) =>
+            getDisplayNameForCity(c).toLowerCase().startsWith(tl),
+        );
+        if (dispStarts.length === 1) {
+            return { city: dispStarts[0].city, stateCode: dispStarts[0].stateCode };
+        }
+
+        return null;
+    };
+
+    const resolveManualLocationLabel = (): string | null => {
+        if (selectedLiveResult) {
+            const lr = selectedLiveResult;
+            return lr.city && lr.state
+                ? `${lr.city}, ${lr.state}`
+                : lr.city || lr.displayName.split(',').slice(0, 2).join(',').trim();
+        }
+
+        let city = selectedCity;
+        let stateCode = selectedDistrict;
+
+        if (!city) {
+            const fromSearch = resolveCityFromSearchTerm(searchTerm);
+            if (fromSearch) {
+                city = fromSearch.city;
+                stateCode = fromSearch.stateCode;
+            }
+        }
+
+        if (city) {
+            const sc = stateCode || allCities.find((c) => c.city === city)?.stateCode;
+            return sc ? formatCityAndState(city, sc, indianStates) : getDisplayNameForCity(city);
+        }
+
+        if (selectedOption === 'district' && selectedDistrict) {
+            return indianStates.find((s) => s.code === selectedDistrict)?.name || selectedDistrict;
+        }
+
+        return null;
+    };
+    
     const handleSave = () => {
         if (selectedOption === 'detect') {
             handleDetectLocation();
@@ -380,81 +487,29 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             return;
         }
 
-        if (selectedOption === 'district' && selectedDistrict) {
-            const stateName = indianStates.find(s => s.code === selectedDistrict)?.name || selectedDistrict;
-            onLocationChange(stateName);
-            addToast(t('locationModal.toast.setTo', { place: stateName }), 'success');
-            onClose();
-            return;
-        }
-
-        // Live search result selected
-        if (selectedLiveResult) {
-            const lr = selectedLiveResult;
-            const label = lr.city && lr.state
-                ? `${lr.city}, ${lr.state}`
-                : lr.city || lr.displayName.split(',').slice(0, 2).join(',').trim();
+        const label = resolveManualLocationLabel();
+        if (label) {
             onLocationChange(label);
             addToast(t('locationModal.toast.setTo', { place: label }), 'success');
             onClose();
             return;
         }
 
-        if (selectedOption === 'city') {
-            let city = selectedCity;
-            let stateCode = selectedDistrict;
-            const term = searchTerm.trim();
-            if (!city && term) {
-                const tl = term.toLowerCase();
-                const exact = allCities.filter(({ city: c }) => c.toLowerCase() === tl);
-                if (exact.length === 1) {
-                    city = exact[0].city;
-                    stateCode = exact[0].stateCode;
-                } else {
-                    const byDisplay = allCities.filter(
-                        ({ city: c }) => getDisplayNameForCity(c).toLowerCase() === tl
-                    );
-                    if (byDisplay.length === 1) {
-                        city = byDisplay[0].city;
-                        stateCode = byDisplay[0].stateCode;
-                    } else {
-                        const starts = allCities.filter(({ city: c }) => c.toLowerCase().startsWith(tl));
-                        if (starts.length === 1) {
-                            city = starts[0].city;
-                            stateCode = starts[0].stateCode;
-                        } else {
-                            const dispStarts = allCities.filter(({ city: c }) =>
-                                getDisplayNameForCity(c).toLowerCase().startsWith(tl)
-                            );
-                            if (dispStarts.length === 1) {
-                                city = dispStarts[0].city;
-                                stateCode = dispStarts[0].stateCode;
-                            }
-                        }
-                    }
-                }
-            }
-            if (city) {
-                const sc = stateCode || allCities.find((c) => c.city === city)?.stateCode;
-                const label = sc ? formatCityAndState(city, sc, indianStates) : getDisplayNameForCity(city);
-                onLocationChange(label);
-                addToast(t('locationModal.toast.setTo', { place: label }), 'success');
-                onClose();
-                return;
-            }
-        }
-
         addToast(t('locationModal.selectPrompt'), 'info');
     };
 
-    const handleCitySelect = (cityName: string, stateCode: string) => {
-        markUserEdited();
-        setSelectedOption('city');
-        setSelectedCity(cityName);
-        setSelectedDistrict(stateCode);
-        setSelectedLiveResult(null);
-        setSearchTerm('');
-    };
+    const isStateRowActive = (stateCode: string) =>
+        selectedDistrict === stateCode &&
+        (selectedOption === 'district' || selectedOption === 'city');
+
+    const isCityRowSelected = (city: string, stateCode: string) =>
+        selectedOption === 'city' && selectedCity === city && selectedDistrict === stateCode;
+
+    const pendingSelectionLabel = useMemo(
+        () => resolveManualLocationLabel(),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- resolveManualLocationLabel reads selection state
+        [selectedOption, selectedCity, selectedDistrict, selectedLiveResult, searchTerm, indianStates],
+    );
 
     const handleLiveResultSelect = (result: LocationSearchResult) => {
         markUserEdited();
@@ -617,7 +672,13 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                         </div>
 
                         {/* All of India */}
-                        <label className="flex items-center gap-3 p-3 rounded-md hover:bg-gray-50 cursor-pointer">
+                        <label
+                            className={`flex items-center gap-3 p-3 rounded-md cursor-pointer transition-colors ${
+                                selectedOption === 'all'
+                                    ? 'bg-blue-50 ring-1 ring-inset ring-blue-200'
+                                    : 'hover:bg-gray-50'
+                            }`}
+                        >
                             <input
                                 type="radio"
                                 name="location"
@@ -626,10 +687,15 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                 onChange={() => {
                                     markUserEdited();
                                     setSelectedOption('all');
+                                    setExpandedDistrict('');
+                                    setSelectedDistrict('');
+                                    setSelectedCity('');
                                 }}
-                                className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                                className="w-4 h-4 text-blue-600 focus:ring-blue-500 accent-blue-600"
                             />
-                            <span className="text-sm text-gray-900">{t('locationModal.allIndia')}</span>
+                            <span className={`text-sm ${selectedOption === 'all' ? 'font-semibold text-blue-900' : 'text-gray-900'}`}>
+                                {t('locationModal.allIndia')}
+                            </span>
                         </label>
 
                         {/* Tier-1 quick picks (major cities only). Full search/states stay available below. */}
@@ -643,10 +709,10 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                         <button
                                             key={`${displayName}-${stateCode}`}
                                             type="button"
-                                            onClick={() => handleCitySelect(city, stateCode)}
+                                            onClick={() => handleCitySelect(city, stateCode, false)}
                                             className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                                                selectedOption === 'city' && selectedCity === city
-                                                    ? 'border-blue-600 bg-blue-50 text-blue-700'
+                                                isCityRowSelected(city, stateCode)
+                                                    ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
                                                     : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
                                             }`}
                                         >
@@ -660,7 +726,13 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                         {/* District Options */}
                         {browseStates.map((district) => (
                             <div key={district.code}>
-                                <label className="flex items-center gap-3 p-3 rounded-md hover:bg-gray-50 cursor-pointer">
+                                <label
+                                    className={`flex items-center gap-3 p-3 rounded-md cursor-pointer transition-colors ${
+                                        isStateRowActive(district.code)
+                                            ? 'bg-blue-50 ring-1 ring-inset ring-blue-200'
+                                            : 'hover:bg-gray-50'
+                                    }`}
+                                >
                                     <input
                                         type="radio"
                                         name="location"
@@ -670,43 +742,50 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                             markUserEdited();
                                             setSelectedOption('district');
                                             setSelectedDistrict(district.code);
+                                            setSelectedCity('');
+                                            setSelectedLiveResult(null);
+                                            setExpandedDistrict(district.code);
                                         }}
-                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 accent-blue-600"
                                     />
-                                    <span className="text-sm text-gray-900">{district.name}</span>
+                                    <span className={`text-sm ${isStateRowActive(district.code) ? 'font-semibold text-blue-900' : 'text-gray-900'}`}>
+                                        {district.name}
+                                    </span>
                                 </label>
 
-                                {/* District Cities List */}
-                                {selectedOption === 'district' && selectedDistrict === district.code && districtCities.length > 0 && (
+                                {/* District Cities List — stays open while picking a city */}
+                                {expandedDistrict === district.code && districtCities.length > 0 && (
                                     <div className="ml-7 mt-1 max-h-60 overflow-y-auto space-y-1">
                                         {districtCities.map((city) => (
-                                            <label
+                                            <button
                                                 key={city}
-                                                className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
-                                                onClick={() => {
-                                                    markUserEdited();
-                                                    setSelectedOption('city');
-                                                    setSelectedCity(city);
-                                                    setSelectedDistrict(district.code);
-                                                }}
+                                                type="button"
+                                                onClick={() => handleCitySelect(city, district.code, false)}
+                                                className={`flex w-full items-center gap-3 p-2 rounded-md text-left transition-colors touch-manipulation ${
+                                                    isCityRowSelected(city, district.code)
+                                                        ? 'bg-blue-100 ring-2 ring-blue-500 shadow-sm'
+                                                        : 'hover:bg-gray-50 active:bg-gray-100'
+                                                }`}
                                             >
-                                                <input
-                                                    type="radio"
-                                                    name="location-city"
-                                                    checked={selectedCity === city}
-                                                    onChange={() => {
-                                                        markUserEdited();
-                                                        setSelectedOption('city');
-                                                        setSelectedCity(city);
-                                                        setSelectedDistrict(district.code);
-                                                    }}
-                                                    className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                                                />
-                                                <span className="text-sm text-gray-700">
+                                                <span
+                                                    className={`w-4 h-4 shrink-0 rounded-full border-2 flex items-center justify-center ${
+                                                        isCityRowSelected(city, district.code)
+                                                            ? 'border-blue-600 bg-blue-600'
+                                                            : 'border-gray-300 bg-white'
+                                                    }`}
+                                                    aria-hidden
+                                                >
+                                                    {isCityRowSelected(city, district.code) ? (
+                                                        <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                        </svg>
+                                                    ) : null}
+                                                </span>
+                                                <span className={`text-sm ${isCityRowSelected(city, district.code) ? 'font-semibold text-blue-900' : 'text-gray-700'}`}>
                                                     {getDisplayNameForCity(city)}
                                                     <span className="text-gray-500"> — {district.name}</span>
                                                 </span>
-                                            </label>
+                                            </button>
                                         ))}
                                     </div>
                                 )}
@@ -720,20 +799,32 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                     const stateName = indianStates.find((s) => s.code === stateCode)?.name || stateCode;
                                     const line = `${getDisplayNameForCity(city)} — ${stateName}`;
                                     return (
-                                        <label
+                                        <button
                                             key={`${city}-${stateCode}`}
-                                            className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
-                                            onClick={() => handleCitySelect(city, stateCode)}
+                                            type="button"
+                                            onClick={() => handleCitySelect(city, stateCode, false)}
+                                            className={`flex w-full items-center gap-3 p-2 rounded-md text-left transition-colors touch-manipulation ${
+                                                isCityRowSelected(city, stateCode)
+                                                    ? 'bg-blue-100 ring-2 ring-blue-500 shadow-sm'
+                                                    : 'hover:bg-gray-50 active:bg-gray-100'
+                                            }`}
                                         >
-                                            <input
-                                                type="radio"
-                                                name="location-city"
-                                                checked={selectedOption === 'city' && selectedCity === city}
-                                                onChange={() => handleCitySelect(city, stateCode)}
-                                                className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                                            />
-                                            <span className="text-sm text-gray-700">{line}</span>
-                                        </label>
+                                            <span
+                                                className={`w-4 h-4 shrink-0 rounded-full border-2 flex items-center justify-center ${
+                                                    isCityRowSelected(city, stateCode)
+                                                        ? 'border-blue-600 bg-blue-600'
+                                                        : 'border-gray-300 bg-white'
+                                                }`}
+                                                aria-hidden
+                                            >
+                                                {isCityRowSelected(city, stateCode) ? (
+                                                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                    </svg>
+                                                ) : null}
+                                            </span>
+                                            <span className={`text-sm ${isCityRowSelected(city, stateCode) ? 'font-semibold text-blue-900' : 'text-gray-700'}`}>{line}</span>
+                                        </button>
                                     );
                                 })}
                             </div>
@@ -809,6 +900,13 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     </div>
 
                 {/* Footer Buttons */}
+                {pendingSelectionLabel && (
+                    <div className="px-6 py-2.5 border-t border-blue-100 bg-blue-50 flex-shrink-0">
+                        <p className="text-sm text-blue-900">
+                            <span className="font-semibold">{t('locationModal.selectedPreview', { place: pendingSelectionLabel })}</span>
+                        </p>
+                    </div>
+                )}
                 <div 
                     className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 flex-shrink-0"
                     style={{ minHeight: '68px' }}

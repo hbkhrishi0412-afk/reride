@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
 import { fetchServices, getServicePricing, fallbackPricing } from '../services/servicePricingService';
 import { supportTelHref } from '../utils/whatsappShare.js';
+import AutoT from './AutoT';
+import { useAutoT } from '../hooks/useAutoT';
+import { useTranslatedText, useTranslatedArray } from '../hooks/useTranslatedText';
 
 interface ServiceDetailProps {
   onNavigate?: (view: ViewEnum) => void;
@@ -204,9 +207,15 @@ const serviceDefinitions: Record<string, Omit<Service, 'icon'>> = {
 
 const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => {
   const supportTel = supportTelHref();
+  const loadingText = useAutoT('serviceDetail.loading');
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [servicePricingData, setServicePricingData] = useState<Record<string, Service['pricing']>>({});
   const [, setLoadingPricing] = useState(true);
+
+  const translatedTitle = useTranslatedText(selectedService?.title);
+  const translatedDescription = useTranslatedText(selectedService?.description);
+  const translatedBenefits = useTranslatedText(selectedService?.benefits);
+  const translatedServices = useTranslatedArray(selectedService?.services ?? []);
 
   // Fetch services pricing from Supabase
   useEffect(() => {
@@ -341,7 +350,7 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading service details...</p>
+          <p className="text-gray-600 dark:text-gray-400" data-no-translate>{loadingText}</p>
         </div>
       </div>
     );
@@ -363,7 +372,7 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          <span className="font-semibold text-sm sm:text-base">Back to Services</span>
+          <span className="font-semibold text-sm sm:text-base"><AutoT i18nKey="serviceDetail.back" /></span>
         </button>
       </div>
 
@@ -375,8 +384,8 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
               {selectedService.icon}
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-2xl sm:text-4xl md:text-5xl font-black mb-2 break-words">{selectedService.title}</h1>
-              <p className="text-base sm:text-xl text-white/90 max-w-3xl break-words">{selectedService.description}</p>
+              <h1 className="text-2xl sm:text-4xl md:text-5xl font-black mb-2 break-words" data-no-translate>{translatedTitle}</h1>
+              <p className="text-base sm:text-xl text-white/90 max-w-3xl break-words" data-no-translate>{translatedDescription}</p>
             </div>
           </div>
         </div>
@@ -390,18 +399,18 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
             {/* Services Included */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 sm:p-8 shadow-lg border border-gray-200 dark:border-gray-700">
               <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white mb-4 sm:mb-6">
-                Services Included
+                <AutoT i18nKey="serviceDetail.included.title" />
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                {selectedService.services.map((service, index) => (
+                {translatedServices.map((service, index) => (
                   <div
                     key={index}
                     className="flex w-full items-start gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-3"
                   >
                     <div className="flex-1 flex items-center justify-between gap-2">
-                      <span className="text-gray-700 dark:text-gray-300 font-medium">{service}</span>
+                      <span className="text-gray-700 dark:text-gray-300 font-medium" data-no-translate>{service}</span>
                       <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
-                        At checkout
+                        <AutoT i18nKey="serviceDetail.included.atCheckout" />
                       </span>
                     </div>
                   </div>
@@ -412,17 +421,17 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
             {/* Benefits */}
             <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl p-4 sm:p-8 shadow-lg border border-gray-200 dark:border-gray-700">
               <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white mb-3 sm:mb-4">
-                Why Choose This Service?
+                <AutoT i18nKey="serviceDetail.why.title" />
               </h2>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-base sm:text-lg">
-                {selectedService.benefits}
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-base sm:text-lg" data-no-translate>
+                {translatedBenefits}
               </p>
             </div>
 
             {/* Service Quality Features */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 sm:p-8 shadow-lg border border-gray-200 dark:border-gray-700">
               <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white mb-4 sm:mb-6">
-                Service Quality Assured
+                <AutoT i18nKey="serviceDetail.quality.title" />
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 <div className="flex items-start gap-3">
@@ -430,8 +439,8 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
                   <div>
-                    <p className="font-bold text-gray-900 dark:text-white">OEM Parts Only</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Only OEM or brand-authorised parts used</p>
+                    <p className="font-bold text-gray-900 dark:text-white"><AutoT i18nKey="serviceDetail.quality.oem.title" /></p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400"><AutoT i18nKey="serviceDetail.quality.oem.desc" /></p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -439,8 +448,8 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <div>
-                    <p className="font-bold text-gray-900 dark:text-white">3-Month Warranty</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Service warranty on parts & workmanship</p>
+                    <p className="font-bold text-gray-900 dark:text-white"><AutoT i18nKey="serviceDetail.quality.warranty.title" /></p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400"><AutoT i18nKey="serviceDetail.quality.warranty.desc" /></p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -448,8 +457,8 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <div>
-                    <p className="font-bold text-gray-900 dark:text-white">Real-Time Updates</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Track your service progress live</p>
+                    <p className="font-bold text-gray-900 dark:text-white"><AutoT i18nKey="serviceDetail.quality.updates.title" /></p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400"><AutoT i18nKey="serviceDetail.quality.updates.desc" /></p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -457,8 +466,8 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   <div>
-                    <p className="font-bold text-gray-900 dark:text-white">Pre & Post Photos</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Complete documentation of service</p>
+                    <p className="font-bold text-gray-900 dark:text-white"><AutoT i18nKey="serviceDetail.quality.photos.title" /></p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400"><AutoT i18nKey="serviceDetail.quality.photos.desc" /></p>
                   </div>
                 </div>
               </div>
@@ -469,32 +478,31 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
           <div className="lg:col-span-1 order-first lg:order-last">
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 sm:p-8 shadow-xl border-2 border-gray-200 dark:border-gray-700 lg:sticky lg:top-8">
               <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white mb-4 sm:mb-6">
-                Pricing & Booking
+                <AutoT i18nKey="serviceDetail.pricing.title" />
               </h2>
 
               {/* Pricing Display */}
               <div className="mb-6">
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Final price</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2"><AutoT i18nKey="serviceDetail.pricing.finalLabel" /></p>
                   <p className="text-2xl sm:text-3xl font-black text-blue-600 dark:text-blue-400 mb-3">
-                    Price confirmed at checkout
+                    <AutoT i18nKey="serviceDetail.pricing.confirmed" />
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    We'll match you with a nearby verified service provider based on your location.
-                    Final pricing may vary by provider, vehicle model, and pickup/drop preference.
+                    <AutoT i18nKey="serviceDetail.pricing.body" as="span" />
                   </p>
                   {estimatedPriceRange && (
                     <div className="mt-4 rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-900/20 p-3">
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
-                          Typical range
+                          <AutoT i18nKey="serviceDetail.pricing.typicalRange" />
                         </span>
-                        <span className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                        <span className="text-sm font-bold text-blue-900 dark:text-blue-100" data-no-translate>
                           {estimatedPriceRange}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-blue-700/80 dark:text-blue-200/80">
-                        Estimated range only. Final price is shown before payment.
+                        <AutoT i18nKey="serviceDetail.pricing.rangeHint" as="span" />
                       </p>
                     </div>
                   )}
@@ -503,36 +511,20 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
 
               {/* Features */}
               <div className="mb-6 space-y-3">
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Final breakup before payment</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Provider selected based on location</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">3-month warranty</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Pickup & drop available</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Real-time updates</span>
-                </div>
+                {[
+                  'serviceDetail.pricing.feature1',
+                  'serviceDetail.pricing.featureProvider',
+                  'serviceDetail.pricing.feature2',
+                  'serviceDetail.pricing.featurePickup',
+                  'serviceDetail.pricing.featureUpdates',
+                ].map((featureKey) => (
+                  <div key={featureKey} className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-sm text-gray-700 dark:text-gray-300"><AutoT i18nKey={featureKey} /></span>
+                  </div>
+                ))}
               </div>
 
               {/* Action Buttons */}
@@ -541,20 +533,20 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                   onClick={handleBookNow}
                   className="w-full px-6 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 active:scale-95 touch-manipulation min-h-[48px] text-base sm:text-lg"
                 >
-                  Book Now
+                  <AutoT i18nKey="serviceDetail.bookNow" />
                 </button>
                 <button
                   onClick={handleAddToCart}
                   className="w-full px-6 py-4 rounded-xl border-2 border-blue-600 text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors active:scale-95 touch-manipulation min-h-[48px] text-base sm:text-lg"
                 >
-                  Add to Cart
+                  <AutoT i18nKey="serviceDetail.addToCart" />
                 </button>
                 {supportTel ? (
                   <a
                     href={supportTel}
                     className="block w-full px-6 py-4 rounded-xl border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 text-center transition-colors active:scale-95 touch-manipulation min-h-[48px] text-base sm:text-lg"
                   >
-                    Call for Quote
+                    <AutoT i18nKey="serviceDetail.callForQuote" />
                   </a>
                 ) : (
                   <button
@@ -562,7 +554,7 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                     onClick={() => onNavigate?.(ViewEnum.SUPPORT)}
                     className="block w-full px-6 py-4 rounded-xl border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 text-center transition-colors active:scale-95 touch-manipulation min-h-[48px] text-base sm:text-lg"
                   >
-                    Contact support
+                    <AutoT i18nKey="serviceDetail.contactSupport" />
                   </button>
                 )}
               </div>
@@ -574,13 +566,13 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <span>Secure</span>
+                    <span><AutoT i18nKey="serviceDetail.secure" /></span>
                   </div>
                   <div className="flex items-center gap-1">
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <span>Verified</span>
+                    <span><AutoT i18nKey="serviceDetail.verified" /></span>
                   </div>
                 </div>
               </div>

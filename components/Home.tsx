@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next';
 import { VehicleCategory, View as ViewEnum, type Vehicle, type View } from '../types';
 import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
-import { matchesCity } from '../utils/cityMapping';
+import { matchesLocation } from '../utils/cityMapping';
 import { countCityVehicles } from '../utils/storefrontDiscoveryCounts';
 import LazyImage from './LazyImage';
 import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
@@ -108,7 +108,14 @@ const Home: React.FC<HomeProps> = ({
         }
     }, [featuredVehicles]);
 
-    const publishedVehicles = allVehicles.filter(v => v && v.status === 'published');
+    const activeLocationFilter =
+        selectedCity.trim() && !/^all of india$/i.test(selectedCity.trim()) ? selectedCity.trim() : '';
+
+    const publishedVehicles = useMemo(() => {
+        const base = allVehicles.filter((v) => v && v.status === 'published');
+        if (!activeLocationFilter) return base;
+        return base.filter((v) => matchesLocation(v.city, v.state, activeLocationFilter));
+    }, [allVehicles, activeLocationFilter]);
     const recentListingWindowMs = useMemo(() => {
         const raw =
             typeof import.meta !== 'undefined'

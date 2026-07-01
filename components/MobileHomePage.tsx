@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense, laz
 import { useTranslation } from 'react-i18next';
 import { View as ViewEnum, VehicleCategory, type Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
-import { matchesCity, primaryLocationLabel } from '../utils/cityMapping';
+import { matchesLocation, primaryLocationLabel } from '../utils/cityMapping';
 import { countCityVehicles } from '../utils/storefrontDiscoveryCounts';
 import MobileVehicleCard from './MobileVehicleCard';
 import { useApp } from './AppProvider';
@@ -225,11 +225,27 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
     vehicleId: number;
   } | null>(null);
 
+  const activeLocationFilter = useMemo(() => {
+    const raw = selectedCity.trim();
+    if (!raw || /^all of india$/i.test(raw)) return '';
+    return raw;
+  }, [selectedCity]);
+
   const publishedVehicles = useMemo(
-    () => allVehicles.filter(vehicle => vehicle && isPublicBuyListing(vehicle) && vehicle.listingType !== 'rental'),
-    [allVehicles]
+    () => {
+      const base = allVehicles.filter(vehicle => vehicle && isPublicBuyListing(vehicle) && vehicle.listingType !== 'rental');
+      if (!activeLocationFilter) return base;
+      return base.filter((vehicle) => matchesLocation(vehicle.city, vehicle.state, activeLocationFilter));
+    },
+    [allVehicles, activeLocationFilter]
   );
 
+  const localizedRecommendations = useMemo(() => {
+    if (!activeLocationFilter) return recommendations;
+    return recommendations.filter((vehicle) =>
+      matchesLocation(vehicle.city, vehicle.state, activeLocationFilter),
+    );
+  }, [recommendations, activeLocationFilter]);
 
   const cities = useMemo(
     () =>
@@ -1374,7 +1390,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       </section>
 
       {/* Recommendations */}
-      {recommendations.length > 0 && (
+      {localizedRecommendations.length > 0 && (
         <div ref={recsRef} className={`reveal-on-scroll px-4 py-6 ${HOME_SECTION_BG.recommendations}`}>
           <div className="flex items-end justify-between mb-4">
             <div className="space-y-1">
@@ -1395,7 +1411,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             </button>
           </div>
           <div className="space-y-4">
-            {recommendations.slice(0, 5).map((vehicle) => (
+            {localizedRecommendations.slice(0, 5).map((vehicle) => (
               <MobileVehicleCard
                 key={vehicle.id}
                 vehicle={vehicle}

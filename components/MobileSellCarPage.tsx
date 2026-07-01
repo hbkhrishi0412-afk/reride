@@ -6,6 +6,7 @@ import { sellCarAPI } from '../services/sellCarService';
 import { useCamera } from '../hooks/useMobileFeatures';
 import { fetchVehicleSpecs, cacheAISpecs } from '../services/vehicleSpecsService';
 import { getAiVehicleSuggestions } from '../services/geminiService';
+import AutoT from './AutoT';
 
 interface MobileSellCarPageProps {
   onNavigate: (view: ViewEnum) => void;
@@ -736,7 +737,9 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
       case 0: // Seller Type Selection
         return (
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">I am a</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              <AutoT i18nKey="sellCar.mobile.step0.title" />
+            </h2>
             <button
               type="button"
               onClick={handleSelectIndividual}
@@ -749,8 +752,8 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
                   </svg>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">Individual</h3>
-                  <p className="text-sm text-gray-600">Selling my personal vehicle</p>
+                  <h3 className="font-semibold text-gray-900"><AutoT i18nKey="sellCar.mobile.individual.title" /></h3>
+                  <p className="text-sm text-gray-600"><AutoT i18nKey="sellCar.mobile.individual.desc" as="span" /></p>
                 </div>
               </div>
             </button>
@@ -766,8 +769,8 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
                   </svg>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">Dealer</h3>
-                  <p className="text-sm text-gray-600">I have a dealership</p>
+                  <h3 className="font-semibold text-gray-900"><AutoT i18nKey="sellCar.mobile.dealer.title" /></h3>
+                  <p className="text-sm text-gray-600"><AutoT i18nKey="sellCar.mobile.dealer.desc" as="span" /></p>
                 </div>
               </div>
             </button>
@@ -1284,7 +1287,9 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
             </svg>
           </button>
         )}
-        <h1 className="text-lg font-bold text-gray-900 flex-1">Sell Your Car</h1>
+        <h1 className="text-lg font-bold text-gray-900 flex-1">
+          <AutoT i18nKey="sellCar.mobile.title" />
+        </h1>
       </div>
 
       {currentStep < 9 && (

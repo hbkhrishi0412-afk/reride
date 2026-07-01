@@ -10,6 +10,7 @@ import { toastEn, toastHi, toastTe, toastTa } from './toastStrings.js';
 import { installDynamicTranslation } from './dynamicTranslate.js';
 import { installDOMAutoTranslation } from './domAutoTranslate.js';
 import { installDocumentLocaleSync } from './documentLocaleSync.js';
+import { staticPageEn } from './staticPageStrings.js';
 
 const en = {
   'app.name': 'ReRide',
@@ -382,6 +383,7 @@ const en = {
   'locationModal.allIndia': 'All of India',
   'locationModal.cancel': 'Cancel',
   'locationModal.save': 'Save',
+  'locationModal.selectedPreview': 'Selected: {{place}}',
   'locationModal.noCities': 'No cities found matching "{{term}}"',
   'locationModal.selectPrompt':
     'Please select a city from the list or choose a state / All of India',
@@ -1005,6 +1007,7 @@ const en = {
   'carServices.services.denting.bullets':
     'Dent removal|||Panel beating|||Primer and paint|||Scratch repair|||Clear coat finishing',
 
+  ...staticPageEn,
   ...toastEn,
 } as const;
 

@@ -4,6 +4,8 @@ import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel
 import { sellCarAPI } from '../services/sellCarService';
 import { fetchVehicleSpecs, cacheAISpecs } from '../services/vehicleSpecsService';
 import { getAiVehicleSuggestions } from '../services/geminiService';
+import AutoT from './AutoT';
+import { useAutoT } from '../hooks/useAutoT';
 
 interface SellCarPageProps {
   onNavigate: (view: ViewEnum) => void;
@@ -61,7 +63,7 @@ const BackBar: React.FC<{ onBack: () => void; currentStep: number; totalSteps: n
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
-        Back
+        <AutoT i18nKey="sellCar.back" />
       </button>
       <div className="flex items-center gap-2 text-xs text-gray-500">
         {summary}
@@ -261,16 +263,19 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
   };
 
   const trustSignals = [
-    { value: 'Free', label: 'To list your vehicle' },
-    { value: 'Direct', label: 'Buyer contact' },
-    { value: 'Pan-India', label: 'City coverage' }
+    { valueKey: 'sellCar.trust.free.value', labelKey: 'sellCar.trust.free.label' },
+    { valueKey: 'sellCar.trust.direct.value', labelKey: 'sellCar.trust.direct.label' },
+    { valueKey: 'sellCar.trust.panIndia.value', labelKey: 'sellCar.trust.panIndia.label' },
   ];
 
   const heroHighlights = [
-    { title: 'Instant valuation', desc: '90% cars get a price in under 2 minutes.' },
-    { title: 'Doorstep inspection', desc: 'Free pickup & RC transfer included.' },
-    { title: 'Transparent listings', desc: 'Add RC, photos, and details buyers can verify.' }
+    { titleKey: 'sellCar.highlight1.title', descKey: 'sellCar.highlight1.desc' },
+    { titleKey: 'sellCar.highlight2.title', descKey: 'sellCar.highlight2.desc' },
+    { titleKey: 'sellCar.highlight3.title', descKey: 'sellCar.highlight3.desc' },
   ];
+
+  const individualTags = ['sellCar.individual.tag1', 'sellCar.individual.tag2', 'sellCar.individual.tag3'] as const;
+  const dealerTags = ['sellCar.dealer.tag1', 'sellCar.dealer.tag2', 'sellCar.dealer.tag3'] as const;
 
   const getBrandLogo = (brandName: string): string => {
     const direct = brandLogos[brandName];
@@ -536,35 +541,35 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
       <div className="bg-gradient-to-br from-purple-50 via-white to-orange-50 rounded-2xl p-5 md:p-6 border border-white/60 shadow-[0_12px_40px_rgba(0,0,0,0.06)]">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white text-orange-600 text-xs font-semibold shadow-sm mb-3">
           <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-          Faster handoffs, happier sellers
+          <AutoT i18nKey="sellCar.step0.badge" />
         </div>
         <h2 className="text-2xl md:text-3xl font-bold text-gray-900 leading-snug">
-          Sell with confidence, in under 2 minutes
+          <AutoT i18nKey="sellCar.step0.title" />
         </h2>
         <p className="text-gray-600 mt-2 text-sm md:text-base">
-          Step-by-step guidance, auto-fetched details, verified buyers, and instant payouts.
+          <AutoT i18nKey="sellCar.step0.subtitle" as="span" />
         </p>
 
         <div className="grid sm:grid-cols-3 gap-3 mt-5">
           {trustSignals.map((item) => (
-            <div key={item.label} className="bg-white rounded-xl p-3 border border-orange-100 shadow-sm">
-              <p className="text-xl font-bold text-gray-900">{item.value}</p>
-              <p className="text-xs text-gray-600">{item.label}</p>
+            <div key={item.valueKey} className="bg-white rounded-xl p-3 border border-orange-100 shadow-sm">
+              <p className="text-xl font-bold text-gray-900"><AutoT i18nKey={item.valueKey} /></p>
+              <p className="text-xs text-gray-600"><AutoT i18nKey={item.labelKey} /></p>
             </div>
           ))}
         </div>
 
         <div className="space-y-3 mt-5">
           {heroHighlights.map((highlight) => (
-            <div key={highlight.title} className="flex items-start gap-3">
+            <div key={highlight.titleKey} className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-900">{highlight.title}</p>
-                <p className="text-sm text-gray-600">{highlight.desc}</p>
+                <p className="text-sm font-semibold text-gray-900"><AutoT i18nKey={highlight.titleKey} /></p>
+                <p className="text-sm text-gray-600"><AutoT i18nKey={highlight.descKey} /></p>
               </div>
             </div>
           ))}
@@ -573,8 +578,8 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
 
       <div className="space-y-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-600 mb-2">Pick one to begin</p>
-          <h3 className="text-lg md:text-xl font-bold text-gray-900">Who's selling?</h3>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-600 mb-2"><AutoT i18nKey="sellCar.step0.pickOne" /></p>
+          <h3 className="text-lg md:text-xl font-bold text-gray-900"><AutoT i18nKey="sellCar.step0.whoSelling" /></h3>
         </div>
 
         <button
@@ -594,13 +599,13 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
             </span>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <p className="text-gray-900 font-bold">Sell as Individual</p>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-green-100 text-green-700">Recommended</span>
+                <p className="text-gray-900 font-bold"><AutoT i18nKey="sellCar.individual.title" /></p>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-green-100 text-green-700"><AutoT i18nKey="sellCar.individual.recommended" /></span>
               </div>
-              <p className="text-sm text-gray-600 mt-1">One-to-one guidance, instant valuation, free RC transfer.</p>
+              <p className="text-sm text-gray-600 mt-1"><AutoT i18nKey="sellCar.individual.desc" as="span" /></p>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {['2-min flow', 'Instant price', 'Doorstep pickup'].map(tag => (
-                  <span key={tag} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-orange-200 text-orange-700">{tag}</span>
+                {individualTags.map((tagKey) => (
+                  <span key={tagKey} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-orange-200 text-orange-700"><AutoT i18nKey={tagKey} /></span>
                 ))}
               </div>
             </div>
@@ -626,11 +631,11 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
               </svg>
             </span>
             <div className="flex-1">
-              <p className="text-gray-900 font-bold">Sell as Dealer</p>
-              <p className="text-sm text-gray-600 mt-1">Log in to your dealer account and manage inventory.</p>
+              <p className="text-gray-900 font-bold"><AutoT i18nKey="sellCar.dealer.title" /></p>
+              <p className="text-sm text-gray-600 mt-1"><AutoT i18nKey="sellCar.dealer.desc" as="span" /></p>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {['Bulk listing', 'Lead inbox', 'Priority support'].map(tag => (
-                  <span key={tag} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-purple-200 text-purple-700">{tag}</span>
+                {dealerTags.map((tagKey) => (
+                  <span key={tagKey} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-purple-200 text-purple-700"><AutoT i18nKey={tagKey} /></span>
                 ))}
               </div>
             </div>
@@ -644,7 +649,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
           <svg className="w-4 h-4 text-gray-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z" />
           </svg>
-          Need help? Call 727-727-7275 or chat with us — we answer in under 60 seconds.
+          <AutoT i18nKey="sellCar.step0.help" as="span" />
         </div>
       </div>
     </div>
@@ -1378,10 +1383,10 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
           <span className="text-white font-semibold text-lg tracking-wide">SellRight</span>
         </div>
         <h1 className="text-3xl md:text-4xl font-bold text-white text-center leading-tight">
-          Sell Car Online
+          <AutoT i18nKey="sellCar.hero.title" />
         </h1>
         <p className="text-teal-200 italic text-center text-sm md:text-base mt-1">
-          at the Best Price
+          <AutoT i18nKey="sellCar.hero.subtitle" as="span" />
         </p>
 
         {/* Numbered step strip (hidden on step 0) */}

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { User, SupportTicket } from '../types';
+import AutoT from './AutoT';
+import { useAutoT } from '../hooks/useAutoT';
 
 interface SupportPageProps {
   currentUser: User | null;
@@ -19,6 +21,10 @@ const SupportPage: React.FC<SupportPageProps> = ({ currentUser, onSubmitTicket }
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const namePlaceholder = useAutoT('support.form.namePlaceholder');
+  const emailPlaceholder = useAutoT('support.form.emailPlaceholder');
+  const subjectPlaceholder = useAutoT('support.form.subjectPlaceholder');
+  const messagePlaceholder = useAutoT('support.form.messagePlaceholder');
 
   // Keep name/email aligned with session when auth loads after mount (avoids 403: ticket email ≠ JWT email).
   useEffect(() => {
@@ -173,26 +179,26 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 text-xs font-bold">
               <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
-              Priority support that actually answers
+              <AutoT i18nKey="support.badge" />
             </div>
             <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">
-              Contact Support
+              <AutoT i18nKey="support.hero.title" />
             </h1>
             <p className="text-slate-600 max-w-2xl text-base">
-              Tell us what you need. We’ll route your request to the right specialist and keep you posted every step of the way.
+              <AutoT i18nKey="support.hero.subtitle" as="span" />
             </p>
             <div className="flex flex-wrap gap-3 text-sm">
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white shadow-sm border border-slate-200">
                 <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="font-semibold text-slate-800">Avg. response under 30 mins</span>
+                <span className="font-semibold text-slate-800"><AutoT i18nKey="support.stat.response" /></span>
               </div>
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white shadow-sm border border-slate-200">
                 <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="font-semibold text-slate-800">4.8/5 satisfaction</span>
+                <span className="font-semibold text-slate-800"><AutoT i18nKey="support.stat.satisfaction" /></span>
               </div>
             </div>
           </div>
@@ -200,8 +206,8 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
           <div className="hidden md:flex items-center gap-3 bg-white px-4 py-3 rounded-xl shadow-sm border border-slate-200">
             <div className="h-10 w-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm">24/7</div>
             <div>
-              <div className="text-sm font-semibold text-slate-900">Need urgent help?</div>
-              <div className="text-xs text-slate-600">We monitor tickets around the clock.</div>
+              <div className="text-sm font-semibold text-slate-900"><AutoT i18nKey="support.urgent.title" /></div>
+              <div className="text-xs text-slate-600"><AutoT i18nKey="support.urgent.body" /></div>
             </div>
           </div>
         </div>
@@ -217,22 +223,22 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Fastest Resolution
+                  <AutoT i18nKey="support.card.badge" />
                 </div>
-                <h2 className="text-xl font-black leading-tight">We pair every ticket with a specialist</h2>
+                <h2 className="text-xl font-black leading-tight"><AutoT i18nKey="support.card.title" /></h2>
                 <p className="text-indigo-100 text-sm leading-relaxed">
-                  Share a few details and we’ll triage, prioritize, and keep you updated. 90% of tickets are resolved without a follow-up.
+                  <AutoT i18nKey="support.card.body" as="span" />
                 </p>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   {[
-                    { label: 'Car service & detailing', icon: '🧽' },
-                    { label: 'Buying & selling help', icon: '🚗' },
-                    { label: 'Payments & RC', icon: '💳' },
-                    { label: 'App issues', icon: '📱' },
+                    { labelKey: 'support.category.service', icon: '🧽' },
+                    { labelKey: 'support.category.buySell', icon: '🚗' },
+                    { labelKey: 'support.category.payments', icon: '💳' },
+                    { labelKey: 'support.category.app', icon: '📱' },
                   ].map((item) => (
-                    <div key={item.label} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 border border-white/10 backdrop-blur">
+                    <div key={item.labelKey} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 border border-white/10 backdrop-blur">
                       <span className="text-base">{item.icon}</span>
-                      <span>{item.label}</span>
+                      <span><AutoT i18nKey={item.labelKey} /></span>
                     </div>
                   ))}
                 </div>
@@ -242,8 +248,8 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">Quick reach</p>
-                  <h3 className="text-lg font-black text-slate-900">Prefer a faster lane?</h3>
+                  <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide"><AutoT i18nKey="support.quickReach.eyebrow" /></p>
+                  <h3 className="text-lg font-black text-slate-900"><AutoT i18nKey="support.quickReach.title" /></h3>
                 </div>
                 <div className="hidden sm:flex h-10 w-10 rounded-full bg-indigo-50 text-indigo-700 items-center justify-center">
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -253,15 +259,15 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
               </div>
               <div className="grid sm:grid-cols-3 gap-3 text-sm">
                 {[
-                  { title: 'Call us', desc: 'Mon-Sat, 9am-8pm', action: '1-800-RERIDE' },
-                  { title: 'WhatsApp', desc: 'Quick status updates', action: 'Chat now' },
-                  { title: 'Email', desc: 'support@reride.com', action: 'Open mail' },
+                  { titleKey: 'support.quickReach.call.title', descKey: 'support.quickReach.call.desc', action: '1-800-RERIDE' },
+                  { titleKey: 'support.quickReach.whatsapp.title', descKey: 'support.quickReach.whatsapp.desc', action: 'Chat now' },
+                  { titleKey: 'support.quickReach.email.title', descKey: 'support.quickReach.email.desc', actionKey: 'support.quickReach.openMail' },
                 ].map((item) => (
-                  <div key={item.title} className="border border-slate-200 rounded-xl p-3 hover:-translate-y-0.5 hover:shadow-md transition-transform bg-slate-50/60">
-                    <div className="font-semibold text-slate-900">{item.title}</div>
-                    <div className="text-xs text-slate-600">{item.desc}</div>
+                  <div key={item.titleKey} className="border border-slate-200 rounded-xl p-3 hover:-translate-y-0.5 hover:shadow-md transition-transform bg-slate-50/60">
+                    <div className="font-semibold text-slate-900"><AutoT i18nKey={item.titleKey} /></div>
+                    <div className="text-xs text-slate-600"><AutoT i18nKey={item.descKey} /></div>
                     <div className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-indigo-700">
-                      {item.action}
+                      {item.actionKey ? <AutoT i18nKey={item.actionKey} /> : item.action}
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
@@ -280,8 +286,8 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div className="flex-1">
-                  <h3 className="text-emerald-800 font-semibold text-sm mb-0.5">Ticket submitted!</h3>
-                  <p className="text-emerald-700 text-xs">We’ve received your request and will reach out shortly.</p>
+                  <h3 className="text-emerald-800 font-semibold text-sm mb-0.5"><AutoT i18nKey="support.success.title" /></h3>
+                  <p className="text-emerald-700 text-xs"><AutoT i18nKey="support.success.body" as="span" /></p>
                 </div>
               </div>
             )}
@@ -294,7 +300,7 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
                       <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      Your Name
+                      <AutoT i18nKey="support.form.name" />
                     </div>
                   </label>
                   <input
@@ -305,7 +311,7 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
                     onChange={handleChange}
                     required
                     disabled={!!currentUser}
-                    placeholder="Enter your full name"
+                    placeholder={namePlaceholder}
                     className={formInputClass(!!errors.name, !!currentUser)}
                   />
                   {errors.name && (
@@ -324,7 +330,7 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
                       <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
-                      Your Email
+                      <AutoT i18nKey="support.form.email" />
                     </div>
                   </label>
                   <input
@@ -335,7 +341,7 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
                     onChange={handleChange}
                     required
                     disabled={!!currentUser}
-                    placeholder="your.email@example.com"
+                    placeholder={emailPlaceholder}
                     className={formInputClass(!!errors.email, !!currentUser)}
                   />
                   {errors.email && (
@@ -355,7 +361,7 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
                     <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h10m-7 4h7" />
                     </svg>
-                    Subject
+                    <AutoT i18nKey="support.form.subject" />
                   </div>
                 </label>
                 <input
@@ -365,7 +371,7 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
                   value={formData.subject}
                   onChange={handleChange}
                   required
-                  placeholder="Brief description of your issue"
+                  placeholder={subjectPlaceholder}
                   className={formInputClass(!!errors.subject)}
                 />
                 {errors.subject && (
@@ -384,7 +390,7 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
                     <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
-                    Message
+                    <AutoT i18nKey="support.form.message" />
                   </div>
                 </label>
                 <textarea
@@ -394,7 +400,7 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
                   onChange={handleChange}
                   required
                   rows={5}
-                  placeholder="Share more context to help us resolve this quickly..."
+                  placeholder={messagePlaceholder}
                   className={`${formInputClass(!!errors.message)} resize-y min-h-[100px]`}
                 />
                 <div className="flex items-center justify-between mt-1">
@@ -435,14 +441,14 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Submitting...
+                      <AutoT i18nKey="support.form.submitting" />
                     </>
                   ) : (
                     <>
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                       </svg>
-                      Submit Ticket
+                      <AutoT i18nKey="support.form.submit" />
                     </>
                   )}
                 </button>

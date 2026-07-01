@@ -4,7 +4,7 @@
  * actual city names stored in vehicle data (e.g., "Delhi", "New Delhi")
  */
 
-import { INDIAN_STATES } from '../constants/location.js';
+import { INDIAN_STATES, CITIES_BY_STATE } from '../constants/location.js';
 
 export interface CityMapping {
   displayName: string;
@@ -48,24 +48,82 @@ export function getCityNamesForDisplay(displayName: string): string[] {
  * @returns true if the vehicle city matches the display city
  */
 export function matchesCity(vehicleCity: string | undefined, displayCity: string | undefined): boolean {
-  if (!displayCity) return true; // No filter selected
-  if (!vehicleCity) return false; // Vehicle has no city
+  return matchesLocation(vehicleCity, undefined, displayCity);
+}
 
-  // Normalize both strings for comparison. Many vehicle cities include state codes
-  // like "Hyderabad, TS" – strip anything after the comma. Header may use "City, State".
+function normalizeCityToken(city: string): string {
+  return primaryLocationLabel(city).trim().toLowerCase();
+}
+
+function vehicleInStateCatalog(
+  vehicleCity: string | undefined,
+  vehicleState: string | undefined,
+  state: { name: string; code: string },
+): boolean {
+  if (vehicleState?.trim()) {
+    const vs = vehicleState.trim();
+    if (vs === state.code || vs.toLowerCase() === state.name.toLowerCase()) {
+      return true;
+    }
+  }
+
+  if (!vehicleCity?.trim()) return false;
+
+  const norm = normalizeCityToken(vehicleCity);
+  const cities = CITIES_BY_STATE[state.code] || [];
+  if (cities.some((c) => c.toLowerCase() === norm)) return true;
+  if (cities.some((c) => cityNameMatches(vehicleCity, c))) return true;
+
+  const blob = `${vehicleCity} ${vehicleState || ''}`.toLowerCase();
+  return blob.includes(state.name.toLowerCase()) || blob.includes(state.code.toLowerCase());
+}
+
+/** City-only match (aliases, partial) — used by matchesLocation and legacy callers. */
+function cityNameMatches(vehicleCity: string | undefined, displayCity: string | undefined): boolean {
+  if (!displayCity) return true;
+  if (!vehicleCity) return false;
+
   const normalize = (city: string) => city.split(',')[0].trim().toLowerCase();
   const normalizedVehicleCity = normalize(vehicleCity);
   const normalizedDisplayCity = normalize(displayCity);
-
-  // Get all possible city names for the display name
   const possibleNames = getCityNamesForDisplay(displayCity).map(normalize);
 
-  // Check for exact or starts-with/contains matches to be forgiving
   return (
     possibleNames.some((name) => name === normalizedVehicleCity) ||
     normalizedVehicleCity === normalizedDisplayCity ||
     possibleNames.some((name) => normalizedVehicleCity.includes(name) || name.includes(normalizedVehicleCity))
   );
+}
+
+/**
+ * Match a vehicle against a header / picker region: All of India, state name,
+ * city name, or "City, State" (e.g. Hyderabad, Telangana).
+ */
+export function matchesLocation(
+  vehicleCity: string | undefined,
+  vehicleState: string | undefined,
+  region: string | undefined,
+): boolean {
+  const r = (region ?? '').trim();
+  if (!r || /^all of india$/i.test(r)) return true;
+
+  const stateExact = INDIAN_STATES.find((s) => s.name.toLowerCase() === r.toLowerCase());
+  if (stateExact) {
+    return vehicleInStateCatalog(vehicleCity, vehicleState, stateExact);
+  }
+
+  const commaIdx = r.indexOf(',');
+  if (commaIdx !== -1) {
+    const cityPart = r.slice(0, commaIdx).trim();
+    const statePart = r.slice(commaIdx + 1).trim();
+    if (!cityNameMatches(vehicleCity, cityPart)) return false;
+    const stateFromLabel = INDIAN_STATES.find((s) => s.name.toLowerCase() === statePart.toLowerCase())
+      ?? INDIAN_STATES.find((s) => s.code.toLowerCase() === statePart.toLowerCase());
+    if (!stateFromLabel) return true;
+    return vehicleInStateCatalog(vehicleCity, vehicleState, stateFromLabel);
+  }
+
+  return cityNameMatches(vehicleCity, r);
 }
 
 /**
@@ -89,8 +147,20 @@ export function getDisplayNameForCity(cityName: string): string {
  */
 export function getStateCodeForCity(cityName: string, citiesByState: Record<string, string[]>): string | null {
   if (!cityName) return null;
-  
-  const normalizedCity = cityName.trim().toLowerCase();
+
+  const comma = cityName.indexOf(',');
+  if (comma !== -1) {
+    const statePart = cityName.slice(comma + 1).trim();
+    const byName = INDIAN_STATES.find((s) => s.name.toLowerCase() === statePart.toLowerCase());
+    if (byName) return byName.code;
+    const byCode = INDIAN_STATES.find((s) => s.code.toLowerCase() === statePart.toLowerCase());
+    if (byCode) return byCode.code;
+  }
+
+  const normalizedCity = primaryLocationLabel(cityName).trim().toLowerCase();
+
+  const stateOnly = INDIAN_STATES.find((s) => s.name.toLowerCase() === normalizedCity);
+  if (stateOnly) return stateOnly.code;
   
   // First, check if it's a display name and get actual city names
   const possibleNames = getCityNamesForDisplay(cityName);

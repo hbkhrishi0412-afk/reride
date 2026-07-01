@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { User, SupportTicket } from '../types';
+import AutoT from './AutoT';
+import { useAutoT } from '../hooks/useAutoT';
 
 interface MobileSupportPageProps {
   currentUser: User | null;
@@ -47,6 +49,17 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  const namePlaceholder = useAutoT('support.mobile.form.namePlaceholder');
+  const emailPlaceholder = useAutoT('support.form.emailPlaceholder');
+  const subjectPlaceholder = useAutoT('support.form.subjectPlaceholder');
+  const messagePlaceholder = useAutoT('support.mobile.form.messagePlaceholder');
+  const errName = useAutoT('support.mobile.validation.name');
+  const errEmail = useAutoT('support.mobile.validation.email');
+  const errEmailInvalid = useAutoT('support.mobile.validation.emailInvalid');
+  const errSubject = useAutoT('support.mobile.validation.subject');
+  const errMessage = useAutoT('support.mobile.validation.message');
+  const errSubmit = useAutoT('support.mobile.error.submit');
+
   useEffect(() => {
     if (!currentUser?.email) return;
     setFormData((prev) => ({
@@ -70,11 +83,11 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.name.trim()) newErrors.name = 'Name is required';
-    if (!formData.email.trim()) newErrors.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Please enter a valid email address';
-    if (!formData.subject.trim()) newErrors.subject = 'Subject is required';
-    if (!formData.message.trim()) newErrors.message = 'Message is required';
+    if (!formData.name.trim()) newErrors.name = errName;
+    if (!formData.email.trim()) newErrors.email = errEmail;
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = errEmailInvalid;
+    if (!formData.subject.trim()) newErrors.subject = errSubject;
+    if (!formData.message.trim()) newErrors.message = errMessage;
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -102,7 +115,7 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
       if (ok === false) {
         setErrors((prev) => ({
           ...prev,
-          submit: 'Failed to submit support ticket. Please try again.',
+          submit: errSubmit,
         }));
         return;
       }
@@ -165,16 +178,19 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
               <IconChevronLeft size={16} stroke={2.2} />
             </button>
           )}
-          <span className="text-[10.5px] uppercase tracking-[0.22em] text-white/45 font-semibold">Support</span>
+          <span className="text-[10.5px] uppercase tracking-[0.22em] text-white/45 font-semibold">
+            <AutoT i18nKey="support.mobile.badge" />
+          </span>
         </div>
 
         <div className="relative z-10 flex items-end justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-white font-semibold truncate" style={{ fontSize: '26px', lineHeight: 1.1, letterSpacing: '-0.03em' }}>
-              How can we help
-              <span className="text-white/40 font-light">?</span>
+              <AutoT i18nKey="support.mobile.hero.title" />
             </h1>
-            <p className="mt-2 text-[12.5px] text-white/55 font-medium">Send us a ticket — we typically reply within a day.</p>
+            <p className="mt-2 text-[12.5px] text-white/55 font-medium">
+              <AutoT i18nKey="support.mobile.hero.subtitle" as="span" />
+            </p>
           </div>
           <span
             className="shrink-0 w-12 h-12 rounded-2xl grid place-items-center text-white"
@@ -199,8 +215,12 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
               <IconCheck size={16} stroke={2.4} />
             </span>
             <div>
-              <p className="text-[13px] font-bold text-emerald-900 tracking-tight" style={{ letterSpacing: '-0.01em' }}>Ticket submitted</p>
-              <p className="text-[11.5px] text-emerald-700 font-medium mt-0.5">We&apos;ll get back to you shortly.</p>
+              <p className="text-[13px] font-bold text-emerald-900 tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+                <AutoT i18nKey="support.mobile.success.title" />
+              </p>
+              <p className="text-[11.5px] text-emerald-700 font-medium mt-0.5">
+                <AutoT i18nKey="support.mobile.success.body" as="span" />
+              </p>
             </div>
           </div>
         </div>
@@ -220,8 +240,10 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
             <IconMail size={17} stroke={2} />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[10.5px] uppercase tracking-[0.16em] font-semibold text-slate-400">Email us</p>
-            <p className="text-[13.5px] font-semibold text-slate-900 truncate tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+            <p className="text-[10.5px] uppercase tracking-[0.16em] font-semibold text-slate-400">
+              <AutoT i18nKey="support.mobile.email.label" />
+            </p>
+            <p className="text-[13.5px] font-semibold text-slate-900 truncate tracking-tight" style={{ letterSpacing: '-0.01em' }} data-no-translate>
               support@reride.app
             </p>
           </div>
@@ -239,60 +261,70 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
         }}
       >
         <div>
-          <p className="text-[10.5px] uppercase tracking-[0.16em] font-semibold text-slate-400">New ticket</p>
-          <h2 className="text-[16px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.01em' }}>Tell us what&apos;s happening</h2>
+          <p className="text-[10.5px] uppercase tracking-[0.16em] font-semibold text-slate-400">
+            <AutoT i18nKey="support.mobile.form.eyebrow" />
+          </p>
+          <h2 className="text-[16px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.01em' }}>
+            <AutoT i18nKey="support.mobile.form.title" />
+          </h2>
         </div>
 
         {errors.submit && (
-          <p className="text-[11px] text-rose-600 font-semibold rounded-xl px-3 py-2 bg-rose-50 border border-rose-100">
+          <p className="text-[11px] text-rose-600 font-semibold rounded-xl px-3 py-2 bg-rose-50 border border-rose-100" data-no-translate>
             {errors.submit}
           </p>
         )}
 
         <label className="block">
-          <span className="block text-[11.5px] font-semibold text-slate-700 mb-1.5 tracking-tight">Name</span>
+          <span className="block text-[11.5px] font-semibold text-slate-700 mb-1.5 tracking-tight">
+            <AutoT i18nKey="support.mobile.form.name" />
+          </span>
           <input
             type="text"
             name="name"
             value={formData.name}
             onChange={handleChange}
-            placeholder="Your name"
+            placeholder={namePlaceholder}
             style={fieldStyle(!!errors.name)}
           />
-          {errors.name && <p className="text-[11px] text-rose-600 mt-1 font-semibold">{errors.name}</p>}
+          {errors.name && <p className="text-[11px] text-rose-600 mt-1 font-semibold" data-no-translate>{errors.name}</p>}
         </label>
 
         <label className="block">
-          <span className="block text-[11.5px] font-semibold text-slate-700 mb-1.5 tracking-tight">Email</span>
+          <span className="block text-[11.5px] font-semibold text-slate-700 mb-1.5 tracking-tight">
+            <AutoT i18nKey="support.form.email" />
+          </span>
           <input
             type="email"
             name="email"
             value={formData.email}
             onChange={handleChange}
-            placeholder="your.email@example.com"
+            placeholder={emailPlaceholder}
             inputMode="email"
             style={fieldStyle(!!errors.email)}
           />
-          {errors.email && <p className="text-[11px] text-rose-600 mt-1 font-semibold">{errors.email}</p>}
+          {errors.email && <p className="text-[11px] text-rose-600 mt-1 font-semibold" data-no-translate>{errors.email}</p>}
         </label>
 
         <label className="block">
-          <span className="block text-[11.5px] font-semibold text-slate-700 mb-1.5 tracking-tight">Subject</span>
+          <span className="block text-[11.5px] font-semibold text-slate-700 mb-1.5 tracking-tight">
+            <AutoT i18nKey="support.form.subject" />
+          </span>
           <input
             type="text"
             name="subject"
             value={formData.subject}
             onChange={handleChange}
-            placeholder="Brief description of your issue"
+            placeholder={subjectPlaceholder}
             style={fieldStyle(!!errors.subject)}
           />
-          {errors.subject && <p className="text-[11px] text-rose-600 mt-1 font-semibold">{errors.subject}</p>}
+          {errors.subject && <p className="text-[11px] text-rose-600 mt-1 font-semibold" data-no-translate>{errors.subject}</p>}
         </label>
 
         <label className="block">
           <span className="flex items-center justify-between text-[11.5px] font-semibold text-slate-700 mb-1.5 tracking-tight">
-            <span>Message</span>
-            <span className="text-[10.5px] text-slate-400 font-medium">{formData.message.length}/1000</span>
+            <span><AutoT i18nKey="support.form.message" /></span>
+            <span className="text-[10.5px] text-slate-400 font-medium" data-no-translate>{formData.message.length}/1000</span>
           </span>
           <textarea
             name="message"
@@ -300,10 +332,10 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
             onChange={handleChange}
             rows={6}
             maxLength={1000}
-            placeholder="Describe your issue in detail..."
+            placeholder={messagePlaceholder}
             style={{ ...fieldStyle(!!errors.message), resize: 'none' }}
           />
-          {errors.message && <p className="text-[11px] text-rose-600 mt-1 font-semibold">{errors.message}</p>}
+          {errors.message && <p className="text-[11px] text-rose-600 mt-1 font-semibold" data-no-translate>{errors.message}</p>}
         </label>
 
         <button
@@ -317,7 +349,7 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
             minHeight: 56,
           }}
         >
-          {isSubmitting ? 'Submitting…' : 'Submit ticket'}
+          {isSubmitting ? <AutoT i18nKey="support.form.submitting" /> : <AutoT i18nKey="support.mobile.form.submit" />}
         </button>
       </form>
     </div>
