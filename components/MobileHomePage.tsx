@@ -204,6 +204,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   const citiesRef = useRevealOnScroll<HTMLDivElement>(0);
   const recsRef = useRevealOnScroll<HTMLDivElement>(0);
   const sellRef = useRevealOnScroll<HTMLDivElement>(0);
+  const trendingRef = useRevealOnScroll<HTMLDivElement>(0);
+  const serviceRef = useRevealOnScroll<HTMLDivElement>(0);
   /**
    * Featured carousel: horizontal scroll + strict touch heuristics used to swallow taps on real devices
    * (small scrollDelta / missing synthetic click on iOS). Pointer down→up with a movement slop fixes opens.
@@ -661,23 +663,42 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             />
           </div>
 
-          {/* Feature Pills */}
+          {/* Feature Pills — tap targets mirror desktop hero cards (Safety Center + browse). */}
           <div className="grid grid-cols-4 gap-2 mt-5 hero-rise hero-rise-6">
             {[
-              { icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z', label: t('mobile.hero.checksPill') },
-              { icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', label: t('mobile.hero.fixedPrice') },
-              { icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15', label: t('mobile.hero.moneyBack') },
-              { icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', label: t('mobile.hero.freeRc') },
+              {
+                icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+                label: t('mobile.hero.checksPill'),
+                view: ViewEnum.SAFETY_CENTER,
+              },
+              {
+                icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+                label: t('mobile.hero.fixedPrice'),
+                view: ViewEnum.USED_CARS,
+              },
+              {
+                icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+                label: t('mobile.hero.moneyBack'),
+                view: ViewEnum.USED_CARS,
+              },
+              {
+                icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+                label: t('mobile.hero.freeRc'),
+                view: ViewEnum.SAFETY_CENTER,
+              },
             ].map((pill) => (
-              <div
+              <button
                 key={pill.label}
-                className="bg-white/12 backdrop-blur-sm rounded-xl p-2.5 text-center border border-white/15"
+                type="button"
+                onClick={() => onNavigate(pill.view)}
+                className="bg-white/12 backdrop-blur-sm rounded-xl p-2.5 text-center border border-white/15 active:scale-95 active:bg-white/20 transition-transform touch-manipulation"
+                aria-label={pill.label}
               >
-                <svg className="w-5 h-5 text-white mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-white mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={pill.icon} />
                 </svg>
                 <p className="text-white text-[10px] font-medium leading-tight">{pill.label}</p>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -1391,7 +1412,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       )}
 
       {/* Sell Your Car CTA */}
-      <div ref={sellRef} className="reveal-on-scroll px-4 pt-6 pb-8">
+      <div ref={sellRef} className="reveal-on-scroll px-4 pt-6 pb-4">
         <div
           className="relative overflow-hidden rounded-2xl p-5 text-white border border-white/10"
           style={{ background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #C026D3 100%)' }}
@@ -1414,6 +1435,115 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               {t('nav.sellCar')}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Trending — parity with desktop Home (shown when many featured listings). */}
+      {featuredVehicles.length > 4 && (
+        <div ref={trendingRef} className={`reveal-on-scroll px-4 py-8 ${HOME_SECTION_BG.trending}`}>
+          <div className="text-center space-y-3">
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-orange-700">
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+              {t('home.trending.badge')}
+            </span>
+            <h2 className="text-[22px] font-bold text-gray-900 tracking-tight leading-tight">
+              {t('home.trending.title')}
+            </h2>
+            <p className="text-gray-600 text-[13px] leading-snug max-w-sm mx-auto">
+              {t('home.trending.subtitle')}
+            </p>
+            <button
+              type="button"
+              onClick={() => onNavigate(ViewEnum.USED_CARS)}
+              className="mt-2 bg-orange-500 active:bg-orange-600 text-white px-6 py-2.5 rounded-full font-semibold text-[13px] inline-flex items-center gap-2 mx-auto transition-colors shadow-md"
+            >
+              {t('home.trending.viewAll')}
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Car Services marketing — parity with desktop Home service section. */}
+      <div
+        ref={serviceRef}
+        className="reveal-on-scroll relative mx-4 mb-8 py-8 px-4 text-white overflow-hidden rounded-2xl"
+        style={{
+          background:
+            'radial-gradient(600px 400px at -10% -10%, rgba(255,107,53,0.18) 0%, transparent 60%), radial-gradient(500px 400px at 110% 10%, rgba(124,58,237,0.22) 0%, transparent 60%), linear-gradient(135deg, #0B1020 0%, #111834 50%, #1A1240 100%)',
+        }}
+      >
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+          <div
+            className="absolute -top-16 -right-12 w-48 h-48 rounded-full blur-3xl opacity-40"
+            style={{ background: 'radial-gradient(circle, #FF6B35 0%, transparent 70%)' }}
+          />
+          <div
+            className="absolute -bottom-20 -left-10 w-52 h-52 rounded-full blur-3xl opacity-40"
+            style={{ background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)' }}
+          />
+        </div>
+        <div className="relative text-center">
+          <span className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/80 mb-3">
+            <span className="h-px w-5 bg-white/40" />
+            {t('home.service.badge')}
+            <span className="h-px w-5 bg-white/40" />
+          </span>
+          <h2 className="text-[22px] font-bold mb-2 leading-tight tracking-tight text-white">
+            {t('home.service.title')}
+          </h2>
+          <p className="text-[13px] text-white/85 mb-6 leading-snug">
+            {t('home.service.subtitle')}
+          </p>
+          <div className="space-y-3 text-left">
+            {[
+              {
+                icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+                color: 'bg-blue-500',
+                title: t('home.service.card1Title'),
+                desc: t('home.service.card1Desc'),
+              },
+              {
+                icon: 'M13 10V3L4 14h7v7l9-11h-7z',
+                color: 'bg-green-500',
+                title: t('home.service.card2Title'),
+                desc: t('home.service.card2Desc'),
+              },
+              {
+                icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+                color: 'bg-pink-500',
+                title: t('home.service.card3Title'),
+                desc: t('home.service.card3Desc'),
+              },
+            ].map((card) => (
+              <div
+                key={card.title}
+                className="bg-white/10 backdrop-blur-xl rounded-xl p-4 border border-white/20 flex gap-3 items-start"
+              >
+                <div className={`w-10 h-10 ${card.color} rounded-lg flex items-center justify-center flex-shrink-0 shadow-md`}>
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={card.icon} />
+                  </svg>
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-[14px] mb-0.5 tracking-tight text-white">{card.title}</h3>
+                  <p className="text-white/80 text-[12px] leading-relaxed">{card.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate(ViewEnum.CAR_SERVICES)}
+            className="mt-5 w-full bg-white/15 hover:bg-white/20 active:bg-white/25 backdrop-blur-sm border border-white/25 text-white py-3 rounded-xl font-semibold text-[14px] active:scale-[0.98] transition-transform"
+            style={{ minHeight: '48px' }}
+          >
+            {t('nav.carServices')}
+          </button>
         </div>
       </div>
 

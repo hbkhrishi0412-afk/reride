@@ -304,7 +304,7 @@ switch (currentView) {
             navigate(ViewEnum.USED_CARS);
           }}
           featuredVehicles={enrichVehiclesWithSellerInfo(
-            vehicles.filter(v => v.isFeatured && v.status === 'published').slice(0, 4),
+            vehicles.filter(v => v.isFeatured && v.status === 'published'),
             users
           )}
           onSelectVehicle={selectVehicle}
