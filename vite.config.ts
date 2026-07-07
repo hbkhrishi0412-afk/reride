@@ -194,13 +194,18 @@ export default defineConfig(({ mode }) => {
           ) {
             return 'vendor-i18n'
           }
-          // NOTE: Do NOT manually chunk @sentry/* — its packages have internal
-          // circular imports that, when forced into a single chunk by Rollup,
-          // produce a Temporal Dead Zone error in production:
-          //   "Cannot access 'da' before initialization" in vendor-sentry-*.js
-          // Sentry is loaded via a dynamic import() in utils/monitoring.ts, so
-          // Rollup will already create a separate async chunk for it.
-          // See: https://github.com/getsentry/sentry-javascript/issues/9435
+          // @sentry/* and web-vitals must NOT land in vendor-misc: index.tsx
+          // synchronously imports vendor-misc, and vendor-misc ↔ vendor-react is
+          // circular. Sentry feedback/replay ship React class components; if they
+          // init inside vendor-misc, React is still undefined → "reading 'Component'".
+          // Return undefined so dynamic import() in utils/monitoring.ts gets its own
+          // async chunk instead of the sync vendor-misc catch-all.
+          if (
+            id.includes('node_modules/@sentry') ||
+            id.includes('node_modules/web-vitals')
+          ) {
+            return undefined
+          }
           if (
             id.includes('node_modules/dompurify/') ||
             id.includes('node_modules/validator/') ||

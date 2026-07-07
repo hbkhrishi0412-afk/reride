@@ -48,6 +48,21 @@ if (jsFiles.length === 0) {
 
 console.log('✅ Build output verified: dist/index.html and dist/assets/*.js are valid for production.');
 
+// vendor-misc is synchronously imported at app startup. Sentry (and similar libs)
+// ship React class components; if they land in vendor-misc, a circular import with
+// vendor-react leaves React undefined → "Cannot read properties of undefined (reading 'Component')".
+const vendorMiscFile = jsFiles.find((f) => f.startsWith('vendor-misc-'));
+if (vendorMiscFile) {
+  const vendorMiscSource = fs.readFileSync(path.join(assetsDir, vendorMiscFile), 'utf8');
+  if (/extends \w+\.Component/.test(vendorMiscSource)) {
+    console.error(
+      `❌ ${vendorMiscFile} contains React class components. ` +
+        'Keep @sentry/* and web-vitals out of vendor-misc (see vite.config.ts manualChunks).',
+    );
+    process.exit(1);
+  }
+}
+
 const capBuild = process.env.CAPACITOR_BUILD === '1' || process.env.CAPACITOR_BUILD === 'true';
 if (capBuild) {
   let foundGoogleClient = false;

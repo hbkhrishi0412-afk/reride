@@ -27,8 +27,8 @@ export async function initErrorTracking(): Promise<void> {
     if (!Sentry?.init) return;
 
     Sentry.init({
-      dsn: process.env.VITE_SENTRY_DSN,
-      environment: process.env.NODE_ENV,
+      dsn: import.meta.env.VITE_SENTRY_DSN,
+      environment: import.meta.env.MODE,
       tracesSampleRate: 0.1, // 10% of transactions
       beforeSend(event: { request?: { headers?: Record<string, string> } }) {
         if (event.request?.headers) {
