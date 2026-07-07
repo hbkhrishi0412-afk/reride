@@ -1,6 +1,6 @@
-import React, { useState, useMemo, memo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, memo, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, ProsAndCons, User, CertifiedInspection, VehicleDocument } from '../types';
+import type { Vehicle, ProsAndCons, User, CertifiedInspection, VehicleDocument, DealLead } from '../types';
 import { useTranslatedText, useTranslatedArray, useTranslatedFields } from '../hooks/useTranslatedText';
 import { generateProsAndCons } from '../services/geminiService';
 import { getFirstValidImage, getValidImages, getSafeImageSrc, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, VEHICLE_THUMB_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder, isPlaceholderService } from '../utils/imageUtils';
@@ -8,8 +8,6 @@ import { stringifyVehicleForSession } from '../utils/vehicleSessionCache';
 import StarRating from './StarRating';
 import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
-import InlineChat from './InlineChat';
-import { resolveChatCallPhone, resolveChatOtherPartyName } from '../utils/chatContact';
 import VerificationBadge from './VerificationBadge';
 import { VehicleOfferBanner } from './VehicleOfferBanner';
 import VehicleHistory from './VehicleHistory';
@@ -24,7 +22,7 @@ import { trackPhoneView } from '../services/listingService.js';
 import { telHrefFromRawPhone } from '../utils/numberUtils.js';
 import TestDriveModal from './TestDriveModal.js';
 import { ListingStockBadge } from './ListingStockBadge.js';
-import { ListingTrustChips } from './ListingTrustChips.js';
+import { ListingTrustStatusBar } from './ListingTrustStatusBar.js';
 import VehicleDetailTrustStrip from './VehicleDetailTrustStrip.js';
 import { isListingAvailable } from '../utils/listingStock.js';
 import { isRerideStaffPick } from '../utils/staffPick.js';
@@ -32,13 +30,15 @@ import { PriceInsights } from './PriceInsights';
 import { findSimilarVehicles } from '../utils/vehiclePricing';
 import { enrichVehicleWithSellerInfo, resolveVehicleSellerEmail } from '../utils/vehicleEnrichment';
 import SellerDisclosureDisplay from './SellerDisclosureDisplay';
-import BuyerInspectionForm from './BuyerInspectionForm';
 import {
   fetchRatingEligibility,
   submitPeerRating,
 } from '../services/vehicleTrustService';
 import type { RatingEligibility } from '../types';
 import { View } from '../types';
+import { getDealLead } from '../services/dealService';
+import DealStageChip from './DealStageChip';
+import { maskVehicleIdentifier } from '../utils/vehiclePrivacy';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -267,17 +267,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const context = useApp();
   const updateVehicle = updateVehicleProp || context.updateVehicle;
   const {
-    conversations,
-    activeChat,
     vehicles: contextVehicles,
-    sendMessage,
-    sendMessageWithType,
-    typingStatus,
-    toggleTyping,
-    markAsRead,
-    clearConversationMessages,
-    onOfferResponse,
-    chatPeerOnlineByConversationId,
     navigate,
     setCurrentView,
   } = context;
@@ -354,13 +344,11 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState<boolean>(false);
   const [showEMICalculator, setShowEMICalculator] = useState<boolean>(false);
-  const [showSellerChat, setShowSellerChat] = useState(false);
+  const [vehicleDealLead, setVehicleDealLead] = useState<DealLead | null>(null);
   const [showTestDriveModal, setShowTestDriveModal] = useState(false);
   const ratingSuccessTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emiCalculatorRef = useRef<HTMLDivElement>(null);
   const scrollToEmiOnShowRef = useRef(false);
-  const sellerChatRef = useRef<HTMLDivElement>(null);
-  const scrollToChatOnShowRef = useRef(false);
   const trackedViewRef = useRef<Set<number>>(new Set());
 
   // ✅ FIX: Optimize useEffect dependency - only depend on vehicle.id and videoUrl
@@ -370,8 +358,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     setIsGeneratingProsCons(false);
     setShowEMICalculator(false);
     scrollToEmiOnShowRef.current = false;
-    setShowSellerChat(false);
-    scrollToChatOnShowRef.current = false;
+    setVehicleDealLead(null);
     setShowTestDriveModal(false);
     setActiveMediaTab(vehicle.videoUrl ? 'video' : 'images');
     scrollAppToTop();
@@ -379,6 +366,23 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     // Reset tracked views when vehicle changes
     trackedViewRef.current.clear();
   }, [vehicle.id, vehicle.videoUrl]);
+
+  const refreshVehicleDealLead = useCallback(async () => {
+    if (!currentUser?.email || safeVehicle.id == null) {
+      setVehicleDealLead(null);
+      return;
+    }
+    try {
+      const lead = await getDealLead({ vehicleId: safeVehicle.id });
+      setVehicleDealLead(lead);
+    } catch {
+      setVehicleDealLead(null);
+    }
+  }, [currentUser?.email, safeVehicle.id]);
+
+  useEffect(() => {
+    void refreshVehicleDealLead();
+  }, [refreshVehicleDealLead]);
 
   // Cleanup timeout on unmount to prevent memory leaks
   useEffect(() => {
@@ -399,38 +403,8 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     requestAnimationFrame(() => requestAnimationFrame(scrollToCalculator));
   }, [showEMICalculator]);
 
-  const listingConversation = useMemo(() => {
-    if (!currentUser || currentUser.role !== 'customer') return null;
-    const customerEmail = currentUser.email?.toLowerCase().trim();
-    if (!customerEmail) return null;
-    if (
-      activeChat?.vehicleId === safeVehicle.id &&
-      activeChat.customerId?.toLowerCase().trim() === customerEmail
-    ) {
-      return activeChat;
-    }
-    return (
-      conversations.find(
-        (c) =>
-          c.vehicleId === safeVehicle.id &&
-          c.customerId?.toLowerCase().trim() === customerEmail,
-      ) ?? null
-    );
-  }, [currentUser, activeChat, conversations, safeVehicle.id]);
-
-  // Scroll after seller chat section mounts
-  useEffect(() => {
-    if (!showSellerChat || !scrollToChatOnShowRef.current || !listingConversation) return;
-    scrollToChatOnShowRef.current = false;
-    const scrollToChat = () => {
-      sellerChatRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    };
-    requestAnimationFrame(() => requestAnimationFrame(scrollToChat));
-  }, [showSellerChat, listingConversation]);
-  
-  // ✅ FIX: Use valid images for navigation to prevent index errors
   const validImages = useMemo(() => getValidImages(safeVehicle.images, safeVehicle.id), [safeVehicle.images, safeVehicle.id]);
-  
+
   const handlePrevImage = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (validImages.length > 0) {
@@ -599,13 +573,10 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   };
 
   const handleChatWithSeller = async () => {
-    if (!currentUser) {
-      void onStartChat(safeVehicle);
-      return;
-    }
-    scrollToChatOnShowRef.current = true;
-    setShowSellerChat(true);
     await Promise.resolve(onStartChat(safeVehicle));
+    if (currentUser) {
+      await refreshVehicleDealLead();
+    }
   };
 
   const filteredRecommendations = useMemo(() => {
@@ -1007,26 +978,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                   category={safeVehicle.category}
                                   vahanSnapshot={safeVehicle.vahanSnapshot}
                                 />
-                                {(!currentUser || currentUser.role === 'customer') &&
-                                  currentUser?.email?.toLowerCase().trim() !==
-                                    safeVehicle.sellerEmail?.toLowerCase().trim() && (
-                                  <BuyerInspectionForm
-                                    vehicleId={safeVehicle.databaseId || safeVehicle.id}
-                                    category={safeVehicle.category}
-                                    sellerChecklist={safeVehicle.sellerDisclosureChecklist}
-                                    buyerEmail={
-                                      currentUser?.role === 'customer' ? currentUser.email : undefined
-                                    }
-                                    onRequireLogin={() => {
-                                      try {
-                                        sessionStorage.setItem('reride.postLoginView', View.DETAIL);
-                                      } catch {
-                                        /* ignore */
-                                      }
-                                      setCurrentView(View.CUSTOMER_LOGIN);
-                                    }}
-                                  />
-                                )}
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                                   <KeySpec label={t('vehicle.year')} value={safeVehicle.year} />
                                   <KeySpec
@@ -1397,7 +1348,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                   <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 bg-gray-50 rounded-lg p-4">
                                     <SpecDetail 
                                       label={t('vehicle.detail.vahan.registrationNumber')} 
-                                      value={extVehicle.registrationNumber || '-'} 
+                                      value={maskVehicleIdentifier(extVehicle.registrationNumber)} 
                                     />
                                     <SpecDetail 
                                       label={t('vehicle.detail.vahan.registrationDate')} 
@@ -1405,11 +1356,11 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                     />
                                     <SpecDetail 
                                       label={t('vehicle.detail.vahan.engineNumber')} 
-                                      value={extVehicle.engineNumber || '-'} 
+                                      value={maskVehicleIdentifier(extVehicle.engineNumber)} 
                                     />
                                     <SpecDetail 
                                       label={t('vehicle.detail.vahan.chassisNumber')} 
-                                      value={extVehicle.chassisNumber || '-'} 
+                                      value={maskVehicleIdentifier(extVehicle.chassisNumber)} 
                                     />
                                     <SpecDetail 
                                       label={t('vehicle.detail.vahan.rtoOffice')} 
@@ -1526,48 +1477,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                         </div>
                     )}
 
-                    {showSellerChat && listingConversation && currentUser?.role === 'customer' && (
-                        <div
-                          id="seller-chat-section"
-                          ref={sellerChatRef}
-                          className="mt-8 scroll-mt-24 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
-                        >
-                          <div className="border-b border-gray-200 px-4 py-3">
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              {t('vehicle.detail.chatWithSeller')}
-                            </h3>
-                          </div>
-                          <InlineChat
-                            conversation={listingConversation}
-                            currentUserRole="customer"
-                            otherUserName={resolveChatOtherPartyName(users, listingConversation, 'seller')}
-                            callTargetPhone={resolveChatCallPhone(users, contextVehicles, listingConversation, 'customer')}
-                            callTargetName={resolveChatOtherPartyName(users, listingConversation, 'seller')}
-                            otherUserOnline={chatPeerOnlineByConversationId[String(listingConversation.id)]}
-                            onStartCall={(phone) => {
-                              if (phone) window.open(`tel:${phone}`);
-                            }}
-                            onSendMessage={(messageText, type, payload) => {
-                              if (type || payload) {
-                                sendMessageWithType(listingConversation.id, messageText, type, payload);
-                              } else {
-                                sendMessage(listingConversation.id, messageText);
-                              }
-                            }}
-                            typingStatus={typingStatus}
-                            onUserTyping={(conversationId) => toggleTyping(conversationId, true)}
-                            onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
-                            uploaderEmail={currentUser.email}
-                            onMarkMessagesAsRead={(conversationId) =>
-                              markAsRead(conversationId, { readerRole: 'customer', forceReadState: true })
-                            }
-                            onFlagContent={onFlagContent}
-                            onOfferResponse={onOfferResponse}
-                            onClearChat={clearConversationMessages}
-                            height="h-[28rem]"
-                          />
-                        </div>
-                    )}
                   </div>
                   </div>
                   
@@ -1682,7 +1591,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           <ListingStockBadge vehicle={safeVehicle} size="md" />
                           <VerificationBadge vehicle={safeVehicle} />
                         </div>
-                        <ListingTrustChips vehicle={safeVehicle} seller={seller} />
+                        <ListingTrustStatusBar vehicle={safeVehicle} className="mt-1" />
 
                         {canRate && seller ? (
                           <div className="rounded-lg border border-purple-100 bg-purple-50/60 px-3 py-2">
@@ -1798,16 +1707,31 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
 
                         {/* Action Buttons — one clear primary, contact options secondary */}
                         <div className="pt-3 mt-3 border-t border-gray-200 space-y-2">
+                          {vehicleDealLead ? (
+                            <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2">
+                              <DealStageChip lead={vehicleDealLead} className="mb-1" />
+                              <button
+                                type="button"
+                                onClick={() => void handleChatWithSeller()}
+                                className="text-xs font-semibold text-blue-700 hover:underline"
+                              >
+                                {t('vehicle.detail.viewDealTimeline', { defaultValue: 'View deal timeline' })}
+                              </button>
+                            </div>
+                          ) : null}
                           {/* Primary CTA */}
                           <button
                             type="button"
                             onClick={() => void handleChatWithSeller()}
+                            data-testid="start-tracked-deal"
                             className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-all flex items-center justify-center gap-2 shadow-sm"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                             </svg>
-                            {t('vehicle.detail.chatWithSeller')}
+                            {vehicleDealLead
+                              ? t('vehicle.detail.openDealRoom', { defaultValue: 'Open deal room' })
+                              : t('vehicle.detail.startTrackedDeal', { defaultValue: 'Start tracked deal' })}
                           </button>
                           {/* Secondary contact options */}
                           {listingAvailable && (callHref || sellerWhatsAppUrl) ? (

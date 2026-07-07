@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, ProsAndCons, User, RatingEligibility } from '../types';
+import type { Vehicle, ProsAndCons, User, RatingEligibility, DealLead } from '../types';
 import { useTranslatedText, useTranslatedArray, useTranslatedFields } from '../hooks/useTranslatedText';
 import { generateProsAndCons } from '../services/geminiService';
 import { getFirstValidImage, getValidImages, swapToPlaceholderOnError } from '../utils/imageUtils';
@@ -17,16 +17,19 @@ import { buildSellerWhatsAppUrl } from '../utils/sellerContact.js';
 import { trackPhoneView } from '../services/listingService.js';
 import TestDriveModal from './TestDriveModal.js';
 import { ListingTrustChips } from './ListingTrustChips.js';
+import { ListingTrustStatusBar } from './ListingTrustStatusBar.js';
 import { isListingAvailable } from '../utils/listingStock.js';
 import StarRating from './StarRating';
 import { PriceInsights } from './PriceInsights';
 import { findSimilarVehicles } from '../utils/vehiclePricing';
 import SellerDisclosureDisplay from './SellerDisclosureDisplay';
-import BuyerInspectionForm from './BuyerInspectionForm';
 import { fetchRatingEligibility, submitPeerRating } from '../services/vehicleTrustService';
 import { useApp } from './AppProvider';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import { enrichVehicleWithSellerInfo, resolveVehicleSellerEmail } from '../utils/vehicleEnrichment';
+import { getDealLead } from '../services/dealService';
+import DealStageChip from './DealStageChip';
+import { maskVehicleIdentifier } from '../utils/vehiclePrivacy';
 
 interface MobileVehicleDetailProps {
   vehicle: Vehicle;
@@ -92,6 +95,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState(false);
   const [ratingEligibility, setRatingEligibility] = useState<RatingEligibility | null>(null);
   const [ratingDealId, setRatingDealId] = useState<string | undefined>();
+  const [vehicleDealLead, setVehicleDealLead] = useState<DealLead | null>(null);
 
   const safeVehicle = useMemo(() => {
     const sellerEmail = resolveVehicleSellerEmail(vehicle, contextVehicles);
@@ -253,9 +257,34 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     }
   };
 
-  const handleChat = () => {
-    onStartChat(safeVehicle);
+  const handleChat = async () => {
+    await Promise.resolve(onStartChat(safeVehicle));
+    if (currentUser?.email) {
+      try {
+        const lead = await getDealLead({ vehicleId: safeVehicle.id });
+        setVehicleDealLead(lead);
+      } catch {
+        /* ignore */
+      }
+    }
   };
+
+  const refreshVehicleDealLead = useCallback(async () => {
+    if (!currentUser?.email || safeVehicle.id == null) {
+      setVehicleDealLead(null);
+      return;
+    }
+    try {
+      const lead = await getDealLead({ vehicleId: safeVehicle.id });
+      setVehicleDealLead(lead);
+    } catch {
+      setVehicleDealLead(null);
+    }
+  }, [currentUser?.email, safeVehicle.id]);
+
+  useEffect(() => {
+    void refreshVehicleDealLead();
+  }, [refreshVehicleDealLead]);
 
   const handleShare = () => {
     setShowShareSheet(true);
@@ -291,6 +320,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     setShowTestDriveModal(false);
     setProsAndCons(null);
     setIsGeneratingProsCons(false);
+    setVehicleDealLead(null);
     scrollAppToTop();
     requestAnimationFrame(() => scrollAppToTop());
   }, [vehicle.id]);
@@ -342,8 +372,14 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   const contactToolbar =
     typeof document !== 'undefined'
       ? createPortal(
+          <div className="fixed inset-x-0 bottom-0 z-[90] border-t border-gray-200/90 bg-white/85 shadow-[0_-8px_32px_rgba(0,0,0,0.12)] backdrop-blur-xl pb-[max(12px,env(safe-area-inset-bottom,0px))]">
+            {vehicleDealLead ? (
+              <div className="px-4 pt-2 border-b border-gray-100">
+                <DealStageChip lead={vehicleDealLead} />
+              </div>
+            ) : null}
           <div
-            className="fixed inset-x-0 bottom-0 z-[90] flex gap-3 border-t border-gray-200/90 bg-white/85 px-4 pt-3 shadow-[0_-8px_32px_rgba(0,0,0,0.12)] backdrop-blur-xl pb-[max(12px,env(safe-area-inset-bottom,0px))]"
+            className="flex gap-3 px-4 pt-3"
             role="toolbar"
             aria-label={t('vehicle.detail.contactActions')}
           >
@@ -418,12 +454,15 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
-                {t('vehicle.detail.chat')}
+                {vehicleDealLead
+                  ? t('vehicle.detail.openDealRoom', { defaultValue: 'Deal room' })
+                  : t('vehicle.detail.startTrackedDeal', { defaultValue: 'Start deal' })}
               </span>
               {!currentUser && (
                 <span className="text-[10px] font-medium leading-tight text-white/90">{t('vehicle.detail.loginToChatWithSeller')}</span>
               )}
             </button>
+          </div>
           </div>,
           document.body
         )
@@ -474,6 +513,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 {safeVehicle.year} {safeVehicle.make} {safeVehicle.model}
               </h1>
               <div className="flex flex-wrap gap-2 mb-2">
+                <ListingTrustStatusBar vehicle={safeVehicle} metOnly />
                 <ListingTrustChips vehicle={safeVehicle} seller={seller} />
               </div>
               {safeVehicle.variant && (
@@ -690,17 +730,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                   category={safeVehicle.category}
                   vahanSnapshot={safeVehicle.vahanSnapshot}
                 />
-                {(!currentUser || currentUser.role === 'customer') &&
-                  currentUser?.email?.toLowerCase().trim() !==
-                    safeVehicle.sellerEmail?.toLowerCase().trim() && (
-                  <BuyerInspectionForm
-                    vehicleId={safeVehicle.databaseId || safeVehicle.id}
-                    category={safeVehicle.category}
-                    sellerChecklist={safeVehicle.sellerDisclosureChecklist}
-                    buyerEmail={currentUser?.role === 'customer' ? currentUser.email : undefined}
-                    onRequireLogin={onRequestLogin}
-                  />
-                )}
                 {safeVehicle.description && (
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -929,10 +958,10 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                     
                     return (
                       <div className="grid grid-cols-2 gap-3">
-                        <SpecCard label={t('vehicle.detail.vahan.registrationNumber')} value={extVehicle.registrationNumber || '-'} />
+                        <SpecCard label={t('vehicle.detail.vahan.registrationNumber')} value={maskVehicleIdentifier(extVehicle.registrationNumber)} />
                         <SpecCard label={t('vehicle.detail.vahan.registrationDate')} value={safeVehicle.registrationYear?.toString() || '-'} />
-                        <SpecCard label={t('vehicle.detail.vahan.engineNumber')} value={extVehicle.engineNumber || '-'} />
-                        <SpecCard label={t('vehicle.detail.vahan.chassisNumber')} value={extVehicle.chassisNumber || '-'} />
+                        <SpecCard label={t('vehicle.detail.vahan.engineNumber')} value={maskVehicleIdentifier(extVehicle.engineNumber)} />
+                        <SpecCard label={t('vehicle.detail.vahan.chassisNumber')} value={maskVehicleIdentifier(extVehicle.chassisNumber)} />
                         <SpecCard label={t('vehicle.detail.vahan.rtoOffice')} value={safeVehicle.rto || '-'} />
                         <SpecCard label={t('vehicle.detail.vahan.registeredState')} value={safeVehicle.state || '-'} />
                       </div>
@@ -1088,8 +1117,8 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   );
 };
 
-const SpecCard: React.FC<{ label: string; value?: string | number }> = ({ label, value }) => {
-  if (!value) return null;
+const SpecCard: React.FC<{ label: string; value?: React.ReactNode }> = ({ label, value }) => {
+  if (value === undefined || value === null || value === '') return null;
   return (
     <div className="bg-gray-50 rounded-lg p-4 text-center">
       <p className="text-xs text-gray-500 mb-1">{label}</p>

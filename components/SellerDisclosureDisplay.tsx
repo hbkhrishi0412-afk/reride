@@ -7,6 +7,7 @@ import { groupBySection, getSellerDefinitions } from '../lib/universalChecklist'
 import type { UniversalSellerChecklist, VahanSnapshot } from '../lib/vehicleDisclosureChecklist';
 import type { ListingChecklistTier } from '../lib/universalChecklist/types';
 import { computeListingTier } from '../lib/universalChecklist/helpers';
+import { isSensitiveDisclosureItem } from '../utils/vehiclePrivacy';
 
 interface SellerDisclosureDisplayProps {
   checklist?: UniversalSellerChecklist | null;
@@ -60,13 +61,19 @@ export const SellerDisclosureDisplay: React.FC<SellerDisclosureDisplayProps> = (
                 {section.items.map((def) => {
                   const item = checklist!.items.find((i) => i.id === def.id);
                   if (!item?.status) return null;
+                  const isSensitive = isSensitiveDisclosureItem(def.id);
                   return (
                     <div
                       key={def.id}
                       className="flex gap-2 items-start bg-white rounded-lg p-2 border border-emerald-100"
                     >
-                      {item.photoUrl && (
+                      {item.photoUrl && !isSensitive && (
                         <img src={item.photoUrl} alt="" className="w-12 h-12 rounded object-cover shrink-0" />
+                      )}
+                      {item.photoUrl && isSensitive && (
+                        <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-1 text-[10px] font-semibold text-gray-700 shrink-0">
+                          Document uploaded
+                        </span>
                       )}
                       <div className="min-w-0">
                         <p className="text-[10px] text-gray-500 leading-tight">{def.label}</p>
@@ -81,8 +88,11 @@ export const SellerDisclosureDisplay: React.FC<SellerDisclosureDisplayProps> = (
                         >
                           {item.status}
                         </p>
-                        {item.notes && (
+                        {item.notes && !isSensitive && (
                           <p className="text-xs text-gray-600 truncate">{item.notes}</p>
+                        )}
+                        {item.notes && isSensitive && (
+                          <p className="text-xs text-gray-500">Sensitive details hidden</p>
                         )}
                       </div>
                     </div>
