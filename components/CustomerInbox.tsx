@@ -270,9 +270,17 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
 
                     return (
                       <li key={conv.id}>
-                        <button
+                        <div
+                          role="button"
+                          tabIndex={0}
                           onClick={() => handleSelectConversation(conv)}
-                          className={`w-full text-left p-4 border-l-4 transition-all duration-200 ${
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              handleSelectConversation(conv);
+                            }
+                          }}
+                          className={`w-full text-left p-4 border-l-4 transition-all duration-200 cursor-pointer ${
                             isSelected 
                               ? 'bg-white border-orange-500 shadow-sm' 
                               : 'border-transparent hover:bg-white hover:border-gray-300'
@@ -348,7 +356,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                               ₹{conv.vehiclePrice.toLocaleString('en-IN')}
                             </p>
                           )}
-                        </button>
+                        </div>
                       </li>
                     );
                   })}

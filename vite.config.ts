@@ -148,10 +148,11 @@ export default defineConfig(({ mode }) => {
         // don't make every other page wait for those libraries to download.
         manualChunks(id) {
           if (!id.includes('node_modules')) {
-            // Enum/constants with no React dependency — must load before AppProvider
-            // (avoid circular chunk: admin-command-center ↔ app-provider).
+            // Enum/constants with no React dependency — safe to preload before App shell.
             if (id.includes('/vehicle-category')) return 'shared-core';
-            if (id.includes('/components/AppProvider')) return 'app-provider';
+            // Do NOT manually chunk AppProvider: it hosts Vite's __vitePreload helper and
+            // creates circular chunks (vendor-react → vendor-misc → app-provider → vendor-react)
+            // that leave React undefined at runtime ("reading 'Component'").
             return undefined;
           }
           // React + router + head management — needed on every page
@@ -169,7 +170,9 @@ export default defineConfig(({ mode }) => {
           if (id.includes('node_modules/@tanstack/')) return 'vendor-query'
           if (
             id.includes('node_modules/framer-motion/') ||
-            id.includes('node_modules/@emotion/')
+            id.includes('node_modules/@emotion/') ||
+            id.includes('node_modules/motion-dom/') ||
+            id.includes('node_modules/motion-utils/')
           ) {
             return 'vendor-motion'
           }
@@ -220,8 +223,23 @@ export default defineConfig(({ mode }) => {
           ) {
             return 'vendor-react'
           }
-          // Capacitor plugins — keep out of vendor-misc catch-all.
-          if (id.includes('node_modules/@capacitor/')) return 'vendor-capacitor'
+          // Capacitor plugins — keep out of vendor-misc catch-all (vendor-misc must not
+          // import app code or React-dependent preload helpers at init time).
+          if (
+            id.includes('node_modules/@capacitor/') ||
+            id.includes('node_modules/@capawesome/') ||
+            id.includes('node_modules/@aparajita/')
+          ) {
+            return 'vendor-capacitor'
+          }
+          // react-router v7 shared runtime — must stay with vendor-react, not vendor-misc.
+          if (
+            id.includes('node_modules/cookie/') ||
+            id.includes('node_modules/set-cookie-parser/') ||
+            id.includes('node_modules/turbo-stream/')
+          ) {
+            return 'vendor-react'
+          }
           // React UI helpers that must resolve the same React instance as vendor-react.
           if (
             id.includes('node_modules/react-cookie-consent') ||
