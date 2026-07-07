@@ -1,4 +1,4 @@
-import { getSupabaseAdminClient, supabaseUserService } from '../handler-shared.js';
+import { getSupabaseAdminClient, supabaseUserService } from '../../handler-shared.js';
 import type { DealActionHandler } from './context.js';
 import {
   assertDealParticipant,

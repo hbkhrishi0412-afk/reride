@@ -1288,7 +1288,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
   const serviceCount = filteredSellers.filter(isCarServiceProvider).length;
 
   return (
-    <div className="dp-root h-screen flex flex-col overflow-hidden bg-slate-50">
+    <div className="dp-root min-h-screen lg:h-screen flex flex-col overflow-hidden bg-slate-50">
       {/* ===== Scoped premium styles ===== */}
       <style>{DP_STYLES}</style>
 
@@ -1339,9 +1339,9 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
       </header>
 
       {/* Main Content Area - Split Layout: stack on small screens, side-by-side on lg+ */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        {/* Left Sidebar */}
-        <div className="w-full lg:w-[400px] xl:w-[440px] shrink-0 lg:border-r lg:border-slate-200 flex flex-col overflow-hidden bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+        {/* Left Sidebar — capped height when stacked below lg so map stays visible */}
+        <div className="w-full lg:w-[400px] xl:w-[440px] shrink-0 flex flex-col overflow-hidden bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] max-h-[48vh] min-h-[240px] lg:max-h-none lg:min-h-0 lg:border-r lg:border-slate-200">
           {/* Sidebar Header (glass) */}
           <div className="dp-sidebar-head p-4">
             <div className="flex items-center justify-between mb-3">
@@ -1495,7 +1495,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
         </div>
 
         {/* Right Map Section */}
-        <div className="flex-1 relative min-h-[300px] lg:min-h-0 dp-map-wrap">
+        <div className="flex-1 relative min-h-[42vh] md:min-h-[45vh] lg:min-h-0 dp-map-wrap">
           {/* Map Search - geocode city/area and fly to it */}
           <div className="absolute top-4 left-4 right-4 lg:right-auto z-[1000] lg:w-80">
             <div className="dp-map-search">

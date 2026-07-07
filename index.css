@@ -2563,6 +2563,63 @@ a:hover {
   }
 }
 
+/* Touch-friendly interactive targets (WCAG 2.5.5) */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Horizontal table scroll — contained, no page-level overflow */
+.responsive-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  max-width: 100%;
+}
+
+.responsive-table-scroll > table {
+  min-width: 100%;
+}
+
+@media (max-width: 639px) {
+  .responsive-table-scroll::after {
+    content: '';
+    display: block;
+    height: 1px;
+  }
+}
+
+/* Scroll hint for wide data tables on small screens */
+@media (max-width: 1023px) {
+  .table-scroll-hint {
+    position: relative;
+  }
+
+  .table-scroll-hint::before {
+    content: 'Swipe horizontally to see more →';
+    display: block;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #64748b;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+}
+
+/* Responsive prose for legal / policy pages */
+.prose-responsive {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+
+@media (min-width: 640px) {
+  .prose-responsive {
+    font-size: 1.0625rem;
+    line-height: 1.75;
+  }
+}
+
 /* Premium Dark Mode Support */
 @media (prefers-color-scheme: dark) {
   .dark-mode-premium {

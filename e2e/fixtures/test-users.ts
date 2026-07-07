@@ -16,6 +16,8 @@ export const E2E_TEST_USERS = [
     name: 'Test Seller',
     role: 'seller',
     status: 'active',
+    subscriptionPlan: 'premium',
+    planExpiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
     createdAt: new Date().toISOString(),
   },
   {

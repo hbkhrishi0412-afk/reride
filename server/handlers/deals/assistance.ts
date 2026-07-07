@@ -1,16 +1,16 @@
 import { createHmac } from 'crypto';
-import { getSupabaseAdminClient } from '../handler-shared.js';
+import { getSupabaseAdminClient } from '../../handler-shared.js';
 import type {
   AssistanceFulfillmentStatus,
   AssistanceQueueItem,
   DealLeadMetadata,
-} from '../../types.js';
+} from '../../../types.js';
 import {
   DEAL_ASSISTANCE_PACKAGES,
   assistancePackageNeedsInspection,
   assistancePackageNeedsRc,
   dealAssistancePackageLabel,
-} from '../../types.js';
+} from '../../../types.js';
 import type { DealActionHandler } from './context.js';
 import {
   assertDealParticipant,

@@ -4,6 +4,9 @@ import type { VercelRequest } from '@vercel/node';
 const API_PATH_SEGMENTS: ReadonlyArray<{ needle: string; route: string }> = [
   { needle: '/service-providers/register', route: '/api/service-providers/register' },
   { needle: '/csrf-token', route: '/api/csrf-token' },
+  { needle: '/vehicle-trust', route: '/api/vehicle-trust' },
+  { needle: '/deals', route: '/api/deals' },
+  { needle: '/complaints', route: '/api/complaints' },
   { needle: '/vehicle-data', route: '/api/vehicle-data' },
   { needle: '/buyer-activity', route: '/api/buyer-activity' },
   { needle: '/conversations', route: '/api/conversations' },

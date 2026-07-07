@@ -8,7 +8,7 @@ import {
   supabaseVehicleService,
   getSupabaseAdminClient,
   authenticateRequestDual,
-} from '../handler-shared.js';
+} from '../../handler-shared.js';
 import type {
   DealLead,
   DealLeadMetadata,
@@ -27,13 +27,13 @@ import type {
   DealInspectionBookingStatus,
   AssistanceQueueItem,
   AssistanceRequestSource,
-} from '../../types.js';
+} from '../../../types.js';
 import {
   deriveKanbanStatus,
   dealAssistancePackageLabel,
   assistancePackageNeedsInspection,
   assistancePackageNeedsRc,
-} from '../../types.js';
+} from '../../../types.js';
 
 export function firstQueryParam(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value[0];
@@ -65,7 +65,7 @@ export async function participantIdVariantsAdmin(
   const normalized = normalizeEmail(email);
   if (!normalized) return [];
   const resolved = await resolveUserTableIdAdmin(supabase, normalized);
-  const { emailToKey } = await import('../../services/supabase-user-service.js');
+  const { emailToKey } = await import('../../../services/supabase-user-service.js');
   const key = emailToKey(normalized);
   return [...new Set([resolved, normalized, key].filter(Boolean) as string[])];
 }
@@ -302,7 +302,7 @@ export async function notifyAdminsAssistanceRequest(params: {
 
     if (adminEmails.length) {
       const { notifyAdminsDealAssistanceEmail, notifyAdminDealAssistancePush } = await import(
-        '../../lib/dealAssistanceAlerts.js'
+        '../../../lib/dealAssistanceAlerts.js'
       );
       notifyAdminsDealAssistanceEmail({
         adminEmails,

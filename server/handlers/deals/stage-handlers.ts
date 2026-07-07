@@ -1,5 +1,5 @@
-import { getSupabaseAdminClient } from '../handler-shared.js';
-import type { DealLeadMetadata, DealStage } from '../../types.js';
+import { getSupabaseAdminClient } from '../../handler-shared.js';
+import type { DealLeadMetadata, DealStage } from '../../../types.js';
 import { validateAdvanceStage } from './stage-validation.js';
 import type { DealActionHandler } from './context.js';
 import {

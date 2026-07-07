@@ -77,7 +77,7 @@ export const AdminDataTableFrame: React.FC<{
             </div>
             {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
-        <div className="overflow-x-auto">
+        <div className="responsive-table-scroll table-scroll-hint">
             <div className="inline-block min-w-full align-middle px-1 pb-1 sm:px-2">{children}</div>
         </div>
     </section>
@@ -227,3 +227,45 @@ export const adminTableHeadClass =
 export const adminTableCellClass = 'px-4 py-3.5 text-sm text-slate-800';
 
 export const adminTableRowClass = 'border-b border-slate-100 transition-colors hover:bg-violet-50/[0.35]';
+
+/** Card layout for admin queues on viewports below lg */
+export const AdminMobileCardList: React.FC<{ children: React.ReactNode; className?: string }> = ({
+    children,
+    className = '',
+}) => <div className={`space-y-3 lg:hidden ${className}`.trim()} data-testid="admin-mobile-cards">{children}</div>;
+
+/** Table wrapper — hidden on mobile when paired with AdminMobileCardList */
+export const AdminDesktopTableWrap: React.FC<{ children: React.ReactNode; className?: string }> = ({
+    children,
+    className = '',
+}) => (
+    <div className={`hidden lg:block responsive-table-scroll table-scroll-hint rounded-xl border border-slate-200 ${className}`.trim()}>
+        {children}
+    </div>
+);
+
+export const AdminMobileCard: React.FC<{
+    children: React.ReactNode;
+    footer?: React.ReactNode;
+    highlight?: 'amber' | 'red';
+}> = ({ children, footer, highlight }) => (
+    <div
+        className={`rounded-xl border bg-white p-4 shadow-sm ${
+            highlight === 'amber'
+                ? 'border-amber-200 bg-amber-50/40'
+                : highlight === 'red'
+                  ? 'border-red-200 bg-red-50/40'
+                  : 'border-slate-200'
+        }`}
+    >
+        {children}
+        {footer ? <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">{footer}</div> : null}
+    </div>
+);
+
+export const AdminCardField: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+    <div className="flex items-start justify-between gap-3 py-1 text-sm">
+        <span className="shrink-0 text-slate-500">{label}</span>
+        <span className="min-w-0 text-right font-medium text-slate-900 break-words">{children}</span>
+    </div>
+);

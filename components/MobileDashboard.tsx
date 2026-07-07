@@ -1142,6 +1142,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         {isSeller && (
           <button
             type="button"
+            data-testid="seller-add-vehicle-nav"
             onClick={openAddVehicleTab}
             disabled={listingAtLimit}
             aria-disabled={listingAtLimit}

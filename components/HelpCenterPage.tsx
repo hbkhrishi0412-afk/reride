@@ -48,9 +48,9 @@ const HelpCenterPage: React.FC<HelpCenterPageProps> = ({ faqItems, onNavigate })
   }, [items]);
 
   return (
-    <div className="animate-fade-in container mx-auto py-8 max-w-4xl px-4 pb-24 lg:pb-12">
-      <div className="text-center mb-10">
-        <h1 className="text-4xl md:text-5xl font-extrabold text-reride-text-dark">
+    <div className="animate-fade-in container mx-auto py-6 sm:py-8 max-w-4xl px-4 pb-24 lg:pb-12">
+      <div className="text-center mb-6 sm:mb-10">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-reride-text-dark break-words">
           {t('help.title', { defaultValue: 'Help Center' })}
         </h1>
         <p className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto">
@@ -66,7 +66,7 @@ const HelpCenterPage: React.FC<HelpCenterPageProps> = ({ faqItems, onNavigate })
         placeholder={t('help.searchPlaceholder', { defaultValue: 'Search help articles…' })}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full p-4 border border-gray-300 rounded-xl focus:outline-none bg-white text-lg mb-4"
+        className="w-full p-3 sm:p-4 border border-gray-300 rounded-xl focus:outline-none bg-white text-base sm:text-lg mb-4 min-h-[44px]"
       />
 
       <div className="flex flex-wrap gap-2 mb-8">
@@ -75,7 +75,7 @@ const HelpCenterPage: React.FC<HelpCenterPageProps> = ({ faqItems, onNavigate })
             key={cat.id}
             type="button"
             onClick={() => setCategory(cat.id)}
-            className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-colors ${
+            className={`px-4 py-2 min-h-[44px] rounded-full text-sm font-semibold border transition-colors ${
               category === cat.id
                 ? 'bg-blue-600 text-white border-blue-600'
                 : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
@@ -96,10 +96,10 @@ const HelpCenterPage: React.FC<HelpCenterPageProps> = ({ faqItems, onNavigate })
                   <button
                     type="button"
                     onClick={() => setOpenId(openId === item.id ? null : item.id)}
-                    className="w-full flex justify-between items-center text-left px-4 py-3 hover:bg-gray-50"
+                    className="w-full flex justify-between items-center text-left px-4 py-3 min-h-[44px] hover:bg-gray-50"
                     aria-expanded={openId === item.id}
                   >
-                    <span className="font-semibold text-gray-900 pr-4">{item.question}</span>
+                    <span className="font-semibold text-gray-900 pr-4 break-words">{item.question}</span>
                     <svg
                       className={`w-5 h-5 text-gray-500 flex-shrink-0 transition-transform ${
                         openId === item.id ? 'rotate-180' : ''

@@ -4332,6 +4332,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     return (
       <button
         type="button"
+        data-testid={view === 'form' ? 'seller-add-vehicle-nav' : undefined}
         onClick={() => {
           if (disabled) {
             if (view === 'form') notifyListingLimitReached();

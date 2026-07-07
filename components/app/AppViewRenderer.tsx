@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { View as ViewEnum, Vehicle, User, Notification, Conversation, SubscriptionPlan, type SearchFilters } from '../../types';
 import { useApp } from '../AppProvider';
 import useIsMobileApp from '../../hooks/useIsMobileApp';
+import useIsLgUp from '../../hooks/useIsLgUp';
 import { enrichVehiclesWithSellerInfo } from '../../utils/vehicleEnrichment';
 import { matchesLocation } from '../../utils/cityMapping';
 import { buildVehicleMutationBody } from '../../utils/vehicleIdentity';
@@ -180,6 +181,8 @@ const ChatWidget = React.lazy(() => import('../ChatWidget').then(module => ({ de
 
 export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
   const { isMobileApp } = useIsMobileApp();
+  const isLgUp = useIsLgUp();
+  const preferCompactDashboard = isMobileApp || !isLgUp;
   const { t } = useTranslation();
   const {
     currentView,
@@ -740,8 +743,8 @@ switch (currentView) {
       return v.sellerEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
     });
 
-    // Use MobileDashboard for mobile app, Dashboard for desktop
-    if (isMobileApp) {
+    // Use MobileDashboard for mobile / compact viewports, Dashboard for large desktop
+    if (preferCompactDashboard) {
       // Return just the component - MobileLayout wrapper is handled by outer wrapper
       return (
         <DashboardErrorBoundary>
@@ -1307,7 +1310,7 @@ switch (currentView) {
   }
 
   case ViewEnum.BUYER_DASHBOARD:
-    if (isMobileApp && currentUser?.role === 'customer') {
+    if (preferCompactDashboard && currentUser?.role === 'customer') {
       return (
         <MobileBuyerDashboard
           currentUser={currentUser}
@@ -1595,6 +1598,7 @@ switch (currentView) {
         }}
         currentUserEmail={currentUser.email}
         onClearChat={clearConversationMessages}
+        onDeleteConversation={deleteConversation}
         chatPeerOnlineByConversationId={chatPeerOnlineByConversationId}
       />
     ) : (
@@ -1682,7 +1686,7 @@ switch (currentView) {
     // Pass sellers AND service providers if available; components will fetch directly from API if not provided.
     // Car-service providers and dealer/showroom sellers both appear on the Dealer page, differentiated by role.
     const sellersFromUsers = users.filter(user => user.role === 'seller' || user.role === 'service_provider');
-    if (isMobileApp) {
+    if (preferCompactDashboard) {
       return (
         <MobileDealerProfilesPage
           sellers={sellersFromUsers.length > 0 ? sellersFromUsers : undefined}

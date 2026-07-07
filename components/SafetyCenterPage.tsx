@@ -119,8 +119,8 @@ function SafetySection({ titleKey, accent, tipKeys, icon }: typeof SECTIONS[numb
 
 const SafetyCenterPage: React.FC<SafetyCenterPageProps> = ({ onNavigate }) => {
   return (
-    <div className="animate-fade-in container mx-auto py-8 max-w-5xl px-4 pb-24 lg:pb-12">
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950 p-8 md:p-12 shadow-reride-lg">
+    <div className="animate-fade-in container mx-auto py-6 sm:py-8 max-w-5xl px-4 pb-24 lg:pb-12">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950 p-4 sm:p-8 md:p-12 shadow-reride-lg">
         <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-blue-500/10" />
         <div className="absolute -right-4 top-20 w-32 h-32 rounded-full bg-blue-400/10" />
         <div className="relative">
@@ -130,7 +130,7 @@ const SafetyCenterPage: React.FC<SafetyCenterPageProps> = ({ onNavigate }) => {
             </svg>
             <AutoT i18nKey="safety.badge" />
           </span>
-          <h1 className="mt-4 text-3xl md:text-5xl font-extrabold text-white">
+          <h1 className="mt-4 text-2xl sm:text-3xl md:text-5xl font-extrabold text-white break-words">
             <AutoT i18nKey="safety.hero.title" as="span" />
           </h1>
           <p className="mt-3 max-w-2xl text-slate-300 text-lg">
@@ -145,7 +145,7 @@ const SafetyCenterPage: React.FC<SafetyCenterPageProps> = ({ onNavigate }) => {
         ))}
       </div>
 
-      <div className="mt-8 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 shadow-reride flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+      <div className="mt-8 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-8 shadow-reride flex flex-col md:flex-row md:items-center md:justify-between gap-6">
         <div className="flex items-start gap-4">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400 flex-shrink-0">
             <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -167,7 +167,7 @@ const SafetyCenterPage: React.FC<SafetyCenterPageProps> = ({ onNavigate }) => {
           <button
             type="button"
             onClick={() => onNavigate(View.SUPPORT)}
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold shadow-reride-md hover:bg-blue-700 transition-all flex-shrink-0"
+            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 min-h-[44px] rounded-xl bg-blue-600 text-white font-semibold shadow-reride-md hover:bg-blue-700 transition-all flex-shrink-0"
           >
             <AutoT i18nKey="safety.help.cta" />
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

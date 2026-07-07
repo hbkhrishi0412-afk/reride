@@ -8,6 +8,12 @@ import {
 } from '../../services/dealService.js';
 import { DealDetailPage } from './DealDetailPage.js';
 import { useApp } from '../AppProvider.js';
+import {
+  AdminCardField,
+  AdminDesktopTableWrap,
+  AdminMobileCard,
+  AdminMobileCardList,
+} from '../admin/AdminPrimitives.js';
 
 type ViewMode = 'kanban' | 'table';
 
@@ -273,7 +279,56 @@ export const AdminDealCenter: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <>
+        <AdminMobileCardList>
+          {filteredTableLeads.map((lead) => (
+            <AdminMobileCard key={`${lead.id}-mobile`}>
+              <button
+                type="button"
+                onClick={() => setSelectedLeadId(lead.id)}
+                className="font-mono text-sm font-bold text-reride-orange hover:underline"
+              >
+                {lead.id}
+              </button>
+              <div className="mt-3 space-y-1">
+                <AdminCardField label="Buyer">{lead.buyerDisplayName || lead.buyerEmail}</AdminCardField>
+                <AdminCardField label="Seller">{lead.sellerDisplayName || lead.sellerEmail}</AdminCardField>
+                <AdminCardField label="Vehicle">
+                  {lead.vehicleName || lead.metadata.vehicleName || '—'}
+                </AdminCardField>
+                <AdminCardField label="Stage">
+                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
+                    {dealKanbanLabel(lead.kanbanStatus || 'lead_created')}
+                  </span>
+                </AdminCardField>
+                <AdminCardField label="Updated">
+                  {new Date(lead.updatedAt).toLocaleDateString('en-IN')}
+                </AdminCardField>
+              </div>
+              <div className="mt-3">
+                <label className="mb-1 block text-xs font-semibold text-slate-500">Move to</label>
+                <select
+                  disabled={movingId === lead.id}
+                  value={lead.kanbanStatus || 'lead_created'}
+                  onChange={(e) => void handleMove(lead.id, e.target.value as DealKanbanStatus)}
+                  className="min-h-[44px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  {DEAL_KANBAN_COLUMNS.map((c) => (
+                    <option key={c.status} value={c.status}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </AdminMobileCard>
+          ))}
+        </AdminMobileCardList>
+        {filteredTableLeads.length === 0 && (
+          <p className="text-sm text-slate-500 p-8 text-center lg:hidden">
+            {tableLeads.length === 0 ? 'No deal leads yet.' : 'No deals match your search.'}
+          </p>
+        )}
+        <AdminDesktopTableWrap>
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             <thead className="bg-slate-50">
               <tr>
@@ -328,11 +383,12 @@ export const AdminDealCenter: React.FC = () => {
             </tbody>
           </table>
           {filteredTableLeads.length === 0 && (
-            <p className="text-sm text-slate-500 p-8 text-center">
+            <p className="text-sm text-slate-500 p-8 text-center hidden lg:block">
               {tableLeads.length === 0 ? 'No deal leads yet.' : 'No deals match your search.'}
             </p>
           )}
-        </div>
+        </AdminDesktopTableWrap>
+        </>
       )}
     </div>
   );

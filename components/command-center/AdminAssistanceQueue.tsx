@@ -8,6 +8,12 @@ import {
 } from '../../services/dealService.js';
 import { DealDetailPage } from './DealDetailPage.js';
 import { useApp } from '../AppProvider.js';
+import {
+  AdminCardField,
+  AdminDesktopTableWrap,
+  AdminMobileCard,
+  AdminMobileCardList,
+} from '../admin/AdminPrimitives.js';
 
 function statusColor(status: AssistanceFulfillmentStatus): string {
   switch (status) {
@@ -142,7 +148,88 @@ export const AdminAssistanceQueue: React.FC = () => {
           No open assistance requests.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <>
+        <AdminMobileCardList>
+          {queue.map((item) => (
+            <AdminMobileCard
+              key={item.id}
+              highlight={item.daysOpen > 3 && item.fulfillmentStatus === 'requested' ? 'amber' : undefined}
+              footer={
+                <>
+                  {!item.metadata.assistanceFulfillment?.assignedAdminEmail && (
+                    <button
+                      type="button"
+                      disabled={actingId === item.id}
+                      onClick={() => void handleAssignToMe(item)}
+                      className="min-h-[44px] rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50"
+                    >
+                      Assign to me
+                    </button>
+                  )}
+                  {item.fulfillmentStatus !== 'completed' && (
+                    <button
+                      type="button"
+                      disabled={actingId === item.id}
+                      onClick={() => void handleStatusChange(item, 'completed')}
+                      className="min-h-[44px] rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50"
+                    >
+                      Mark done
+                    </button>
+                  )}
+                </>
+              }
+            >
+              <button
+                type="button"
+                onClick={() => setSelectedLeadId(item.id)}
+                className="font-mono text-sm font-bold text-reride-orange hover:underline"
+              >
+                {item.id}
+              </button>
+              <p className="mt-1 text-sm font-semibold text-slate-900 break-words">
+                {item.vehicleName || item.metadata.vehicleName || '—'}
+              </p>
+              <div className="mt-3 space-y-1">
+                <AdminCardField label="Package">{item.packageLabel}</AdminCardField>
+                <AdminCardField label="Source">
+                  <span className="capitalize">{item.source}</span>
+                </AdminCardField>
+                <AdminCardField label="Paid">{formatInr(item.paidAmount)}</AdminCardField>
+                <AdminCardField label="Days open">{item.daysOpen}d</AdminCardField>
+                <AdminCardField label="Assigned">
+                  {item.metadata.assistanceFulfillment?.assignedAdminEmail || '—'}
+                </AdminCardField>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <select
+                  disabled={actingId === item.id}
+                  value={item.fulfillmentStatus}
+                  onChange={(e) =>
+                    void handleStatusChange(item, e.target.value as AssistanceFulfillmentStatus)
+                  }
+                  className={`min-h-[44px] rounded-lg border-0 px-2 py-2 text-xs font-semibold ${statusColor(item.fulfillmentStatus)}`}
+                >
+                  {ASSISTANCE_FULFILLMENT_STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+                {item.needsInspectionBooking && (
+                  <span className="rounded bg-teal-100 px-2 py-1 text-[10px] font-semibold text-teal-800">
+                    Inspection
+                  </span>
+                )}
+                {item.needsRcAssistance && (
+                  <span className="rounded bg-orange-100 px-2 py-1 text-[10px] font-semibold text-orange-800">
+                    RC
+                  </span>
+                )}
+              </div>
+            </AdminMobileCard>
+          ))}
+        </AdminMobileCardList>
+        <AdminDesktopTableWrap>
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             <thead className="bg-slate-50">
               <tr>
@@ -239,7 +326,8 @@ export const AdminAssistanceQueue: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </div>
+        </AdminDesktopTableWrap>
+        </>
       )}
     </div>
   );

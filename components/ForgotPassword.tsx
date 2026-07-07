@@ -190,9 +190,9 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onResetSent }) 
     : t('auth.forgotIntro');
 
   return (
-    <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl">
+    <div className="w-full max-w-md space-y-6 sm:space-y-8 bg-white p-6 sm:p-10 rounded-xl shadow-soft-xl">
       <div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-reride-text-dark dark:text-reride-text-dark">
+        <h2 className="mt-4 sm:mt-6 text-center text-2xl sm:text-3xl font-extrabold text-reride-text-dark dark:text-reride-text-dark">
           {title}
         </h2>
         {!showRequestSent && !showRecoveryComplete && (

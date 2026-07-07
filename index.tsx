@@ -12,14 +12,14 @@ if (typeof window !== 'undefined') {
 }
 
 import { completeWebSupabaseOAuthCallbackIfNeeded } from './utils/consumeWebSupabaseOAuthCallback';
-import React from 'react';
+import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, HashRouter } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import './index.css';
-import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
+import AppBootFallback from './components/AppBootFallback';
 import { reportWebVitals, logPerformanceMetrics } from './utils/performance';
 import { initializeViewportZoom } from './utils/viewportZoom';
 import { injectCriticalCSS } from './utils/criticalCSS';
@@ -40,6 +40,8 @@ function escapeHtmlMountMessage(s: string): string {
 
 // i18n - must run before any component that uses useTranslation
 import './lib/i18n';
+
+const App = React.lazy(() => import('./App'));
 
 // Preload route chunks for common deep links so Suspense fallback is shorter
 if (typeof window !== 'undefined') {
@@ -174,7 +176,9 @@ void (async () => {
           <QueryClientProvider client={queryClient}>
             <AppRouter>
               <ErrorBoundary>
-                <App />
+                <Suspense fallback={<AppBootFallback />}>
+                  <App />
+                </Suspense>
               </ErrorBoundary>
             </AppRouter>
           </QueryClientProvider>

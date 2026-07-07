@@ -1,6 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { DealRevenueDashboard } from '../../types.js';
 import { fetchAdminDealRevenue } from '../../services/dealService.js';
+import {
+  AdminCardField,
+  AdminDesktopTableWrap,
+  AdminMobileCard,
+  AdminMobileCardList,
+} from '../admin/AdminPrimitives.js';
 
 function formatInr(amount: number): string {
   return `₹${amount.toLocaleString('en-IN')}`;
@@ -115,7 +121,22 @@ export const AdminDealRevenue: React.FC = () => {
         {recentPayments.length === 0 ? (
           <p className="text-sm text-slate-500 p-6 text-center">No payments recorded yet.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <AdminMobileCardList>
+            {recentPayments.map((p) => (
+              <AdminMobileCard key={`${p.leadId}-${p.paidAt}-mobile`}>
+                <p className="font-mono text-sm font-bold text-reride-orange">{p.leadId}</p>
+                <div className="mt-3 space-y-1">
+                  <AdminCardField label="Package">{p.packageId}</AdminCardField>
+                  <AdminCardField label="Amount">{formatInr(p.amount)}</AdminCardField>
+                  <AdminCardField label="Paid">
+                    {new Date(p.paidAt).toLocaleString('en-IN')}
+                  </AdminCardField>
+                </div>
+              </AdminMobileCard>
+            ))}
+          </AdminMobileCardList>
+          <AdminDesktopTableWrap>
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
@@ -138,7 +159,8 @@ export const AdminDealRevenue: React.FC = () => {
                 ))}
               </tbody>
             </table>
-          </div>
+          </AdminDesktopTableWrap>
+          </>
         )}
       </div>
     </div>

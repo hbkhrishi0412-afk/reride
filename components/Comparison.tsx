@@ -95,7 +95,7 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, comparisonCategory = 
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-soft-lg animate-fade-in">
+    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-soft-lg animate-fade-in overflow-hidden">
       <PageHeader
         title={t('compare.pageTitle')}
         backLabel={t('compare.backToListings')}
@@ -124,15 +124,15 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, comparisonCategory = 
         </p>
       )}
       
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
+      <div className="responsive-table-scroll -mx-4 sm:mx-0 px-4 sm:px-0">
+        <table className="w-full border-collapse min-w-[480px] sm:min-w-[640px]">
           <thead>
             <tr className="border-b-2 border-gray-300 dark:border-gray-300">
-              <th className="text-left font-bold text-lg text-reride-text-dark p-4 sticky left-0 bg-white z-10">{t('compare.featureColumn')}</th>
+              <th className="text-left font-bold text-base sm:text-lg text-reride-text-dark p-3 sm:p-4 sticky left-0 bg-white z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">{t('compare.featureColumn')}</th>
               {vehicles.map(vehicle => (
-                <th key={vehicle.id} className="p-4 min-w-[220px]">
-                  <img src={getFirstValidImage(vehicle.images, vehicle.id)} alt={`${vehicle.make} ${vehicle.model}`} className="w-full h-40 object-cover rounded-lg mb-2" loading="lazy" decoding="async" onError={(e) => swapToPlaceholderOnError(e.currentTarget)} />
-                  <h3 className="font-bold text-lg dark:text-reride-text-dark">{vehicle.year} {vehicle.make} {vehicle.model} {vehicle.variant || ''}</h3>
+                <th key={vehicle.id} className="p-3 sm:p-4 min-w-[140px] sm:min-w-[180px] md:min-w-[220px]">
+                  <img src={getFirstValidImage(vehicle.images, vehicle.id)} alt={`${vehicle.make} ${vehicle.model}`} className="w-full h-28 sm:h-40 object-cover rounded-lg mb-2" loading="lazy" decoding="async" onError={(e) => swapToPlaceholderOnError(e.currentTarget)} />
+                  <h3 className="font-bold text-sm sm:text-lg dark:text-reride-text-dark break-words">{vehicle.year} {vehicle.make} {vehicle.model} {vehicle.variant || ''}</h3>
                   <button type="button" onClick={() => onToggleCompare(vehicle.id)} className="mt-2 text-sm text-reride-orange hover:text-reride-orange">{t('compare.remove')}</button>
                 </th>
               ))}
@@ -143,7 +143,7 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, comparisonCategory = 
               const hasDifference = areValuesDifferent(key);
               return (
                 <tr key={String(key)} className="border-b border-gray-200 dark:border-gray-200">
-                  <td className="font-semibold text-brand-gray-600 dark:text-reride-text-dark p-4 sticky left-0 bg-white z-10">{specLabels[key] ?? String(key)}</td>
+                  <td className="font-semibold text-brand-gray-600 dark:text-reride-text-dark p-3 sm:p-4 sticky left-0 bg-white z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">{specLabels[key] ?? String(key)}</td>
                   {vehicles.map(vehicle => {
                     let value = vehicle[key];
                     if (key === 'city') {
@@ -154,7 +154,7 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, comparisonCategory = 
                     const cellClass = highlightDiffs && hasDifference ? '' : '';
                     // Removed unused cellStyle variable
                     return (
-                      <td key={`${vehicle.id}-${String(key)}`} className={`p-4 text-center dark:text-brand-gray-200 transition-colors ${cellClass} ${isBest ? 'bg-reride-orange-light dark:bg-reride-orange/20' : ''}`}>
+                      <td key={`${vehicle.id}-${String(key)}`} className={`p-3 sm:p-4 text-center dark:text-brand-gray-200 transition-colors ${cellClass} ${isBest ? 'bg-reride-orange-light dark:bg-reride-orange/20' : ''}`}>
                          <span className={`inline-flex items-center gap-2 ${isBest ? 'font-bold text-reride-orange dark:text-reride-orange' : ''}`}>
                             {(() => {
                                 if (value === undefined || value === null) return '-';
@@ -189,9 +189,9 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, comparisonCategory = 
               const hasDifference = areValuesDifferent('features');
               return (
                  <tr key={feature} className="border-b border-gray-200 dark:border-gray-200">
-                     <td className="font-semibold text-brand-gray-600 dark:text-reride-text-dark p-4 sticky left-0 bg-white z-10">{feature}</td>
+                     <td className="font-semibold text-brand-gray-600 dark:text-reride-text-dark p-3 sm:p-4 sticky left-0 bg-white z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">{feature}</td>
                      {vehicles.map(vehicle => (
-                        <td key={`${vehicle.id}-${feature}`} className="p-4 transition-colors" style={highlightDiffs && hasDifference ? { backgroundColor: 'rgba(30, 136, 229, 0.1)' } : undefined}>
+                        <td key={`${vehicle.id}-${feature}`} className="p-3 sm:p-4 transition-colors" style={highlightDiffs && hasDifference ? { backgroundColor: 'rgba(30, 136, 229, 0.1)' } : undefined}>
                             {vehicle.features.includes(feature) ? <CheckIcon /> : <XIcon />}
                         </td>
                      ))}

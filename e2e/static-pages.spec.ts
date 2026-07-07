@@ -12,6 +12,14 @@ test.describe('Static pages', () => {
     await page.goto('/this-page-does-not-exist-reride', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await expect(page.getByTestId('not-found-page')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: /browse vehicles/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /help center/i })).toBeVisible();
+    await expect(page.getByTestId('not-found-page').getByRole('button', { name: /help center/i })).toBeVisible();
+  });
+
+  test('safety center loads without horizontal overflow at 375px', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/safety-center', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await expect(page.getByRole('heading').first()).toBeVisible({ timeout: 15_000 });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+    expect(overflow).toBe(false);
   });
 });

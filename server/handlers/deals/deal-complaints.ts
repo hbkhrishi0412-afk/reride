@@ -1,11 +1,11 @@
-import { getSupabaseAdminClient, supabaseUserService } from '../handler-shared.js';
+import { getSupabaseAdminClient, supabaseUserService } from '../../handler-shared.js';
 import type {
   DealComplaint,
   DealComplaintCategory,
   DealComplaintStatus,
   DealLeadMetadata,
-} from '../../types.js';
-import { DEAL_COMPLAINT_CATEGORIES } from '../../types.js';
+} from '../../../types.js';
+import { DEAL_COMPLAINT_CATEGORIES } from '../../../types.js';
 import type { DealActionHandler } from './context.js';
 import {
   assertDealParticipant,

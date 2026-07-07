@@ -24,6 +24,8 @@ interface CustomerInboxProps {
   onConsumedInitialConversation?: () => void;
   currentUserEmail?: string | null;
   onClearChat?: (conversationId: string) => void | Promise<void>;
+  /** Permanently delete the conversation (API + state). */
+  onDeleteConversation?: (conversationId: string) => void | Promise<void>;
   chatPeerOnlineByConversationId?: Record<string, boolean>;
   onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
   onMarkAllAsRead?: () => void;
@@ -54,6 +56,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   onConsumedInitialConversation,
   currentUserEmail,
   onClearChat,
+  onDeleteConversation,
   chatPeerOnlineByConversationId,
   onSetConversationReadState,
   onMarkAllAsRead,
@@ -106,6 +109,17 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
       onMarkMessagesAsRead(conv.id, 'customer');
     }
   }, [isInboxNarrow, onMarkMessagesAsRead]);
+
+  const handleDeleteConversation = useCallback(
+    (conversationId: string) => {
+      if (!onDeleteConversation) return;
+      if (typeof window !== 'undefined' && !window.confirm('Delete this conversation? This cannot be undone.')) {
+        return;
+      }
+      void Promise.resolve(onDeleteConversation(conversationId));
+    },
+    [onDeleteConversation],
+  );
 
   useEffect(() => {
     if (initialOpenConversationId) {
@@ -282,19 +296,34 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                               <span className="text-xs text-gray-500 whitespace-nowrap">
                                 {formatRelativeTime(conv.lastMessageAt)}
                               </span>
-                              {onSetConversationReadState && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onSetConversationReadState(conv.id, isUnread);
-                                  }}
-                                  className="text-[11px] text-gray-500 hover:text-orange-500"
-                                  aria-label={isUnread ? 'Mark conversation as read' : 'Mark conversation as unread'}
-                                >
-                                  {isUnread ? 'Mark read' : 'Mark unread'}
-                                </button>
-                              )}
+                              <div className="flex flex-col items-end gap-0.5">
+                                {onSetConversationReadState && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onSetConversationReadState(conv.id, isUnread);
+                                    }}
+                                    className="text-[11px] text-gray-500 hover:text-orange-500"
+                                    aria-label={isUnread ? 'Mark conversation as read' : 'Mark conversation as unread'}
+                                  >
+                                    {isUnread ? 'Mark read' : 'Mark unread'}
+                                  </button>
+                                )}
+                                {onDeleteConversation && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteConversation(conv.id);
+                                    }}
+                                    className="text-[11px] text-gray-500 hover:text-red-600"
+                                    aria-label="Delete conversation"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
                               {unreadMsgCount > 0 && (
                                 <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold text-white bg-orange-500 rounded-full">
                                   {unreadMsgCount > 9 ? '9+' : unreadMsgCount}

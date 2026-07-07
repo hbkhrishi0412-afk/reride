@@ -109,8 +109,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 md:p-8 lg:p-12 animate-fade-in">
             <div className="absolute inset-0" onClick={onClose} aria-hidden="true"></div>
-            <div className="relative bg-white rounded-[24px] shadow-2xl w-full max-w-3xl overflow-hidden transform transition-transform animate-scale-in">
-                <header className="bg-gradient-to-r from-orange-500 via-orange-400 to-orange-300 text-white px-8 py-6 flex items-center justify-between">
+            <div className="relative bg-white rounded-[24px] shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-hidden transform transition-transform animate-scale-in mx-4 sm:mx-0">
+                <header className="bg-gradient-to-r from-orange-500 via-orange-400 to-orange-300 text-white px-4 sm:px-8 py-5 sm:py-6 flex items-center justify-between">
                     <div>
                         <p className="text-xs uppercase tracking-[0.3em] font-semibold opacity-80">Edit User</p>
                         <h2 className="mt-1 text-2xl md:text-3xl font-bold tracking-tight">
@@ -128,7 +128,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                     </button>
                 </header>
                 <form onSubmit={handleSubmit}>
-                    <div className="max-h-[70vh] overflow-y-auto px-8 py-6 space-y-8 custom-scrollbar">
+                    <div className="max-h-[70vh] overflow-y-auto px-4 sm:px-8 py-5 sm:py-6 space-y-6 sm:space-y-8 custom-scrollbar">
                         <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
                                 <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">

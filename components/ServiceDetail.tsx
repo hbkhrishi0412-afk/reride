@@ -362,7 +362,7 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
     : undefined;
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 min-h-screen pb-safe">
+    <div className="bg-gray-50 dark:bg-gray-900 min-h-screen pb-24 lg:pb-safe">
       {/* Back Button */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-8">
         <button

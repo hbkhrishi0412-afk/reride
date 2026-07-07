@@ -42,12 +42,17 @@ async function walk(dir, files = []) {
 
 async function main() {
   const violations = [];
+  const depthViolations = [];
 
   for (const relDir of SCAN_DIRS) {
     const absDir = join(root, relDir);
     const files = await walk(absDir);
     for (const file of files) {
       const content = await readFile(file, 'utf8');
+      const relFile = file.replace(root + require('path').sep, '').replace(/\\/g, '/');
+      const nestedHandler =
+        /^server\/handlers\/[^/]+\//.test(relFile) || /^api\/[^/]+\//.test(relFile);
+
       let match;
       IMPORT_RE.lastIndex = 0;
       while ((match = IMPORT_RE.exec(content)) !== null) {
@@ -55,28 +60,59 @@ async function main() {
         if (isRelative(specifier) && !hasValidExtension(specifier)) {
           const line = content.slice(0, match.index).split('\n').length;
           violations.push({
-            file: file.replace(root + require('path').sep, '').replace(/\//g, '/'),
+            file: relFile,
             line,
             specifier,
           });
+        }
+        if (nestedHandler) {
+          const badNested = [
+            ['../handler-shared.js', '../../handler-shared.js'],
+            ['../../types.js', '../../../types.js'],
+          ];
+          for (const [wrong, hint] of badNested) {
+            if (specifier === wrong) {
+              const line = content.slice(0, match.index).split('\n').length;
+              depthViolations.push({ file: relFile, line, specifier, hint });
+            }
+          }
+          if (specifier.startsWith('../../services/') || specifier.startsWith('../../lib/')) {
+            const line = content.slice(0, match.index).split('\n').length;
+            depthViolations.push({
+              file: relFile,
+              line,
+              specifier,
+              hint: specifier.replace('../../', '../../../'),
+            });
+          }
         }
       }
     }
   }
 
-  if (violations.length === 0) {
+  if (violations.length === 0 && depthViolations.length === 0) {
     console.log('✅ All relative imports in api/ and server/ use explicit .js (or .json) extensions.');
     process.exit(0);
   }
 
-  console.error(`❌ ${violations.length} relative import(s) missing .js extension:\n`);
-  for (const v of violations.slice(0, 50)) {
-    console.error(`  ${v.file}:${v.line}  →  "${v.specifier}"`);
+  if (violations.length > 0) {
+    console.error(`❌ ${violations.length} relative import(s) missing .js extension:\n`);
+    for (const v of violations.slice(0, 50)) {
+      console.error(`  ${v.file}:${v.line}  →  "${v.specifier}"`);
+    }
+    if (violations.length > 50) {
+      console.error(`  … and ${violations.length - 50} more`);
+    }
+    console.error('\nFix: append `.js` to relative import paths (TypeScript ESM convention).');
   }
-  if (violations.length > 50) {
-    console.error(`  … and ${violations.length - 50} more`);
+
+  if (depthViolations.length > 0) {
+    console.error(`\n❌ ${depthViolations.length} nested handler import(s) use wrong relative depth:\n`);
+    for (const v of depthViolations.slice(0, 50)) {
+      console.error(`  ${v.file}:${v.line}  →  "${v.specifier}" (use ${v.hint})`);
+    }
   }
-  console.error('\nFix: append `.js` to relative import paths (TypeScript ESM convention).');
+
   process.exit(1);
 }
 

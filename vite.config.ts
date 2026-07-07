@@ -147,7 +147,11 @@ export default defineConfig(({ mode }) => {
         // pulls the code it actually needs. Routes that use maps/charts/i18n
         // don't make every other page wait for those libraries to download.
         manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined
+          if (!id.includes('node_modules')) {
+            if (id.includes('/components/command-center/')) return 'admin-command-center';
+            if (id.includes('/components/AppProvider')) return 'app-provider';
+            return undefined;
+          }
           // React + router + head management — needed on every page
           if (
             id.includes('node_modules/react/') ||

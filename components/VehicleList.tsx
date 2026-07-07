@@ -2786,8 +2786,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           <div className="absolute bottom-20 left-20 w-96 h-96 bg-gradient-to-tr from-orange-200/15 to-rose-200/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
         </div>
         
-        <div className="relative z-10 used-cars-page grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-4 lg:gap-8 container mx-auto py-4 lg:py-8">
-          <aside className={`filters hidden lg:block lg:sticky top-24 self-start space-y-6 transition-all duration-300 ${isDesktopFilterVisible ? 'w-[300px] opacity-100' : 'w-0 opacity-0 -translate-x-full'}`}>
+        <div className="relative z-10 used-cars-page grid grid-cols-1 md:grid-cols-[auto_1fr] gap-4 md:gap-6 lg:gap-8 container mx-auto py-4 md:py-6 lg:py-8">
+          <aside className={`filters hidden md:block md:sticky top-24 self-start space-y-6 transition-all duration-300 ${isDesktopFilterVisible ? 'w-[260px] lg:w-[300px] opacity-100' : 'w-0 opacity-0 -translate-x-full'}`}>
               <div className={`bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-6 ${isDesktopFilterVisible ? 'block' : 'hidden'}`}>
                 <div className="flex items-center gap-3 mb-6">
                   <div
@@ -2845,16 +2845,16 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
           {/* Mobile-optimized filters and sort bar - sticky on mobile */}
           <div 
-            className="sticky-filter-bar lg:static lg:bg-transparent py-2 lg:py-0 lg:border-none -mx-4 px-4 lg:mx-0 lg:px-0 mb-2"
+            className="sticky-filter-bar md:static md:bg-transparent py-2 md:py-0 md:border-none -mx-4 px-4 md:mx-0 md:px-0 mb-2"
           >
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-2 lg:gap-3">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-2 md:gap-3">
               <div className='flex items-center gap-1.5 w-full sm:w-auto'>
-                <button onClick={() => setIsDesktopFilterVisible(prev => !prev)} className="hidden lg:block p-1.5 rounded-md bg-white dark:bg-brand-gray-700 hover:bg-reride-off-white dark:hover:bg-brand-gray-600 transition-colors">
+                <button onClick={() => setIsDesktopFilterVisible(prev => !prev)} className="hidden md:block p-1.5 rounded-md bg-white dark:bg-brand-gray-700 hover:bg-reride-off-white dark:hover:bg-brand-gray-600 transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
                 </button>
                 <button 
                   onClick={() => handleOpenFilterModal()} 
-                  className="lg:hidden relative p-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors native-button active:opacity-80 min-h-[40px] min-w-[40px] flex items-center justify-center shadow-md"
+                  className="md:hidden relative p-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors native-button active:opacity-80 min-h-[40px] min-w-[40px] flex items-center justify-center shadow-md"
                   style={{ backgroundColor: '#FF6B35' }}
                   aria-label={`Open filters${activeFilterCount > 0 ? ` (${activeFilterCount} active)` : ''}`}
                 >

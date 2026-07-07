@@ -113,10 +113,10 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
   }
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="bg-gradient-to-r from-reride-orange to-orange-600 text-white rounded-2xl p-8 mb-8 animate-fade-in">
-        <h1 className="text-4xl font-bold mb-4">Used Cars in {city}</h1>
-        <p className="text-xl mb-6">
+    <div className="container mx-auto px-4 py-6 sm:py-8 pb-24 lg:pb-8">
+      <div className="bg-gradient-to-r from-reride-orange to-orange-600 text-white rounded-2xl p-4 sm:p-8 mb-6 sm:mb-8 animate-fade-in">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4 break-words">Used Cars in {city}</h1>
+        <p className="text-base sm:text-xl mb-4 sm:mb-6">
           Find your perfect car from {cityStats.totalListings} quality listings
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

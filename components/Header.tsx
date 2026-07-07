@@ -171,7 +171,7 @@ const Header: React.FC<HeaderProps> = memo(({
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-end items-center py-1.5">
                         <div className="flex items-center gap-3">
                             {showHomeLocationActions ? (
-                                <div className="hidden md:flex items-center gap-2">
+                                <div className="hidden lg:flex items-center gap-2">
                                     <HomeLocationActionButtons
                                         testId="home-location-banner"
                                         selectedCity={selectedCity}
@@ -211,7 +211,7 @@ const Header: React.FC<HeaderProps> = memo(({
                 ) : null}
 
                 {showHomeLocationActions ? (
-                    <div className="md:hidden border-b border-gray-100 bg-gray-50" data-testid="header-mobile-home-location">
+                    <div className="lg:hidden border-b border-gray-100 bg-gray-50" data-testid="header-mobile-home-location">
                         <div className="max-w-7xl mx-auto px-4 py-2 flex justify-end">
                             <button
                                 type="button"
@@ -279,7 +279,7 @@ const Header: React.FC<HeaderProps> = memo(({
                             />
 
                             {/* Premium Navigation */}
-                            <nav className="hidden md:flex items-center gap-1">
+                            <nav className="hidden lg:flex items-center gap-1">
                                 <CityDropdown 
                                     allVehicles={allVehicles}
                                     onCitySelect={(city) => {
@@ -409,7 +409,7 @@ const Header: React.FC<HeaderProps> = memo(({
                             </nav>
 
                             {/* Right Side Actions */}
-                            <div className="hidden md:flex items-center gap-3">
+                            <div className="hidden lg:flex items-center gap-3">
                                 <LanguageSwitcher />
                                 <button onClick={onOpenCommandPalette} className="p-2 hover:bg-white rounded-full transition-colors" aria-label={t('common.search')}>
                                     <svg className="h-6 w-6 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -584,8 +584,8 @@ const Header: React.FC<HeaderProps> = memo(({
                             </div>
 
                             {/* Mobile Menu Button */}
-                            <div className="md:hidden">
-                                <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-reride-text-dark">
+                            <div className="lg:hidden">
+                                <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-reride-text-dark" aria-label={t('nav.menu', { defaultValue: 'Menu' })} aria-expanded={isMobileMenuOpen}>
                                     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
                                     </svg>
@@ -598,18 +598,18 @@ const Header: React.FC<HeaderProps> = memo(({
 
                 {/* Mobile Menu */}
                 {isMobileMenuOpen && (
-                    <div ref={mobileMenuRef} className="md:hidden absolute top-full left-0 w-full bg-white shadow-lg animate-fade-in z-40">
-                        <nav className="p-4 space-y-2">
+                    <div ref={mobileMenuRef} className="lg:hidden absolute top-full left-0 w-full bg-white shadow-lg animate-fade-in z-40 max-h-[min(70vh,32rem)] overflow-y-auto overscroll-contain">
+                        <nav className="p-4 space-y-1">
                             <LanguageSwitcher variant="inline" onSelect={() => setIsMobileMenuOpen(false)} className="!px-0 !py-2 border-b border-gray-100 mb-2" />
-                            <button onClick={() => handleNavigate(ViewEnum.USED_CARS)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.buyCar')}</button>
-                            <button onClick={() => handleNavigate(ViewEnum.SELLER_LOGIN)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.sellCar')}</button>
-                            <button onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.carServices')}</button>
-                            <button onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.dealers')}</button>
+                            <button onClick={() => handleNavigate(ViewEnum.USED_CARS)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.buyCar')}</button>
+                            <button onClick={() => handleNavigate(ViewEnum.SELLER_LOGIN)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.sellCar')}</button>
+                            <button onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.carServices')}</button>
+                            <button onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.dealers')}</button>
                             <div className="rounded-lg border border-gray-100 overflow-hidden">
                                 <button
                                     type="button"
                                     onClick={() => setIsMobileMoreOpen((p) => !p)}
-                                    className="flex w-full items-center justify-between text-left font-semibold text-reride-text-dark py-2 px-4 hover:bg-white"
+                                    className="flex w-full items-center justify-between text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] hover:bg-white"
                                     aria-expanded={isMobileMoreOpen}
                                 >
                                     {t('nav.more')}
@@ -625,33 +625,33 @@ const Header: React.FC<HeaderProps> = memo(({
                                 </button>
                                 {isMobileMoreOpen && (
                                     <div className="border-t border-gray-100 bg-gray-50/80">
-                                        <button onClick={() => handleNavigate(ViewEnum.SUPPORT)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-2 px-6 hover:bg-white">{t('nav.support')}</button>
-                                        <button onClick={() => handleNavigate(ViewEnum.SAFETY_CENTER)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-2 px-6 hover:bg-white">{t('footer.safety')}</button>
-                                        <button onClick={() => handleNavigate(ViewEnum.ABOUT_US)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-2 px-6 hover:bg-white">{t('nav.aboutUs')}</button>
+                                        <button onClick={() => handleNavigate(ViewEnum.SUPPORT)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-3 px-6 min-h-[44px] hover:bg-white">{t('nav.support')}</button>
+                                        <button onClick={() => handleNavigate(ViewEnum.SAFETY_CENTER)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-3 px-6 min-h-[44px] hover:bg-white">{t('footer.safety')}</button>
+                                        <button onClick={() => handleNavigate(ViewEnum.ABOUT_US)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-3 px-6 min-h-[44px] hover:bg-white">{t('nav.aboutUs')}</button>
                                     </div>
                                 )}
                             </div>
                             <hr className="border-gray-200"/>
-                            <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.compareCount', { count: compareCount })}</button>
-                            <button onClick={() => handleNavigate(ViewEnum.WISHLIST)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.wishlistCount', { count: wishlistCount })}</button>
+                            <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.compareCount', { count: compareCount })}</button>
+                            <button onClick={() => handleNavigate(ViewEnum.WISHLIST)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.wishlistCount', { count: wishlistCount })}</button>
                             {(currentUser && currentUser.role === 'customer') && (
                                 <>
-                                    <button onClick={() => handleNavigate(ViewEnum.BUYER_DASHBOARD)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.myDashboard')}</button>
-                                    <button type="button" onClick={() => { onOpenMessages(); setIsMobileMenuOpen(false); }} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.inboxCount', { count: inboxCount })}</button>
+                                    <button onClick={() => handleNavigate(ViewEnum.BUYER_DASHBOARD)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.myDashboard')}</button>
+                                    <button type="button" onClick={() => { onOpenMessages(); setIsMobileMenuOpen(false); }} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.inboxCount', { count: inboxCount })}</button>
                                 </>
                             )}
                             <hr className="border-gray-200"/>
                             {currentUser ? (
                                 <>
-                                    {currentUser.role === 'seller' && <button onClick={() => handleNavigate(ViewEnum.SELLER_DASHBOARD)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.dashboard')}</button>}
+                                    {currentUser.role === 'seller' && <button onClick={() => handleNavigate(ViewEnum.SELLER_DASHBOARD)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.dashboard')}</button>}
                                     {currentUser.role === 'seller' && (
-                                        <button type="button" onClick={() => { onOpenMessages(); setIsMobileMenuOpen(false); }} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">
+                                        <button type="button" onClick={() => { onOpenMessages(); setIsMobileMenuOpen(false); }} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">
                                             {t('nav.messages')}{inboxCount > 0 ? ` (${inboxCount})` : ''}
                                         </button>
                                     )}
-                                    {currentUser.role === 'admin' && <button onClick={() => handleNavigate(ViewEnum.ADMIN_PANEL)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.adminPanel')}</button>}
-                                    <button onClick={() => handleNavigate(ViewEnum.PROFILE)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.myProfile')}</button>
-                                    <button onClick={onLogout} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.logout')}</button>
+                                    {currentUser.role === 'admin' && <button onClick={() => handleNavigate(ViewEnum.ADMIN_PANEL)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.adminPanel')}</button>}
+                                    <button onClick={() => handleNavigate(ViewEnum.PROFILE)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.myProfile')}</button>
+                                    <button onClick={onLogout} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.logout')}</button>
                                 </>
                             ) : serviceProvider ? (
                                 <>
@@ -659,10 +659,10 @@ const Header: React.FC<HeaderProps> = memo(({
                                         <p className="font-semibold text-reride-text-dark text-sm">{serviceProvider.name || t('role.serviceProvider')}</p>
                                         {serviceProvider.city && <p className="text-xs text-gray-500">{serviceProvider.city}</p>}
                                     </div>
-                                    <button onClick={onLogout} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.logout')}</button>
+                                    <button onClick={onLogout} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.logout')}</button>
                                 </>
                             ) : (
-                                <button onClick={() => handleNavigate(ViewEnum.LOGIN_PORTAL)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.loginRegister')}</button>
+                                <button onClick={() => handleNavigate(ViewEnum.LOGIN_PORTAL)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.loginRegister')}</button>
                             )}
                         </nav>
                     </div>

@@ -62,15 +62,15 @@ const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
   const whatWeDoBody = useAutoT('about.whatWeDo.body');
 
   return (
-    <div className="animate-fade-in container mx-auto py-8 max-w-5xl px-4 pb-24 lg:pb-12">
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950 p-8 md:p-12 shadow-reride-lg">
+    <div className="animate-fade-in container mx-auto py-6 sm:py-8 max-w-5xl px-4 pb-24 lg:pb-12">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950 p-4 sm:p-8 md:p-12 shadow-reride-lg">
         <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-blue-500/10" />
         <div className="absolute -left-8 bottom-0 w-40 h-40 rounded-full bg-blue-400/10" />
         <div className="relative">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm font-semibold text-blue-100 ring-1 ring-white/15 backdrop-blur-sm">
             <AutoT i18nKey="about.badge" />
           </span>
-          <h1 className="mt-4 text-3xl md:text-5xl font-extrabold text-white">
+          <h1 className="mt-4 text-2xl sm:text-3xl md:text-5xl font-extrabold text-white break-words">
             <AutoT i18nKey="about.hero.title" as="span" />
           </h1>
           <p className="mt-3 max-w-2xl text-slate-300 text-lg">
@@ -79,7 +79,7 @@ const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-3 gap-4">
+      <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {STAT_KEYS.map((stat) => (
           <div
             key={stat.labelKey}
@@ -93,7 +93,7 @@ const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
         ))}
       </div>
 
-      <div className="mt-8 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 md:p-10 shadow-reride">
+      <div className="mt-8 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-8 md:p-10 shadow-reride">
         <h2 className="text-2xl font-bold text-reride-text-dark dark:text-white mb-3">
           <AutoT i18nKey="about.whatWeDo.title" />
         </h2>
@@ -136,7 +136,7 @@ const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      <div className="mt-8 rounded-2xl border border-amber-100 bg-amber-50/80 dark:bg-amber-500/10 dark:border-amber-500/20 p-8">
+      <div className="mt-8 rounded-2xl border border-amber-100 bg-amber-50/80 dark:bg-amber-500/10 dark:border-amber-500/20 p-4 sm:p-8">
         <h2 className="text-xl font-bold text-reride-text-dark dark:text-white mb-2">
           <AutoT i18nKey="about.notWe.title" />
         </h2>
@@ -156,7 +156,7 @@ const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      <div className="mt-8 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 shadow-reride flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+      <div className="mt-8 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 sm:p-8 shadow-reride flex flex-col md:flex-row md:items-center md:justify-between gap-6">
         <div>
           <h2 className="text-xl font-bold text-reride-text-dark dark:text-white">
             <AutoT i18nKey="about.contact.title" />
@@ -175,7 +175,7 @@ const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
           <button
             type="button"
             onClick={() => onNavigate(View.SUPPORT)}
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold shadow-reride-md hover:bg-blue-700 transition-all flex-shrink-0"
+            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 min-h-[44px] rounded-xl bg-blue-600 text-white font-semibold shadow-reride-md hover:bg-blue-700 transition-all flex-shrink-0"
           >
             <AutoT i18nKey="about.contact.cta" />
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

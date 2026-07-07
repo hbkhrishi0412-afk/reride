@@ -3,26 +3,8 @@ import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import type { Vehicle, User, Conversation, PlatformSettings, AuditLogEntry, VehicleData, SupportTicket, FAQItem, SubscriptionPlan, PlanDetails } from '../types';
 import { View } from '../types';
-import EditUserModal from './EditUserModal';
-import EditVehicleModal from './EditVehicleModal';
-import PaymentManagement from './PaymentManagement';
 // Removed blocking import - will lazy load PLAN_DETAILS when needed
-import { VehicleDataBulkUploadModal } from './VehicleDataBulkUploadModal';
-import VehicleDataManagement from './VehicleDataManagement';
-import SellerFormPreview from './SellerFormPreview';
 import { planService } from '../services/planService';
-import ImportVehiclesModal from './ImportVehiclesModal';
-import ImportUsersModal from './ImportUsersModal';
-import AdminServiceOps from './AdminServiceOps';
-import ServiceManagement from './ServiceManagement';
-import SellCarAdmin from './SellCarAdmin';
-import AdminDealCenter from './command-center/AdminDealCenter';
-import AdminRcQueue from './command-center/AdminRcQueue';
-import AdminAssistanceQueue from './command-center/AdminAssistanceQueue';
-import AdminFraudDashboard from './command-center/AdminFraudDashboard';
-import AdminDealComplaints from './command-center/AdminDealComplaints';
-import AdminComplaintCases from './command-center/AdminComplaintCases';
-import AdminDealRevenue from './command-center/AdminDealRevenue';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 import { isRerideStaffPick } from '../utils/staffPick';
 import {
@@ -35,6 +17,10 @@ import {
     AdminPageIntro,
     AdminToolbar,
     adminTableHeadClass,
+    AdminMobileCardList,
+    AdminMobileCard,
+    AdminCardField,
+    AdminDesktopTableWrap,
 } from './admin/AdminPrimitives';
 import {
     AdminListingColumnCustomizer,
@@ -43,12 +29,48 @@ import {
     renderListingCell,
     useListingColumnVisibility,
 } from './admin/AdminListingColumns';
+import {
+    LazyPaymentManagement,
+    LazyVehicleDataManagement,
+    LazyVehicleDataBulkUploadModal,
+    LazySellerFormPreview,
+    LazyImportVehiclesModal,
+    LazyImportUsersModal,
+    LazyAdminServiceOps,
+    LazyServiceManagement,
+    LazySellCarAdmin,
+    LazyAdminDealCenter,
+    LazyAdminRcQueue,
+    LazyAdminAssistanceQueue,
+    LazyAdminFraudDashboard,
+    LazyAdminDealComplaints,
+    LazyAdminComplaintCases,
+    LazyAdminDealRevenue,
+    LazyEditUserModal,
+    LazyEditVehicleModal,
+    withAdminViewSuspense,
+    withAdminModalSuspense,
+} from './admin/adminLazyViews';
 import { vehicleSearchHaystack } from '../utils/vehicleListFilters';
 
 /** Safe ₹ formatting — API/mock data can omit or invalidate numeric fields. */
 function formatInrAmount(value: unknown): string {
     const n = typeof value === 'number' ? value : Number(value);
     return (Number.isFinite(n) ? n : 0).toLocaleString('en-IN');
+}
+
+function formatUserMemberSince(user: User): string {
+    const memberSince = user.createdAt || user.joinedDate;
+    if (!memberSince) return 'N/A';
+    try {
+        const date = new Date(memberSince);
+        if (!isNaN(date.getTime())) {
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+    } catch {
+        /* invalid date */
+    }
+    return 'N/A';
 }
 
 // --- Seller Filter Dropdown Component ---
@@ -98,7 +120,7 @@ const SellerFilterDropdown: React.FC<SellerFilterDropdownProps> = ({
         <div className="relative" ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex min-w-[200px] items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+                className="flex w-full sm:min-w-[200px] sm:w-auto items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 min-h-[44px] text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
             >
                 <span className="truncate">{selectedSellerName}</span>
                 <svg 
@@ -1904,9 +1926,119 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                     </button>
                                 ) : null}
                             </div>
-                            <div className="overflow-x-auto">
+                            <AdminMobileCardList className="p-4">
+                                {directoryTableRows.length === 0 ? (
+                                    <p className="py-8 text-center text-sm text-gray-500">No users match this filter or search.</p>
+                                ) : (
+                                    directoryTableRows.map((user) => (
+                                        <AdminMobileCard
+                                            key={`${user.email}-mobile`}
+                                            footer={
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingUser(user)}
+                                                        className="min-h-[44px] rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const action = user.status === 'active' ? 'suspend' : 'activate';
+                                                            if (window.confirm(`Are you sure you want to ${action} user ${user.email}?`)) {
+                                                                handleActionWithLoading(`toggle-user-${user.email}`, () =>
+                                                                    onToggleUserStatus(user.email)
+                                                                );
+                                                            }
+                                                        }}
+                                                        disabled={loadingActions.has(`toggle-user-${user.email}`)}
+                                                        className="min-h-[44px] rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-50"
+                                                    >
+                                                        {user.status === 'active' ? 'Suspend' : 'Activate'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (
+                                                                window.confirm(
+                                                                    `Are you sure you want to delete user ${user.email}? This action cannot be undone.`
+                                                                )
+                                                            ) {
+                                                                handleActionWithLoading(`delete-user-${user.email}`, () =>
+                                                                    onDeleteUser(user.email)
+                                                                );
+                                                            }
+                                                        }}
+                                                        disabled={loadingActions.has(`delete-user-${user.email}`)}
+                                                        className="min-h-[44px] rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </>
+                                            }
+                                        >
+                                            <p className="text-base font-semibold text-gray-900 break-words">{user.name}</p>
+                                            <p className="mt-0.5 text-sm text-gray-600 break-all">{user.email}</p>
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded-full ${
+                                                    user.role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                                                    user.role === 'seller' ? 'bg-blue-100 text-blue-700' :
+                                                    user.role === 'service_provider' ? 'bg-teal-100 text-teal-800' :
+                                                    user.role === 'finance_partner' ? 'bg-amber-100 text-amber-800' :
+                                                    'bg-emerald-100 text-emerald-800'
+                                                }`}>
+                                                    {user.role}
+                                                </span>
+                                                <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded-full ${
+                                                    user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                                }`}>
+                                                    {user.status}
+                                                </span>
+                                            </div>
+                                            <div className="mt-3 space-y-1">
+                                                <AdminCardField label="Mobile">{user.mobile || 'N/A'}</AdminCardField>
+                                                <AdminCardField label="Address">
+                                                    {user.address || user.location || 'N/A'}
+                                                </AdminCardField>
+                                                <AdminCardField label="Member since">{formatUserMemberSince(user)}</AdminCardField>
+                                                {showUserDirectorySellerColumns && (user.role === 'seller' || user.role === 'service_provider') ? (
+                                                    <AdminCardField label="Recommended">
+                                                        {isRerideStaffPick(user.rerideRecommended) ? 'Yes' : 'No'}
+                                                    </AdminCardField>
+                                                ) : null}
+                                                {showUserDirectorySellerColumns && user.partnerBanks && user.partnerBanks.length > 0 ? (
+                                                    <AdminCardField label="Finance partners">
+                                                        {user.partnerBanks.join(', ')}
+                                                    </AdminCardField>
+                                                ) : null}
+                                                <AdminCardField label="Documents">
+                                                    <span className="inline-flex flex-wrap justify-end gap-1">
+                                                        {user.aadharCard?.documentUrl ? (
+                                                            <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                                                                user.aadharCard?.isVerified ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                                            }`}>
+                                                                Aadhar{user.aadharCard.isVerified ? ' ✓' : ' !'}
+                                                            </span>
+                                                        ) : null}
+                                                        {user.panCard?.documentUrl ? (
+                                                            <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                                                                user.panCard?.isVerified ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                                            }`}>
+                                                                PAN{user.panCard.isVerified ? ' ✓' : ' !'}
+                                                            </span>
+                                                        ) : null}
+                                                        {!user.aadharCard?.documentUrl && !user.panCard?.documentUrl ? '—' : null}
+                                                    </span>
+                                                </AdminCardField>
+                                            </div>
+                                        </AdminMobileCard>
+                                    ))
+                                )}
+                            </AdminMobileCardList>
+                            <AdminDesktopTableWrap className="rounded-none border-0 border-t border-gray-200">
                                 <div className="max-h-[min(70vh,720px)] overflow-y-auto">
-                                <table className="w-full divide-y divide-gray-200" style={{ minWidth: '880px' }}>
+                                <table className="w-full divide-y divide-gray-200 min-w-[640px] lg:min-w-[880px]">
                                     <thead className="sticky top-0 z-10 bg-gray-50 shadow-[0_1px_0_0_rgb(229_231_235)]">
                                         <tr>
                                             <SortableHeader title="Name" sortKey="name" sortConfig={sortConfig} requestSort={requestSort} />
@@ -1937,20 +2069,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             </tr>
                                         ) : null}
                                         {directoryTableRows.map(user => {
-                                            const memberSince = user.createdAt || user.joinedDate;
-                                            const formattedDate = memberSince 
-                                                ? (() => {
-                                                    try {
-                                                        const date = new Date(memberSince);
-                                                        if (!isNaN(date.getTime())) {
-                                                            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                                                        }
-                                                    } catch (e) {
-                                                        // Invalid date
-                                                    }
-                                                    return 'N/A';
-                                                })()
-                                                : 'N/A';
+                                            const formattedDate = formatUserMemberSince(user);
                                             return (
                                             <tr key={user.email} className="transition-colors odd:bg-white even:bg-slate-50/60 hover:bg-indigo-50/40">
                                                 <td className="px-3 py-2.5 whitespace-nowrap">
@@ -2157,6 +2276,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                     </tbody>
                                 </table>
                                 </div>
+                            </AdminDesktopTableWrap>
                                 {userDirectoryNeedsPagination ? (
                                     <div className="flex flex-col gap-3 border-t border-gray-100 bg-gray-50/90 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                                         <label className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
@@ -2201,7 +2321,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         </div>
                                     </div>
                                 ) : null}
-                            </div>
                         </div>
                     </div>
                 );
@@ -2304,6 +2423,113 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 </>
                             }
                         >
+                            <AdminMobileCardList className="lg:hidden px-1 pb-2">
+                                {paginatedVehicles.length === 0 ? (
+                                    <p className="px-3 py-8 text-center text-sm text-slate-500">
+                                        {listingsQ.trim()
+                                            ? `No listings match "${listingsQ.trim()}".`
+                                            : 'No listings to show.'}
+                                    </p>
+                                ) : (
+                                    paginatedVehicles.map((vehicle) => (
+                                        <AdminMobileCard
+                                            key={`listing-mobile-${vehicle.id}`}
+                                            footer={
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingVehicle(vehicle)}
+                                                        className="min-h-[44px] rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const action = vehicle.status === 'published' ? 'unpublish' : 'publish';
+                                                            if (window.confirm(`Are you sure you want to ${action} this vehicle listing?`)) {
+                                                                handleActionWithLoading(`toggle-vehicle-${vehicle.id}`, () =>
+                                                                    onToggleVehicleStatus(vehicle.id)
+                                                                );
+                                                            }
+                                                        }}
+                                                        disabled={loadingActions.has(`toggle-vehicle-${vehicle.id}`)}
+                                                        className="min-h-[44px] rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-50"
+                                                    >
+                                                        {vehicle.status === 'published' ? 'Unpublish' : 'Publish'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            handleActionWithLoading(
+                                                                `feature-vehicle-${vehicle.id}`,
+                                                                () => onToggleVehicleFeature(vehicle.id)
+                                                            );
+                                                        }}
+                                                        disabled={loadingActions.has(`feature-vehicle-${vehicle.id}`)}
+                                                        className="min-h-[44px] rounded-lg bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700 disabled:opacity-50"
+                                                    >
+                                                        {vehicle.isFeatured ? 'Unfeature' : 'Feature'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (
+                                                                window.confirm(
+                                                                    'Are you sure you want to delete this vehicle listing? This action cannot be undone.'
+                                                                )
+                                                            ) {
+                                                                handleActionWithLoading(`delete-vehicle-${vehicle.id}`, () =>
+                                                                    onDeleteVehicle(vehicle.id)
+                                                                );
+                                                            }
+                                                        }}
+                                                        disabled={loadingActions.has(`delete-vehicle-${vehicle.id}`)}
+                                                        className="min-h-[44px] rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            }
+                                        >
+                                            <p className="font-semibold text-slate-900 break-words">
+                                                {vehicle.year} {vehicle.make} {vehicle.model} {vehicle.variant || ''}
+                                            </p>
+                                            <div className="mt-3 space-y-1">
+                                                {visibleColumnDefs.map((col) => (
+                                                    <AdminCardField key={col.id} label={col.label}>
+                                                        {renderListingCell(col.id, vehicle, listingLookup)}
+                                                    </AdminCardField>
+                                                ))}
+                                            </div>
+                                        </AdminMobileCard>
+                                    ))
+                                )}
+                            </AdminMobileCardList>
+                            {totalPages > 1 && (
+                                <div className="mt-2 flex items-center justify-center gap-2 border-t border-slate-100 px-4 py-3 lg:hidden">
+                                    <button
+                                        type="button"
+                                        onClick={() => handlePageChange(currentPage - 1)}
+                                        disabled={currentPage === 1}
+                                        className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-40 hover:bg-slate-50"
+                                    >
+                                        Previous
+                                    </button>
+                                    <span className="px-3 text-sm font-medium tabular-nums text-slate-600">
+                                        Page {currentPage} of {totalPages}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => handlePageChange(currentPage + 1)}
+                                        disabled={currentPage === totalPages}
+                                        className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-40 hover:bg-slate-50"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            )}
+                            <div className="hidden lg:block min-w-full">
                             <table className="min-w-full divide-y divide-slate-100">
                                 <thead>
                                     <ListingTableHeader visibleColumnDefs={visibleColumnDefs} />
@@ -2427,6 +2653,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                     </button>
                                 </div>
                             )}
+                            </div>
             </AdminDataTableFrame>
         </div>
     );
@@ -2435,32 +2662,32 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             case 'certificationRequests':
                 return <CertificationRequestsView requests={vehicles.filter(v => v.certificationStatus === 'requested')} users={users} onCertificationApproval={onCertificationApproval} />;
             case 'vehicleData':
-                return (
-                    <VehicleDataManagement 
-                        vehicleData={vehicleData} 
+                return withAdminViewSuspense(
+                    <LazyVehicleDataManagement
+                        vehicleData={vehicleData}
                         onUpdate={onUpdateVehicleData}
                         onPreview={() => setShowPreviewModal(true)}
                         onBulkUpload={() => setIsBulkUploadOpen(true)}
-                    />
+                    />,
                 );
             case 'sellCarAdmin':
-                return props.onNavigate ? (
-                    <SellCarAdmin onNavigate={props.onNavigate} embedded />
-                ) : null;
+                return props.onNavigate
+                    ? withAdminViewSuspense(<LazySellCarAdmin onNavigate={props.onNavigate} embedded />)
+                    : null;
             case 'dealLeads':
-                return <AdminDealCenter />;
+                return withAdminViewSuspense(<LazyAdminDealCenter />);
             case 'assistanceQueue':
-                return <AdminAssistanceQueue />;
+                return withAdminViewSuspense(<LazyAdminAssistanceQueue />);
             case 'rcQueue':
-                return <AdminRcQueue />;
+                return withAdminViewSuspense(<LazyAdminRcQueue />);
             case 'dealComplaints':
-                return <AdminDealComplaints />;
+                return withAdminViewSuspense(<LazyAdminDealComplaints />);
             case 'complaintCases':
-                return <AdminComplaintCases />;
+                return withAdminViewSuspense(<LazyAdminComplaintCases />);
             case 'dealRevenue':
-                return <AdminDealRevenue />;
+                return withAdminViewSuspense(<LazyAdminDealRevenue />);
             case 'fraudDashboard':
-                return <AdminFraudDashboard />;
+                return withAdminViewSuspense(<LazyAdminFraudDashboard />);
             case 'auditLog':
                 return <AuditLogView auditLog={auditLog} />;
             case 'settings':
@@ -2470,13 +2697,13 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             case 'faq':
                 return <FAQManagementView />;
             case 'payments':
-                return <PaymentManagement currentUser={currentUser} />;
+                return withAdminViewSuspense(<LazyPaymentManagement currentUser={currentUser} />);
             case 'planManagement':
                 return <PlanManagementView />;
             case 'serviceOps':
-                return <AdminServiceOps />;
+                return withAdminViewSuspense(<LazyAdminServiceOps />);
             case 'serviceManagement':
-                return <ServiceManagement />;
+                return withAdminViewSuspense(<LazyServiceManagement />);
             default:
                 return null;
         }
@@ -2544,6 +2771,46 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         {filter === 'all' || filter === 'vehicles' ? (
                             flaggedVehicles.length > 0 && (
                                 <AdminDataTableFrame title={`Flagged Vehicles (${flaggedVehicles.length})`}>
+                                    <AdminMobileCardList className="lg:hidden px-1 pb-2">
+                                        {flaggedVehicles.map((vehicle) => (
+                                            <AdminMobileCard
+                                                key={`mod-vehicle-${vehicle.id}`}
+                                                highlight="red"
+                                                footer={
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleResolveFlag('vehicle', vehicle.id)}
+                                                            className="min-h-[44px] rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700"
+                                                        >
+                                                            Resolve Flag
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => onToggleVehicleStatus(vehicle.id)}
+                                                            className="min-h-[44px] rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800"
+                                                        >
+                                                            {vehicle.status === 'published' ? 'Unpublish' : 'Publish'}
+                                                        </button>
+                                                    </div>
+                                                }
+                                            >
+                                                <p className="font-semibold text-slate-900">
+                                                    {vehicle.year} {vehicle.make} {vehicle.model}
+                                                </p>
+                                                <div className="mt-3 space-y-1">
+                                                    <AdminCardField label="Seller">{vehicle.sellerEmail}</AdminCardField>
+                                                    <AdminCardField label="Price">₹{formatInrAmount(vehicle.price)}</AdminCardField>
+                                                    <AdminCardField label="Status">
+                                                        <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+                                                            FLAGGED
+                                                        </span>
+                                                    </AdminCardField>
+                                                </div>
+                                            </AdminMobileCard>
+                                        ))}
+                                    </AdminMobileCardList>
+                                    <div className="hidden lg:block min-w-full">
                                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                         <thead className="bg-white dark:bg-white">
                                             <tr>
@@ -2594,6 +2861,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             ))}
                                         </tbody>
                                     </table>
+                                    </div>
                                 </AdminDataTableFrame>
                             )
                         ) : null}
@@ -2602,6 +2870,46 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         {filter === 'all' || filter === 'conversations' ? (
                             flaggedConversations.length > 0 && (
                                 <AdminDataTableFrame title={`Flagged Conversations (${flaggedConversations.length})`}>
+                                    <AdminMobileCardList className="lg:hidden px-1 pb-2">
+                                        {flaggedConversations.map((conversation) => {
+                                            const vehicle = vehicles.find((v) => v.id === conversation.vehicleId);
+                                            const lastMessage =
+                                                conversation.messages && conversation.messages.length > 0
+                                                    ? conversation.messages[conversation.messages.length - 1]
+                                                    : null;
+                                            return (
+                                                <AdminMobileCard
+                                                    key={`mod-conv-${conversation.id}`}
+                                                    highlight="red"
+                                                    footer={
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleResolveFlag('conversation', conversation.id)}
+                                                            className="min-h-[44px] rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700"
+                                                        >
+                                                            Resolve Flag
+                                                        </button>
+                                                    }
+                                                >
+                                                    <div className="space-y-1">
+                                                        <AdminCardField label="Customer">{conversation.customerId}</AdminCardField>
+                                                        <AdminCardField label="Seller">{conversation.sellerId}</AdminCardField>
+                                                        <AdminCardField label="Vehicle">
+                                                            {vehicle
+                                                                ? `${vehicle.year} ${vehicle.make} ${vehicle.model}`
+                                                                : 'Unknown Vehicle'}
+                                                        </AdminCardField>
+                                                        <AdminCardField label="Last message">
+                                                            {lastMessage
+                                                                ? `${lastMessage.text?.substring(0, 80)}${(lastMessage.text?.length ?? 0) > 80 ? '…' : ''}`
+                                                                : 'No messages'}
+                                                        </AdminCardField>
+                                                    </div>
+                                                </AdminMobileCard>
+                                            );
+                                        })}
+                                    </AdminMobileCardList>
+                                    <div className="hidden lg:block min-w-full">
                                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                         <thead className="bg-white dark:bg-white">
                                             <tr>
@@ -2646,6 +2954,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             })}
                                         </tbody>
                                     </table>
+                                    </div>
                                 </AdminDataTableFrame>
                             )
                         ) : null}
@@ -4448,79 +4757,85 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 </main>
             </div>
 
-            {editingUser && (
-                <EditUserModal 
-                    user={editingUser} 
-                    onClose={() => setEditingUser(null)} 
-                    onSave={(email, details) => handleSaveUser(email, details)}
-                    onVerifyDocument={async (email, documentType, verified) => {
-                        try {
-                            const user = users.find(u => u.email === email);
-                            if (!user) return;
+            {editingUser &&
+                withAdminModalSuspense(
+                    <LazyEditUserModal
+                        user={editingUser}
+                        onClose={() => setEditingUser(null)}
+                        onSave={(email, details) => handleSaveUser(email, details)}
+                        onVerifyDocument={async (email, documentType, verified) => {
+                            try {
+                                const user = users.find((u) => u.email === email);
+                                if (!user) return;
 
-                            const updateData: any = {};
-                            if (documentType === 'aadharCard') {
-                                updateData.aadharCard = {
-                                    ...user.aadharCard,
-                                    isVerified: verified,
-                                    verifiedAt: verified ? new Date().toISOString() : '',
-                                    verifiedBy: verified ? currentUser?.email || 'admin' : '',
-                                };
-                            } else if (documentType === 'panCard') {
-                                updateData.panCard = {
-                                    ...user.panCard,
-                                    isVerified: verified,
-                                    verifiedAt: verified ? new Date().toISOString() : '',
-                                    verifiedBy: verified ? currentUser?.email || 'admin' : '',
-                                };
+                                const updateData: any = {};
+                                if (documentType === 'aadharCard') {
+                                    updateData.aadharCard = {
+                                        ...user.aadharCard,
+                                        isVerified: verified,
+                                        verifiedAt: verified ? new Date().toISOString() : '',
+                                        verifiedBy: verified ? currentUser?.email || 'admin' : '',
+                                    };
+                                } else if (documentType === 'panCard') {
+                                    updateData.panCard = {
+                                        ...user.panCard,
+                                        isVerified: verified,
+                                        verifiedAt: verified ? new Date().toISOString() : '',
+                                        verifiedBy: verified ? currentUser?.email || 'admin' : '',
+                                    };
+                                }
+
+                                await onAdminUpdateUser(email, updateData);
+
+                                setEditingUser({
+                                    ...editingUser,
+                                    ...updateData,
+                                });
+                            } catch (error) {
+                                console.error('Failed to verify document:', error);
                             }
+                        }}
+                    />,
+                )}
+            {editingVehicle &&
+                withAdminModalSuspense(
+                    <LazyEditVehicleModal
+                        vehicle={editingVehicle}
+                        onClose={() => setEditingVehicle(null)}
+                        onSave={handleSaveVehicle}
+                    />,
+                )}
 
-                            await onAdminUpdateUser(email, updateData);
-                            
-                            // Update local state
-                            setEditingUser({
-                                ...editingUser,
-                                ...updateData
-                            });
-                        } catch (error) {
-                            console.error('Failed to verify document:', error);
-                        }
-                    }}
-                />
-            )}
-            {editingVehicle && <EditVehicleModal vehicle={editingVehicle} onClose={() => setEditingVehicle(null)} onSave={handleSaveVehicle} />}
-            
-            {/* Seller Form Preview Modal */}
-            {showPreviewModal && (
-                <SellerFormPreview 
-                    vehicleData={vehicleData} 
-                    onClose={() => setShowPreviewModal(false)} 
-                />
-            )}
-            
-            {/* Bulk Upload Modal */}
-            {isBulkUploadOpen && (
-                <VehicleDataBulkUploadModal 
-                    onClose={() => setIsBulkUploadOpen(false)} 
-                    onUpdateData={onUpdateVehicleData}
-                />
-            )}
-            
-            {/* Import Vehicles Modal */}
-            {showImportModal && onImportVehicles && (
-                <ImportVehiclesModal 
-                    onClose={() => setShowImportModal(false)} 
-                    onImportVehicles={onImportVehicles}
-                />
-            )}
-            
-            {/* Import Users Modal */}
-            {showImportUsersModal && onImportUsers && (
-                <ImportUsersModal 
-                    onClose={() => setShowImportUsersModal(false)} 
-                    onImportUsers={onImportUsers}
-                />
-            )}
+            {showPreviewModal &&
+                withAdminModalSuspense(
+                    <LazySellerFormPreview vehicleData={vehicleData} onClose={() => setShowPreviewModal(false)} />,
+                )}
+
+            {isBulkUploadOpen &&
+                withAdminModalSuspense(
+                    <LazyVehicleDataBulkUploadModal
+                        onClose={() => setIsBulkUploadOpen(false)}
+                        onUpdateData={onUpdateVehicleData}
+                    />,
+                )}
+
+            {showImportModal &&
+                onImportVehicles &&
+                withAdminModalSuspense(
+                    <LazyImportVehiclesModal
+                        onClose={() => setShowImportModal(false)}
+                        onImportVehicles={onImportVehicles}
+                    />,
+                )}
+
+            {showImportUsersModal &&
+                onImportUsers &&
+                withAdminModalSuspense(
+                    <LazyImportUsersModal
+                        onClose={() => setShowImportUsersModal(false)}
+                        onImportUsers={onImportUsers}
+                    />,
+                )}
         </div>
     );
 };

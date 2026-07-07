@@ -821,6 +821,15 @@ async function mainHandler(
           return await handlePlatformSettings(req, res, handlerOptions);
         } else if (checkPath.includes('/upload-image') || checkPath.endsWith('/upload-image')) {
           return await handleUploadImage(req, res);
+        } else if (checkPath.includes('/deals') || checkPath.endsWith('/deals')) {
+          const { handleDeals } = await import('../server/handlers/deals.js');
+          return await handleDeals(req, res, handlerOptions);
+        } else if (checkPath.includes('/vehicle-trust') || checkPath.endsWith('/vehicle-trust')) {
+          const { handleVehicleTrust } = await import('../server/handlers/vehicle-trust.js');
+          return await handleVehicleTrust(req, res, handlerOptions);
+        } else if (checkPath.includes('/complaints') || checkPath.endsWith('/complaints')) {
+          const { handleComplaints } = await import('../server/handlers/complaints.js');
+          return await handleComplaints(req, res, handlerOptions);
         } else if (checkPath.includes('/service-providers/register')) {
           const { handleServiceProviderRegister } = await import('./service-providers.js');
           return await handleServiceProviderRegister(req, res);

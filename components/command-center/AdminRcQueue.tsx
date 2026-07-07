@@ -3,6 +3,12 @@ import type { RcQueueItem } from '../../types.js';
 import { advanceDealStage, fetchAdminRcQueue } from '../../services/dealService.js';
 import { DealDetailPage } from './DealDetailPage.js';
 import { useApp } from '../AppProvider.js';
+import {
+  AdminCardField,
+  AdminDesktopTableWrap,
+  AdminMobileCard,
+  AdminMobileCardList,
+} from '../admin/AdminPrimitives.js';
 
 function rcStatusLabel(status: RcQueueItem['rcStatus']): string {
   switch (status) {
@@ -111,7 +117,72 @@ export const AdminRcQueue: React.FC = () => {
       ) : queue.length === 0 ? (
         <p className="text-sm text-slate-500 p-8 text-center border rounded-xl">No deals in RC queue yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <>
+        <AdminMobileCardList>
+          {queue.map((item) => (
+            <AdminMobileCard
+              key={item.id}
+              highlight={item.daysInQueue > 30 && item.rcStatus !== 'completed' ? 'red' : undefined}
+              footer={
+                item.rcStatus !== 'completed' ? (
+                  <button
+                    type="button"
+                    disabled={actingId === item.id}
+                    onClick={() => void handleMarkRcComplete(item)}
+                    className="min-h-[44px] rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50"
+                  >
+                    {actingId === item.id ? '…' : 'Mark RC done'}
+                  </button>
+                ) : undefined
+              }
+            >
+              <button
+                type="button"
+                onClick={() => setSelectedLeadId(item.id)}
+                className="font-mono text-sm font-bold text-reride-orange hover:underline"
+              >
+                {item.id}
+              </button>
+              <div className="mt-3 space-y-1">
+                <AdminCardField label="Vehicle">
+                  {item.vehicleName || item.metadata.vehicleName || '—'}
+                </AdminCardField>
+                <AdminCardField label="Buyer">{item.buyerDisplayName || item.buyerEmail}</AdminCardField>
+                <AdminCardField label="Seller">{item.sellerDisplayName || item.sellerEmail}</AdminCardField>
+                <AdminCardField label="Days in queue">{item.daysInQueue}d</AdminCardField>
+                <AdminCardField label="Status">
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${rcStatusColor(item.rcStatus)}`}>
+                    {rcStatusLabel(item.rcStatus)}
+                  </span>
+                </AdminCardField>
+                <AdminCardField label="Assistance">
+                  {item.hasPaidRcAssistance ? (
+                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800">
+                      Paid RC assist
+                    </span>
+                  ) : (
+                    '—'
+                  )}
+                </AdminCardField>
+                <AdminCardField label="RC doc">
+                  {item.rcDocUrl ? (
+                    <a
+                      href={item.rcDocUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-reride-orange hover:underline"
+                    >
+                      View
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </AdminCardField>
+              </div>
+            </AdminMobileCard>
+          ))}
+        </AdminMobileCardList>
+        <AdminDesktopTableWrap>
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             <thead className="bg-slate-50">
               <tr>
@@ -181,7 +252,8 @@ export const AdminRcQueue: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </div>
+        </AdminDesktopTableWrap>
+        </>
       )}
     </div>
   );

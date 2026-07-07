@@ -16,12 +16,12 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, onBack, backLa
   const { t } = useTranslation();
   const resolvedBack = backLabel ?? t('common.back');
   return (
-    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-      <div>
+    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3 sm:gap-4">
+      <div className="min-w-0 flex-1">
         {onBack && (
           <button
             onClick={onBack}
-            className="text-sm hover:underline mb-2 transition-colors"
+            className="text-sm hover:underline mb-2 transition-colors min-h-[44px] inline-flex items-center"
             style={{ color: '#FF6B35' }}
             onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--reride-blue)')}
             onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--reride-orange)')}
@@ -29,7 +29,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, onBack, backLa
             &larr; {resolvedBack}
           </button>
         )}
-        <h1 className="text-3xl font-extrabold text-reride-text-dark dark:text-reride-text-dark">{title}</h1>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-reride-text-dark dark:text-reride-text-dark break-words">{title}</h1>
         {subtitle && <div className="text-sm text-gray-600 mt-1">{subtitle}</div>}
       </div>
       {rightSlot}

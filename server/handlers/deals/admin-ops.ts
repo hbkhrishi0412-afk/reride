@@ -1,4 +1,4 @@
-import { getSupabaseAdminClient, supabaseUserService } from '../handler-shared.js';
+import { getSupabaseAdminClient, supabaseUserService } from '../../handler-shared.js';
 import type {
   AdminKanbanBoard,
   DealKanbanStatus,
@@ -10,12 +10,12 @@ import type {
   RcQueueItem,
   SellerCommandCenter,
   SellerDealCalendar,
-} from '../../types.js';
+} from '../../../types.js';
 import {
   DEAL_ASSISTANCE_PACKAGES,
   assistancePackageNeedsRc,
   deriveKanbanStatus,
-} from '../../types.js';
+} from '../../../types.js';
 import type { DealActionHandler } from './context.js';
 import {
   backfillAllKanbanStatuses,
