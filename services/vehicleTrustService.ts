@@ -1,11 +1,10 @@
 /**
- * Client API for vehicle trust: disclosure, VAHAN, inspections, deals, ratings.
+ * Client API for vehicle trust: disclosure, VAHAN, deals, ratings.
  */
 import { finalizeSellerChecklist } from '../lib/universalChecklist/helpers.js';
 import type { VehicleCategory } from '../vehicle-category.js';
 import { authenticatedFetch } from '../utils/authenticatedFetch.js';
 import type {
-  BuyerInspectionItem,
   RatingEligibility,
   UniversalSellerChecklist,
   VahanSnapshot,
@@ -86,29 +85,6 @@ export async function verifyVahanRegistration(
     message?: string;
   }>(response);
   return { snapshot: data.snapshot, verified: data.verified, message: data.message };
-}
-
-export async function submitBuyerInspection(
-  vehicleId: number | string,
-  items: BuyerInspectionItem[],
-  generalNotes?: string,
-  category?: VehicleCategory,
-): Promise<{ inspectionId: string; flaggedKeys: string[]; flaggedCount: number }> {
-  const response = await authenticatedFetch(`${BASE}?action=buyer-inspection`, {
-    method: 'POST',
-    body: JSON.stringify({ vehicleId, items, generalNotes, category }),
-  });
-  const data = await parseJson<{
-    success: boolean;
-    inspectionId: string;
-    flaggedKeys: string[];
-    flaggedCount: number;
-  }>(response);
-  return {
-    inspectionId: data.inspectionId,
-    flaggedKeys: data.flaggedKeys,
-    flaggedCount: data.flaggedCount,
-  };
 }
 
 export async function initiateTrustDeal(

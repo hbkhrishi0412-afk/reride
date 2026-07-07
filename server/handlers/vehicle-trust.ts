@@ -1,5 +1,5 @@
 /**
- * Vehicle trust API: VAHAN verify, buyer inspections, deals, peer ratings.
+ * Vehicle trust API: VAHAN verify, deals, peer ratings.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
@@ -14,12 +14,6 @@ import {
   fetchVahanByRegistration,
   vahanLookupMessage,
 } from '../../lib/vahanVerification.js';
-import {
-  compareBuyerToSeller,
-  type BuyerInspectionItem,
-  type SellerDisclosureChecklist,
-} from '../../lib/vehicleDisclosureChecklist.js';
-import { VehicleCategory } from '../../vehicle-category.js';
 import type { RatingEligibility, VehicleTrustDeal, Vehicle } from '../../types.js';
 
 function firstQueryParam(value: string | string[] | undefined): string | undefined {
@@ -95,17 +89,6 @@ async function recomputeUserRatings(email: string): Promise<void> {
   });
 }
 
-async function incrementNonDisclosureCount(sellerEmail: string): Promise<void> {
-  const user = await supabaseUserService.findByEmail(sellerEmail);
-  if (!user) return;
-  const current = user.reportedCount || 0;
-  const trustScore = Math.max(0, (user.trustScore ?? 50) - 5);
-  await supabaseUserService.update(sellerEmail, {
-    reportedCount: current + 1,
-    trustScore,
-  });
-}
-
 export async function handleVehicleTrust(
   req: VercelRequest,
   res: VercelResponse,
@@ -169,78 +152,6 @@ export async function handleVehicleTrust(
         snapshot: responseSnapshot,
         verified,
         message: vahanLookupMessage(lookup, registrationNumber),
-      });
-    }
-
-    // POST buyer-inspection
-    if (method === 'POST' && subPath === 'buyer-inspection') {
-      const authEmail = await getAuthEmail(req);
-      if (!authEmail) {
-        return res.status(401).json({ success: false, reason: 'Authentication required' });
-      }
-
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-      const vehicleIdRaw = String(body.vehicleId || '');
-      const items = body.items as BuyerInspectionItem[] | undefined;
-      const generalNotes = body.generalNotes as string | undefined;
-
-      if (!vehicleIdRaw || !items?.length) {
-        return res.status(400).json({ success: false, reason: 'vehicleId and items are required' });
-      }
-
-      const resolved = await resolveVehicleId(vehicleIdRaw);
-      if (!resolved?.vehicle) {
-        return res.status(404).json({ success: false, reason: 'Vehicle not found' });
-      }
-
-      const sellerChecklist = resolved.vehicle.sellerDisclosureChecklist as
-        | SellerDisclosureChecklist
-        | undefined;
-      const category =
-        (body.category as VehicleCategory) ||
-        resolved.vehicle.category ||
-        VehicleCategory.FOUR_WHEELER;
-      const flaggedKeys = compareBuyerToSeller(sellerChecklist, items, category);
-
-      const inspectionId = generateId('bins');
-      const supabase = getSupabaseAdminClient();
-
-      const { error: insertError } = await supabase.from('buyer_inspections').insert({
-        id: inspectionId,
-        vehicle_id: resolved.primaryKey,
-        buyer_email: authEmail,
-        items,
-        flagged_keys: flaggedKeys,
-        general_notes: generalNotes || null,
-      });
-
-      if (insertError) {
-        console.error('buyer_inspections insert failed:', insertError);
-        return res.status(500).json({
-          success: false,
-          reason: insertError.message || 'Failed to save buyer inspection',
-        });
-      }
-
-      if (flaggedKeys.length > 0 && resolved.vehicle.sellerEmail) {
-        const flagId = generateId('dflag');
-        await supabase.from('disclosure_flags').insert({
-          id: flagId,
-          vehicle_id: resolved.primaryKey,
-          seller_email: normalizeEmail(resolved.vehicle.sellerEmail),
-          buyer_email: authEmail,
-          inspection_id: inspectionId,
-          flagged_keys: flaggedKeys,
-          reason: generalNotes || 'Buyer reported disclosure mismatch',
-        });
-        await incrementNonDisclosureCount(resolved.vehicle.sellerEmail);
-      }
-
-      return res.status(200).json({
-        success: true,
-        inspectionId,
-        flaggedKeys,
-        flaggedCount: flaggedKeys.length,
       });
     }
 

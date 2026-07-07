@@ -5885,12 +5885,6 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: Ha
     }
   }
 
-  if (action === 'buyer-inspections') {
-    const { handleAdminBuyerInspections } = await import('../server/handlers/admin.js');
-    await handleAdminBuyerInspections(req, res);
-    return;
-  }
-
   return res.status(400).json({ success: false, reason: 'Invalid admin action' });
 }
 

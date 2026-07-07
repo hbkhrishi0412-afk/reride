@@ -6,7 +6,6 @@ import {
   USE_SUPABASE, adminRead, DB_PATHS, HandlerOptions,
   supabaseUserService as userService,
   supabaseVehicleService as vehicleService,
-  getSupabaseAdminClient,
   authenticateRequestDual,
 } from '../handler-shared.js';
 import { hashPassword } from '../../utils/security.js';
@@ -23,118 +22,6 @@ function generateRandomPassword(): string {
 function firstQueryParam(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] || '';
   return value || '';
-}
-
-export async function handleAdminBuyerInspections(
-  req: VercelRequest,
-  res: VercelResponse,
-): Promise<void> {
-  if (req.method !== 'GET') {
-    res.status(405).json({ success: false, reason: 'Method not allowed' });
-    return;
-  }
-  if (!USE_SUPABASE) {
-    res.status(503).json({ success: false, reason: 'Database not available' });
-    return;
-  }
-
-  const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
-  const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || '20'), 10) || 20));
-  const offset = (page - 1) * limit;
-  const search = String(req.query.search || '').toLowerCase().trim();
-  const flaggedOnly = String(req.query.flaggedOnly || '') === '1';
-
-  const supabase = getSupabaseAdminClient();
-  let query = supabase
-    .from('buyer_inspections')
-    .select('*', { count: 'exact' })
-    .order('created_at', { ascending: false });
-
-  if (flaggedOnly) {
-    query = query.not('flagged_keys', 'eq', '[]');
-  }
-
-  const { data: rows, error, count } = await query.range(offset, offset + limit - 1);
-
-  if (error) {
-    res.status(500).json({ success: false, reason: error.message });
-    return;
-  }
-
-  const inspectionIds = (rows || []).map((r) => r.id as string);
-  const vehicleIds = [...new Set((rows || []).map((r) => String(r.vehicle_id)))];
-
-  const { data: flags } =
-    inspectionIds.length > 0
-      ? await supabase.from('disclosure_flags').select('*').in('inspection_id', inspectionIds)
-      : { data: [] as Array<Record<string, unknown>> };
-
-  const flagByInspection = new Map(
-    (flags || []).map((f) => [String(f.inspection_id), f]),
-  );
-
-  const vehicleSellerById = new Map<string, string>();
-  await Promise.all(
-    vehicleIds.map(async (vehicleId) => {
-      try {
-        const num = Number(vehicleId);
-        const isPlainNumericId =
-          Number.isFinite(num) && num > 0 && String(num) === vehicleId;
-        const resolved = await vehicleService.resolveVehicleIdentity(
-          isPlainNumericId ? { id: num, databaseId: vehicleId } : { databaseId: vehicleId },
-        );
-        if (resolved.vehicle?.sellerEmail) {
-          vehicleSellerById.set(vehicleId, resolved.vehicle.sellerEmail);
-        }
-      } catch {
-        /* skip */
-      }
-    }),
-  );
-
-  let inspections = (rows || []).map((row) => {
-    const flag = flagByInspection.get(String(row.id));
-    return {
-      id: String(row.id),
-      vehicleId: String(row.vehicle_id),
-      buyerEmail: String(row.buyer_email),
-      items: Array.isArray(row.items) ? row.items : [],
-      flaggedKeys: Array.isArray(row.flagged_keys) ? row.flagged_keys : [],
-      generalNotes: row.general_notes != null ? String(row.general_notes) : null,
-      createdAt: String(row.created_at),
-      sellerEmail: flag?.seller_email
-        ? String(flag.seller_email)
-        : vehicleSellerById.get(String(row.vehicle_id)) || null,
-      disclosureReason: flag?.reason != null ? String(flag.reason) : null,
-    };
-  });
-
-  if (search) {
-    inspections = inspections.filter((row) => {
-      const haystack = [
-        row.buyerEmail,
-        row.vehicleId,
-        row.sellerEmail || '',
-        row.generalNotes || '',
-        row.disclosureReason || '',
-      ]
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(search);
-    });
-  }
-
-  const total = count ?? inspections.length;
-  res.status(200).json({
-    success: true,
-    inspections,
-    pagination: {
-      page,
-      limit,
-      total,
-      pages: Math.max(1, Math.ceil(total / limit)),
-    },
-  });
 }
 
 export async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
@@ -218,10 +105,6 @@ export async function handleAdmin(req: VercelRequest, res: VercelResponse, _opti
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
-
-  if (action === 'buyer-inspections') {
-    return handleAdminBuyerInspections(req, res);
   }
 
   return res.status(400).json({ success: false, reason: 'Invalid admin action' });

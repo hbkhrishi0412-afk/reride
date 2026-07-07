@@ -16,7 +16,6 @@ import ImportUsersModal from './ImportUsersModal';
 import AdminServiceOps from './AdminServiceOps';
 import ServiceManagement from './ServiceManagement';
 import SellCarAdmin from './SellCarAdmin';
-import AdminVehicleFeedback from './AdminVehicleFeedback';
 import AdminDealCenter from './command-center/AdminDealCenter';
 import AdminRcQueue from './command-center/AdminRcQueue';
 import AdminAssistanceQueue from './command-center/AdminAssistanceQueue';
@@ -204,11 +203,11 @@ interface AdminPanelProps {
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => void;
 }
 
-type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'vehicleFeedback' | 'dealLeads' | 'assistanceQueue' | 'rcQueue' | 'dealComplaints' | 'complaintCases' | 'dealRevenue' | 'fraudDashboard' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps' | 'serviceManagement';
+type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'dealLeads' | 'assistanceQueue' | 'rcQueue' | 'dealComplaints' | 'complaintCases' | 'dealRevenue' | 'fraudDashboard' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps' | 'serviceManagement';
 
 const ADMIN_VIEWS = new Set<AdminView>([
     'analytics', 'users', 'listings', 'moderation', 'certificationRequests', 'vehicleData',
-    'sellCarAdmin', 'vehicleFeedback', 'dealLeads', 'assistanceQueue', 'rcQueue', 'dealComplaints', 'complaintCases', 'dealRevenue', 'fraudDashboard', 'auditLog', 'settings', 'support', 'faq', 'payments',
+    'sellCarAdmin', 'dealLeads', 'assistanceQueue', 'rcQueue', 'dealComplaints', 'complaintCases', 'dealRevenue', 'fraudDashboard', 'auditLog', 'settings', 'support', 'faq', 'payments',
     'planManagement', 'serviceOps', 'serviceManagement',
 ]);
 
@@ -284,12 +283,6 @@ const AdminViewNavIcon: React.FC<{ view: AdminView; className?: string }> = ({ v
             return (
                 <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-            );
-        case 'vehicleFeedback':
-            return (
-                <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                 </svg>
             );
         case 'vehicleData':
@@ -1348,7 +1341,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     items: [
                         { view: 'listings' as const, label: 'Listings' },
                         { view: 'sellCarAdmin' as const, label: 'Sell car submissions' },
-                        { view: 'vehicleFeedback' as const, label: 'Customer vehicle feedback' },
                         { view: 'dealLeads' as const, label: 'Deal Center' },
                         { view: 'assistanceQueue' as const, label: 'Assistance queue' },
                         { view: 'rcQueue' as const, label: 'RC queue' },
@@ -2455,8 +2447,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 return props.onNavigate ? (
                     <SellCarAdmin onNavigate={props.onNavigate} embedded />
                 ) : null;
-            case 'vehicleFeedback':
-                return <AdminVehicleFeedback vehicles={vehicles} embedded />;
             case 'dealLeads':
                 return <AdminDealCenter />;
             case 'assistanceQueue':
