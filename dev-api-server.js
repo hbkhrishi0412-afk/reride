@@ -27,6 +27,12 @@ import { dirname, join } from 'path';
 import { appendFileSync } from 'fs';
 import { randomInt, randomBytes } from 'crypto';
 import { isValidServiceType, sanitizeServiceCategories } from './constants/serviceProviderCatalog.ts';
+import {
+  planDetailsForSeller,
+  validateListingRenewal,
+  validateNewListingCreation,
+  isSellerPlanExpired,
+} from './utils/listingPlanRules.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -101,6 +107,40 @@ async function delegateToMainHandler(req, res) {
     if (!res.headersSent) {
       res.status(500).json({ success: false, reason: 'API delegation failed' });
     }
+  }
+}
+
+/** Issue real app JWTs (not mock-token) so authenticatedFetch works with /api/deals etc. */
+async function mintAuthTokensForUser(user) {
+  const { generateAccessToken, generateRefreshToken } = await import('./utils/security.ts');
+  const safeUser = {
+    ...user,
+    email: user.email,
+    role: user.role || 'customer',
+    id: user.id || user.email,
+  };
+  return {
+    accessToken: generateAccessToken(safeUser),
+    refreshToken: generateRefreshToken(safeUser),
+  };
+}
+
+async function respondWithAuthUser(res, user, statusCode = 200) {
+  const { password, ...userWithoutPassword } = user;
+  try {
+    const tokens = await mintAuthTokensForUser(user);
+    return res.status(statusCode).json({
+      success: true,
+      user: userWithoutPassword,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    });
+  } catch (tokenError) {
+    console.error('mintAuthTokensForUser failed:', tokenError);
+    return res.status(503).json({
+      success: false,
+      reason: 'Server configuration error. JWT_SECRET may be missing.',
+    });
   }
 }
 
@@ -659,6 +699,84 @@ async function markVehicleSoldInSupabase(vehicleId) {
   }
 }
 
+function findDevSellerByEmail(email) {
+  const normalized = email ? String(email).toLowerCase().trim() : '';
+  if (!normalized) return null;
+  return mockUsers.find((u) => u.email?.toLowerCase?.().trim() === normalized) || {
+    email: normalized,
+    subscriptionPlan: 'free',
+  };
+}
+
+async function collectDevSellerVehicles(sellerEmail) {
+  const normalized = sellerEmail ? String(sellerEmail).toLowerCase().trim() : '';
+  const byId = new Map();
+  for (const v of mockVehicles) {
+    if (v?.sellerEmail?.toLowerCase?.().trim() === normalized) {
+      byId.set(v.id, v);
+    }
+  }
+  try {
+    const supabaseVehicles = await fetchVehiclesFromSupabase();
+    if (Array.isArray(supabaseVehicles)) {
+      for (const v of supabaseVehicles) {
+        if (v?.sellerEmail?.toLowerCase?.().trim() === normalized) {
+          byId.set(v.id, v);
+        }
+      }
+    }
+  } catch {
+    // mock-only fallback
+  }
+  return Array.from(byId.values());
+}
+
+function listingLimitJson(validation) {
+  return {
+    success: false,
+    reason: validation.reason,
+    planExpired: validation.planExpired,
+    limitReached: validation.limitReached,
+    activeListings: validation.activeListings,
+    limit: validation.limit,
+    expiredOn: validation.expiredOn,
+  };
+}
+
+function assertDevSellerCanCreateListing(sellerEmail) {
+  const seller = findDevSellerByEmail(sellerEmail);
+  if (!seller) {
+    return { ok: false, status: 404, body: { success: false, reason: 'Seller not found' } };
+  }
+  if (isSellerPlanExpired(seller)) {
+    return {
+      ok: false,
+      status: 403,
+      body: {
+        success: false,
+        reason: 'Your subscription plan has expired. Please renew your plan to create new listings.',
+        planExpired: true,
+        expiredOn: seller.planExpiryDate,
+      },
+    };
+  }
+  return { ok: true, seller };
+}
+
+async function assertDevSellerCanPublishListing(sellerEmail, vehicle) {
+  const seller = findDevSellerByEmail(sellerEmail);
+  if (!seller) {
+    return { ok: false, status: 404, body: { success: false, reason: 'Seller not found' } };
+  }
+  const sellerVehicles = await collectDevSellerVehicles(sellerEmail);
+  const planDetails = planDetailsForSeller(seller);
+  const validation = validateListingRenewal(seller, vehicle, sellerVehicles, planDetails);
+  if (!validation.allowed) {
+    return { ok: false, status: 403, body: listingLimitJson(validation) };
+  }
+  return { ok: true, seller };
+}
+
 function toPublicDirectoryUser(user) {
   const { mobile, password, ...safe } = user;
   return safe;
@@ -812,7 +930,13 @@ app.post('/api/vehicles', async (req, res) => {
       vehicle.views = 0;
       vehicle.inquiriesCount = 0;
     } else if (refreshAction === 'renew') {
+      const publishGuard = await assertDevSellerCanPublishListing(sellerEmail, vehicle);
+      if (!publishGuard.ok) {
+        return res.status(publishGuard.status).json(publishGuard.body);
+      }
       vehicle.listingExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      vehicle.status = 'published';
+      vehicle.listingStatus = 'active';
     }
     
     // Emit real-time update
@@ -954,6 +1078,11 @@ app.post('/api/vehicles', async (req, res) => {
       return res.status(404).json({ success: false, reason: 'Vehicle not found' });
     }
     
+    const publishGuard = await assertDevSellerCanPublishListing(vehicle.sellerEmail, vehicle);
+    if (!publishGuard.ok) {
+      return res.status(publishGuard.status).json(publishGuard.body);
+    }
+
     vehicle.status = 'published';
     vehicle.listingStatus = 'active';
     vehicle.soldAt = undefined;
@@ -968,9 +1097,23 @@ app.post('/api/vehicles', async (req, res) => {
 
   // Default: Create new vehicle
   console.log('🚗 POST /api/vehicles - Creating new vehicle');
+  const sellerEmail = req.body?.sellerEmail;
+  const createGuard = assertDevSellerCanCreateListing(sellerEmail);
+  if (!createGuard.ok) {
+    return res.status(createGuard.status).json(createGuard.body);
+  }
+  const sellerVehicles = await collectDevSellerVehicles(sellerEmail);
+  const planDetails = planDetailsForSeller(createGuard.seller);
+  const limitValidation = validateNewListingCreation(createGuard.seller, sellerVehicles, planDetails);
+  if (!limitValidation.allowed) {
+    return res.status(403).json(listingLimitJson(limitValidation));
+  }
+
   const newVehicle = {
     id: Date.now(),
     ...req.body,
+    status: req.body?.status === 'unpublished' ? 'unpublished' : 'published',
+    listingStatus: req.body?.status === 'unpublished' ? 'draft' : 'active',
     createdAt: new Date().toISOString()
   };
   mockVehicles.unshift(newVehicle);
@@ -980,11 +1123,19 @@ app.post('/api/vehicles', async (req, res) => {
   res.status(201).json(newVehicle);
 });
 
-app.put('/api/vehicles', (req, res) => {
+app.put('/api/vehicles', async (req, res) => {
   const { id, ...patch } = req.body || {};
   if (!id) return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
   const idx = mockVehicles.findIndex(v => v.id === id);
   if (idx === -1) return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+  const existing = mockVehicles[idx];
+  const nextStatus = patch.status;
+  if (nextStatus === 'published' && existing.status !== 'published') {
+    const publishGuard = await assertDevSellerCanPublishListing(existing.sellerEmail, existing);
+    if (!publishGuard.ok) {
+      return res.status(publishGuard.status).json(publishGuard.body);
+    }
+  }
   mockVehicles[idx] = { ...mockVehicles[idx], ...patch };
   // Emit real-time update
   if (io) {
@@ -1495,7 +1646,12 @@ app.get('/api/users', async (req, res) => {
 app.post('/api/users', (req, res) => {
   const { action } = req.body;
 
-  if (action === 'request-password-reset' || action === 'complete-password-reset') {
+  if (
+    action === 'request-password-reset' ||
+    action === 'complete-password-reset' ||
+    action === 'refresh-token' ||
+    action === 'logout'
+  ) {
     return delegateToMainHandler(req, res);
   }
   
@@ -1503,7 +1659,8 @@ app.post('/api/users', (req, res) => {
     const { email, password, role } = req.body;
     const user = mockUsers.find(u => u.email === email && u.password === password);
     if (!user) {
-      return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
+      // Real Supabase accounts (not in mockUsers) — use production login handler
+      return delegateToMainHandler(req, res);
     }
     // Validate role if provided
     if (role && user.role !== role) {
@@ -1512,12 +1669,7 @@ app.post('/api/users', (req, res) => {
         reason: `User is not a registered ${role}.` 
       });
     }
-    return res.json({ 
-      success: true, 
-      user: { ...user, password: undefined }, 
-      accessToken: 'mock-token',
-      refreshToken: 'mock-refresh-token'
-    });
+    return respondWithAuthUser(res, user);
   }
 
   if (action === 'save-push-token') {
@@ -1548,12 +1700,7 @@ app.post('/api/users', (req, res) => {
       createdAt: new Date().toISOString()
     };
     mockUsers.push(newUser);
-    return res.status(201).json({ 
-      success: true, 
-      user: { ...newUser, password: undefined },
-      accessToken: 'mock-token',
-      refreshToken: 'mock-refresh-token'
-    });
+    return respondWithAuthUser(res, newUser, 201);
   }
   
   if (action === 'oauth-login') {
@@ -1656,15 +1803,7 @@ app.post('/api/users', (req, res) => {
       user.isVerified = true;
     }
     
-    // Return user without password field
-    const { password, ...userWithoutPassword } = user;
-    
-    return res.status(200).json({ 
-      success: true, 
-      user: userWithoutPassword,
-      accessToken: 'mock-token',
-      refreshToken: 'mock-refresh-token'
-    });
+    return respondWithAuthUser(res, user);
   }
 
   if (action === 'oauth-service-provider') {
@@ -2695,150 +2834,8 @@ let Conversation = null;
 //   }
 // })();
 
-// Conversations endpoints
-// NOTE: Firebase handles conversations in production, localStorage handles them in development
-// These endpoints provide API compatibility but actual data storage is handled client-side
-app.get('/api/conversations', async (req, res) => {
-  try {
-    // Conversations are stored client-side (localStorage in dev, Firebase in production)
-    // This endpoint exists for API compatibility but returns empty array
-    // Clients should use localStorage/Firebase directly for conversation data
-    return res.json({
-      success: true,
-      data: [],
-      info: 'Conversations are stored client-side (localStorage/Firebase). Use client-side storage APIs to retrieve conversations.',
-      warning: 'This endpoint returns empty array. Use localStorage.getItem("reRideConversations") in development or Firebase in production.'
-    });
-  } catch (error) {
-    console.error('Error in GET /api/conversations:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? error.message : 'Failed to fetch conversations'
-    });
-  }
-});
-
-app.post('/api/conversations', async (req, res) => {
-  try {
-    // MongoDB is disabled - Firebase handles conversations in production
-    const conversationData = req.body;
-    
-    // Emit real-time update (Socket.io still works)
-    if (io) {
-      io.emit('conversations:saved', { conversation: conversationData });
-    }
-    
-    // Return success - Firebase handles persistence in production
-    return res.json({
-      success: true,
-      data: conversationData,
-      info: 'Using Firebase for conversations - MongoDB not required'
-    });
-  } catch (error) {
-    console.error('Error in POST /api/conversations:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? error.message : 'Failed to save conversation'
-    });
-  }
-});
-
-app.put('/api/conversations', async (req, res) => {
-  try {
-    // MongoDB is disabled - Firebase handles conversations in production
-    const { conversationId, message } = req.body;
-    
-    if (!conversationId) {
-      return res.status(400).json({
-        success: false,
-        error: 'conversationId is required'
-      });
-    }
-    
-    // Emit real-time update (Socket.io still works)
-    if (io && message) {
-      io.emit('conversation:new-message', {
-        conversationId,
-        message
-      });
-    }
-    
-    // Return success - Firebase handles persistence in production
-    return res.json({
-      success: true,
-      data: { conversationId, message },
-      info: 'Using Firebase for conversations - MongoDB not required'
-    });
-  } catch (error) {
-    console.error('Error in PUT /api/conversations:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? error.message : 'Failed to update conversation'
-    });
-  }
-});
-
-// Dev stub: production uses Supabase via api/main PATCH
-app.patch('/api/conversations', (req, res) => {
-  try {
-    const { conversationId, clearMessages, markReadMessageIds } = req.body || {};
-    if (!conversationId) {
-      return res.status(400).json({ success: false, reason: 'conversationId is required' });
-    }
-    const now = new Date().toISOString();
-    return res.json({
-      success: true,
-      data: {
-        id: String(conversationId),
-        messages: clearMessages ? [] : undefined,
-        lastMessageAt: now,
-        lastMessage: clearMessages ? '' : undefined,
-        isReadBySeller: true,
-        isReadByCustomer: true,
-        markReadMessageIds: markReadMessageIds || [],
-      },
-    });
-  } catch (error) {
-    console.error('Error in PATCH /api/conversations:', error);
-    res.status(500).json({ success: false, reason: 'PATCH conversations failed' });
-  }
-});
-
-app.delete('/api/conversations', (req, res) => {
-  try {
-    const { conversationId } = req.body || req.query;
-    
-    // Validate conversationId is provided
-    if (!conversationId) {
-      return res.status(400).json({
-        success: false,
-        error: 'conversationId is required',
-        message: 'Please provide a conversationId to delete'
-      });
-    }
-    
-    // Emit real-time update (Firebase handles actual deletion in production)
-    if (io) {
-      io.emit('conversations:deleted', { conversationId });
-    }
-    
-    res.json({
-      success: true,
-      message: 'Conversation deleted successfully',
-      info: 'Using Firebase for conversations - MongoDB not required'
-    });
-  } catch (error) {
-    console.error('Error in DELETE /api/conversations:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? error.message : 'Failed to delete conversation'
-    });
-  }
-});
+// Conversations — Supabase persistence via production api/main.ts (same as Vercel)
+app.all('/api/conversations', delegateToMainHandler);
 
 // Notifications endpoints (mock handlers for development)
 app.get('/api/notifications', (req, res) => {
@@ -3339,6 +3336,26 @@ app.all('/api/vehicle-trust', async (req, res) => {
   } catch (error) {
     console.error('vehicle-trust error:', error);
     return res.status(500).json({ success: false, reason: 'Vehicle trust API error' });
+  }
+});
+
+app.all('/api/deals', async (req, res) => {
+  try {
+    const { handleDeals } = await import('./server/handlers/deals.ts');
+    await handleDeals(req, res, {});
+  } catch (error) {
+    console.error('deals error:', error);
+    return res.status(500).json({ success: false, reason: 'Deals API error' });
+  }
+});
+
+app.all('/api/complaints', async (req, res) => {
+  try {
+    const { handleComplaints } = await import('./server/handlers/complaints.ts');
+    await handleComplaints(req, res, {});
+  } catch (error) {
+    console.error('complaints error:', error);
+    return res.status(500).json({ success: false, reason: 'Complaints API error' });
   }
 });
 
@@ -4125,6 +4142,18 @@ app.get('/api/health', (req, res) => {
 });
 
 // Start server with WebSocket support
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.error(
+      `\n❌ Port ${PORT} is already in use — an old dev-api-server is still running.\n` +
+        `   Stop it (Windows: netstat -ano | findstr :${PORT} then taskkill /PID <pid> /F)\n` +
+        `   then run "npm run dev" again. Without a fresh API server, login returns invalid tokens and admin/seller APIs return 401.\n`,
+    );
+    process.exit(1);
+  }
+  throw err;
+});
+
 server.listen(PORT, () => {
   console.log(`🚀 Development API server running on http://localhost:${PORT}`);
   console.log(`   Android emulator: http://10.0.2.2:${PORT} (localhost in the emulator is not your PC)`);
@@ -4155,10 +4184,7 @@ server.listen(PORT, () => {
   console.log(`   - POST /api/services - Create new service (admin only)`);
   console.log(`   - PATCH /api/services - Update service (admin only)`);
   console.log(`   - DELETE /api/services?id=... - Delete service (admin only)`);
-  console.log(`   - GET  /api/conversations - Get conversations (returns empty in dev)`);
-  console.log(`   - POST /api/conversations - Save conversation`);
-  console.log(`   - PUT  /api/conversations - Update conversation`);
-  console.log(`   - DELETE /api/conversations - Delete conversation`);
+  console.log(`   - GET/POST/PUT/PATCH/DELETE /api/conversations - Supabase chat (via api/main.ts)`);
   console.log(`   - GET  /api/notifications - Get notifications (returns empty in dev)`);
   console.log(`   - POST /api/notifications - Save notification`);
   console.log(`   - PUT  /api/notifications - Update notification`);

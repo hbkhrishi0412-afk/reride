@@ -25,7 +25,7 @@ function organizationJsonLd(): Record<string, unknown> {
     url: base,
     logo: `${base}/icon-512.png`,
     description:
-      'ReRide is an India-focused marketplace to buy and sell quality used cars and bikes, with verified listings and trusted car services.',
+      'ReRide is an India-focused platform to buy and sell used vehicles with RC details on listings and deal tracking from chat to RC transfer.',
     areaServed: { '@type': 'Country', name: 'India' },
   };
   if (PLATFORM_SUPPORT_PHONE_E164) {
@@ -84,12 +84,12 @@ export function computePageSeoMeta(params: {
   const { view, pathname, selectedVehicle, selectedCity, sellerDisplayName } = params;
 
   const defaultDesc =
-    'Buy and sell quality used vehicles in India. Verified listings, car services, and trusted dealers on ReRide.';
+    "India's trusted used vehicle transaction platform — browse with RC details and track your deal from interest to RC transfer.";
 
   switch (view) {
     case View.HOME:
       return {
-        title: 'Buy & Sell Used Cars in India',
+        title: 'Used Vehicle Deals with RC Transfer Tracking | ReRide India',
         description: defaultDesc,
         path: '/',
         jsonLd: [organizationJsonLd()],
@@ -97,22 +97,24 @@ export function computePageSeoMeta(params: {
     case View.USED_CARS:
     case View.RENTAL:
       return {
-        title: 'Browse Used Cars',
-        description: 'Search used cars by city, budget, fuel type, and more on ReRide.',
+        title: 'Used Cars in India with RC Details | ReRide',
+        description:
+          'Browse used cars and bikes with RC details on ReRide. Every listing can become a tracked deal from chat to RC transfer.',
         path: '/used-cars',
       };
     case View.DETAIL:
       if (selectedVehicle?.id != null) {
         const name = `${selectedVehicle.make} ${selectedVehicle.model} ${selectedVehicle.year}`;
-        const loc = selectedVehicle.location ? ` in ${selectedVehicle.location}` : '';
+        const city = selectedVehicle.city || selectedVehicle.location || '';
+        const loc = city ? ` in ${city}` : '';
         const price = selectedVehicle.price;
         const desc =
           price != null
-            ? `${name}${loc} — ₹${Number(price).toLocaleString('en-IN')}. View photos, specs, and contact the seller on ReRide.`
-            : `${name}${loc}. View photos, specs, and contact the seller on ReRide.`;
+            ? `${name}${loc} — ₹${Number(price).toLocaleString('en-IN')}. RC details, photos, and tracked deal room on ReRide.`
+            : `${name}${loc}. View photos, specs, and start a tracked deal on ReRide.`;
         const img = getFirstValidImage(selectedVehicle.images, selectedVehicle.id);
         return {
-          title: `${name} for sale`,
+          title: `${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}${city ? ` in ${city}` : ''} — ₹${price != null ? Number(price).toLocaleString('en-IN') : 'price on request'} | ReRide`,
           description: desc,
           path: `/vehicle/${selectedVehicle.id}`,
           type: 'article',
@@ -151,8 +153,9 @@ export function computePageSeoMeta(params: {
       };
     case View.SELL_CAR:
       return {
-        title: 'Sell Your Car',
-        description: 'List your used car on ReRide and reach serious buyers.',
+        title: 'List Your Used Vehicle Free | ReRide',
+        description:
+          'List your car or bike free on ReRide. Manage buyer chats, offers, and RC transfer in one deal room.',
         path: '/sell-car',
       };
     case View.PRICING:
@@ -169,9 +172,17 @@ export function computePageSeoMeta(params: {
       };
     case View.FAQ:
       return {
-        title: 'FAQ',
-        description: 'Frequently asked questions about buying, selling, and services on ReRide.',
+        title: 'Help & FAQs | ReRide Deals',
+        description:
+          'Answers about buying, selling, deal rooms, RC transfer, subscriptions, and safety on ReRide.',
         path: '/faq',
+      };
+    case View.HELP_CENTER:
+      return {
+        title: 'Help Center | ReRide',
+        description:
+          'Search help articles for buying, selling, deals, RC transfer, and account settings on ReRide.',
+        path: '/help',
       };
     case View.PRIVACY_POLICY:
       return {
@@ -189,22 +200,46 @@ export function computePageSeoMeta(params: {
     case View.SAFETY_CENTER:
       return {
         title: 'Trust & Safety',
-        description: 'Safety tips for buying and selling used cars and using ReRide securely.',
+        description: 'Safety tips for buying and selling used vehicles and completing deals on ReRide.',
         path: '/safety-center',
+      };
+    case View.REFUND_POLICY:
+      return {
+        title: 'Refund Policy',
+        description: 'Refund terms for ReRide subscriptions and deal assistance packages.',
+        path: '/refund-policy',
+      };
+    case View.COMPLAINT_RESOLUTION:
+      return {
+        title: 'Complaint Resolution',
+        description: 'How to raise and resolve complaints on ReRide.',
+        path: '/complaint-resolution',
+      };
+    case View.FRAUD_POLICY:
+      return {
+        title: 'Fraud Policy',
+        description: 'ReRide policies on listing fraud, payment scams, and enforcement.',
+        path: '/fraud-policy',
+      };
+    case View.COOKIE_POLICY:
+      return {
+        title: 'Cookie Policy',
+        description: 'How ReRide uses cookies and your choices.',
+        path: '/cookie-policy',
       };
     case View.ABOUT_US:
       return {
-        title: 'About ReRide',
+        title: 'About ReRide — India\'s Deal Platform for Used Vehicles',
         description:
-          'ReRide is an India-focused platform connecting buyers, sellers, and car service providers.',
+          'ReRide helps buyers and sellers manage used vehicle deals from first interest to RC transfer.',
         path: '/about-us',
       };
     case View.CITY_LANDING: {
       const city = selectedCity?.trim() || 'your city';
       const slug = city.toLowerCase().replace(/\s+/g, '-');
       return {
-        title: `Used Cars in ${city}`,
-        description: `Browse used cars for sale in ${city} on ReRide — verified listings and local inventory.`,
+        title: `Used Cars in ${city} | RC details & deal tracking | ReRide`,
+        description: `Browse used vehicles for sale in ${city} on ReRide — RC details on listings and tracked deals to RC transfer.`,
         path: `/city/${encodeURIComponent(slug)}`,
       };
     }
@@ -250,6 +285,13 @@ export function computePageSeoMeta(params: {
         title: 'ReRide',
         description: defaultDesc,
         path: pathname || '/',
+        noIndex: true,
+      };
+    case View.NOT_FOUND:
+      return {
+        title: 'Page Not Found',
+        description: 'The page you are looking for does not exist on ReRide.',
+        path: '/404',
         noIndex: true,
       };
     default:

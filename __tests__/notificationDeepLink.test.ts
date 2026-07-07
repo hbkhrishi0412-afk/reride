@@ -31,4 +31,16 @@ describe('notificationDeepLink', () => {
       buildNotificationDeepLinkUrl(baseNotification({ type: 'wishlist' })),
     ).toBe('/#/wishlist');
   });
+
+  it('routes admin assistance notifications to assistance queue', () => {
+    expect(
+      buildNotificationDeepLinkUrl(
+        baseNotification({
+          targetType: 'deal',
+          dealAction: 'view_assistance',
+          dealLeadId: 'RR-LD-001',
+        }),
+      ),
+    ).toBe('/#/admin?tab=assistanceQueue&leadId=RR-LD-001');
+  });
 });

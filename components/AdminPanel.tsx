@@ -17,6 +17,13 @@ import AdminServiceOps from './AdminServiceOps';
 import ServiceManagement from './ServiceManagement';
 import SellCarAdmin from './SellCarAdmin';
 import AdminVehicleFeedback from './AdminVehicleFeedback';
+import AdminDealCenter from './command-center/AdminDealCenter';
+import AdminRcQueue from './command-center/AdminRcQueue';
+import AdminAssistanceQueue from './command-center/AdminAssistanceQueue';
+import AdminFraudDashboard from './command-center/AdminFraudDashboard';
+import AdminDealComplaints from './command-center/AdminDealComplaints';
+import AdminComplaintCases from './command-center/AdminComplaintCases';
+import AdminDealRevenue from './command-center/AdminDealRevenue';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 import { isRerideStaffPick } from '../utils/staffPick';
 import {
@@ -197,11 +204,11 @@ interface AdminPanelProps {
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => void;
 }
 
-type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'vehicleFeedback' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps' | 'serviceManagement';
+type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'vehicleFeedback' | 'dealLeads' | 'assistanceQueue' | 'rcQueue' | 'dealComplaints' | 'complaintCases' | 'dealRevenue' | 'fraudDashboard' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps' | 'serviceManagement';
 
 const ADMIN_VIEWS = new Set<AdminView>([
     'analytics', 'users', 'listings', 'moderation', 'certificationRequests', 'vehicleData',
-    'sellCarAdmin', 'vehicleFeedback', 'auditLog', 'settings', 'support', 'faq', 'payments',
+    'sellCarAdmin', 'vehicleFeedback', 'dealLeads', 'assistanceQueue', 'rcQueue', 'dealComplaints', 'complaintCases', 'dealRevenue', 'fraudDashboard', 'auditLog', 'settings', 'support', 'faq', 'payments',
     'planManagement', 'serviceOps', 'serviceManagement',
 ]);
 
@@ -1342,6 +1349,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         { view: 'listings' as const, label: 'Listings' },
                         { view: 'sellCarAdmin' as const, label: 'Sell car submissions' },
                         { view: 'vehicleFeedback' as const, label: 'Customer vehicle feedback' },
+                        { view: 'dealLeads' as const, label: 'Deal Center' },
+                        { view: 'assistanceQueue' as const, label: 'Assistance queue' },
+                        { view: 'rcQueue' as const, label: 'RC queue' },
+                        { view: 'dealComplaints' as const, label: 'Deal complaints' },
                         { view: 'vehicleData' as const, label: 'Vehicle data' },
                     ],
                 },
@@ -1350,6 +1361,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     label: 'Trust & safety',
                     items: [
                         { view: 'moderation' as const, label: 'Moderation queue', count: analytics.flaggedContent },
+                        { view: 'fraudDashboard' as const, label: 'Fraud dashboard' },
+                        { view: 'complaintCases' as const, label: 'Grievance queue' },
                         {
                             view: 'certificationRequests' as const,
                             label: 'Certification requests',
@@ -1362,6 +1375,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     label: 'Commerce & billing',
                     items: [
                         { view: 'payments' as const, label: 'Payment requests' },
+                        { view: 'dealRevenue' as const, label: 'Deal revenue' },
                         { view: 'planManagement' as const, label: 'Plan management' },
                     ],
                 },
@@ -1558,6 +1572,19 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             setActiveView('listings');
         }
     }, [searchParams]);
+
+    useEffect(() => {
+        try {
+            const pendingTab = sessionStorage.getItem('reride_admin_tab');
+            if (pendingTab && ADMIN_VIEWS.has(pendingTab as AdminView)) {
+                sessionStorage.removeItem('reride_admin_tab');
+                setActiveView(pendingTab as AdminView);
+                setSearchParams({ tab: pendingTab });
+            }
+        } catch {
+            /* ignore */
+        }
+    }, [setSearchParams]);
 
     // Pagination logic for vehicles
     const filteredVehicles = useMemo(() => {
@@ -2430,6 +2457,20 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 ) : null;
             case 'vehicleFeedback':
                 return <AdminVehicleFeedback vehicles={vehicles} embedded />;
+            case 'dealLeads':
+                return <AdminDealCenter />;
+            case 'assistanceQueue':
+                return <AdminAssistanceQueue />;
+            case 'rcQueue':
+                return <AdminRcQueue />;
+            case 'dealComplaints':
+                return <AdminDealComplaints />;
+            case 'complaintCases':
+                return <AdminComplaintCases />;
+            case 'dealRevenue':
+                return <AdminDealRevenue />;
+            case 'fraudDashboard':
+                return <AdminFraudDashboard />;
             case 'auditLog':
                 return <AuditLogView auditLog={auditLog} />;
             case 'settings':

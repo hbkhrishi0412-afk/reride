@@ -165,57 +165,6 @@ export async function addMessageToConversation(conversationId: string, message: 
   }
 }
 
-/** Persist offer accept/reject/counter plus the visible chat line (single DB write). */
-export async function putConversationOfferResponse(
-  conversationId: string,
-  offerMessageId: number | string,
-  response: 'accepted' | 'rejected' | 'countered',
-  responseMessage: ChatMessage,
-  counterPrice?: number,
-): Promise<{ success: boolean; data?: Conversation; error?: string }> {
-  try {
-    const fetchResponse = await authenticatedFetch('/api/conversations', {
-      method: 'PUT',
-      body: JSON.stringify({
-        conversationId,
-        offerResponse: {
-          offerMessageId,
-          response,
-          ...(counterPrice != null && Number(counterPrice) > 0 ? { counterPrice } : {}),
-          responseMessage,
-        },
-      }),
-    });
-    const result = await handleApiResponse<{
-      success?: boolean;
-      data?: Conversation;
-      reason?: string;
-      error?: string;
-    }>(fetchResponse);
-    if (!result.success) {
-      return {
-        success: false,
-        error: result.reason || result.error || `HTTP ${fetchResponse.status}`,
-      };
-    }
-    const body = result.data;
-    if (body && typeof body === 'object' && body.success === false) {
-      return {
-        success: false,
-        error: body.reason || body.error || 'Offer response was not saved',
-      };
-    }
-    const conv =
-      body && typeof body === 'object' && 'data' in body
-        ? (body as { data?: Conversation }).data
-        : (body as Conversation | undefined);
-    return { success: true, data: conv };
-  } catch (error) {
-    console.error('putConversationOfferResponse error:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-  }
-}
-
 /**
  * Get conversations from Supabase
  */
@@ -239,7 +188,7 @@ export async function getConversationByIdFromSupabase(
     }
     const body = parsed.data as { data?: Conversation | null };
     const conv = body?.data;
-    if (!conv || typeof conv !== 'object') {
+    if (!conv || typeof conv !== 'object' || Array.isArray(conv)) {
       return { success: false, error: 'Not found' };
     }
     return { success: true, data: conv as Conversation };

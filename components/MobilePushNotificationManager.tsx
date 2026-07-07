@@ -69,6 +69,10 @@ export const MobilePushNotificationManager: React.FC<MobilePushNotificationManag
         data: {
           notificationId: n.id,
           url: getNotificationUrl(n),
+          leadId: n.dealLeadId,
+          action: n.dealAction,
+          conversationId: n.conversationId,
+          type: n.targetType === 'deal' ? 'deal' : undefined,
         },
         requireInteraction: false,
         vibrate: [200, 100, 200],
@@ -84,6 +88,31 @@ export const MobilePushNotificationManager: React.FC<MobilePushNotificationManag
       const notificationId = d.notificationId;
       // Defer navigation / state updates off the SW message task (avoids long "message" handler violations).
       queueMicrotask(() => {
+        if (data.pushType === 'deal' && d.leadId && d.action === 'accept_chat') {
+          window.dispatchEvent(
+            new CustomEvent('reride:native-push-tap', {
+              detail: {
+                type: 'deal',
+                leadId: d.leadId,
+                action: d.action,
+                conversationId: d.conversationId,
+              },
+            }),
+          );
+          return;
+        }
+        if (d.pushType === 'deal' && d.leadId && d.action === 'view_assistance') {
+          window.dispatchEvent(
+            new CustomEvent('reride:native-push-tap', {
+              detail: {
+                type: 'deal',
+                leadId: d.leadId,
+                action: d.action,
+              },
+            }),
+          );
+          return;
+        }
         const notification = notifications.find((n) => n.id === notificationId);
         if (notification && onNotificationClick) {
           onNotificationClick(notification);

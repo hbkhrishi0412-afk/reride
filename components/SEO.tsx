@@ -36,7 +36,11 @@ export default function SEO({
   noIndex = false,
   jsonLd,
 }: SEOProps) {
-  const fullTitle = title ? `${title} | ReRide` : 'ReRide - Buy & Sell Quality Used Vehicles';
+  const fullTitle = title
+    ? title.includes('ReRide')
+      ? title
+      : `${title} | ReRide`
+    : 'ReRide - Buy & Sell Quality Used Vehicles';
   const fullDescription = description || 'Buy and sell used cars and bikes in India. Browse listings, compare details, and contact sellers by call, chat, or WhatsApp.';
   const canonical = path.startsWith('http') ? path : `${BASE_URL.replace(/\/$/, '')}${path.startsWith('/') ? path : '/' + path}`;
   const imageUrl = image && (image.startsWith('http') || image.startsWith('data:')) ? image : image ? `${BASE_URL}${image.startsWith('/') ? image : '/' + image}` : `${BASE_URL}/icon-512.png`;

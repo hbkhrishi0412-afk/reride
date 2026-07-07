@@ -8,10 +8,12 @@ import LazyImage from './LazyImage';
 import { getFirstValidImage } from '../utils/imageUtils';
 import { StatCard, StatCardGrid, EmptyState } from './dashboard/shared';
 import PendingDealsBanner from './PendingDealsBanner';
+import MyDealsList from './MyDealsList';
 import { useApp } from './AppProvider';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 
 const ServiceCart = lazy(() => import('./ServiceCart'));
+const DealDetailPage = lazy(() => import('./command-center/DealDetailPage'));
 
 interface BuyerDashboardProps {
   currentUser: User;
@@ -39,8 +41,9 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   onViewSellerProfile,
 }) => {
   const { t } = useTranslation();
-  const { comparisonCategory } = useApp();
-  const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity' | 'alerts' | 'serviceTrack'>('overview');
+  const { comparisonCategory, setActiveChat, addToast } = useApp();
+  const [activeTab, setActiveTab] = useState<'deals' | 'overview' | 'searches' | 'activity' | 'alerts' | 'serviceTrack'>('deals');
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   // Removed unused showSaveSearchModal state
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(
     () => buyerService.getSavedSearches(currentUser?.email || '')
@@ -119,6 +122,27 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     );
   }
 
+  if (selectedDealId) {
+    return (
+      <div className="min-h-screen bg-gray-50 px-4 py-6">
+        <Suspense fallback={<div className="animate-pulse h-40 rounded-2xl bg-gray-100" />}>
+          <DealDetailPage
+            leadId={selectedDealId}
+            currentUser={currentUser}
+            role="customer"
+            conversations={conversations}
+            onBack={() => setSelectedDealId(null)}
+            onOpenConversation={(conv) => {
+              setActiveChat(conv);
+              onNavigate(View.INBOX);
+            }}
+            onNotify={(msg, type) => addToast(msg, type === 'error' ? 'error' : type === 'warning' ? 'warning' : type === 'info' ? 'info' : 'success')}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 relative overflow-hidden">
       {/* Background Elements */}
@@ -148,6 +172,11 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
 
               <div role="tablist" aria-orientation="vertical" className="space-y-2">
                 {([
+                  { id: 'deals' as const, label: t('buyerDashboard.tab.myDeals', { defaultValue: 'My Deals' }), icon: (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                  ) },
                   { id: 'overview' as const, label: t('buyerDashboard.tab.overview'), icon: (
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
@@ -293,6 +322,28 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
         <div className="bg-white dark:bg-brand-gray-800 rounded-2xl shadow-soft mb-8">
 
           <div className="p-4 sm:p-6">
+            {activeTab === 'deals' && (
+              <div role="tabpanel" id="buyer-panel-deals" aria-labelledby="buyer-tab-deals" className="space-y-4">
+                <div>
+                  <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-1">
+                    {t('buyerDashboard.deals.title', { defaultValue: 'My Deals' })}
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    {t('buyerDashboard.deals.subtitle', {
+                      defaultValue: 'Track every vehicle deal from chat to RC transfer.',
+                    })}
+                  </p>
+                  <MyDealsList
+                    vehicles={vehicles}
+                    onSelectVehicle={onSelectVehicle}
+                    onOpenDeal={(leadId, vehicle) => {
+                      setSelectedDealId(leadId);
+                      if (vehicle) onSelectVehicle(vehicle);
+                    }}
+                  />
+                </div>
+              </div>
+            )}
             {/* Overview Tab */}
             {activeTab === 'overview' && (
               <div role="tabpanel" id="buyer-panel-overview" aria-labelledby="buyer-tab-overview" className="space-y-8">

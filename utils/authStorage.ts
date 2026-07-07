@@ -143,7 +143,15 @@ function getCustomJwtFromBrowserStorage(): string | null {
   }
   if (!custom || custom.trim().length <= 10) return null;
   const t = custom.trim();
-  if (!looksLikeJwt(t)) return null;
+  if (!looksLikeJwt(t)) {
+    try {
+      sessionStorage?.removeItem('reRideAccessToken');
+      localStorage?.removeItem('reRideAccessToken');
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
   const exp = jwtExpSeconds(t);
   const nowSec = Math.floor(Date.now() / 1000);
   const bufferSec = 60;
@@ -152,7 +160,13 @@ function getCustomJwtFromBrowserStorage(): string | null {
   }
   const supa = getSupabaseAccessTokenFromStorage();
   if (supa) return supa;
-  return t;
+  try {
+    sessionStorage?.removeItem('reRideAccessToken');
+    localStorage?.removeItem('reRideAccessToken');
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 export function clearSessionStoredAccessToken(): void {

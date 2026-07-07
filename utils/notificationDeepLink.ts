@@ -5,7 +5,19 @@ import type { Notification } from '../types.js';
  * Query-string `/?view=DETAIL&id=` is legacy and unreliable on packaged Android.
  */
 export function buildNotificationDeepLinkPath(notification: Notification): string {
+  if (notification.dealAction === 'view_assistance') {
+    const leadId = notification.dealLeadId;
+    return leadId
+      ? `/admin?tab=assistanceQueue&leadId=${encodeURIComponent(leadId)}`
+      : '/admin?tab=assistanceQueue';
+  }
+  if (notification.dealAction === 'view_complaint') {
+    return '/admin?tab=dealComplaints';
+  }
   if (notification.targetType === 'conversation') {
+    return '/inbox';
+  }
+  if (notification.targetType === 'deal') {
     return '/inbox';
   }
   if (notification.vehicleId != null && !Number.isNaN(notification.vehicleId)) {

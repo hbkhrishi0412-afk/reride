@@ -474,6 +474,10 @@ self.addEventListener('notificationclick', (event) => {
               type: 'NOTIFICATION_CLICK',
               notificationId: notificationData.notificationId,
               url: url,
+              leadId: notificationData.leadId,
+              action: notificationData.action,
+              conversationId: notificationData.conversationId,
+              pushType: notificationData.type,
             });
             return client.focus();
           }

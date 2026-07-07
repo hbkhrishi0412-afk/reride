@@ -21,4 +21,13 @@ export {
   shouldBackfillAIInspectionOnView,
 } from './vehicle-ai-inspection.js';
 export { handleVehicleTrust } from './vehicle-trust.js';
+export { handleDeals } from './deals.js';
+export { handleComplaints } from './complaints.js';
+export { validateAdvanceStage } from './deals/stage-validation.js';
+export { handleDealComplaints } from './deals/deal-complaints.js';
+export { handleStageHandlers } from './deals/stage-handlers.js';
+export { handleAssistance } from './deals/assistance.js';
+export { handleLeadLifecycle } from './deals/lead-lifecycle.js';
+export { handleInspections } from './deals/inspections.js';
+export { handleAdminOps } from './deals/admin-ops.js';
 export { handleBuyerActivity } from './buyer-activity.js';

@@ -64,6 +64,10 @@ import {
 import { buildVehicleMutationBody } from './utils/vehicleIdentity';
 import { computePageSeoMeta } from './utils/pageSeoMeta.js';
 import { openOrCreateVehicleConversation } from './utils/vehicleConversationFlow.js';
+import { stringifyVehicleForSession } from './utils/vehicleSessionCache.js';
+import { createDealLead, getDealLead, advanceDealStage, fetchPendingDealSurveys, acceptDealChat } from './services/dealService.js';
+import { invalidateMyDealLeadsCache } from './hooks/useMyDealLeads.js';
+import DealSurveyModal from './components/DealSurveyModal.js';
 import { RERIDE_PRICE_DROP_EVENT, type ReridePriceDropDetail } from './services/buyerService';
 import type {
   AppApiResponse,
@@ -258,11 +262,44 @@ const AppContent: React.FC = () => {
     );
   }, [notifications, currentUser?.email]);
 
+  const [pendingSurvey, setPendingSurvey] = useState<{
+    surveyId: string;
+    leadId: string;
+    vehicleName?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!currentUser?.email || currentUser.role === 'admin') return;
+    fetchPendingDealSurveys()
+      .then((surveys) => {
+        if (surveys.length > 0) {
+          const s = surveys[0];
+          const lead = s.deal_leads;
+          setPendingSurvey({
+            surveyId: s.id,
+            leadId: s.lead_id,
+            vehicleName: lead?.metadata?.vehicleName,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [currentUser?.email, currentUser?.role]);
+
+  const savePostLoginDetailContext = useCallback((vehicle: Vehicle) => {
+    try {
+      sessionStorage.setItem('reride.postLoginView', ViewEnum.DETAIL);
+      sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(vehicle));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const handleStartVehicleChat = useCallback(
     async (vehicle: Vehicle) => {
       if (!currentUser) {
-        addToast('Please login to start a chat', 'info');
-        navigate(ViewEnum.LOGIN_PORTAL);
+        savePostLoginDetailContext(vehicle);
+        addToast('Please login to express interest', 'info');
+        navigate(ViewEnum.CUSTOMER_LOGIN);
         return;
       }
       const conversation = await openOrCreateVehicleConversation({
@@ -276,9 +313,24 @@ const AppContent: React.FC = () => {
         addToast('Unable to start chat. The seller may no longer be available.', 'error');
         return;
       }
-      addToast('Chat started with seller', 'success');
+      try {
+        const { lead, existing } = await createDealLead({
+          vehicleId: vehicle.id,
+          conversationId: conversation.id,
+          buyerName: currentUser.name,
+        });
+        if (existing) {
+          addToast(`You're already interested. Lead ${lead.id}`, 'info');
+        } else {
+          addToast(`Interest sent! Lead ${lead.id} created.`, 'success');
+        }
+        invalidateMyDealLeadsCache();
+      } catch (err) {
+        logWarn('Deal lead creation failed (chat still opened):', err);
+        addToast('Chat opened, but deal tracking could not start. Try again from your inbox.', 'warning');
+      }
     },
-    [currentUser, conversations, setConversations, setActiveChat, addToast, navigate],
+    [currentUser, conversations, setConversations, setActiveChat, addToast, navigate, savePostLoginDetailContext],
   );
 
   const handleBrowseAllIndia = useCallback(() => {
@@ -313,8 +365,9 @@ const AppContent: React.FC = () => {
   const handleRequestTestDrive = useCallback(
     async (vehicle: Vehicle, details: { date: string; time: string }) => {
       if (!currentUser) {
+        savePostLoginDetailContext(vehicle);
         addToast(t('toast.testDrive.loginRequired'), 'info');
-        navigate(ViewEnum.LOGIN_PORTAL);
+        navigate(ViewEnum.CUSTOMER_LOGIN);
         return;
       }
       const conversation = await openOrCreateVehicleConversation({
@@ -354,6 +407,7 @@ const AppContent: React.FC = () => {
       sendMessageWithType,
       addToast,
       navigate,
+      savePostLoginDetailContext,
       t,
     ],
   );
@@ -415,6 +469,20 @@ const AppContent: React.FC = () => {
           newStatus === 'confirmed' ? t('toast.testDrive.confirmed') : t('toast.testDrive.declined'),
           'success',
         );
+
+        if (newStatus === 'confirmed') {
+          try {
+            const lead = await getDealLead({ conversationId });
+            if (lead && message.payload?.date) {
+              await advanceDealStage(lead.id, 'test_drive_scheduled', {
+                date: message.payload.date,
+                time: message.payload.time || '',
+              });
+            }
+          } catch {
+            /* non-fatal */
+          }
+        }
       } catch (error) {
         logError('Failed to respond to test drive request:', error);
         addToast(t('toast.testDrive.responseFailed'), 'error');
@@ -1591,6 +1659,36 @@ const AppContent: React.FC = () => {
 
 
 
+  const handleAcceptDealChat = React.useCallback(
+    async (leadId: string, conversationId?: string) => {
+      if (!currentUser || currentUser.role !== 'seller') {
+        addToast('Only the seller can accept chat', 'error');
+        return false;
+      }
+      try {
+        await acceptDealChat(leadId, conversationId);
+        addToast('Chat accepted! Buyer can now message you.', 'success');
+        if (conversationId) {
+          const conversation = conversations.find((c) => String(c.id) === String(conversationId));
+          if (conversation) {
+            if (isMobileApp) {
+              setInboxConversationIdToOpen(String(conversation.id));
+              navigate(ViewEnum.INBOX);
+            } else {
+              setActiveChat(conversation);
+              navigate(ViewEnum.SELLER_DASHBOARD);
+            }
+          }
+        }
+        return true;
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : 'Failed to accept chat', 'error');
+        return false;
+      }
+    },
+    [currentUser, conversations, addToast, isMobileApp, navigate, setActiveChat, setInboxConversationIdToOpen],
+  );
+
   const handleNotificationClick = React.useCallback(
     (notification: Notification) => {
       if (process.env.NODE_ENV === 'development') {
@@ -1610,6 +1708,68 @@ const AppContent: React.FC = () => {
           )
         );
       };
+
+      if (notification.targetType === 'deal' && notification.dealLeadId) {
+        if (
+          notification.dealAction === 'view_assistance' &&
+          currentUser?.role === 'admin'
+        ) {
+          try {
+            sessionStorage.setItem('reride_admin_tab', 'assistanceQueue');
+            sessionStorage.setItem('reride_admin_assistance_lead', notification.dealLeadId);
+          } catch {
+            /* ignore */
+          }
+          navigate(ViewEnum.ADMIN_PANEL);
+          return;
+        }
+
+        if (
+          notification.dealAction === 'view_complaint' &&
+          currentUser?.role === 'admin'
+        ) {
+          try {
+            sessionStorage.setItem('reride_admin_tab', 'dealComplaints');
+          } catch {
+            /* ignore */
+          }
+          navigate(ViewEnum.ADMIN_PANEL);
+          return;
+        }
+
+        const convId = notification.conversationId;
+        const conversation = convId
+          ? conversations.find((c) => String(c.id) === String(convId))
+          : undefined;
+
+        if (conversation) {
+          patchConversationRead(conversation);
+        }
+
+        if (notification.dealAction === 'accept_chat' && currentUser?.role === 'seller') {
+          void handleAcceptDealChat(notification.dealLeadId, convId);
+          return;
+        }
+
+        if (conversation && currentUser) {
+          if (currentUser.role === 'customer') {
+            handleCloseChat();
+            setInboxConversationIdToOpen(String(conversation.id));
+            navigate(ViewEnum.INBOX);
+          } else if (currentUser.role === 'seller') {
+            if (isMobileApp) {
+              setInboxConversationIdToOpen(String(conversation.id));
+              navigate(ViewEnum.INBOX);
+            } else {
+              setActiveChat(conversation);
+              navigate(ViewEnum.SELLER_DASHBOARD);
+            }
+          }
+        } else {
+          navigate(currentUser?.role === 'seller' ? ViewEnum.SELLER_DASHBOARD : ViewEnum.INBOX);
+        }
+        return;
+      }
 
       if (notification.targetType === 'conversation') {
         const conversation = conversations.find(
@@ -1700,12 +1860,11 @@ const AppContent: React.FC = () => {
       setConversations,
       setInboxConversationIdToOpen,
       vehicles,
+      handleAcceptDealChat,
     ]
   );
 
   useEffect(() => {
-    if (!isMobileApp) return;
-
     const onNativePushTap = (event: Event) => {
       const data = normalizeNativePushPayload(
         (event as CustomEvent<Record<string, unknown>>).detail,
@@ -1717,6 +1876,22 @@ const AppContent: React.FC = () => {
           handleNotificationClick(notification);
           return;
         }
+      }
+
+      if (data.type === 'deal' && data.leadId && data.action === 'accept_chat') {
+        void handleAcceptDealChat(data.leadId, data.conversationId);
+        return;
+      }
+
+      if (data.type === 'deal' && data.leadId && data.action === 'view_assistance') {
+        try {
+          sessionStorage.setItem('reride_admin_tab', 'assistanceQueue');
+          sessionStorage.setItem('reride_admin_assistance_lead', data.leadId);
+        } catch {
+          /* ignore */
+        }
+        navigate(ViewEnum.ADMIN_PANEL);
+        return;
       }
 
       if (data.url) {
@@ -1746,6 +1921,7 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener('reride:native-push-tap', onNativePushTap);
   }, [
     handleNotificationClick,
+    handleAcceptDealChat,
     isMobileApp,
     navigate,
     notifications,
@@ -1915,6 +2091,7 @@ const AppContent: React.FC = () => {
       handleRegister={handleRegister}
       handleLogoutAll={handleLogoutAll}
       handleNotificationClick={handleNotificationClick}
+      handleAcceptDealChat={handleAcceptDealChat}
       handleMarkNotificationsAsRead={handleMarkNotificationsAsRead}
       handleMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
       markAllVisibleAsRead={markAllVisibleAsRead}
@@ -1922,6 +2099,12 @@ const AppContent: React.FC = () => {
       locationError={locationError}
     />
   );
+
+  /** On vehicle detail, only auto-expand chat when it belongs to the listing being viewed. */
+  const chatInlineLaunch = React.useMemo(() => {
+    if (currentView !== ViewEnum.DETAIL || !selectedVehicle || !activeChat) return true;
+    return Number(activeChat.vehicleId) === Number(selectedVehicle.id);
+  }, [currentView, selectedVehicle?.id, activeChat?.vehicleId, activeChat?.id]);
 
   // Render Mobile App Layout
   if (isMobileApp) {
@@ -2005,17 +2188,27 @@ const AppContent: React.FC = () => {
           }}
         />
         <ToastContainer toasts={toasts} onRemove={removeToast} />
+        {pendingSurvey && (
+          <DealSurveyModal
+            surveyId={pendingSurvey.surveyId}
+            leadId={pendingSurvey.leadId}
+            vehicleName={pendingSurvey.vehicleName}
+            onClose={() => setPendingSurvey(null)}
+            onSubmitted={() => setPendingSurvey(null)}
+          />
+        )}
         {currentUser && activeChat && (
           <ChatErrorBoundary>
             <Suspense fallback={<MinimalLoader />}>
               <ChatWidget
                 conversation={activeChat}
                 currentUserRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
+                currentUserEmail={currentUser.email}
                 otherUserName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
                 otherUserOnline={chatPeerOnlineByConversationId[String(activeChat.id)]}
                 callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
                 callTargetName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
-                isInlineLaunch={true}
+                isInlineLaunch={chatInlineLaunch}
                 onStartCall={(phone) => {
                   if (!phone) return;
                   window.open(`tel:${phone}`);
@@ -2127,6 +2320,15 @@ const AppContent: React.FC = () => {
           toasts={toasts} 
           onRemove={removeToast} 
         />
+        {pendingSurvey && (
+          <DealSurveyModal
+            surveyId={pendingSurvey.surveyId}
+            leadId={pendingSurvey.leadId}
+            vehicleName={pendingSurvey.vehicleName}
+            onClose={() => setPendingSurvey(null)}
+            onSubmitted={() => setPendingSurvey(null)}
+          />
+        )}
         <Suspense fallback={<MinimalLoader />}>
           <CommandPalette 
             isOpen={isCommandPaletteOpen}
@@ -2148,11 +2350,12 @@ const AppContent: React.FC = () => {
               <ChatWidget
                 conversation={activeChat}
                 currentUserRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
+                currentUserEmail={currentUser.email}
                 otherUserName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
                 otherUserOnline={chatPeerOnlineByConversationId[String(activeChat.id)]}
                 callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
                 callTargetName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
-                isInlineLaunch={true}
+                isInlineLaunch={chatInlineLaunch}
                 onStartCall={(phone) => {
                   if (!phone) return;
                   window.open(`tel:${phone}`);

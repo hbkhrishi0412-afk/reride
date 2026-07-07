@@ -2,6 +2,7 @@ import type { Notification } from '../types.js';
 import { queueRequest } from '../utils/requestQueue.js';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
+import { normalizeNotificationRow } from '../utils/normalizeNotification.js';
 
 /** Best-effort email from JWT (custom app token). */
 function parseJwtEmailClaim(token: string): string | null {
@@ -93,7 +94,9 @@ export async function getNotificationsFromSupabase(recipientEmail?: string, isRe
         if (!parsed.success) {
           return { success: false, error: parsed.reason || parsed.error || 'Failed to get notifications' };
         }
-        return { success: true, data: parsed.data?.data || [] };
+        const rows = (parsed.data?.data || []) as unknown as Record<string, unknown>[];
+        const normalized = rows.map((row) => normalizeNotificationRow(row));
+        return { success: true, data: normalized };
       },
       { priority: 5, id: 'notifications', maxRetries: 2 }
     );

@@ -31,9 +31,9 @@ const FEATURE_KEYS = [
 ] as const;
 
 const STAT_KEYS = [
-  { labelKey: 'about.stat1.label', value: '100%' },
-  { labelKey: 'about.stat2.label', value: '3-in-1' },
-  { labelKey: 'about.stat3.label', value: 'Marketplace' },
+  { labelKey: 'about.stat1.label', value: 'India' },
+  { labelKey: 'about.stat2.label', value: 'Deal → RC' },
+  { labelKey: 'about.stat3.label', value: 'Free list' },
 ] as const;
 
 function FeatureCard({ titleKey, descKey, icon }: { titleKey: string; descKey: string; icon: React.ReactNode }) {
@@ -49,6 +49,12 @@ function FeatureCard({ titleKey, descKey, icon }: { titleKey: string; descKey: s
     </div>
   );
 }
+
+const DEAL_STEP_KEYS = [
+  { titleKey: 'home.testimonials.amitName', descKey: 'home.testimonials.amitQuote', tagKey: 'home.testimonials.amitTag' },
+  { titleKey: 'home.testimonials.riyaName', descKey: 'home.testimonials.riyaQuote', tagKey: 'home.testimonials.riyaTag' },
+  { titleKey: 'home.testimonials.karanName', descKey: 'home.testimonials.karanQuote', tagKey: 'home.testimonials.karanTag' },
+] as const;
 
 const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
   const { t } = useTranslation();
@@ -93,6 +99,49 @@ const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
         </h2>
         <p className="text-gray-600 dark:text-gray-300 leading-relaxed text-lg" data-no-translate>
           {whatWeDoBody}
+        </p>
+      </div>
+
+      <div id="how-deals-work" className="mt-8 scroll-mt-24">
+        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-white mb-2">
+          <AutoT i18nKey="about.howDeals.title" />
+        </h2>
+        <p className="text-gray-600 dark:text-gray-300 mb-6">
+          <AutoT i18nKey="about.howDeals.subtitle" as="span" />
+        </p>
+        <div className="grid gap-4 md:grid-cols-3">
+          {DEAL_STEP_KEYS.map((step, idx) => (
+            <div
+              key={step.titleKey}
+              className="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-reride"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                  {idx + 1}
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-900 dark:text-white text-sm">
+                    <AutoT i18nKey={step.titleKey} />
+                  </div>
+                  <div className="text-xs text-blue-700 font-medium">
+                    <AutoT i18nKey={step.tagKey} />
+                  </div>
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                <AutoT i18nKey={step.descKey} as="span" />
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-8 rounded-2xl border border-amber-100 bg-amber-50/80 dark:bg-amber-500/10 dark:border-amber-500/20 p-8">
+        <h2 className="text-xl font-bold text-reride-text-dark dark:text-white mb-2">
+          <AutoT i18nKey="about.notWe.title" />
+        </h2>
+        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          <AutoT i18nKey="about.notWe.body" as="span" />
         </p>
       </div>
 

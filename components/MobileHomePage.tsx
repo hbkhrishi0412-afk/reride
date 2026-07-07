@@ -34,6 +34,8 @@ import {
 import { getPopularMakes } from '../utils/popularListings';
 import { PopularCitiesChips } from './PopularCitiesChips';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
+import ActiveDealsHomeBanner from './ActiveDealsHomeBanner';
+import type { User } from '../types';
 
 
 // Rough EMI estimate: 5-year loan at ~10% APR, 20% down. Display-only.
@@ -83,6 +85,7 @@ interface MobileHomePageProps {
   isCatalogLoading?: boolean;
   /** Retry catalog fetch after a network/API failure. */
   onRetryCatalogLoad?: () => void;
+  currentUser?: User | null;
 }
 
 /**
@@ -117,6 +120,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   onUseMyLocation: _onUseMyLocation,
   isCatalogLoading = false,
   onRetryCatalogLoad,
+  currentUser = null,
 }) => {
   const { t } = useTranslation();
   const { comparisonCategory } = useApp();
@@ -719,6 +723,12 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           </div>
         </div>
       </div>
+
+      {currentUser?.role === 'customer' ? (
+        <div className="px-4 pt-4">
+          <ActiveDealsHomeBanner onNavigate={onNavigate} />
+        </div>
+      ) : null}
 
       {/* Continue Browsing — anon-friendly "pick up where you left off"
           strip. Only renders when the local recently-viewed list has at

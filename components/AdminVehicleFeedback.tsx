@@ -64,7 +64,11 @@ const AdminVehicleFeedback: React.FC<AdminVehicleFeedbackProps> = ({
       setInspections(result.inspections);
       setTotalPages(Math.max(1, result.pagination?.pages || 1));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load customer feedback');
+      const raw = e instanceof Error ? e.message : 'Failed to load customer feedback';
+      const message = /unauthorized|authentication required|admin endpoints require/i.test(raw)
+        ? 'Your session is missing valid API credentials. Log out, restart `npm run dev` (free port 3001 if needed), then sign in again.'
+        : raw;
+      setError(message);
       setInspections([]);
     } finally {
       setLoading(false);

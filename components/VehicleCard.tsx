@@ -7,6 +7,7 @@ import LazyImage from './LazyImage.js';
 import { logInfo, logError } from '../utils/logger.js';
 import { showVerifiedListingBadge } from '../utils/listingTrust.js';
 import { ListingStockBadge } from './ListingStockBadge.js';
+import { ListingTrustChips } from './ListingTrustChips.js';
 import { useTranslatedFields } from '../hooks/useTranslatedText.js';
 
 import { PriceFairnessBadge } from './PriceInsights.js';
@@ -304,6 +305,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
             )}
           </div>
         </div>
+
+        <ListingTrustChips vehicle={vehicle} compact className="mb-2" />
 
         {/* Price */}
         <div className="mt-auto pt-2 border-t border-[#E0E0E0]">

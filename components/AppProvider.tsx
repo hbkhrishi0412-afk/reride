@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from '../lib/i18n';
 import { useNavigate as useRouterNavigate, useLocation } from 'react-router-dom';
 import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan, ChatMessage } from '../types';
+import { normalizeNotificationRow } from '../utils/normalizeNotification.js';
 import { View, VehicleCategory as CategoryEnum } from '../types';
 import {
   computeCompareToggle,
@@ -22,7 +23,6 @@ import {
   sanitizeComparisonList,
 } from '../utils/compareList.js';
 import { getConversations, saveConversations } from '../services/chatService';
-import { putConversationOfferResponse } from '../services/conversationService';
 import {
   addMessageWithSync,
   ensureSyncQueueOnlineListener,
@@ -72,6 +72,15 @@ import * as buyerService from '../services/buyerService';
 import { createSafetyReport } from '../services/trustSafetyService';
 import { addLocalRecentId } from '../utils/recentlyViewed';
 import { stringifyVehicleForSession } from '../utils/vehicleSessionCache';
+import {
+  getAppPathFromRouter,
+  pathToView,
+  parseSellerEmailFromPath,
+  resolveViewFromPathAndState,
+  readInitialAppViewFromBrowser,
+  type AppHistoryState,
+} from '../utils/appNavigation.js';
+import { parseCityFromPath } from '../utils/citySlug.js';
 import { persistReRideNotifications, readPersistedReRideNotifications } from '../utils/notificationLocalStorage';
 import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
 import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
@@ -256,200 +265,9 @@ interface UserUpdateOptions {
 }
 
 // PERFORMANCE: Proper typing improves tree-shaking and prevents runtime errors
-interface HistoryState {
-  view: View;
-  previousView: View;
-  timestamp: number;
-  selectedVehicleId?: number;
-  selectedVehicleDatabaseId?: string;
-}
+type HistoryState = AppHistoryState;
 
 /** Compare vehicle ids from URL, JSON, or API (number vs numeric string). */
-
-/** React Router pathname for packaged WebView (`/index.html`) → logical app path. */
-function normalizeRouterPath(path: string): string {
-  if (path == null || typeof path !== 'string') return '/';
-  const p = path.trim();
-  const lower = p.toLowerCase();
-  if (lower === '/index.html' || lower.endsWith('/index.html')) {
-    return '/';
-  }
-  return p;
-}
-
-/**
- * HashRouter should set pathname from the hash, but some Android WebViews briefly report "/"
- * while `location.hash` already contains the real route (#/vehicle/:id, #/seller/..., etc.).
- * Prefer the hash path for any `/...` segment — not only vehicle detail — or seller/deep links
- * mis-resolve to `/` and the location sync effect clobbers SELLER_PROFILE back to HOME/DETAIL.
- */
-function getAppPathFromRouter(loc: { pathname?: string; hash?: string }): string {
-  const raw = (loc?.pathname ?? '/') || '/';
-  const p = normalizeRouterPath(raw);
-  if (p.startsWith('/vehicle/')) return p;
-  if (p !== '/' && p !== '') return p;
-  const hashStr =
-    loc?.hash != null && loc.hash.length > 0
-      ? loc.hash
-      : typeof window !== 'undefined' && window.location.hash
-        ? window.location.hash
-        : '';
-  if (hashStr.length > 1) {
-    try {
-      const fromHash = hashStr.replace(/^#/, '').split('?')[0] || '/';
-      if (fromHash.startsWith('/') && fromHash.length > 1) {
-        return fromHash;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  return p;
-}
-
-// Helper function to map URL paths to views (safe for Capacitor/WebView)
-function pathToView(path: string): View {
-  if (path == null || typeof path !== 'string') return View.HOME;
-  const normalizedPath = normalizeRouterPath(path).toLowerCase().trim();
-  
-  // Exact matches first
-  if (normalizedPath === '/' || normalizedPath === '') return View.HOME;
-  if (normalizedPath === '/used-cars') return View.USED_CARS;
-  if (normalizedPath === '/new-cars') return View.USED_CARS;
-  if (normalizedPath === '/car-services') return View.CAR_SERVICES;
-  if (normalizedPath === '/car-services/detail') return View.SERVICE_DETAIL;
-  if (normalizedPath === '/car-services/login') return View.CAR_SERVICE_LOGIN;
-  if (normalizedPath === '/car-services/dashboard') return View.CAR_SERVICE_DASHBOARD;
-  if (normalizedPath === '/car-services/cart') return View.SERVICE_CART;
-  if (normalizedPath === '/rental') return View.RENTAL;
-  if (normalizedPath === '/dealers') return View.DEALER_PROFILES;
-  if (normalizedPath.startsWith('/vehicle/')) {
-    return View.DETAIL;
-  }
-  if (normalizedPath === '/vehicle') return View.DETAIL;
-  if (normalizedPath === '/seller/dashboard') return View.SELLER_DASHBOARD;
-  // Admin login lives at /admin/login. /admin (and /admin/panel) is the signed-in dashboard URL
-  // and must map to ADMIN_PANEL — otherwise location sync clobbers the panel whenever users/vehicles update.
-  if (normalizedPath === '/admin/login') return View.ADMIN_LOGIN;
-  if (normalizedPath === '/admin/new-cars' || normalizedPath === '/admin/new-cars/manage') {
-    return View.ADMIN_PANEL;
-  }
-  if (normalizedPath === '/admin/sell-car') return View.SELL_CAR_ADMIN;
-  if (normalizedPath === '/admin' || normalizedPath === '/admin/panel') return View.ADMIN_PANEL;
-  if (normalizedPath === '/login') return View.LOGIN_PORTAL;
-  if (normalizedPath === '/404') return View.NOT_FOUND;
-  if (normalizedPath === '/compare') return View.COMPARISON;
-  if (normalizedPath === '/wishlist') return View.WISHLIST;
-  if (normalizedPath === '/profile') return View.PROFILE;
-  if (normalizedPath === '/forgot-password') return View.FORGOT_PASSWORD;
-  if (normalizedPath === '/inbox') return View.INBOX;
-  if (normalizedPath === '/notifications') return View.NOTIFICATIONS_CENTER;
-  if (normalizedPath.startsWith('/seller/')) {
-    // Path like /seller/email@example.com
-    return View.SELLER_PROFILE;
-  }
-  if (normalizedPath === '/seller') return View.SELLER_PROFILE;
-  if (normalizedPath === '/pricing') return View.PRICING;
-  if (normalizedPath === '/support') return View.SUPPORT;
-  if (normalizedPath === '/about-us') return View.ABOUT_US;
-  if (normalizedPath === '/faq') return View.FAQ;
-  if (normalizedPath === '/privacy-policy') return View.PRIVACY_POLICY;
-  if (normalizedPath === '/terms-of-service') return View.TERMS_OF_SERVICE;
-  if (normalizedPath === '/safety-center' || normalizedPath === '/safety') return View.SAFETY_CENTER;
-  if (normalizedPath === '/customer/dashboard' || normalizedPath === '/buyer/dashboard') return View.BUYER_DASHBOARD;
-  if (normalizedPath.startsWith('/city/')) {
-    // Path like /city/mumbai
-    return View.CITY_LANDING;
-  }
-  if (normalizedPath === '/city') return View.CITY_LANDING;
-  if (normalizedPath === '/sell-car') return View.SELL_CAR;
-
-  // Unknown paths should show a 404 — not silently redirect to Home
-  return View.NOT_FOUND;
-}
-
-/** Email segment from /seller/:email (excludes /seller/dashboard). */
-function parseSellerEmailFromPath(path: string): string | null {
-  const sellerSeg = path.match(/^\/seller\/(.+)$/i);
-  if (!sellerSeg || sellerSeg[1].toLowerCase() === 'dashboard') return null;
-  try {
-    const email = decodeURIComponent(sellerSeg[1]).toLowerCase().trim();
-    return email || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Map ?role= on /login to seller/customer login views so refresh keeps the intended portal.
- */
-function loginViewFromSearch(search: string | null | undefined): View | null {
-  if (!search) return null;
-  try {
-    const role = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get('role');
-    const normalized = (role || '').toLowerCase().trim();
-    if (normalized === 'seller') return View.SELLER_LOGIN;
-    if (normalized === 'customer') return View.CUSTOMER_LOGIN;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-/**
- * Prefer the URL for public seller routes: history.state.view can lag or be wrong on HashRouter/WebView
- * while the hash already shows /seller/..., which previously kept the UI on DETAIL or HOME.
- */
-function resolveViewFromPathAndState(
-  path: string,
-  routerState: HistoryState | null | undefined,
-  search?: string | null,
-): View {
-  const pathView = pathToView(path);
-  if (pathView === View.LOGIN_PORTAL) {
-    const roleView = loginViewFromSearch(search);
-    if (roleView) return roleView;
-  }
-  if (pathView === View.SELLER_PROFILE) {
-    return View.SELLER_PROFILE;
-  }
-  if (pathView === View.NOTIFICATIONS_CENTER) {
-    return View.NOTIFICATIONS_CENTER;
-  }
-  // HashRouter/WebView: URL can advance to /used-cars (etc.) before history.state updates — stale state.view may still be DETAIL.
-  // Never let that override a non-detail path, or "Back to Listings" syncs back to detail.
-  if (pathView !== View.DETAIL && routerState?.view === View.DETAIL) {
-    return pathView;
-  }
-  // Stale location.state.view must not win over a real /admin* URL, or the app stays on HOME/another view
-  // with an empty or wrong main area while the address bar shows /admin (user sees header + no dashboard).
-  if (
-    pathView === View.ADMIN_PANEL ||
-    pathView === View.ADMIN_LOGIN ||
-    pathView === View.SELL_CAR_ADMIN
-  ) {
-    return pathView;
-  }
-  return routerState?.view ?? pathView;
-}
-
-/**
- * First paint must match the real URL; defaulting to HOME until an effect runs
- * left /admin showing the marketing shell with an empty or wrong main region.
- * Bootstrap from window (pathname + hash) and ignore history.state so stale view cannot win on refresh.
- */
-function readInitialAppViewFromBrowser(): View {
-  if (typeof window === 'undefined') return View.HOME;
-  try {
-    const path = getAppPathFromRouter({
-      pathname: window.location.pathname || '/',
-      hash: window.location.hash || '',
-    });
-    return resolveViewFromPathAndState(path, null, window.location.search);
-  } catch {
-    return View.HOME;
-  }
-}
 
 function isAdminUserRole(role: string | undefined | null): boolean {
   return (role || '').toLowerCase().trim() === 'admin';
@@ -752,8 +570,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return;
       }
-
-      if (isDevelopmentEnvironment()) return;
 
       logWarn('⚠️ Persisted session failed token validation — signing out');
       setCurrentUser(null);
@@ -1158,7 +974,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setTypingStatus(null);
       setChatPeerOnlineByConversationId({});
       setComparisonList([]);
-      setWishlist([]);
       setNotifications([]);
       try {
         persistReRideNotifications([]);
@@ -1166,7 +981,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         /* ignore */
       }
       try {
-        localStorage.removeItem('reride_wishlist');
         localStorage.removeItem('reride_comparison_list');
       } catch { /* ignore storage errors */ }
       
@@ -2242,8 +2056,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         [View.SUPPORT]: '/support',
         [View.ABOUT_US]: '/about-us',
         [View.FAQ]: '/faq',
+        [View.HELP_CENTER]: '/help',
         [View.PRIVACY_POLICY]: '/privacy-policy',
         [View.TERMS_OF_SERVICE]: '/terms-of-service',
+        [View.REFUND_POLICY]: '/refund-policy',
+        [View.COMPLAINT_RESOLUTION]: '/complaint-resolution',
+        [View.FRAUD_POLICY]: '/fraud-policy',
+        [View.COOKIE_POLICY]: '/cookie-policy',
         [View.SAFETY_CENTER]: '/safety-center',
         [View.BUYER_DASHBOARD]: '/customer/dashboard',
         [View.SELL_CAR]: '/sell-car',
@@ -2564,6 +2383,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
+    // Still on city landing but URL slug changed — hydrate selectedCity from path
+    if (newView === viewNow && newView === View.CITY_LANDING) {
+      const cityFromPath = parseCityFromPath(path);
+      if (cityFromPath) {
+        updateSelectedCity(cityFromPath);
+      }
+      return;
+    }
+
     // Still on seller profile but URL switched to another dealer — view enum unchanged, so hydrate profile
     if (newView === viewNow && newView === View.SELLER_PROFILE) {
       const email = parseSellerEmailFromPath(path);
@@ -2651,6 +2479,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSelectedVehicle(null);
     }
 
+    if (newView === View.CITY_LANDING) {
+      const cityFromPath = parseCityFromPath(path);
+      if (cityFromPath) {
+        updateSelectedCity(cityFromPath);
+      }
+    }
+
     // Clear seller profile when navigating away
     if (newView !== View.SELLER_PROFILE) {
       setPublicSellerProfile(null);
@@ -2691,6 +2526,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     vehicles,
     users,
     selectedVehicle?.id,
+    updateSelectedCity,
   ]);
 
   // When the catalog finishes loading, resolve /vehicle/:id if the list sync effect ran too early
@@ -2830,18 +2666,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // AUTH: Rehydrate tokens in parallel — published vehicles are public and must not
         // wait up to 2.5s behind refresh-token on first paint for new/returning visitors.
         void (async () => {
-          if (typeof window !== 'undefined' && !isDevelopmentEnvironment()) {
-            try {
-              const hasAccessToken = !!getBrowserAccessTokenForApi();
-              if (!hasAccessToken && hasLikelyRefreshSource()) {
-                await Promise.race([
-                  refreshAuthToken(),
-                  new Promise((resolve) => setTimeout(resolve, 2500)),
-                ]);
-              }
-            } catch (error) {
-              logWarn('⚠️ Auth rehydration failed (non-critical):', error);
-            }
+          if (typeof window === 'undefined') return;
+          try {
+            const { rehydrateApiCredentials } = await import('../utils/validatePersistedSession.js');
+            await rehydrateApiCredentials();
+          } catch (error) {
+            logWarn('⚠️ Auth rehydration failed (non-critical):', error);
           }
         })();
         
@@ -3173,6 +3003,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (userEmail || userRole) {
                 // Use timeout to prevent blocking - max 3 seconds
                 const conversationPromise = (async () => {
+                  const { rehydrateApiCredentials } = await import('../utils/validatePersistedSession.js');
+                  await rehydrateApiCredentials();
                   const { getConversationsFromMongoDB } = await import('../services/conversationService');
                   const conversationKey = `conversations-${userRole}-${userEmail || 'all'}`;
                   return await deduplicateRequest(
@@ -3200,13 +3032,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId
                     }));
                     
-                    setConversations(normalizedConversations);
-                    // Cache the fresh data
-                    try {
-                      localStorage.setItem('reRideConversations', JSON.stringify(normalizedConversations));
-                    } catch (error) {
-                      logWarn('Failed to cache conversations to localStorage:', error);
-                    }
+                    setConversations((prev) => {
+                      const merged = mergeConversationLists(prev, normalizedConversations);
+                      try {
+                        localStorage.setItem('reRideConversations', JSON.stringify(merged));
+                      } catch (error) {
+                        logWarn('Failed to cache conversations to localStorage:', error);
+                      }
+                      return merged;
+                    });
                   }
                   // If result failed but we already have cached data, keep using cache
                 }
@@ -3422,30 +3256,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Supabase Realtime: when a new notification is created for this user, add it to state and show browser notification
   const userEmailForNotif = currentUser?.email?.toLowerCase().trim() ?? '';
   const onNotificationRealtimeInsert = useCallback(
-    (row: any) => {
+    (row: Record<string, unknown>) => {
       if (!userEmailForNotif) return;
       const recipient = (row.recipient_email || row.user_id || '').toString();
       if (!recipient || !participantIdMatchesAppUser(recipient, userEmailForNotif, currentUser?.id)) return;
-      const notif: Notification = {
-        id: row.id,
-        recipientEmail: userEmailForNotif,
-        message: row.message || '',
-        title: row.title,
-        targetId: row.metadata?.targetId ?? row.id,
-        targetType: (row.type === 'conversation' ? 'conversation' : row.type === 'vehicle' ? 'vehicle' : 'general') as Notification['targetType'],
-        isRead: row.read ?? false,
-        timestamp: row.created_at || new Date().toISOString(),
-      };
-      setNotifications((prev) => [notif, ...prev]);
-      if (typeof document !== 'undefined') {
-        if (document.visibilityState === 'hidden') {
-          showNotification(notif.title || 'New message', { body: notif.message });
-        } else if (notif.targetType === 'conversation') {
-          addToast(notif.message || notif.title || 'New message', 'info');
-        }
-      }
+      setNotifications((prev) => [normalizeNotificationRow(row), ...prev]);
     },
-    [userEmailForNotif, currentUser?.id, addToast],
+    [userEmailForNotif, currentUser?.id],
   );
 
   useSupabaseRealtime({
@@ -3549,18 +3366,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           logDebug('📊 AppProvider: Admin user detected - fetching users for admin panel...');
         }
 
-        // AUTH: Ensure we have an access token before production API calls.
-        // This runs when a user is restored from localStorage on initial load.
-        if (typeof window !== 'undefined' && !isDevelopmentEnvironment()) {
+        // AUTH: Ensure we have an access token before API calls (including dev).
+        if (typeof window !== 'undefined') {
           try {
-            const hasAccessToken = !!getBrowserAccessTokenForApi();
-
-            if (!hasAccessToken && hasLikelyRefreshSource()) {
-              await Promise.race([
-                refreshAuthToken(),
-                new Promise((resolve) => setTimeout(resolve, 2500)),
-              ]);
-            }
+            const { rehydrateApiCredentials } = await import('../utils/validatePersistedSession.js');
+            await rehydrateApiCredentials();
           } catch (error) {
             logWarn('⚠️ Auth rehydration failed in syncLatestData (non-critical):', error);
           }
@@ -3661,6 +3471,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ) {
           try {
             const inboxEmail = currentUser.email.toLowerCase().trim();
+            const { rehydrateApiCredentials } = await import('../utils/validatePersistedSession.js');
+            await rehydrateApiCredentials();
             const { getConversationsFromSupabase } = await import('../services/conversationService');
             const convResult =
               currentUser.role === 'seller'
@@ -3778,6 +3590,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       } else if (notification.targetType === 'conversation') {
         addToast(notification.message || notification.title || 'New message', 'info');
+      } else if (notification.targetType === 'deal') {
+        addToast(notification.message || notification.title || 'Deal update', 'info');
       }
     });
 
@@ -4065,19 +3879,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
         }));
         setConversations((prev) => {
+          const merged = mergeConversationLists(prev, normalized);
           const changed =
-            prev.length !== normalized.length ||
-            normalized.some((n) => {
-              const p = prev.find((x) => x.id === n.id);
-              return !p || p.messages.length !== n.messages.length || p.isReadBySeller !== n.isReadBySeller || p.isReadByCustomer !== n.isReadByCustomer;
+            prev.length !== merged.length ||
+            merged.some((n) => {
+              const p = prev.find((x) => x && String(x.id) === String(n.id));
+              return !p || (p.messages?.length ?? 0) !== (n.messages?.length ?? 0) || p.isReadBySeller !== n.isReadBySeller || p.isReadByCustomer !== n.isReadByCustomer;
             });
           if (!changed) return prev;
           try {
-            saveConversations(normalized);
+            saveConversations(merged);
           } catch {
             /* ignore */
           }
-          return normalized;
+          return merged;
         });
       } catch {
         /* ignore */
@@ -4740,6 +4555,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!match) return;
     const localLen = activeChat.messages?.length ?? 0;
     const matchLen = match.messages?.length ?? 0;
+    // Never replace open chat with fewer messages (dev API returns empty until Supabase is wired).
+    if (matchLen < localLen) {
+      return;
+    }
     if (
       matchLen > localLen ||
       match.lastMessageAt !== activeChat.lastMessageAt ||
@@ -4893,8 +4712,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const updatedConversation = conversations.find(conv => conv.id === activeChat.id);
       if (updatedConversation) {
         // Use shallow comparison instead of deep JSON comparison to avoid infinite loops
+        const localMsgLen = activeChat.messages?.length ?? 0;
+        const remoteMsgLen = updatedConversation.messages?.length ?? 0;
+        if (remoteMsgLen < localMsgLen) {
+          return;
+        }
         const hasChanges = 
-          updatedConversation.messages.length !== activeChat.messages.length ||
+          remoteMsgLen !== localMsgLen ||
           updatedConversation.lastMessageAt !== activeChat.lastMessageAt ||
           updatedConversation.isReadBySeller !== activeChat.isReadBySeller ||
           updatedConversation.isReadByCustomer !== activeChat.isReadByCustomer;
@@ -5384,6 +5208,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (!vehicle) return;
           
           const newStatus = vehicle.status === 'published' ? 'unpublished' : 'published';
+          if (newStatus === 'published' && currentUser?.email) {
+            const { assertSellerCanPublishListing } = await import('../utils/sellerAddListing');
+            const sellerEmail = currentUser.email.toLowerCase().trim();
+            const sellerVehicles = Array.isArray(vehicles)
+              ? vehicles.filter((v) => v?.sellerEmail?.toLowerCase?.().trim() === sellerEmail)
+              : [];
+            const canPublish = await assertSellerCanPublishListing({
+              currentUser,
+              vehicle,
+              sellerVehicles,
+              addToast,
+            });
+            if (!canPublish) return;
+          }
           await updateVehicleHandler(vehicleId, { status: newStatus });
           
           // Log audit entry for vehicle status toggle
@@ -7026,64 +6864,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast(t('compare.maxReached', { max: MAX_COMPARE_VEHICLES }), 'error');
       }
     },
-    onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => {
-      void (async () => {
-        if (!currentUser) {
-          addToast(t('toast.loginRequiredMessages'), 'error');
-          return;
-        }
-
-        const responseTexts: Record<typeof response, string> = {
-          accepted: `✅ Offer accepted! The deal is confirmed.`,
-          rejected: `❌ Offer declined. Thank you for your interest.`,
-          countered: `💰 Counter-offer made: ₹${(counterPrice ?? 0).toLocaleString('en-IN')}`,
-        };
-
-        const responseMessage: ChatMessage = {
-          id: Date.now() * 1000 + randomIntBelow(1000),
-          sender: currentUser.role === 'seller' ? 'seller' : 'user',
-          text: responseTexts[response],
-          timestamp: new Date().toISOString(),
-          isRead: false,
-          type: 'text',
-        };
-
-        const apiResult = await putConversationOfferResponse(
-          conversationId,
-          messageId,
-          response,
-          responseMessage,
-          counterPrice,
-        );
-
-        if (!apiResult.success || !apiResult.data) {
-          addToast(apiResult.error || t('toast.failedSendMessageGeneric'), 'error');
-          return;
-        }
-
-        const fresh = apiResult.data;
-        setConversations((prev) => {
-          const next = Array.isArray(prev)
-            ? prev.map((c) => (c && String(c.id) === String(fresh.id) ? fresh : c))
-            : [];
-          try {
-            saveConversations(next);
-          } catch {
-            /* ignore */
-          }
-          return next;
-        });
-        setActiveChat((ac) => (ac && String(ac.id) === String(fresh.id) ? fresh : ac));
-
-        addToast(
-          response === 'accepted'
-            ? t('toast.offerAccepted')
-            : response === 'rejected'
-              ? t('toast.offerRejected')
-              : t('toast.offerCountered'),
-          'success',
-        );
-      })();
+    onOfferResponse: () => {
+      addToast('Offer actions moved to Deal Room pipeline.', 'info');
     },
   };
   }, [

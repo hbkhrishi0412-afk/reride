@@ -655,7 +655,9 @@ export const syncWithBackend = async (
         authProvider,
       }),
     });
-    const parsed = await handleApiResponse<BackendSyncResult>(response);
+    const parsed = await handleApiResponse<
+      BackendSyncResult & { accessToken?: string; refreshToken?: string }
+    >(response);
     if (!parsed.success) {
       // Preserve prior user-facing messages for common statuses
       if (response.status === 429) {
@@ -666,7 +668,16 @@ export const syncWithBackend = async (
       }
       return { success: false, reason: parsed.reason || parsed.error || 'Failed to sync with backend' };
     }
-    return parsed.data as BackendSyncResult;
+    const data = parsed.data;
+    if (data?.success && data.user && data.accessToken) {
+      const { establishSessionFromBackendAuth } = await import('./userService.js');
+      establishSessionFromBackendAuth({
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        user: data.user,
+      });
+    }
+    return data as BackendSyncResult;
   } catch (error: unknown) {
     if (error instanceof Error && error.name === 'AbortError') {
       return { success: false, reason: 'Signing in took too long. Check your connection and try again.' };

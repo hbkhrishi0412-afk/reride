@@ -10,6 +10,9 @@ export interface WebPushPayload {
   url?: string;
   tag?: string;
   conversationId?: string;
+  leadId?: string;
+  action?: string;
+  type?: string;
 }
 
 function getVapidPublicKey(): string | null {
@@ -82,7 +85,9 @@ export async function sendWebPushToUser(userEmail: string, payload: WebPushPaylo
     data: {
       url: payload.url || '/#/inbox',
       conversationId: payload.conversationId,
-      type: 'conversation',
+      leadId: payload.leadId,
+      action: payload.action,
+      type: payload.type || (payload.leadId ? 'deal' : 'conversation'),
     },
   });
 

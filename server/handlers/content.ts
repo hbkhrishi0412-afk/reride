@@ -36,6 +36,34 @@ export async function handleContent(req: VercelRequest, res: VercelResponse, _op
 
 // ── FAQs ────────────────────────────────────────────────────────────────────
 
+async function requireContentAdmin(
+  req: VercelRequest,
+  res: VercelResponse,
+): Promise<AuthResult | null> {
+  const auth = await authenticateRequestDual(req);
+  if (!auth.isValid) {
+    res.status(401).json({ success: false, reason: 'Authentication required.' });
+    return null;
+  }
+  let role = auth.user?.role;
+  if (role !== 'admin' && auth.user?.email) {
+    try {
+      const dbUser = await supabaseUserService.findByEmail(auth.user.email.toLowerCase().trim());
+      if (dbUser && normalizeUserRoleString(dbUser.role) === 'admin') {
+        role = 'admin';
+        auth.user = { ...auth.user!, role: 'admin' };
+      }
+    } catch {
+      /* non-fatal */
+    }
+  }
+  if (role !== 'admin') {
+    res.status(403).json({ success: false, reason: 'Admin access required.' });
+    return null;
+  }
+  return auth;
+}
+
 async function handleFAQs(req: VercelRequest, res: VercelResponse) {
   const path = 'faqs';
   switch (req.method) {
@@ -55,6 +83,8 @@ async function handleFAQs(req: VercelRequest, res: VercelResponse) {
       }
     }
     case 'POST': {
+      const auth = await requireContentAdmin(req, res);
+      if (!auth) return;
       const d = req.body;
       if (!d.question || !d.answer || !d.category) return res.status(400).json({ success: false, error: 'Missing required fields' });
       const id = `faq_${Date.now()}`;
@@ -63,6 +93,8 @@ async function handleFAQs(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json({ success: true, faq });
     }
     case 'PUT': {
+      const auth = await requireContentAdmin(req, res);
+      if (!auth) return;
       const { id } = req.query;
       if (!id) return res.status(400).json({ success: false, error: 'FAQ ID required' });
       const existing = await adminRead<Record<string, unknown>>(path, String(id));
@@ -71,6 +103,8 @@ async function handleFAQs(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, message: 'FAQ updated' });
     }
     case 'DELETE': {
+      const auth = await requireContentAdmin(req, res);
+      if (!auth) return;
       const { id } = req.query;
       if (!id) return res.status(400).json({ success: false, error: 'FAQ ID required' });
       await adminDelete(path, String(id));

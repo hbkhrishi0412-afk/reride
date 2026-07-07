@@ -33,6 +33,8 @@ interface SellerDisclosureFormProps {
   vahanVerified?: boolean;
   vahanSnapshot?: VahanSnapshot | null;
   compact?: boolean;
+  /** Hide the inner heading when a parent fieldset already provides the section title. */
+  hideTitle?: boolean;
 }
 
 export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
@@ -45,6 +47,7 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
   vahanVerified,
   vahanSnapshot,
   compact = false,
+  hideTitle = false,
 }) => {
   const [items, setItems] = useState<ChecklistItemResponse[]>(() =>
     mergeSellerResponses(category, value),
@@ -119,9 +122,11 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
     <div className={`rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 ${compact ? 'p-4' : 'p-5'}`}>
       <div className="flex items-start justify-between gap-3 mb-2">
         <div>
-          <h3 className="font-bold text-gray-900 text-base">Vehicle documents & photos</h3>
-          <p className="text-xs text-gray-600 mt-0.5">
-            Upload photos or enter details for each item below. Complete all for a Verified Listing badge.
+          {!hideTitle && (
+            <h3 className="font-bold text-gray-900 text-base">Inspection & trust checklist</h3>
+          )}
+          <p className={`text-xs text-gray-600 ${hideTitle ? '' : 'mt-0.5'}`}>
+            Upload photos or enter details for each item below to create a trustworthy listing.
           </p>
           <p className="text-xs text-emerald-800 mt-1 font-medium">
             RC, insurance, PUC, and checklist photos sync to your listing gallery automatically.

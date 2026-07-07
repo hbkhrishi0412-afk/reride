@@ -6,6 +6,7 @@ import {
   clearPersistedUserSession,
   isPersistedSessionAuthenticated,
   readPersistedUser,
+  rehydrateApiCredentials,
 } from '../utils/validatePersistedSession';
 
 jest.mock('../utils/environment', () => ({
@@ -65,6 +66,7 @@ describe('validatePersistedSession', () => {
       JSON.stringify({ email: 'a@test.com', role: 'customer', name: 'A' }),
     );
     await expect(isPersistedSessionAuthenticated()).resolves.toBe(false);
+    await expect(rehydrateApiCredentials()).resolves.toBe(false);
   });
 
   it('clears persisted user keys', () => {

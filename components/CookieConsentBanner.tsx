@@ -56,8 +56,8 @@ export default function CookieConsentBanner() {
     >
       <span style={{ marginRight: 8 }}>
         {t('cookie.consent')}{' '}
-        <a href="/privacy-policy" style={{ color: '#FF6B35', textDecoration: 'underline' }}>
-          {t('cookie.learnMore')}
+        <a href="/cookie-policy" style={{ color: '#FF6B35', textDecoration: 'underline' }}>
+          {t('footer.cookies', { defaultValue: 'Cookie Policy' })}
         </a>
       </span>
     </CookieConsent>

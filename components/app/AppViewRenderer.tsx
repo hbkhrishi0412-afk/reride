@@ -7,7 +7,8 @@ import useIsMobileApp from '../../hooks/useIsMobileApp';
 import { enrichVehiclesWithSellerInfo } from '../../utils/vehicleEnrichment';
 import { matchesLocation } from '../../utils/cityMapping';
 import { buildVehicleMutationBody } from '../../utils/vehicleIdentity';
-import { addSellerListing, addSellerListingsBulk } from '../../utils/sellerAddListing.js';
+import { addSellerListing, addSellerListingsBulk, assertSellerCanPublishListing } from '../../utils/sellerAddListing.js';
+import { computeListingExpiresAtForSeller } from '../../utils/listingPlanRules.js';
 import { authenticatedFetch } from '../../utils/authenticatedFetch';
 import { planService } from '../../services/planService';
 import { logInfo, logWarn, logError } from '../../utils/logger';
@@ -65,6 +66,7 @@ export interface AppViewRendererLocals {
   handleRegister: (user: User) => void;
   handleLogoutAll: () => void;
   handleNotificationClick: (notification: Notification) => void;
+  handleAcceptDealChat: (leadId: string, conversationId?: string) => void | Promise<boolean>;
   handleMarkNotificationsAsRead: (ids: number[]) => void | Promise<void>;
   handleMarkAllNotificationsAsRead: () => void | Promise<void>;
   markAllVisibleAsRead: (role: 'customer' | 'seller') => void | Promise<void>;
@@ -160,6 +162,12 @@ const MobilePrivacyPolicyPage = React.lazy(() => import('../MobilePrivacyPolicyP
 const SafetyCenterPage = React.lazy(() => import('../SafetyCenterPage'));
 const TermsOfServicePage = React.lazy(() => import('../TermsOfServicePage'));
 const MobileTermsOfServicePage = React.lazy(() => import('../MobileTermsOfServicePage'));
+const RefundPolicyPage = React.lazy(() => import('../RefundPolicyPage'));
+const ComplaintResolutionPage = React.lazy(() => import('../ComplaintResolutionPage'));
+const FraudPolicyPage = React.lazy(() => import('../FraudPolicyPage'));
+const CookiePolicyPage = React.lazy(() => import('../CookiePolicyPage'));
+const HelpCenterPage = React.lazy(() => import('../HelpCenterPage'));
+const NotFoundPage = React.lazy(() => import('../NotFoundPage'));
 const MobileBuyerDashboard = React.lazy(() => import('../MobileBuyerDashboard'));
 const MobileDealerProfilesPage = React.lazy(() => import('../MobileDealerProfilesPage'));
 const MobileHomePage = React.lazy(() => import('../MobileHomePage'));
@@ -281,6 +289,7 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     handleRegister,
     handleLogoutAll,
     handleNotificationClick,
+    handleAcceptDealChat,
     handleMarkNotificationsAsRead,
     handleMarkAllNotificationsAsRead,
     markAllVisibleAsRead,
@@ -334,6 +343,7 @@ switch (currentView) {
           onUseMyLocation={handleHomeUseMyLocation}
           isCatalogLoading={isLoading || (!vehiclesCatalogReady && vehicles.length === 0)}
           onRetryCatalogLoad={() => void refreshVehicles({ userInitiated: true })}
+          currentUser={currentUser}
         />
       );
     }
@@ -383,6 +393,7 @@ switch (currentView) {
         addToast={addToast}
         isCatalogLoading={isLoading || (!vehiclesCatalogReady && vehicles.length === 0)}
         onRetryCatalogLoad={() => void refreshVehicles({ userInitiated: true })}
+        currentUser={currentUser}
       />
     );
 
@@ -556,7 +567,6 @@ switch (currentView) {
             navigate(ViewEnum.CUSTOMER_LOGIN);
           }}
           onStartChat={handleStartVehicleChat}
-          onRequestTestDrive={handleRequestTestDrive}
           recommendations={recommendations}
           onSelectVehicle={selectVehicle}
         />
@@ -578,7 +588,6 @@ switch (currentView) {
         updateVehicle={updateVehicle}
         onViewSellerProfile={openSellerProfileByEmail}
         onStartChat={handleStartVehicleChat}
-        onRequestTestDrive={handleRequestTestDrive}
         recommendations={recommendations}
         onSelectVehicle={selectVehicle}
       />
@@ -767,6 +776,15 @@ switch (currentView) {
                 }
               }}
               onMarkAsUnsold={async (vehicleId) => {
+                const vehicle = vehicles.find((v) => v.id === vehicleId);
+                if (!vehicle) return;
+                const canPublish = await assertSellerCanPublishListing({
+                  currentUser,
+                  vehicle,
+                  sellerVehicles: sellerVehiclesFiltered || [],
+                  addToast,
+                });
+                if (!canPublish) return;
                 await updateVehicle(vehicleId, { status: 'published', soldAt: undefined, listingStatus: 'active' });
               }}
               onAddMultipleVehicles={async (vehiclesData) => {
@@ -786,6 +804,7 @@ switch (currentView) {
                   nextNumericId: () => Date.now() + randomIntBelow(1000),
                   addToast,
                   logError,
+                  sellerVehicles: sellerVehiclesFiltered || [],
                 });
               }}
               onRequestCertification={async (vehicleId) => {
@@ -964,6 +983,7 @@ switch (currentView) {
                   successMessage: 'Vehicle added successfully!',
                   addToast,
                   logError,
+                  sellerVehicles: sellerVehiclesFiltered || [],
                 })
               }
               onUpdateVehicle={async (vehicleData) => {
@@ -1026,6 +1046,7 @@ switch (currentView) {
               addToast,
               logError,
               errorMessage: 'Failed to add vehicle',
+              sellerVehicles: sellerVehiclesFiltered || [],
             })
           }
           onAddMultipleVehicles={async (vehiclesData) => {
@@ -1045,6 +1066,7 @@ switch (currentView) {
               nextNumericId: () => Date.now() + randomIntBelow(1000),
               addToast,
               logError,
+              sellerVehicles: sellerVehiclesFiltered || [],
             });
           }}
           onUpdateVehicle={async (vehicleData) => {
@@ -1060,6 +1082,15 @@ switch (currentView) {
             }
           }}
           onMarkAsUnsold={async (vehicleId) => {
+            const vehicle = vehicles.find((v) => v.id === vehicleId);
+            if (!vehicle) return;
+            const canPublish = await assertSellerCanPublishListing({
+              currentUser,
+              vehicle,
+              sellerVehicles: sellerVehiclesFiltered || [],
+              addToast,
+            });
+            if (!canPublish) return;
             await updateVehicle(vehicleId, { status: 'published', soldAt: undefined, listingStatus: 'active' });
           }}
           conversations={(conversations || []).filter(
@@ -1460,6 +1491,14 @@ switch (currentView) {
     );
 
   case ViewEnum.INBOX:
+    if (currentUser?.role === 'seller' && !isMobileApp && !isCapacitorNativeApp()) {
+      navigate(ViewEnum.SELLER_DASHBOARD);
+      return (
+        <div className="min-h-[40vh] flex items-center justify-center text-gray-500 text-sm">
+          Redirecting to seller dashboard…
+        </div>
+      );
+    }
     if ((isMobileApp || isCapacitorNativeApp()) && currentUser) {
       const inboxEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
       const inboxRoleNorm = normalizeInboxRole(currentUser.role);
@@ -1523,20 +1562,14 @@ switch (currentView) {
     return currentUser ? (
       <CustomerInbox 
         conversations={conversations.filter(c => {
-          if (!c || !c.customerId || !currentUser?.email) return false;
-          return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+          if (!c || !currentUser?.email) return false;
+          return conversationBelongsToCustomer(c, currentUser.email, currentUser.id);
         })}
         initialOpenConversationId={inboxConversationIdToOpen}
         onConsumedInitialConversation={handleInboxInitialConversationConsumed}
         vehicles={vehicles}
-        onSendMessage={(vehicleId, messageText, type, payload) => {
-          // Only find conversations that belong to the current user
-          // Normalize emails for comparison (critical for production)
-          const normalizedCustomerEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
-          const conversation = normalizedCustomerEmail ? conversations.find(c => {
-            if (!c || !c.customerId) return false;
-            return c.vehicleId === vehicleId && c.customerId.toLowerCase().trim() === normalizedCustomerEmail;
-          }) : undefined;
+        onSendMessage={(conversationId, messageText, type, payload) => {
+          const conversation = conversations.find((c) => c && String(c.id) === String(conversationId));
           if (conversation) {
             sendMessageWithType(conversation.id, messageText, type, payload);
           }
@@ -1860,6 +1893,13 @@ switch (currentView) {
       />
     );
 
+  case ViewEnum.HELP_CENTER:
+    return (
+      <React.Suspense fallback={<LoadingSpinner />}>
+        <HelpCenterPage faqItems={faqItems} onNavigate={navigate} />
+      </React.Suspense>
+    );
+
   case ViewEnum.PRIVACY_POLICY:
     if (isMobileApp) {
       return (
@@ -1887,6 +1927,34 @@ switch (currentView) {
       </React.Suspense>
     );
 
+  case ViewEnum.REFUND_POLICY:
+    return (
+      <React.Suspense fallback={<LoadingSpinner />}>
+        <RefundPolicyPage />
+      </React.Suspense>
+    );
+
+  case ViewEnum.COMPLAINT_RESOLUTION:
+    return (
+      <React.Suspense fallback={<LoadingSpinner />}>
+        <ComplaintResolutionPage onNavigate={navigate} />
+      </React.Suspense>
+    );
+
+  case ViewEnum.FRAUD_POLICY:
+    return (
+      <React.Suspense fallback={<LoadingSpinner />}>
+        <FraudPolicyPage onNavigate={navigate} />
+      </React.Suspense>
+    );
+
+  case ViewEnum.COOKIE_POLICY:
+    return (
+      <React.Suspense fallback={<LoadingSpinner />}>
+        <CookiePolicyPage />
+      </React.Suspense>
+    );
+
   case ViewEnum.CITY_LANDING:
     return (
       <CityLandingPage
@@ -1903,19 +1971,9 @@ switch (currentView) {
 
   case ViewEnum.NOT_FOUND:
     return (
-      <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
-        <div className="text-center px-4">
-          <h2 className="text-2xl font-bold text-gray-600 mb-4">Page Not Found</h2>
-          <p className="text-gray-500 mb-4">The page you&apos;re looking for doesn&apos;t exist.</p>
-          <button
-            type="button"
-            onClick={() => navigate(ViewEnum.HOME)}
-            className="btn-brand-primary"
-          >
-            Go Home
-          </button>
-        </div>
-      </div>
+      <React.Suspense fallback={<LoadingSpinner />}>
+        <NotFoundPage onNavigate={navigate} currentUser={currentUser} />
+      </React.Suspense>
     );
 
   case ViewEnum.LOGIN_PORTAL:
@@ -1955,7 +2013,7 @@ switch (currentView) {
               setForgotPasswordRole('customer');
               navigate(ViewEnum.FORGOT_PASSWORD);
             }}
-            allowedRoles={['customer', 'seller', 'service_provider']}
+            allowedRoles={['customer', 'seller']}
             forcedRole={loginForcedRole}
           />
         </Suspense>
@@ -2054,6 +2112,7 @@ switch (currentView) {
             <MobileNotifications
               notifications={userNotifs}
               onNotificationClick={handleNotificationClick}
+              onAcceptDealChat={handleAcceptDealChat}
               onMarkAsRead={handleMarkNotificationsAsRead}
               onMarkAllAsRead={handleMarkAllNotificationsAsRead}
               onBack={() => goBack(ViewEnum.HOME)}
@@ -2065,6 +2124,7 @@ switch (currentView) {
               vehicles={vehicles}
               conversations={conversations}
               onNotificationClick={handleNotificationClick}
+              onAcceptDealChat={handleAcceptDealChat}
               onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
               onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
               onBack={() => goBack(ViewEnum.HOME)}

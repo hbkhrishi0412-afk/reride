@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Conversation, User, ChatMessage, Vehicle } from '../types.js';
 import { findUserByParticipantId, resolveSellerPhoneFromProfileOrListing } from '../utils/chatContact.js';
-import { OfferModal } from './ReadReceiptIcon.js';
 import InlineChat from './InlineChat.js';
 import { useConversationList } from '../hooks/useConversationList';
 import { formatRelativeTime } from '../utils/date';
@@ -10,7 +9,7 @@ import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../util
 
 interface CustomerInboxProps {
   conversations: Conversation[];
-  onSendMessage: (vehicleId: number, messageText: string, type?: ChatMessage['type'], payload?: any) => void;
+  onSendMessage: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: any) => void;
   onMarkAsRead: (conversationId: string) => void;
   users: User[];
   vehicles?: Vehicle[];
@@ -65,7 +64,6 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   const [mobileShowsChat, setMobileShowsChat] = useState(false);
   const [isInboxNarrow, setIsInboxNarrow] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 1023px)');
@@ -153,16 +151,6 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   // Removed unused handleSendReply function
   
   // Removed unused handleFlagClick function
-
-  const handleSendOffer = (price: number) => {
-    if (selectedConv) {
-        onSendMessage(selectedConv.vehicleId, `Offer: ${price}`, 'offer', {
-            offerPrice: price,
-            status: 'pending'
-        });
-        setIsOfferModalOpen(false);
-    }
-  };
 
   // Removed unused functions: handleInputChange, handleSendReply, handleFlagClick, formInputClass
 
@@ -394,6 +382,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                   <InlineChat
                       conversation={selectedConv}
                       currentUserRole="customer"
+                      currentUserEmail={currentUserEmail ?? undefined}
                       otherUserName={getSellerName(selectedConv.sellerId)}
                       callTargetPhone={getSellerPhone(selectedConv.sellerId, selectedConv.vehicleId)}
                       callTargetName={getSellerName(selectedConv.sellerId)}
@@ -401,13 +390,13 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                       onStartCall={handleStartCall}
                       onSendMessage={(messageText, type, payload) => {
                           if (type === 'offer' && payload) {
-                              onSendMessage(selectedConv.vehicleId, messageText, type, payload);
+                              onSendMessage(selectedConv.id, messageText, type, payload);
                           } else if (type === 'image' && payload?.imageUrl) {
-                              onSendMessage(selectedConv.vehicleId, messageText || '📷 Photo', 'image', payload);
+                              onSendMessage(selectedConv.id, messageText || '📷 Photo', 'image', payload);
                           } else if (type === 'voice' && payload?.audioUrl) {
-                              onSendMessage(selectedConv.vehicleId, messageText || '🎤 Voice message', 'voice', payload);
+                              onSendMessage(selectedConv.id, messageText || '🎤 Voice message', 'voice', payload);
                           } else {
-                              onSendMessage(selectedConv.vehicleId, messageText);
+                              onSendMessage(selectedConv.id, messageText);
                           }
                       }}
                       typingStatus={typingStatus}
@@ -436,14 +425,6 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
               )}
           </main>
       </div>
-      {isOfferModalOpen && selectedConv && (
-        <OfferModal
-            title="Make an Offer"
-            listingPrice={selectedConv.vehiclePrice}
-            onSubmit={handleSendOffer}
-            onClose={() => setIsOfferModalOpen(false)}
-        />
-      )}
     </div>
   );
 };

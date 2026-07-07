@@ -9,6 +9,7 @@ import PricingGuidance from './PricingGuidance';
 import BoostListingModal from './BoostListingModal';
 import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
+import { PaymentErrorBoundary } from './ErrorBoundaries';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
 import { getFirstValidImage, swapToPlaceholderOnError } from '../utils/imageUtils';
 import {
@@ -26,16 +27,18 @@ import {
   type ListingEnhancementResult 
 } from '../services/listingEnhancementService';
 import SellerDisclosureForm from './SellerDisclosureForm';
+import SellerCommandHome from './command-center/SellerCommandHome';
+import DealDetailPage from './command-center/DealDetailPage';
 import { formatIndianNumberInput, parseIndianNumberDigits } from '../utils/indianNumberInput.js';
 import {
   clearChecklistPhotoByUrl,
-  countAiReadyPhotos,
   extractChecklistGalleryUrls,
   getExtraGalleryImages,
   mergeListingImages,
 } from '../lib/universalChecklist/mediaSync';
 import { verifyVahanRegistration, applyVahanVerifyToVehicleFields } from '../services/vehicleTrustService';
 import MarkSoldDealModal from './MarkSoldDealModal';
+import { isListingLimitReached } from '../utils/listingPlanRules';
 
 // ---------- Premium inline SVG icon set (kept local to avoid new deps) ----------
 type IconProps = { className?: string; size?: number; stroke?: number };
@@ -391,6 +394,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     [addToast],
   );
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [messagesHubFilter, setMessagesHubFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editFormData, setEditFormData] = useState<Vehicle | null>(null);
@@ -653,6 +657,22 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const totalInquiries = safeConversations.length;
   const reportedCount = safeReportedVehicles.length;
   const featuredListingsCount = safeUserVehicles.filter(v => v && v.isFeatured).length;
+  const listingAtLimit = useMemo(
+    () => isListingLimitReached(currentUser, safeUserVehicles, plan),
+    [currentUser, safeUserVehicles, plan],
+  );
+
+  const openAddVehicleTab = useCallback(() => {
+    if (listingAtLimit) {
+      notify(
+        "You've reached your plan's active listing limit. Unpublish or sell a listing, or upgrade your plan.",
+        'warning',
+      );
+      return;
+    }
+    setEditingVehicle(null);
+    setActiveTab('addVehicle');
+  }, [listingAtLimit, notify]);
   const unreadSellerThreads = useMemo(
     () => safeConversations.filter((c) => c && !c.isReadBySeller).length,
     [safeConversations]
@@ -693,15 +713,26 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   }, [t, totalListings, soldListings, reportedCount, isSeller, unreadSellerThreads]);
 
   const renderOverview = () => {
+    if (isSeller && selectedDealId) {
+      return (
+        <div className="pb-4">
+          <DealDetailPage
+            leadId={selectedDealId}
+            currentUser={currentUser}
+            role="seller"
+            conversations={safeConversations}
+            onBack={() => setSelectedDealId(null)}
+            onOpenConversation={(conv) => {
+              onSellerOpenChat?.(conv);
+              setActiveTab('messages');
+            }}
+            onNotify={(message, type) => addToast?.(message, type ?? 'info')}
+          />
+        </div>
+      );
+    }
+
     const conversionRate = totalListings > 0 ? Math.round((soldListings / totalListings) * 100) : 0;
-    const planUsedPct = plan && plan.listingLimit !== 'unlimited'
-      ? Math.min((activeListings / plan.listingLimit) * 100, 100)
-      : 0;
-    const featuredRemaining = plan ? Math.max((plan.featuredCredits || 0) - featuredListingsCount, 0) : 0;
-    const certsRemaining = plan ? Math.max((plan.freeCertifications || 0) - (currentUser.usedCertifications || 0), 0) : 0;
-    const expiringSoon = currentUser.planExpiryDate
-      ? (new Date(currentUser.planExpiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24) < 14
-      : false;
 
     return (
       <div className="space-y-4 pb-4">
@@ -792,10 +823,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               <button
                 type="button"
                 onClick={() => {
-                  setEditingVehicle(null);
-                  setActiveTab('addVehicle');
+                  openAddVehicleTab();
                 }}
-                className="mt-5 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-[13px] font-semibold text-white active:scale-[0.97] transition-transform"
+                disabled={listingAtLimit}
+                aria-disabled={listingAtLimit}
+                className={`mt-5 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-[13px] font-semibold text-white active:scale-[0.97] transition-transform ${listingAtLimit ? 'opacity-50 cursor-not-allowed' : ''}`}
                 style={{
                   background: 'linear-gradient(135deg, #FF8456 0%, #FF6B35 100%)',
                   boxShadow: '0 10px 24px -10px rgba(255,107,53,0.6), inset 0 1px 0 rgba(255,255,255,0.25)'
@@ -809,7 +841,24 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           </div>
         </div>
 
-        {/* -- Premium Stats Grid (2x2) -- */}
+        {isSeller && (
+          <SellerCommandHome
+            seller={currentUser}
+            conversations={safeConversations}
+            compact
+            onOpenDeal={(leadId) => setSelectedDealId(leadId)}
+            onOpenConversation={(conv) => {
+              onSellerOpenChat?.(conv);
+              setActiveTab('messages');
+            }}
+            onNavigateToMessages={() => setActiveTab('messages')}
+            onNavigateToListings={() => setActiveTab('listings')}
+            onNotify={(message, type) => addToast?.(message, type ?? 'info')}
+          />
+        )}
+
+        {/* -- Premium Stats Grid (2x2) — buyers/admins only; sellers use Command Center above -- */}
+        {!isSeller && (
         <div className="grid grid-cols-2 gap-3">
           {[
             {
@@ -909,151 +958,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             );
           })}
         </div>
-
-        {/* -- Plan card skeleton -- */}
-        {isSeller && planLoading && (
-          <div
-            aria-hidden
-            className="rounded-3xl p-5 animate-pulse"
-            style={{
-              background: 'linear-gradient(135deg, #16161D, #0E0E14)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              minHeight: 200
-            }}
-          >
-            <div className="h-4 w-32 bg-white/10 rounded mb-3" />
-            <div className="h-7 w-44 bg-white/10 rounded mb-5" />
-            <div className="h-2 w-full bg-white/10 rounded mb-2" />
-            <div className="h-3 w-2/3 bg-white/10 rounded mb-2" />
-            <div className="h-3 w-1/2 bg-white/10 rounded" />
-          </div>
-        )}
-
-        {/* -- Premium Plan Card (obsidian + amber accents) -- */}
-        {isSeller && plan && !planLoading && (
-          <div
-            className="relative overflow-hidden rounded-3xl text-white"
-            style={{
-              background:
-                'linear-gradient(135deg, #14141C 0%, #0B0B11 60%, #08080C 100%)',
-              border: '1px solid rgba(255, 184, 102, 0.18)',
-              boxShadow: '0 20px 50px -22px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)'
-            }}
-          >
-            {/* Amber edge */}
-            <div
-              aria-hidden
-              className="absolute inset-x-0 top-0 h-px"
-              style={{ background: 'linear-gradient(90deg, transparent, rgba(255,184,102,0.55), transparent)' }}
-            />
-            <div
-              aria-hidden
-              className="absolute -right-16 -top-16 w-56 h-56 rounded-full"
-              style={{ background: 'radial-gradient(closest-side, rgba(255,184,102,0.18), transparent 70%)' }}
-            />
-
-            <div className="relative p-5">
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span
-                      className="w-7 h-7 grid place-items-center rounded-lg"
-                      style={{
-                        background: 'linear-gradient(135deg, #FFD08A, #E59F4B)',
-                        color: '#1B120A',
-                        boxShadow: '0 6px 14px -6px rgba(229,159,75,0.55)'
-                      }}
-                    >
-                      <IconCrown size={15} stroke={2} />
-                    </span>
-                    <span className="text-[10.5px] uppercase tracking-[0.20em] text-amber-200/80 font-semibold">
-                      {t('sellerDashboard.yourPlanLabel')}
-                    </span>
-                  </div>
-                  <h3
-                    className="text-white font-semibold tracking-tight"
-                    style={{ fontSize: '20px', letterSpacing: '-0.02em' }}
-                  >
-                    {plan.name}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onNavigate(ViewEnum.PRICING)}
-                  className="shrink-0 rounded-full px-4 py-2 text-[12.5px] font-semibold text-slate-900 active:scale-95 transition-transform"
-                  style={{
-                    background: 'linear-gradient(180deg, #FFFFFF, #F2F2F2)',
-                    boxShadow: '0 8px 18px -8px rgba(255,255,255,0.35)'
-                  }}
-                >
-                  {(plan.id !== 'premium' || (currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date()))
-                    ? (currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date()
-                      ? t('sellerDashboard.renewPlan')
-                      : t('sellerDashboard.upgradePlan'))
-                    : 'View all plans'}
-                </button>
-              </div>
-
-              {/* Listings usage */}
-              <div className="mb-4">
-                <div className="flex items-baseline justify-between mb-2">
-                  <span className="text-[12px] text-white/55 font-medium">{t('vehicle.detail.activeListings')}</span>
-                  <span className="text-[13px] text-white font-semibold">
-                    {activeListings}
-                    <span className="text-white/40"> / {plan.listingLimit === 'unlimited' ? '∞' : plan.listingLimit}</span>
-                  </span>
-                </div>
-                <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{
-                      width: `${plan.listingLimit === 'unlimited' ? 100 : planUsedPct}%`,
-                      background: 'linear-gradient(90deg, #FFD08A, #FF8456)'
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Two-up: credits + certifications */}
-              <div className="grid grid-cols-2 gap-2.5 mb-3">
-                <div
-                  className="rounded-2xl px-3 py-2.5"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
-                >
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/45 font-semibold">Featured</p>
-                  <p className="mt-1 text-[16px] font-bold text-white tracking-tight">
-                    {featuredRemaining}<span className="text-white/40 text-[12px] font-medium ml-1">left</span>
-                  </p>
-                </div>
-                <div
-                  className="rounded-2xl px-3 py-2.5"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
-                >
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/45 font-semibold">Certifications</p>
-                  <p className="mt-1 text-[16px] font-bold text-white tracking-tight">
-                    {certsRemaining}<span className="text-white/40 text-[12px] font-medium ml-1">free</span>
-                  </p>
-                </div>
-              </div>
-
-              {currentUser.planExpiryDate && (
-                <div
-                  className="flex items-center justify-between rounded-xl px-3 py-2"
-                  style={{
-                    background: expiringSoon ? 'rgba(255,107,53,0.08)' : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${expiringSoon ? 'rgba(255,107,53,0.25)' : 'rgba(255,255,255,0.06)'}`
-                  }}
-                >
-                  <span className="text-[11.5px] text-white/60 font-medium">
-                    {expiringSoon ? 'Renews soon' : 'Renews on'}
-                  </span>
-                  <span className="text-[12px] font-semibold text-white">
-                    {new Date(currentUser.planExpiryDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
         )}
 
         {/* -- AI Sales Assistant -- */}
@@ -1134,7 +1038,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   key: 'add',
                   label: 'Add vehicle',
                   sub: 'List in minutes',
-                  onClick: () => { setEditingVehicle(null); setActiveTab('addVehicle'); },
+                  onClick: openAddVehicleTab,
                   icon: <IconPlus size={16} stroke={2.2} />,
                   accent: '#FF6B35',
                   tint: 'rgba(255,107,53,0.10)'
@@ -1238,8 +1142,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         {isSeller && (
           <button
             type="button"
-            onClick={() => { setEditingVehicle(null); setActiveTab('addVehicle'); }}
-            className="inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[12.5px] font-semibold text-white active:scale-95 transition-transform shrink-0"
+            onClick={openAddVehicleTab}
+            disabled={listingAtLimit}
+            aria-disabled={listingAtLimit}
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[12.5px] font-semibold text-white active:scale-95 transition-transform shrink-0 ${listingAtLimit ? 'opacity-50 cursor-not-allowed' : ''}`}
             style={{
               background: 'linear-gradient(135deg, #FF8456 0%, #FF6B35 100%)',
               boxShadow: '0 8px 18px -8px rgba(255,107,53,0.55)',
@@ -1283,8 +1189,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           {isSeller && (
             <button
               type="button"
-              onClick={() => { setEditingVehicle(null); setActiveTab('addVehicle'); }}
-              className="inline-flex items-center gap-2 rounded-full px-6 py-3 font-semibold text-white text-[13.5px] active:scale-95 transition-transform"
+              onClick={openAddVehicleTab}
+              disabled={listingAtLimit}
+              aria-disabled={listingAtLimit}
+              className={`inline-flex items-center gap-2 rounded-full px-6 py-3 font-semibold text-white text-[13.5px] active:scale-95 transition-transform ${listingAtLimit ? 'opacity-50 cursor-not-allowed' : ''}`}
               style={{
                 background: 'linear-gradient(135deg, #FF8456 0%, #FF6B35 100%)',
                 boxShadow: '0 12px 24px -10px rgba(255,107,53,0.55)'
@@ -2669,20 +2577,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     });
   };
 
-  const handleEditChecklistChange = (checklist: NonNullable<Vehicle['sellerDisclosureChecklist']>) => {
-    setEditFormData((prev) => {
-      if (!prev) return prev;
-      const checklistUrls = extractChecklistGalleryUrls(checklist);
-      const extras = getExtraGalleryImages(prev.sellerDisclosureChecklist, prev.images || []);
-      return {
-        ...prev,
-        sellerDisclosureChecklist: checklist,
-        images: mergeListingImages(checklistUrls, extras),
-      };
-    });
-  };
-
-  const aiReadyPhotoCount = countAiReadyPhotos(addFormData.sellerDisclosureChecklist);
+  const checklistGalleryUrls = useMemo(
+    () => extractChecklistGalleryUrls(addFormData.sellerDisclosureChecklist),
+    [addFormData.sellerDisclosureChecklist],
+  );
+  const extraGalleryImages = useMemo(
+    () => getExtraGalleryImages(addFormData.sellerDisclosureChecklist, addFormData.images || []),
+    [addFormData.sellerDisclosureChecklist, addFormData.images],
+  );
 
   const handleAddImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -3042,8 +2944,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           </div>
 
           <div className="pt-6 border-t border-gray-200">
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3 mb-4">
+              {t('sellerListing.section.checklist', 'Inspection & trust checklist')}
+            </h4>
             <SellerDisclosureForm
               compact
+              hideTitle
               category={addFormData.category || VehicleCategory.FOUR_WHEELER}
               value={addFormData.sellerDisclosureChecklist}
               sellerEmail={currentUser.email}
@@ -3074,23 +2980,75 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             />
           </div>
 
-          {/* Extra photos — mandatory shots come from checklist above */}
+          {/* Listing presentation */}
+          <div className="space-y-4 pt-6 border-t border-gray-200">
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">
+              {t('sellerListing.section.presentation', 'Listing presentation')}
+            </h4>
+            <p className="text-xs text-gray-600">
+              {t('sellerListing.presentation.hint', 'Add a description and any extra marketing photos.')}
+            </p>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                {t('sellerListing.label.description')}
+              </label>
+              <textarea
+                name="description"
+                value={addFormData.description || ''}
+                onChange={handleAddFormChange}
+                rows={4}
+                placeholder={t('sellerListing.placeholder.description')}
+                className="native-input resize-none"
+              />
+            </div>
+          </div>
+
+          {/* Extra marketing photos */}
           <div className="space-y-4 pt-6 border-t border-gray-200">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h4 className="font-bold text-gray-900 text-base">{t('sellerListing.section.photos', 'Listing gallery')}</h4>
-              <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                aiReadyPhotoCount >= 6 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-              }`}>
-                {aiReadyPhotoCount}/6 {t('sellerListing.photoGuide.recommended', 'checklist angles')}
-              </span>
+              <h4 className="font-bold text-gray-900 text-base">
+                {t('sellerListing.section.extraPhotos', 'Extra marketing photos')}
+              </h4>
+              {extraGalleryImages.length > 0 && (
+                <span className="text-xs px-2 py-1 rounded-full font-semibold bg-orange-100 text-orange-700">
+                  {extraGalleryImages.length} extra
+                </span>
+              )}
             </div>
 
-            <p className="text-xs text-gray-600 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-              {t(
-                'sellerListing.photoGuide.syncedHint',
-                'Photos from the mandatory checklist (Â§1.3) appear here automatically. Tap below only for extra shots.',
-              )}
-            </p>
+            {checklistGalleryUrls.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-emerald-800">
+                    {t('sellerListing.photoGuide.fromChecklist', 'From checklist')} ({checklistGalleryUrls.length})
+                  </p>
+                  <p className="text-[10px] text-gray-500">
+                    {t('sellerListing.photoGuide.editInChecklist', 'Edit in checklist above')}
+                  </p>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {checklistGalleryUrls.map((url, index) => (
+                    <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 ring-1 ring-emerald-200">
+                      <img
+                        src={url}
+                        className="w-full h-full object-cover opacity-90"
+                        alt={`Checklist ${index + 1}`}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+                        }}
+                      />
+                      {index === 0 && (
+                        <span className="absolute top-1 left-1 bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                          {t('sellerListing.cover', 'COVER')}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Upload Button */}
             <label
@@ -3133,29 +3091,24 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               />
             </label>
 
-            {/* Uploaded Images Preview */}
-            {addFormData.images && addFormData.images.length > 0 && (
+            {/* Extra photos preview */}
+            {extraGalleryImages.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-gray-600">
-                  {t('sellerListing.uploadedImages', 'Uploaded Images')} ({addFormData.images.length})
+                  {t('sellerListing.uploadedImages', 'Extra photos')} ({extraGalleryImages.length})
                 </p>
                 <div className="grid grid-cols-4 gap-2">
-                  {addFormData.images.map((url, index) => (
-                    <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group">
+                  {extraGalleryImages.map((url) => (
+                    <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group">
                       <img
                         src={url}
                         className="w-full h-full object-cover"
-                        alt={`Upload ${index + 1}`}
+                        alt="Extra photo"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
                           target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
                         }}
                       />
-                      {index === 0 && (
-                        <span className="absolute top-1 left-1 bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                          {t('sellerListing.cover', 'COVER')}
-                        </span>
-                      )}
                       <button
                         type="button"
                         onClick={() => handleRemoveAddImage(url)}
@@ -3169,6 +3122,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               </div>
             )}
 
+            {checklistGalleryUrls.length === 0 && extraGalleryImages.length === 0 && (
+              <p className="text-xs text-gray-500 text-center">
+                {t('sellerListing.photoGuide.noPhotosYet', 'No photos yet — complete the checklist above to add required shots.')}
+              </p>
+            )}
+
             {/* Tip */}
             <p className="text-xs text-gray-500 flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
@@ -3176,25 +3135,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               </svg>
               {t('sellerListing.photoTip', 'Tip: Listings with 6+ clear photos get 3x more views!')}
             </p>
-          </div>
-
-          {/* Description */}
-          <div className="space-y-4 pt-6 border-t border-gray-200">
-            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.description')}</h4>
-            
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {t('sellerListing.label.description')}
-              </label>
-              <textarea
-                name="description"
-                value={addFormData.description || ''}
-                onChange={handleAddFormChange}
-                rows={4}
-                placeholder={t('sellerListing.placeholder.description')}
-                className="native-input resize-none"
-              />
-            </div>
           </div>
 
           {/* Actions */}
@@ -3699,46 +3639,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             </div>
           </div>
 
-          <div className="space-y-4 pt-4 border-t">
-            <h4 className="font-semibold text-gray-900">Condition disclosure checklist</h4>
-            <p className="text-xs text-gray-500">Optional — complete for a Verified Listing badge</p>
-            <SellerDisclosureForm
-              compact
-              category={formData.category || VehicleCategory.FOUR_WHEELER}
-              value={formData.sellerDisclosureChecklist}
-              sellerEmail={currentUser.email}
-              registrationNumber={formData.registrationNumber}
-              vahanVerified={formData.vahanSnapshot?.source === 'surepass'}
-              vahanSnapshot={formData.vahanSnapshot}
-              onChange={handleEditChecklistChange}
-              onVerifyVahan={async (registrationNumber) => {
-                try {
-                  const result = await verifyVahanRegistration(
-                    registrationNumber,
-                    editingVehicle?.databaseId ?? editingVehicle?.id,
-                  );
-                  setEditFormData((prev) =>
-                    prev
-                      ? applyVahanVerifyToVehicleFields(prev, registrationNumber, result)
-                      : prev,
-                  );
-                  notify(
-                    result.verified ? 'RC verified' : result.message || 'RC saved',
-                    result.verified ? 'success' : 'warning',
-                  );
-                  return {
-                    verified: result.verified,
-                    message: result.message,
-                  };
-                } catch (e) {
-                  const message = e instanceof Error ? e.message : 'Verification failed';
-                  notify(message, 'error');
-                  return { verified: false, message };
-                }
-              }}
-            />
-          </div>
-
           {/* Status */}
           <div className="space-y-4 pt-4 border-t">
             <h4 className="font-semibold text-gray-900">{t('sellerListing.section.listingStatus')}</h4>
@@ -4020,6 +3920,15 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   // Render Settings View with Bank Partners
   const renderSettings = () => {
+    const planUsedPct = plan && plan.listingLimit !== 'unlimited'
+      ? Math.min((activeListings / plan.listingLimit) * 100, 100)
+      : 0;
+    const featuredRemaining = plan ? Math.max((plan.featuredCredits || 0) - featuredListingsCount, 0) : 0;
+    const certsRemaining = plan ? Math.max((plan.freeCertifications || 0) - (currentUser.usedCertifications || 0), 0) : 0;
+    const expiringSoon = currentUser.planExpiryDate
+      ? (new Date(currentUser.planExpiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24) < 14
+      : false;
+
     const availableBanks = [
       'HDFC Bank', 'ICICI Bank', 'State Bank of India', 'Axis Bank', 'Kotak Mahindra Bank',
       'Bajaj Finserv', 'Tata Capital', 'Mahindra Finance', 'Yes Bank', 'IDFC First Bank',
@@ -4105,8 +4014,155 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         <div>
           <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Account</p>
           <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Settings</h3>
-          <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">Manage your preferences and finance partners</p>
+          <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">Manage your plan, preferences and finance partners</p>
         </div>
+
+        {isSeller && planLoading && (
+          <div
+            aria-hidden
+            className="rounded-3xl p-5 animate-pulse"
+            style={{
+              background: 'linear-gradient(135deg, #16161D, #0E0E14)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              minHeight: 200
+            }}
+          >
+            <div className="h-4 w-32 bg-white/10 rounded mb-3" />
+            <div className="h-7 w-44 bg-white/10 rounded mb-5" />
+            <div className="h-2 w-full bg-white/10 rounded mb-2" />
+            <div className="h-3 w-2/3 bg-white/10 rounded mb-2" />
+            <div className="h-3 w-1/2 bg-white/10 rounded" />
+          </div>
+        )}
+
+        {isSeller && plan && !planLoading && (
+          <div
+            className="relative overflow-hidden rounded-3xl text-white"
+            style={{
+              background:
+                'linear-gradient(135deg, #14141C 0%, #0B0B11 60%, #08080C 100%)',
+              border: '1px solid rgba(255, 184, 102, 0.18)',
+              boxShadow: '0 20px 50px -22px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)'
+            }}
+          >
+            <div
+              aria-hidden
+              className="absolute inset-x-0 top-0 h-px"
+              style={{ background: 'linear-gradient(90deg, transparent, rgba(255,184,102,0.55), transparent)' }}
+            />
+            <div
+              aria-hidden
+              className="absolute -right-16 -top-16 w-56 h-56 rounded-full"
+              style={{ background: 'radial-gradient(closest-side, rgba(255,184,102,0.18), transparent 70%)' }}
+            />
+
+            <div className="relative p-5">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span
+                      className="w-7 h-7 grid place-items-center rounded-lg"
+                      style={{
+                        background: 'linear-gradient(135deg, #FFD08A, #E59F4B)',
+                        color: '#1B120A',
+                        boxShadow: '0 6px 14px -6px rgba(229,159,75,0.55)'
+                      }}
+                    >
+                      <IconCrown size={15} stroke={2} />
+                    </span>
+                    <span className="text-[10.5px] uppercase tracking-[0.20em] text-amber-200/80 font-semibold">
+                      {t('sellerDashboard.yourPlanLabel')}
+                    </span>
+                  </div>
+                  <h3
+                    className="text-white font-semibold tracking-tight"
+                    style={{ fontSize: '20px', letterSpacing: '-0.02em' }}
+                  >
+                    {plan.name}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate(ViewEnum.PRICING)}
+                  className="shrink-0 rounded-full px-4 py-2 text-[12.5px] font-semibold text-slate-900 active:scale-95 transition-transform"
+                  style={{
+                    background: 'linear-gradient(180deg, #FFFFFF, #F2F2F2)',
+                    boxShadow: '0 8px 18px -8px rgba(255,255,255,0.35)'
+                  }}
+                >
+                  {(plan.id !== 'premium' || (currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date()))
+                    ? (currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date()
+                      ? t('sellerDashboard.renewPlan')
+                      : t('sellerDashboard.upgradePlan'))
+                    : 'View all plans'}
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className="text-[12px] text-white/55 font-medium">{t('vehicle.detail.activeListings')}</span>
+                  <span className="text-[13px] text-white font-semibold">
+                    {activeListings}
+                    <span className="text-white/40"> / {plan.listingLimit === 'unlimited' ? '∞' : plan.listingLimit}</span>
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${plan.listingLimit === 'unlimited' ? 100 : planUsedPct}%`,
+                      background: 'linear-gradient(90deg, #FFD08A, #FF8456)'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5 mb-3">
+                <div
+                  className="rounded-2xl px-3 py-2.5"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/45 font-semibold">Featured</p>
+                  <p className="mt-1 text-[16px] font-bold text-white tracking-tight">
+                    {featuredRemaining}<span className="text-white/40 text-[12px] font-medium ml-1">left</span>
+                  </p>
+                </div>
+                <div
+                  className="rounded-2xl px-3 py-2.5"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/45 font-semibold">Certifications</p>
+                  <p className="mt-1 text-[16px] font-bold text-white tracking-tight">
+                    {certsRemaining}<span className="text-white/40 text-[12px] font-medium ml-1">free</span>
+                  </p>
+                </div>
+              </div>
+
+              {currentUser.planExpiryDate && (
+                <div
+                  className="flex items-center justify-between rounded-xl px-3 py-2"
+                  style={{
+                    background: expiringSoon ? 'rgba(255,107,53,0.08)' : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${expiringSoon ? 'rgba(255,107,53,0.25)' : 'rgba(255,255,255,0.06)'}`
+                  }}
+                >
+                  <span className="text-[11.5px] text-white/60 font-medium">
+                    {expiringSoon ? 'Renews soon' : 'Renews on'}
+                  </span>
+                  <span className="text-[12px] font-semibold text-white">
+                    {new Date(currentUser.planExpiryDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isSeller && (
+          <PaymentErrorBoundary>
+            <PaymentStatusCard currentUser={currentUser} />
+          </PaymentErrorBoundary>
+        )}
 
         {/* Bank Partners */}
         {isSeller && (

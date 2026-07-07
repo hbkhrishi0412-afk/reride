@@ -27,6 +27,8 @@ import { getPopularMakes } from '../utils/popularListings';
 import { PopularCitiesChips } from './PopularCitiesChips.js';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 import FloatingWhatsApp from './FloatingWhatsApp';
+import ActiveDealsHomeBanner from './ActiveDealsHomeBanner';
+import type { User } from '../types';
 
 interface HomeProps {
     onSearch: (query: string) => void;
@@ -58,6 +60,7 @@ interface HomeProps {
     /** True while the vehicle catalog is still loading — avoids infinite skeletons when the catalog is empty. */
     isCatalogLoading?: boolean;
     onRetryCatalogLoad?: () => void;
+    currentUser?: User | null;
 }
 
 const Home: React.FC<HomeProps> = ({ 
@@ -82,6 +85,7 @@ const Home: React.FC<HomeProps> = ({
     addToast,
     isCatalogLoading = false,
     onRetryCatalogLoad,
+    currentUser = null,
 }) => {
     const { t, i18n } = useTranslation();
     const [searchQuery, setSearchQuery] = useState('');
@@ -248,7 +252,6 @@ const Home: React.FC<HomeProps> = ({
     const testimonialsRef = useRevealOnScroll<HTMLDivElement>(0);
     const categoriesRef = useRevealOnScroll<HTMLDivElement>(0);
     const sellRef = useRevealOnScroll<HTMLDivElement>(0);
-    const serviceRef = useRevealOnScroll<HTMLDivElement>(0);
 
     const handleSearch = useCallback(() => {
         const q = searchQuery.trim();
@@ -418,22 +421,22 @@ const Home: React.FC<HomeProps> = ({
                 title: t('home.sell.step1Title'),
                 desc: t('home.sell.step1Desc'),
                 cta: t('home.sell.step1Cta'),
-                accent: 'from-purple-500 to-pink-500',
-                emoji: '⏱️',
+                accent: 'from-blue-500 to-cyan-500',
+                emoji: '📝',
             },
             {
                 title: t('home.sell.step2Title'),
                 desc: t('home.sell.step2Desc'),
                 cta: t('home.sell.step2Cta'),
-                accent: 'from-blue-500 to-cyan-500',
-                emoji: '📋',
+                accent: 'from-purple-500 to-pink-500',
+                emoji: '💬',
             },
             {
                 title: t('home.sell.step3Title'),
                 desc: t('home.sell.step3Desc'),
                 cta: t('home.sell.step3Cta'),
                 accent: 'from-emerald-500 to-teal-500',
-                emoji: '💸',
+                emoji: '✅',
             },
         ],
         [t, i18n.language]
@@ -956,6 +959,12 @@ const Home: React.FC<HomeProps> = ({
                 </div>
             </div>
 
+            {currentUser?.role === 'customer' ? (
+                <div className="max-w-7xl mx-auto px-4 pt-6">
+                    <ActiveDealsHomeBanner onNavigate={onNavigate} />
+                </div>
+            ) : null}
+
             {/* Continue browsing — only rendered when we actually have recent
                 vehicles to show. Backed by localStorage so it works for
                 logged-out visitors too. */}
@@ -1472,34 +1481,31 @@ const Home: React.FC<HomeProps> = ({
                 </div>
             </div>
 
-            {/* Testimonials */}
+            {/* Deal journey */}
             <div ref={testimonialsRef} className={`reveal-on-scroll py-16 md:py-20 px-4 ${HOME_SECTION_BG.testimonials}`}>
                 <div className="max-w-6xl mx-auto">
                     <div className="text-center mb-10 md:mb-12 space-y-3">
-                        <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-pink-700">
-                            <span className="h-px w-6 bg-pink-300"></span>
-                            What Customers Say
-                            <span className="h-px w-6 bg-pink-300"></span>
+                        <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-blue-700">
+                            <span className="h-px w-6 bg-blue-300" />
+                            {t('home.dealJourney.badge')}
+                            <span className="h-px w-6 bg-blue-300" />
                         </span>
                         <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight">{t('home.testimonials.title')}</h2>
                         <p className="text-gray-600 text-base max-w-xl mx-auto leading-relaxed">{t('home.testimonials.subtitle')}</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
                         {testimonialItems.map((item, idx) => (
-                            <div key={idx} className="home-listing-card rounded-xl p-6 transition-all duration-200">
-                                <svg className="w-7 h-7 text-purple-200 mb-3" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
-                                </svg>
-                                <p className="text-gray-700 text-[15px] leading-relaxed mb-5">{item.quote}</p>
-                                <div className="flex items-center gap-3 pt-4 border-t border-gray-200/80">
-                                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white flex items-center justify-center font-semibold text-sm">
-                                        {item.name.charAt(0)}
+                            <div key={idx} className="home-listing-card rounded-xl p-6 transition-all duration-200 border border-gray-100">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                                        {idx + 1}
                                     </div>
                                     <div>
                                         <div className="font-semibold text-gray-900 text-sm tracking-tight">{item.name}</div>
-                                        <div className="text-[12px] text-purple-700 font-medium">{item.tag}</div>
+                                        <div className="text-[12px] text-blue-700 font-medium">{item.tag}</div>
                                     </div>
                                 </div>
+                                <p className="text-gray-700 text-[15px] leading-relaxed">{item.quote}</p>
                             </div>
                         ))}
                     </div>
@@ -1609,7 +1615,7 @@ const Home: React.FC<HomeProps> = ({
                                     <p className="text-sm text-gray-600 leading-relaxed">{item.desc}</p>
                                 </div>
                                 <button
-                                    onClick={() => onNavigate(ViewEnum.SELL_CAR)}
+                                    onClick={() => onNavigate(idx === 1 ? ViewEnum.SELLER_DASHBOARD : ViewEnum.SELL_CAR)}
                                     className="inline-flex items-center gap-1 text-purple-700 font-medium text-sm hover:gap-2 transition-all"
                                 >
                                     {item.cta}
@@ -1632,7 +1638,7 @@ const Home: React.FC<HomeProps> = ({
                             </svg>
                         </button>
                         <button
-                            onClick={() => onNavigate(ViewEnum.SELL_CAR)}
+                            onClick={() => onNavigate(ViewEnum.ABOUT_US)}
                             className="inline-flex items-center gap-2 px-6 py-3 rounded-full border border-gray-300 text-gray-800 font-medium text-sm hover:border-purple-500 hover:text-purple-700 transition-colors"
                         >
                             {t('home.sell.learnMore')}
@@ -1672,67 +1678,6 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             )}
-
-            {/* Car Service Section */}
-            <div 
-                ref={serviceRef}
-                className="reveal-on-scroll relative py-16 md:py-24 px-4 text-white overflow-hidden bg-[#0B1020]"
-                style={{
-                    background:
-                        'radial-gradient(1000px 600px at -10% -10%, rgba(255,107,53,0.18) 0%, transparent 60%), radial-gradient(900px 600px at 110% 10%, rgba(124,58,237,0.22) 0%, transparent 60%), radial-gradient(1200px 800px at 50% 120%, rgba(59,130,246,0.18) 0%, transparent 60%), linear-gradient(135deg, #0B1020 0%, #111834 50%, #1A1240 100%)'
-                }}
-            >
-                <div className="absolute inset-0 overflow-hidden">
-                    <div
-                        className="absolute -top-32 -right-24 w-[30rem] h-[30rem] rounded-full blur-3xl opacity-40"
-                        style={{ background: 'radial-gradient(circle, #FF6B35 0%, transparent 70%)' }}
-                    ></div>
-                    <div
-                        className="absolute -bottom-40 -left-24 w-[32rem] h-[32rem] rounded-full blur-3xl opacity-40"
-                        style={{ background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)' }}
-                    ></div>
-                </div>
-                <div className="relative max-w-5xl mx-auto text-center">
-                    <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-white/80 mb-4">
-                        <span className="h-px w-6 bg-white/40"></span>
-                        {t('home.service.badge')}
-                        <span className="h-px w-6 bg-white/40"></span>
-                    </span>
-                    <h2 className="text-3xl md:text-5xl font-bold mb-4 leading-[1.1] tracking-tight text-white">{t('home.service.title')}</h2>
-                    <p className="text-base md:text-lg text-white/85 mb-12 max-w-2xl mx-auto leading-relaxed">
-                        {t('home.service.subtitle')}
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
-                        <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-7 border border-white/20 hover:bg-white/15 hover:-translate-y-1 transition-all duration-300">
-                            <div className="w-14 h-14 bg-blue-500 rounded-xl flex items-center justify-center mb-5 mx-auto shadow-lg">
-                                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                </svg>
-                            </div>
-                            <h3 className="font-semibold text-[17px] mb-2 tracking-tight text-white">{t('home.service.card1Title')}</h3>
-                            <p className="text-white/80 text-sm leading-relaxed">{t('home.service.card1Desc')}</p>
-                        </div>
-                        <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-7 border border-white/20 hover:bg-white/15 hover:-translate-y-1 transition-all duration-300">
-                            <div className="w-14 h-14 bg-green-500 rounded-xl flex items-center justify-center mb-5 mx-auto shadow-lg">
-                                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                            </div>
-                            <h3 className="font-semibold text-[17px] mb-2 tracking-tight text-white">{t('home.service.card2Title')}</h3>
-                            <p className="text-white/80 text-sm leading-relaxed">{t('home.service.card2Desc')}</p>
-                        </div>
-                        <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-7 border border-white/20 hover:bg-white/15 hover:-translate-y-1 transition-all duration-300">
-                            <div className="w-14 h-14 bg-pink-500 rounded-xl flex items-center justify-center mb-5 mx-auto shadow-lg">
-                                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            </div>
-                            <h3 className="font-semibold text-[17px] mb-2 tracking-tight text-white">{t('home.service.card3Title')}</h3>
-                            <p className="text-white/80 text-sm leading-relaxed">{t('home.service.card3Desc')}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             {/* WHY: WhatsApp is the #1 support/conversion channel for Indian buyers;
                 self-gating component renders only when a business number is configured. */}

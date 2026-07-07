@@ -85,7 +85,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   onNavigate, 
   onForgotPassword,
   onServiceProviderLogin,
-  allowedRoles = ['customer', 'seller', 'service_provider'],
+  allowedRoles = ['customer', 'seller'],
   forcedRole,
   hideRolePicker
 }) => {
@@ -1314,7 +1314,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   {isLogin ? t('auth.welcomeBack') : t('auth.createAccount')}
                 </h2>
                 <p className="mt-1.5 text-sm font-medium text-gray-500">
-                  {isLogin ? t('auth.signInContinueAccount') : t('auth.getStartedToday')}
+                  {isLogin ? t('auth.signInValue', { defaultValue: 'Sign in to track your vehicle deal.' }) : t('auth.getStartedToday')}
                 </p>
               </div>
 

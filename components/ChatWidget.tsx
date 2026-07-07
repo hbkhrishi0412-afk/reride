@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
-import type { Conversation, ChatMessage } from '../types';
-import ReadReceiptIcon, { OfferMessage, OfferModal, TestDriveMessage } from './ReadReceiptIcon';
+import type { Conversation, ChatMessage, DealLead } from '../types';
+import ReadReceiptIcon, { OfferMessage, TestDriveMessage } from './ReadReceiptIcon';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 import { uploadImage, uploadChatAudio } from '../services/imageUploadService';
 import { ChatMessageImage } from './ChatMessageImage';
@@ -12,10 +12,18 @@ import { filterMessagesForViewer } from '../utils/conversationView';
 import { isCapacitorNativeApp } from '../utils/isCapacitorNative';
 import { isOfferChatMessage } from '../utils/isOfferChatMessage';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
+import {
+  scrollContainerToBottom,
+  scrollContainerToShowElement,
+} from '../utils/scrollWithinContainer.js';
+import DealTimelinePanel from './DealTimelinePanel';
+import DealStageChip from './DealStageChip';
+import { getDealLead } from '../services/dealService';
 
 interface ChatWidgetProps {
   conversation: Conversation;
   currentUserRole: 'customer' | 'seller';
+  currentUserEmail?: string;
   otherUserName: string;
   onClose: () => void;
   onSendMessage: (messageText: string, type?: ChatMessage['type'], payload?: any) => void;
@@ -32,7 +40,6 @@ interface ChatWidgetProps {
     newStatus: 'confirmed' | 'rejected',
   ) => void;
   onClearChat?: (conversationId: string) => void | Promise<void>;
-  onMakeOffer?: () => void; // For seller dashboard
   onStartCall?: (phone: string) => void;
   callTargetPhone?: string;
   callTargetName?: string;
@@ -59,6 +66,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   ({
     conversation,
     currentUserRole,
+    currentUserEmail,
     otherUserName,
     onClose,
     onSendMessage,
@@ -70,7 +78,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     onOfferResponse,
     onTestDriveResponse,
     onClearChat,
-    onMakeOffer,
     onStartCall,
     callTargetPhone,
     callTargetName,
@@ -83,7 +90,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   const [isMinimized, setIsMinimized] = useState(!isInlineLaunch); // Inline launches (CTA click) start opened
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
-  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
@@ -91,7 +97,27 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [dealLead, setDealLead] = useState<DealLead | null>(null);
   const voiceRecorder = useVoiceRecorder();
+
+  useEffect(() => {
+    if (userManuallyClosed || isExiting) return;
+    setIsMinimized(!isInlineLaunch);
+    if (isInlineLaunch) setHasOpenedOnce(true);
+  }, [isInlineLaunch, conversation.id, userManuallyClosed, isExiting]);
+
+  const chatBlockedByDeal = dealLead?.chatStatus === 'pending' && currentUserRole === 'customer';
+  const focusDealRoom = () => {
+    const room = document.getElementById(`deal-room-${conversation.id}`);
+    room?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  useEffect(() => {
+    if (!conversation.id) return;
+    getDealLead({ conversationId: conversation.id })
+      .then(setDealLead)
+      .catch(() => setDealLead(null));
+  }, [conversation.id]);
 
   const visibleMessages = useMemo(
     () => filterMessagesForViewer(conversation, currentUserRole),
@@ -115,9 +141,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   /** Capacitor: sit above tab row (56px) + same safe-area as MobileBottomNav (env added in calc). */
   const bottomTabBarRowPx = isMobile && isCapacitorNativeApp() ? 56 : 0;
   const keyboardInset = useVisualViewportBottomInset();
-  const showOfferInComposer =
-    currentUserRole === 'customer' && visibleMessages.length === 0;
-  
   // Auto-open chat when conversation starts (even with no messages) or has new messages
   // BUT only if user hasn't manually closed it
   useEffect(() => {
@@ -152,6 +175,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     lastMarkReadSignatureRef.current = '';
   }, [conversation.id]);
 
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const firstUnreadRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -160,11 +184,18 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   const lastMarkReadSignatureRef = useRef<string>('');
 
   useEffect(() => {
-    firstUnreadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    if (!firstUnreadRef.current) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isMinimized) return;
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    if (firstUnreadRef.current) {
+      scrollContainerToShowElement(container, firstUnreadRef.current, {
+        behavior: 'smooth',
+        block: 'center',
+      });
+      return;
     }
-  }, [visibleMessages, typingStatus, firstUnreadMessageId]);
+    scrollContainerToBottom(container, 'smooth');
+  }, [visibleMessages, typingStatus, firstUnreadMessageId, isMinimized]);
 
   const lastMessageId =
     visibleMessages.length > 0
@@ -330,7 +361,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     setUserManuallyClosed(true); // Mark that user explicitly closed
     setIsExiting(true);
     setIsMinimized(true); // Ensure it's minimized before closing
-    setIsOfferModalOpen(false); // Close any open modals
     setShowEmojiPicker(false); // Close emoji picker if open
     
     // Close immediately - call onClose directly
@@ -363,14 +393,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
             }
         }
     }
-  };
-
-  const handleSendOffer = (price: number) => {
-    onSendMessage(`Offer: ${price}`, 'offer', {
-      offerPrice: price,
-      status: 'pending'
-    });
-    setIsOfferModalOpen(false);
   };
 
   const senderType = currentUserRole === 'customer' ? 'user' : 'seller';
@@ -562,6 +584,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                         )}
                     </div>
                     <p className="text-xs text-gray-500 truncate">{conversation.vehicleName}</p>
+                    {dealLead ? (
+                      <div className="mt-1">
+                        <DealStageChip lead={dealLead} />
+                      </div>
+                    ) : null}
                 </div>
             </div>
             <div className="flex items-center gap-1">
@@ -681,7 +708,30 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
         )}
 
         {/* Messages - compact list */}
-        <div className="flex-grow p-3 overflow-y-auto bg-gray-50 space-y-3 relative" style={{ backgroundColor: '#F7F7F9' }}>
+        <div
+          ref={messagesContainerRef}
+          className="flex-grow p-3 overflow-y-auto bg-gray-50 space-y-3 relative"
+          style={{ backgroundColor: '#F7F7F9' }}
+        >
+            {dealLead && currentUserEmail && (
+              <div id={`deal-room-${conversation.id}`}>
+                <DealTimelinePanel
+                  lead={dealLead}
+                  currentUser={{ email: currentUserEmail, name: '', role: currentUserRole === 'seller' ? 'seller' : 'customer', mobile: '', location: '', status: 'active', createdAt: '' }}
+                  currentUserRole={currentUserRole}
+                  conversationId={conversation.id}
+                  onLeadUpdated={setDealLead}
+                  onSendPipelineMessage={(messageText, type, payload) =>
+                    onSendMessage(messageText, type as ChatMessage['type'], payload)
+                  }
+                />
+              </div>
+            )}
+            {chatBlockedByDeal && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-center text-sm text-amber-800">
+                Waiting for seller to accept chat.
+              </div>
+            )}
             {visibleMessages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-500">
                 <div className="text-center mb-6">
@@ -690,31 +740,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                   </svg>
                   <p className="text-gray-600 mb-2">No messages yet. Start the conversation!</p>
                 </div>
-                {/* Make an Offer Button - Prominent in empty state */}
-                {currentUserRole === 'customer' && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      if (process.env.NODE_ENV === 'development') {
-                        console.log('🔧 Make Offer button clicked (empty state), opening modal');
-                      }
-                      setIsOfferModalOpen(true);
-                    }}
-                    className="flex items-center gap-2 px-6 py-3 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95"
-                    style={{
-                      background: 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)',
-                      boxShadow: '0 4px 12px rgba(255, 107, 53, 0.4)',
-                      pointerEvents: 'auto',
-                      zIndex: 10
-                    }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" />
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" />
-                    </svg>
-                    <span>Make an Offer</span>
-                  </button>
+                {currentUserRole === 'customer' && !chatBlockedByDeal && (
+                  <p className="text-gray-600 text-sm">Use Deal Room pipeline to make or counter offers.</p>
                 )}
               </div>
             ) : (
@@ -738,9 +765,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                                       msg={msg}
                                       currentUserRole={currentUserRole}
                                       listingPrice={conversation.vehiclePrice}
-                                      onRespond={(messageId, response, counterPrice) =>
-                                        onOfferResponse(conversation.id, messageId, response, counterPrice)
-                                      }
+                                      onOpenDealRoom={dealLead ? focusDealRoom : undefined}
                                     />
                                   ) : msg.type === 'test_drive_request' ? (
                                     <TestDriveMessage
@@ -788,41 +813,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
             )}
         </div>
         
-        {/* Make an Offer Button - Fixed at bottom when messages exist (outside scrollable area) */}
-        {visibleMessages.length > 0 && currentUserRole === 'customer' && (
-          <div 
-            className="px-3 pt-2 pb-1 bg-white border-t border-gray-100"
-            style={{
-              position: 'relative',
-              zIndex: 20,
-              pointerEvents: 'auto'
-            }}
-          >
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('🔧 Make Offer button clicked (with messages), opening modal');
-                }
-                setIsOfferModalOpen(true);
-              }}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-200 active:scale-95 text-sm"
-              style={{
-                background: 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)',
-                boxShadow: '0 2px 8px rgba(255, 107, 53, 0.3)',
-                pointerEvents: 'auto',
-                zIndex: 21
-              }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" />
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" />
-              </svg>
-              <span>Make an Offer</span>
-            </button>
-          </div>
-        )}
 
         {/* Composer */}
         <div
@@ -839,6 +829,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
               : undefined
           }
         >
+            {chatBlockedByDeal ? (
+              <p className="text-center text-sm text-slate-500 py-2">Messaging unlocks when seller accepts chat.</p>
+            ) : (
+            <>
             <input
               ref={attachmentInputRef}
               type="file"
@@ -921,20 +915,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                     disabled={isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
                     className="flex-1 min-w-0 bg-transparent text-[15px] text-gray-900 placeholder:text-gray-500 outline-none py-1.5 disabled:opacity-60"
                   />
-                  {showOfferInComposer && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setIsOfferModalOpen(true);
-                      }}
-                      className="shrink-0 p-1.5 rounded-full text-[#F97316] active:bg-orange-50"
-                      aria-label="Make an offer"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" /><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" /></svg>
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={() => setShowEmojiPicker(prev => !prev)}
@@ -1008,33 +988,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                   <button type="button" onClick={() => setShowEmojiPicker(prev => !prev)} className="shrink-0 p-1 text-gray-500 hover:text-gray-700 rounded-full transition-colors" aria-label="Add emoji">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   </button>
-                  {currentUserRole === 'customer' ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setIsOfferModalOpen(true);
-                      }}
-                      className="shrink-0 p-1 rounded-full text-[#F97316] hover:bg-orange-50 transition-colors"
-                      aria-label="Make an offer"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" /><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" /></svg>
-                    </button>
-                  ) : ( onMakeOffer &&
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        onMakeOffer();
-                      }}
-                      className="shrink-0 p-1 text-gray-500 hover:text-gray-700 rounded-full transition-colors"
-                      aria-label="Make an offer"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" /><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" /></svg>
-                    </button>
-                  )}
                 </div>
                 <button
                   type="submit"
@@ -1049,6 +1002,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
                 </button>
             </form>
+            )}
+            </>
             )}
         </div>
     </div>
@@ -1080,30 +1035,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
       {portalTarget && createPortal(chatButton, portalTarget)}
       {/* Render chat window when not minimized */}
       {!isMinimized && createPortal(chatWindow, portalTarget)}
-      {/* Render Offer Modal in portal to ensure proper z-index and positioning */}
-      {isOfferModalOpen && portalTarget && (() => {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('🔧 Rendering Offer Modal in portal', { 
-            isOfferModalOpen, 
-            hasPortalTarget: !!portalTarget,
-            conversationId: conversation.id 
-          });
-        }
-        return createPortal(
-          <OfferModal
-            title="Make an Offer"
-            listingPrice={conversation.vehiclePrice}
-            onSubmit={handleSendOffer}
-            onClose={() => {
-              if (process.env.NODE_ENV === 'development') {
-                console.log('🔧 Closing Offer Modal');
-              }
-              setIsOfferModalOpen(false);
-            }}
-          />,
-          portalTarget
-        );
-      })()}
     </>
   );
 });

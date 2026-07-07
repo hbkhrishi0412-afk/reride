@@ -1,4 +1,5 @@
 import type { Notification } from '../types.js';
+import { emailToKey } from '../services/supabase-user-service.js';
 
 /**
  * Data we actually persist: allowlisted fields only. Never pass through
@@ -17,6 +18,9 @@ type SessionStoredNotification = {
   type?: string;
   isRead: boolean;
   timestamp: string;
+  dealLeadId?: string;
+  dealAction?: Notification['dealAction'];
+  conversationId?: string;
 };
 
 function isPlainObject(x: unknown): x is Record<string, unknown> {
@@ -49,6 +53,8 @@ function parseTargetType(s: unknown): Notification['targetType'] {
   if (t === 'conversation') return 'conversation';
   if (t === 'price_drop' || t === 'pricedrop') return 'price_drop';
   if (t === 'insurance_expiry' || t === 'insurance expiry') return 'insurance_expiry';
+  if (t === 'deal') return 'deal';
+  if (t === 'service_request') return 'service_request';
   if (t === 'general' || t === 'general_admin' || t === 'admin') return 'general_admin';
   return 'general_admin';
 }
@@ -85,6 +91,38 @@ function parseIsRead(o: Record<string, unknown>): boolean {
   return false;
 }
 
+function parseDealFields(o: Record<string, unknown>): Pick<
+  SessionStoredNotification,
+  'dealLeadId' | 'dealAction' | 'conversationId'
+> {
+  const meta = isPlainObject(o.metadata) ? o.metadata : {};
+  const dealLeadId =
+    asNonEmptyString(o.dealLeadId)
+    || asNonEmptyString(meta.leadId)
+    || undefined;
+  const rawAction = asNonEmptyString(o.dealAction) || asNonEmptyString(meta.action);
+  const dealAction =
+    rawAction === 'accept_chat'
+    || rawAction === 'open_deal'
+    || rawAction === 'view_complaint'
+    || rawAction === 'view_assistance'
+      ? rawAction
+      : undefined;
+  const conversationId =
+    asNonEmptyString(o.conversationId)
+    || asNonEmptyString(meta.conversationId)
+    || undefined;
+  return { dealLeadId, dealAction, conversationId };
+}
+
+function parseRecipientKey(o: Record<string, unknown>): string {
+  const raw =
+    asNonEmptyString(o.recipientEmail)
+    || asNonEmptyString(o.recipient_email)
+    || asNonEmptyString(o.user_id);
+  return raw ? emailToKey(raw) : '';
+}
+
 function parseTimestamp(o: Record<string, unknown>): string {
   const t = o.timestamp ?? o.created_at ?? o.updated_at;
   if (t != null) {
@@ -110,6 +148,9 @@ function safePersistedMessage(
   }
   if (targetType === 'vehicle') {
     return 'Listing update';
+  }
+  if (targetType === 'deal') {
+    return 'Deal update';
   }
   return 'Notification';
 }
@@ -141,7 +182,7 @@ function toSessionStoredFromUnknown(raw: unknown): SessionStoredNotification | n
 
   return {
     id,
-    recipientEmail: '',
+    recipientEmail: parseRecipientKey(o),
     message,
     title,
     targetId: parseTargetId(o),
@@ -150,6 +191,7 @@ function toSessionStoredFromUnknown(raw: unknown): SessionStoredNotification | n
     type: typeStr,
     isRead: parseIsRead(o),
     timestamp: parseTimestamp(o),
+    ...parseDealFields(o),
   };
 }
 

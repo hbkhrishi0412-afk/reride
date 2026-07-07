@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, memo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, User, Conversation, VehicleData, ChatMessage } from '../types';
+import type { Vehicle, User, Conversation, VehicleData, ChatMessage, PlanDetails, SubscriptionPlan } from '../types';
 import { View, VehicleCategory } from '../types';
 import { enhanceVehicleListing } from '../services/listingEnhancementService';
 import { getSafeImageSrc } from '../utils/imageUtils';
@@ -18,10 +18,14 @@ import { ChatWidget } from './ChatWidget';
 import { planService } from '../services/planService';
 import BulkUploadModal from './BulkUploadModal';
 import SellerDisclosureForm from './SellerDisclosureForm';
+import ListingTrustProgress from './ListingTrustProgress';
 import MarkSoldDealModal from './MarkSoldDealModal';
+import SellerCommandHome from './command-center/SellerCommandHome';
+import DealDetailPage from './command-center/DealDetailPage';
+import { fetchSellerCommandCenter } from '../services/dealService';
+import type { DealLead } from '../types';
 import {
   clearChecklistPhotoByUrl,
-  countAiReadyPhotos,
   extractChecklistGalleryUrls,
   getExtraGalleryImages,
   mergeListingImages,
@@ -55,6 +59,7 @@ import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import { isListingExpired } from '../services/listingLifecycleService';
 import {
   validateListingRenewal,
+  isListingLimitReached,
   type ListingRenewalValidation,
 } from '../utils/listingPlanRules';
 import PaymentStatusCard from './PaymentStatusCard';
@@ -450,7 +455,7 @@ const PlanStatusCard: React.FC<{
                 // Fallback to basic plan info
                 setPlan({
                     name: t('sellerDashboard.freePlanName'),
-                    listingLimit: 3,
+                    listingLimit: 1,
                     price: 0
                 });
             } finally {
@@ -953,7 +958,10 @@ const SettingsView: React.FC<{
   seller: User;
   onUpdateSeller: (details: { dealershipName: string; bio: string; logoUrl: string; partnerBanks?: string[] }) => void | Promise<void>;
   onNotify?: DashboardNotifyFn;
-}> = ({ seller, onUpdateSeller, onNotify }) => {
+  activeListingsCount: number;
+  featuredListingsCount: number;
+  onNavigate: (view: View) => void;
+}> = ({ seller, onUpdateSeller, onNotify, activeListingsCount, featuredListingsCount, onNavigate }) => {
   const { t } = useTranslation();
   const notify = useCallback(
     (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') =>
@@ -1032,7 +1040,20 @@ const SettingsView: React.FC<{
   };
 
   return (
-    <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-5xl">
+        <PlanStatusCard
+          seller={seller}
+          activeListingsCount={activeListingsCount}
+          featuredListingsCount={featuredListingsCount}
+          onNavigate={onNavigate}
+        />
+        <PaymentErrorBoundary>
+          <PaymentStatusCard currentUser={seller} />
+        </PaymentErrorBoundary>
+      </div>
+
+      <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
       <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">
         {t('sellerDashboard.settingsTitle')}
       </h2>
@@ -1131,6 +1152,7 @@ const SettingsView: React.FC<{
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -1478,7 +1500,15 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
       });
     };
 
-    const aiReadyPhotoCount = countAiReadyPhotos(formData.sellerDisclosureChecklist);
+
+    const checklistGalleryUrls = useMemo(
+      () => extractChecklistGalleryUrls(formData.sellerDisclosureChecklist),
+      [formData.sellerDisclosureChecklist],
+    );
+    const extraGalleryImages = useMemo(
+      () => getExtraGalleryImages(formData.sellerDisclosureChecklist, formData.images || []),
+      [formData.sellerDisclosureChecklist, formData.images],
+    );
   
     // Determine if seller's plan is expired (client-side UX guard; server still enforces)
     // Use currentTime for real-time updates
@@ -1754,12 +1784,13 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             </FormFieldset>
 
             <FormFieldset
-              title="Condition disclosure checklist"
+              title="Inspection & trust checklist"
               step={3}
-              description="Optional — complete all items for a Verified Listing badge"
+              description="Upload required docs and photos — they sync to your listing gallery automatically"
               defaultOpen={true}
             >
               <SellerDisclosureForm
+                hideTitle
                 category={formData.category || VehicleCategory.FOUR_WHEELER}
                 value={formData.sellerDisclosureChecklist}
                 sellerEmail={seller.email}
@@ -1791,107 +1822,34 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                   }
                 }}
               />
+              <ListingTrustProgress vehicle={formData as Vehicle} className="mt-4" />
             </FormFieldset>
             
-            <FormFieldset title="Description, Features & Extra Photos" step={4} description="Optional extras — photos and documents (RC, Insurance, PUC, service records) come from the checklist above">
+            <FormFieldset title="Listing presentation" step={4} description="Add a description, features, and any extra marketing photos">
                 <div className="space-y-6">
-                    {/* IMAGES */}
+                    {/* DESCRIPTION */}
                     <div>
-                        <div className="flex items-center justify-between mb-2">
-                            <label className="block text-sm font-medium text-reride-text-dark">
-                                Listing gallery
-                                <span className="text-xs text-gray-500 ml-2 font-normal">(synced from checklist + optional extras)</span>
-                            </label>
-                            <div className="flex items-center gap-2">
-                                {aiReadyPhotoCount >= 4 && (
-                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
-                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        AI Ready
-                                    </span>
-                                )}
-                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                    aiReadyPhotoCount >= 6
-                                        ? 'bg-green-100 text-green-700'
-                                        : 'bg-amber-100 text-amber-700'
-                                }`}>
-                                    {aiReadyPhotoCount} / 6 checklist angles
-                                </span>
+                        <label htmlFor="description" className="block text-sm font-medium text-reride-text-dark mb-2">
+                            Vehicle Description
+                            <span className="text-xs text-gray-500 ml-2 font-normal">(optional but recommended)</span>
+                        </label>
+                        <div className="relative">
+                            <textarea
+                                id="description"
+                                name="description"
+                                rows={5}
+                                maxLength={1000}
+                                value={formData.description}
+                                onChange={handleChange}
+                                placeholder="Describe the highlights — service history, condition, recent upgrades, why you love it…"
+                                className="block w-full p-3 border border-gray-200 rounded-lg focus:outline-none transition hover:border-gray-300 resize-y"
+                                onFocus={(e) => (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.15)')}
+                                onBlur={(e) => (e.currentTarget.style.boxShadow = '')}
+                            />
+                            <div className="absolute bottom-2 right-3 text-xs text-gray-400 pointer-events-none">
+                                {(formData.description || '').length} / 1000
                             </div>
                         </div>
-
-                        <p className="text-xs text-gray-600 mb-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-                            Photos from <span className="font-semibold">§1.3 Mandatory Photo Set</span> and document items in the checklist above appear here automatically. Use the upload below only for extra marketing shots.
-                        </p>
-
-                        <label
-                            htmlFor="file-upload"
-                            className={`relative block cursor-pointer bg-orange-50 rounded-xl border-2 border-dashed border-orange-300 hover:border-reride-orange hover:bg-orange-100 hover:shadow-md transition-all duration-200 p-6 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            onDragOver={(e) => { e.preventDefault(); if (!isUploading) e.currentTarget.classList.add('border-reride-orange', 'bg-orange-100', 'shadow-lg'); }}
-                            onDragLeave={(e) => { e.currentTarget.classList.remove('border-reride-orange', 'bg-orange-100', 'shadow-lg'); }}
-                            onDrop={(e) => {
-                                e.preventDefault();
-                                e.currentTarget.classList.remove('border-reride-orange', 'bg-orange-100', 'shadow-lg');
-                                if (isUploading) return;
-                                const files = e.dataTransfer.files;
-                                if (files && files.length > 0) {
-                                    const input = document.getElementById('file-upload') as HTMLInputElement;
-                                    if (input) {
-                                        const dt = new DataTransfer();
-                                        Array.from(files).forEach(f => dt.items.add(f));
-                                        input.files = dt.files;
-                                        input.dispatchEvent(new Event('change', { bubbles: true }));
-                                    }
-                                }
-                            }}
-                        >
-                            <div className="flex flex-col items-center text-center">
-                                <div className="w-16 h-16 rounded-full bg-reride-orange flex items-center justify-center mb-4 shadow-lg">
-                                    {isUploading ? (
-                                        <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                        </svg>
-                                    ) : (
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                        </svg>
-                                    )}
-                                </div>
-                                <div className="bg-reride-orange hover:bg-orange-600 text-white font-bold py-2.5 px-6 rounded-lg shadow-md mb-3 transition-colors">
-                                    {isUploading ? 'Uploading…' : 'Add Extra Photos'}
-                                </div>
-                                <p className="text-sm text-gray-600">or drag & drop images here</p>
-                                <p className="text-xs text-gray-500 mt-1">Optional — JPG, PNG up to 10MB • First image = cover photo</p>
-                            </div>
-                            <input id="file-upload" type="file" className="sr-only" multiple accept="image/png, image/jpeg" onChange={handleFileUpload} disabled={isUploading} />
-                        </label>
-                        {formData.images.length > 0 && (
-                            <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
-                                {formData.images.map((url, index) => (
-                                    <div key={index} className="relative group aspect-square bg-gray-100 rounded-xl overflow-hidden ring-1 ring-gray-200 hover:ring-reride-orange transition-all">
-                                        <img src={getSafeImageSrc(url)} className="w-full h-full object-cover" alt={`Vehicle thumbnail ${index + 1}`} />
-                                        {index === 0 && (
-                                            <span className="absolute top-1.5 left-1.5 bg-reride-orange text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow">
-                                                COVER
-                                            </span>
-                                        )}
-                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRemoveImageUrl(url)}
-                                                className="bg-white/95 text-red-600 rounded-full h-8 w-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:scale-110"
-                                                title="Remove image"
-                                                aria-label="Remove image"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
                     </div>
 
                     {/* KEY FEATURES */}
@@ -1945,29 +1903,113 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                         )}
                     </div>
 
-                    {/* DESCRIPTION */}
+                    {/* EXTRA PHOTOS */}
                     <div>
-                        <label htmlFor="description" className="block text-sm font-medium text-reride-text-dark mb-2">
-                            Vehicle Description
-                            <span className="text-xs text-gray-500 ml-2 font-normal">(optional but recommended)</span>
-                        </label>
-                        <div className="relative">
-                            <textarea
-                                id="description"
-                                name="description"
-                                rows={5}
-                                maxLength={1000}
-                                value={formData.description}
-                                onChange={handleChange}
-                                placeholder="Describe the highlights — service history, condition, recent upgrades, why you love it…"
-                                className="block w-full p-3 border border-gray-200 rounded-lg focus:outline-none transition hover:border-gray-300 resize-y"
-                                onFocus={(e) => (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.15)')}
-                                onBlur={(e) => (e.currentTarget.style.boxShadow = '')}
-                            />
-                            <div className="absolute bottom-2 right-3 text-xs text-gray-400 pointer-events-none">
-                                {(formData.description || '').length} / 1000
-                            </div>
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="block text-sm font-medium text-reride-text-dark">
+                                Extra marketing photos
+                                <span className="text-xs text-gray-500 ml-2 font-normal">(optional)</span>
+                            </label>
+                            {extraGalleryImages.length > 0 && (
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+                                    {extraGalleryImages.length} extra {extraGalleryImages.length === 1 ? 'photo' : 'photos'}
+                                </span>
+                            )}
                         </div>
+
+                        {checklistGalleryUrls.length > 0 && (
+                            <div className="mb-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-xs font-semibold text-emerald-800">
+                                        From checklist ({checklistGalleryUrls.length})
+                                    </p>
+                                    <p className="text-[10px] text-gray-500">Edit in Step 3 above</p>
+                                </div>
+                                <div className="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-6 gap-2">
+                                    {checklistGalleryUrls.map((url, index) => (
+                                        <div key={url} className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden ring-1 ring-emerald-200">
+                                            <img src={getSafeImageSrc(url)} className="w-full h-full object-cover opacity-90" alt={`Checklist photo ${index + 1}`} />
+                                            {index === 0 && (
+                                                <span className="absolute top-1 left-1 bg-emerald-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">
+                                                    COVER
+                                                </span>
+                                            )}
+                                            <span className="absolute bottom-0 inset-x-0 bg-emerald-700/80 text-white text-[8px] font-semibold text-center py-0.5">
+                                                Checklist
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <label
+                            htmlFor="file-upload"
+                            className={`relative block cursor-pointer bg-orange-50 rounded-xl border-2 border-dashed border-orange-300 hover:border-reride-orange hover:bg-orange-100 hover:shadow-md transition-all duration-200 p-6 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            onDragOver={(e) => { e.preventDefault(); if (!isUploading) e.currentTarget.classList.add('border-reride-orange', 'bg-orange-100', 'shadow-lg'); }}
+                            onDragLeave={(e) => { e.currentTarget.classList.remove('border-reride-orange', 'bg-orange-100', 'shadow-lg'); }}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.remove('border-reride-orange', 'bg-orange-100', 'shadow-lg');
+                                if (isUploading) return;
+                                const files = e.dataTransfer.files;
+                                if (files && files.length > 0) {
+                                    const input = document.getElementById('file-upload') as HTMLInputElement;
+                                    if (input) {
+                                        const dt = new DataTransfer();
+                                        Array.from(files).forEach(f => dt.items.add(f));
+                                        input.files = dt.files;
+                                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                                    }
+                                }
+                            }}
+                        >
+                            <div className="flex flex-col items-center text-center">
+                                <div className="w-16 h-16 rounded-full bg-reride-orange flex items-center justify-center mb-4 shadow-lg">
+                                    {isUploading ? (
+                                        <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                    ) : (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                        </svg>
+                                    )}
+                                </div>
+                                <div className="bg-reride-orange hover:bg-orange-600 text-white font-bold py-2.5 px-6 rounded-lg shadow-md mb-3 transition-colors">
+                                    {isUploading ? 'Uploading…' : 'Add Extra Photos'}
+                                </div>
+                                <p className="text-sm text-gray-600">or drag & drop images here</p>
+                                <p className="text-xs text-gray-500 mt-1">JPG, PNG up to 10MB — required shots come from the checklist above</p>
+                            </div>
+                            <input id="file-upload" type="file" className="sr-only" multiple accept="image/png, image/jpeg" onChange={handleFileUpload} disabled={isUploading} />
+                        </label>
+                        {extraGalleryImages.length > 0 && (
+                            <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+                                {extraGalleryImages.map((url) => (
+                                    <div key={url} className="relative group aspect-square bg-gray-100 rounded-xl overflow-hidden ring-1 ring-gray-200 hover:ring-reride-orange transition-all">
+                                        <img src={getSafeImageSrc(url)} className="w-full h-full object-cover" alt="Extra marketing photo" />
+                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveImageUrl(url)}
+                                                className="bg-white/95 text-red-600 rounded-full h-8 w-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:scale-110"
+                                                title="Remove image"
+                                                aria-label="Remove image"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {checklistGalleryUrls.length === 0 && extraGalleryImages.length === 0 && (
+                            <p className="text-xs text-gray-500 mt-3 text-center">
+                                No photos yet — complete the checklist in Step 3 to add required shots.
+                            </p>
+                        )}
                     </div>
                 </div>
             </FormFieldset>
@@ -2448,6 +2490,59 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // CRITICAL: All hooks must be called before any conditional returns (React Rules of Hooks)
   // Initialize all state hooks first
   const [activeView, setActiveView] = useState<DashboardView>('overview');
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [pendingDealCount, setPendingDealCount] = useState(0);
+  const [pendingAcceptCount, setPendingAcceptCount] = useState(0);
+  const [sellerActiveDeals, setSellerActiveDeals] = useState<DealLead[]>([]);
+  const [dealStatsError, setDealStatsError] = useState<string | null>(null);
+
+  const refreshDealCommandStats = useCallback(() => {
+    if (seller?.role !== 'seller' || !seller.email) {
+      setPendingDealCount(0);
+      setPendingAcceptCount(0);
+      setSellerActiveDeals([]);
+      setDealStatsError(null);
+      return;
+    }
+    void fetchSellerCommandCenter()
+      .then((center) => {
+        setPendingDealCount(center.stats.activeDealCount ?? 0);
+        setPendingAcceptCount(center.stats.pendingInterestCount ?? 0);
+        setSellerActiveDeals(center.activeDeals ?? []);
+        setDealStatsError(null);
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : 'Could not load deal leads';
+        setDealStatsError(message);
+        setPendingDealCount(0);
+        setPendingAcceptCount(0);
+        setSellerActiveDeals([]);
+      });
+  }, [seller?.role, seller?.email]);
+
+  const dealsByVehicleId = useMemo(() => {
+    const map = new Map<string, DealLead[]>();
+    for (const deal of sellerActiveDeals) {
+      const key = String(deal.vehicleId);
+      const list = map.get(key) || [];
+      list.push(deal);
+      map.set(key, list);
+    }
+    return map;
+  }, [sellerActiveDeals]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const { rehydrateApiCredentials } = await import('../utils/validatePersistedSession.js');
+      await rehydrateApiCredentials();
+      if (!cancelled) refreshDealCommandStats();
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshDealCommandStats, activeView, seller?.email]);
 
   useEffect(() => {
     try {
@@ -2951,6 +3046,29 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     [seller?.subscriptionPlan, seller?.planExpiryDate],
   );
 
+  const [sellerPlanDetails, setSellerPlanDetails] = useState<PlanDetails | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const loadPlan = async () => {
+      try {
+        const details = await planService.getPlanDetails((seller?.subscriptionPlan || 'free') as SubscriptionPlan);
+        if (active) setSellerPlanDetails(details);
+      } catch {
+        if (active) setSellerPlanDetails(null);
+      }
+    };
+    void loadPlan();
+    return () => {
+      active = false;
+    };
+  }, [seller?.subscriptionPlan]);
+
+  const listingAtLimit = useMemo(
+    () => isListingLimitReached(sellerPlan, safeSellerVehicles, sellerPlanDetails),
+    [sellerPlan, safeSellerVehicles, sellerPlanDetails],
+  );
+
   const isVehicleListingExpired = useCallback(
     (vehicle: Vehicle) => isListingExpired(vehicle, sellerPlan),
     [sellerPlan],
@@ -3253,8 +3371,20 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     }
   };
   
+  const notifyListingLimitReached = useCallback(() => {
+    dashboardNotify(
+      onNotify,
+      `You've reached your plan's active listing limit. Unpublish or sell a listing, or upgrade your plan.`,
+      'warning',
+    );
+  }, [onNotify]);
+
   const handleAddNewClick = () => {
     try {
+      if (listingAtLimit) {
+        notifyListingLimitReached();
+        return;
+      }
       setEditingVehicle(null);
       handleNavigate('form');
     } catch (error) {
@@ -3393,32 +3523,97 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         }
     };
 
+  const renderPendingDealsBanner = () => {
+    if (dealStatsError && activeView !== 'overview') {
+      return (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-red-800">Could not load buyer leads</p>
+            <p className="text-xs text-red-700 mt-0.5">{dealStatsError}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => refreshDealCommandStats()}
+            className="shrink-0 px-4 py-2 text-sm font-bold rounded-lg bg-red-700 text-white hover:bg-red-800"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+    if (pendingAcceptCount <= 0 || activeView === 'overview') return null;
+    return (
+      <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-amber-900">
+            {pendingAcceptCount === 1
+              ? '1 buyer is waiting for you to accept chat'
+              : `${pendingAcceptCount} buyers are waiting for you to accept chat`}
+          </p>
+          <p className="text-xs text-amber-800 mt-0.5">
+            Open Deal Command to review leads and accept chats.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => handleNavigate('overview')}
+          className="shrink-0 px-4 py-2 text-sm font-bold rounded-lg bg-amber-600 text-white hover:bg-amber-700"
+        >
+          Open Deal Command
+        </button>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     switch(activeView) {
       case 'overview':
+        if (selectedDealId) {
+          return (
+            <DealDetailPage
+              leadId={selectedDealId}
+              currentUser={seller}
+              role="seller"
+              conversations={safeConversations.filter((c) =>
+                c && seller?.email ? conversationBelongsToSeller(c, seller.email, seller.id) : false,
+              )}
+              onBack={() => setSelectedDealId(null)}
+              onOpenConversation={(conv) => {
+                setSelectedConv(conv);
+                handleNavigate('messages');
+              }}
+              onNotify={(message, type) => onNotify?.(message, type ?? 'info')}
+            />
+          );
+        }
         return (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <StatCard title="Active Listings" value={activeListings.length} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 17v-2a4 4 0 00-4-4h-1.5m1.5 4H13m-2 0a2 2 0 104 0 2 2 0 00-4 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 11V7a4 4 0 00-4-4H7a4 4 0 00-4 4v4" /></svg>} />
-              <StatCard title="Unread Messages" value={unreadCount} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>} />
-              <StatCard title="Your Seller Rating" value={`${(seller && typeof seller.averageRating === 'number' ? seller.averageRating : 0).toFixed(1)} (${seller && typeof seller.ratingCount === 'number' ? seller.ratingCount : 0})`} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.522 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.522 4.674c.3.921-.755 1.688-1.54 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.784.57-1.838-.197-1.539-1.118l1.522-4.674a1 1 0 00-.363-1.118L2.98 8.11c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.522-4.674z" /></svg>} />
-            </div>
-            <PlanStatusCard
+            <SellerCommandHome
               seller={seller}
-              activeListingsCount={publishedListings.length}
-              featuredListingsCount={safeSellerVehicles.filter(v => v && v.isFeatured).length}
-              onNavigate={onNavigate}
-            />
-            <PaymentErrorBoundary>
-              <PaymentStatusCard currentUser={seller} />
-            </PaymentErrorBoundary>
-            <AiAssistant
-              vehicles={activeListings}
               conversations={safeConversations.filter((c) =>
-                c && seller?.email ? conversationBelongsToSeller(c, seller.email, seller.id) : false
+                c && seller?.email ? conversationBelongsToSeller(c, seller.email, seller.id) : false,
               )}
-              onNavigateToVehicle={handleNavigateToVehicle}
-              onNavigateToInquiry={handleNavigateToInquiry}
+              onOpenDeal={(leadId) => setSelectedDealId(leadId)}
+              onOpenConversation={(conv) => {
+                setSelectedConv(conv);
+                handleNavigate('messages');
+              }}
+              onNavigateToMessages={() => handleNavigate('messages')}
+              onNavigateToListings={() => handleNavigate('listings')}
+              onNotify={(message, type) => {
+                onNotify?.(message, type ?? 'info');
+                refreshDealCommandStats();
+              }}
+              onSignInAgain={() => {
+                void (async () => {
+                  const { clearPersistedUserSession } = await import('../utils/validatePersistedSession.js');
+                  const { logout } = await import('../services/userService.js');
+                  clearPersistedUserSession();
+                  logout();
+                  onNavigate(View.SELLER_LOGIN);
+                  window.location.reload();
+                })();
+              }}
             />
           </div>
         );
@@ -3574,6 +3769,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       case 'listings':
         return (
           <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
+            {renderPendingDealsBanner()}
             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
               <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark">Active Listings</h2>
               <div className="flex gap-2">
@@ -3596,6 +3792,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
                       {paginatedListings.map((v) => {
                       const renewalValidation = getListingRenewalValidation(v);
+                      const vehicleDeals =
+                        dealsByVehicleId.get(String(v.id)) ||
+                        (v.databaseId ? dealsByVehicleId.get(String(v.databaseId)) : undefined) ||
+                        [];
                       return (
                       <tr 
                         key={v.id}
@@ -3611,6 +3811,21 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
                             <ListingLifecycleIndicator vehicle={v} seller={seller} compact={true} onRefresh={() => handleRefreshVehicle(v.id)} onRenew={() => handleRenewVehicle(v.id)} />
+                            {vehicleDeals.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const lead = vehicleDeals[0];
+                                  if (lead) setSelectedDealId(lead.id);
+                                  handleNavigate('overview');
+                                }}
+                                className="inline-flex w-fit items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-900 hover:bg-amber-200"
+                              >
+                                {vehicleDeals.length} buyer lead{vehicleDeals.length === 1 ? '' : 's'}
+                                {vehicleDeals.some((d) => d.chatStatus === 'pending') ? ' · Accept chat' : ''}
+                              </button>
+                            ) : null}
                             
                             {/* Boost Status Indicators */}
                             {v.activeBoosts?.filter(boost => boost.isActive && new Date(boost.expiresAt) > new Date()).map(boost => {
@@ -4084,7 +4299,16 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             </div>
           );
         }
-        return <SettingsView seller={seller} onUpdateSeller={onUpdateSellerProfile} onNotify={onNotify} />;
+        return (
+          <SettingsView
+            seller={seller}
+            onUpdateSeller={onUpdateSellerProfile}
+            onNotify={onNotify}
+            activeListingsCount={publishedListings.length}
+            featuredListingsCount={safeSellerVehicles.filter(v => v && v.isFeatured).length}
+            onNavigate={onNavigate}
+          />
+        );
       case 'reports':
         return <ReportsView
                     reportedVehicles={safeReportedVehicles}
@@ -4103,15 +4327,25 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     }
   }
 
-  const NavItem: React.FC<{ view: DashboardView, children: React.ReactNode, count?: number }> = ({ view, children, count }) => {
+  const NavItem: React.FC<{ view: DashboardView, children: React.ReactNode, count?: number, disabled?: boolean }> = ({ view, children, count, disabled = false }) => {
     const isActive = activeView === view;
     return (
       <button
         type="button"
-        onClick={() => handleNavigate(view)}
+        onClick={() => {
+          if (disabled) {
+            if (view === 'form') notifyListingLimitReached();
+            return;
+          }
+          handleNavigate(view);
+        }}
+        disabled={disabled}
+        aria-disabled={disabled}
         aria-current={isActive ? 'page' : undefined}
         className={`group flex justify-between items-center w-full text-left px-4 py-3 rounded-xl transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 ${
-          isActive
+          disabled
+            ? 'text-gray-400 cursor-not-allowed opacity-60'
+            : isActive
             ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
             : 'text-gray-600 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:shadow-sm'
         }`}
@@ -4195,7 +4429,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 </h3>
               </div>
               
-              <NavItem view="overview">
+              <NavItem view="overview" count={pendingAcceptCount > 0 ? pendingAcceptCount : pendingDealCount > 0 ? pendingDealCount : undefined}>
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"/>
@@ -4241,7 +4475,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 </div>
               </NavItem>
               
-              <NavItem view="form">
+              <NavItem view="form" disabled={listingAtLimit}>
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
@@ -4322,6 +4556,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           <ChatWidget
             conversation={selectedConv}
             currentUserRole="seller"
+            currentUserEmail={seller.email}
             otherUserName={selectedConv.customerName}
             otherUserOnline={chatPeerOnlineByConversationId?.[String(selectedConv.id)]}
             callTargetPhone={(() => {

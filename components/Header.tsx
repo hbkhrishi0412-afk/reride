@@ -313,10 +313,10 @@ const Header: React.FC<HeaderProps> = memo(({
                                     }}
                                 />
                                 <button 
-                                    onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} 
+                                    onClick={() => handleNavigate(ViewEnum.ABOUT_US)} 
                                     className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
                                 >
-                                    {t('nav.carServices')}
+                                    {t('nav.howDealsWork')}
                                 </button>
                                 <button 
                                     onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} 
@@ -354,6 +354,30 @@ const Header: React.FC<HeaderProps> = memo(({
                                                 className="min-w-[200px] rounded-lg border border-gray-100 bg-white py-1 shadow-lg dark:border-gray-200"
                                                 role="menu"
                                             >
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => handleNavigate(ViewEnum.HELP_CENTER)}
+                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
+                                            >
+                                                {t('footer.helpCenter', { defaultValue: 'Help center' })}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => handleNavigate(ViewEnum.FAQ)}
+                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
+                                            >
+                                                {t('footer.faq')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)}
+                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
+                                            >
+                                                {t('nav.carServices')}
+                                            </button>
                                             <button
                                                 type="button"
                                                 role="menuitem"
@@ -414,28 +438,6 @@ const Header: React.FC<HeaderProps> = memo(({
                                         </span>
                                     )}
                                 </button>
-
-                                {currentUser && (currentUser.role === 'customer' || currentUser.role === 'seller') && (
-                                    <button
-                                        type="button"
-                                        onClick={onOpenMessages}
-                                        className="relative p-2 rounded-full transition-colors"
-                                        style={{ backgroundColor: 'transparent' }}
-                                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(30, 136, 229, 0.1)'; }}
-                                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                                        aria-label={t('nav.messages')}
-                                        title={t('nav.messages')}
-                                    >
-                                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#1A1A1A' }} aria-hidden>
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                        </svg>
-                                        {inboxCount > 0 && (
-                                            <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 text-white text-[10px] font-bold rounded-full flex items-center justify-center" style={{ backgroundColor: '#1E88E5' }}>
-                                                {inboxCount > 99 ? '99+' : inboxCount}
-                                            </span>
-                                        )}
-                                    </button>
-                                )}
 
                                 {currentUser && (
                                     <div className="relative" ref={notificationsRef}>

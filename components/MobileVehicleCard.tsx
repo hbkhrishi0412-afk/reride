@@ -4,6 +4,7 @@ import type { Vehicle } from '../types';
 import { getFirstValidImage, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder } from '../utils/imageUtils';
 import { showVerifiedListingBadge } from '../utils/listingTrust';
 import { ListingStockBadge } from './ListingStockBadge';
+import { ListingTrustChips } from './ListingTrustChips';
 import { useTranslatedFields, useTranslatedArray } from '../hooks/useTranslatedText';
 
 interface MobileVehicleCardProps {
@@ -343,6 +344,8 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
             <span className="native-text-caption" data-no-translate>{tf.location}</span>
           </div>
         )}
+
+        <ListingTrustChips vehicle={vehicle} compact className="mb-2" />
 
         {/* Features Preview */}
         {translatedFeatures && translatedFeatures.length > 0 && (

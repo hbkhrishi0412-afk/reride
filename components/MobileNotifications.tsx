@@ -5,6 +5,7 @@ import { formatRelativeTime } from '../utils/date';
 interface MobileNotificationsProps {
   notifications: Notification[];
   onNotificationClick?: (notification: Notification) => void;
+  onAcceptDealChat?: (leadId: string, conversationId?: string) => void | Promise<void>;
   onMarkAsRead?: (ids: number[]) => void;
   onMarkAllAsRead?: () => void;
   onBack?: () => void;
@@ -23,6 +24,7 @@ interface MobileNotificationsProps {
 export const MobileNotifications: React.FC<MobileNotificationsProps> = ({
   notifications,
   onNotificationClick,
+  onAcceptDealChat,
   onMarkAsRead,
   onMarkAllAsRead,
   onBack,
@@ -72,6 +74,12 @@ export const MobileNotifications: React.FC<MobileNotificationsProps> = ({
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        );
+      case 'deal':
+        return (
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         );
       default:
@@ -190,15 +198,21 @@ export const MobileNotifications: React.FC<MobileNotificationsProps> = ({
           {filteredNotifications.map((notification) => (
             <div
               key={notification.id}
-              onClick={() => handleNotificationClick(notification)}
-              className={`bg-white p-4 active:bg-gray-50 transition-colors ${
+              className={`bg-white p-4 transition-colors ${
                 !notification.isRead ? 'bg-orange-50/50' : ''
               }`}
             >
-              <div className="flex gap-3">
+              <div
+                className="flex gap-3 active:bg-gray-50"
+                onClick={() => handleNotificationClick(notification)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && handleNotificationClick(notification)}
+              >
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
                   notification.targetType === 'price_drop' ? 'bg-green-100 text-green-600' :
                   notification.targetType === 'conversation' ? 'bg-blue-100 text-blue-600' :
+                  notification.targetType === 'deal' ? 'bg-orange-100 text-orange-700' :
                   notification.targetType === 'service_request' ? 'bg-purple-100 text-purple-600' :
                   'bg-orange-100 text-orange-600'
                 }`}>
@@ -207,15 +221,33 @@ export const MobileNotifications: React.FC<MobileNotificationsProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between mb-1">
                     <p className={`text-sm ${!notification.isRead ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
-                      {notification.message}
+                      {notification.title || notification.message}
                     </p>
                     {!notification.isRead && (
                       <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0 mt-1"></div>
                     )}
                   </div>
+                  {notification.title && (
+                    <p className="text-xs text-gray-600 mb-1">{notification.message}</p>
+                  )}
                   <p className="text-xs text-gray-500">{formatRelativeTime(notification.timestamp)}</p>
                 </div>
               </div>
+              {notification.targetType === 'deal' &&
+                notification.dealAction === 'accept_chat' &&
+                notification.dealLeadId &&
+                onAcceptDealChat && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void onAcceptDealChat(notification.dealLeadId!, notification.conversationId);
+                    }}
+                    className="mt-3 w-full py-2.5 bg-reride-orange text-white text-sm font-bold rounded-lg"
+                  >
+                    Accept Chat
+                  </button>
+                )}
             </div>
           ))}
         </div>

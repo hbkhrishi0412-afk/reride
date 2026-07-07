@@ -27,6 +27,9 @@ import { analyzeVehiclePricing, findSimilarVehicles } from '../utils/vehiclePric
 import type { BuyerVisibleDealLabel } from '../utils/vehiclePricing.js';
 import type { VehicleData } from '../types.js';
 import type { VehicleMake, VehicleModel } from '../vehicleDataTypes.js';
+import ListingTrustFilterBar from './ListingTrustFilterBar.js';
+import type { TrustFilterValue } from '../utils/listingTrust.js';
+import { vehicleMatchesTrustFilter, getListingDisclosureScore } from '../utils/listingTrust.js';
 // Lazy load location data when needed
 
 interface VehicleListProps {
@@ -249,6 +252,7 @@ interface VehicleListFilterSnapshot {
   selectedCity: string | undefined;
   transmissionFilter: string;
   ownershipFilter: OwnershipFilterValue;
+  trustFilter: TrustFilterValue;
   yearBounds: { min: number | null; max: number | null };
 }
 
@@ -308,6 +312,7 @@ function matchesVehicleFilters(vehicle: Vehicle, snap: VehicleListFilterSnapshot
     if (snap.ownershipFilter === '2' && n !== 2) return false;
     if (snap.ownershipFilter === '3plus' && n < 3) return false;
   }
+  if (snap.trustFilter && !vehicleMatchesTrustFilter(vehicle, snap.trustFilter)) return false;
   if (!vehicleMatchesSearchText(vehicle, aiSearchQuery)) return false;
   return true;
 }
@@ -436,6 +441,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [fuelTypeFilter, setFuelTypeFilter] = useState('');
   const [transmissionFilter, setTransmissionFilter] = useState('');
   const [ownershipFilter, setOwnershipFilter] = useState<OwnershipFilterValue>('');
+  const [trustFilter, setTrustFilter] = useState<TrustFilterValue>('');
   const [selectedPriceBuckets, setSelectedPriceBuckets] = useState<string[]>([]);
   const [yearFilter, setYearFilter] = useState('0');
   const [yearBounds, setYearBounds] = useState<{ min: number | null; max: number | null }>({
@@ -487,6 +493,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     () => ({
       YEAR_DESC: t('listings.sort.yearDesc'),
       RATING_DESC: t('listings.sort.ratingDesc'),
+      DISCLOSURE_DESC: t('listings.sort.disclosureDesc'),
       PRICE_ASC: t('listings.sort.priceAsc'),
       PRICE_DESC: t('listings.sort.priceDesc'),
       MILEAGE_ASC: t('listings.sort.mileageAsc'),
@@ -1431,6 +1438,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     setFuelTypeFilter('');
     setTransmissionFilter('');
     setOwnershipFilter('');
+    setTrustFilter('');
     setSelectedPriceBuckets([]);
     setYearBounds({ min: null, max: null });
 
@@ -1496,7 +1504,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, selectedPriceBuckets, yearFilter, yearBounds, stateFilter, sortOrder, aiSearchQuery]);
+  }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, trustFilter, selectedPriceBuckets, yearFilter, yearBounds, stateFilter, sortOrder, aiSearchQuery]);
 
 
   const processedVehicles = useMemo(() => {
@@ -1518,6 +1526,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       selectedCity,
       transmissionFilter,
       ownershipFilter,
+      trustFilter,
       yearBounds,
     };
 
@@ -1575,13 +1584,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         // Then apply regular sorting
         switch (sortOrder) {
             case 'RATING_DESC': return (b.averageRating || 0) - (a.averageRating || 0);
+            case 'DISCLOSURE_DESC': return getListingDisclosureScore(b) - getListingDisclosureScore(a);
             case 'PRICE_ASC': return a.price - b.price;
             case 'PRICE_DESC': return b.price - a.price;
             case 'MILEAGE_ASC': return a.mileage - b.mileage;
             default: return b.year - a.year;
         }
     });
-  }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, selectedPriceBuckets, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, yearFilter, yearBounds, sortOrder, isWishlistMode, wishlist, stateFilter, isStateFilterUserSet, selectedCity, aiSearchQuery]);
+  }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, selectedPriceBuckets, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, trustFilter, yearFilter, yearBounds, sortOrder, isWishlistMode, wishlist, stateFilter, isStateFilterUserSet, selectedCity, aiSearchQuery]);
   
   const committedFilterCategoryMap = useMemo(
     () =>
@@ -1663,12 +1673,13 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     if (fuelTypeFilter && fuelTypeFilter.trim() !== '') count++;
     if (transmissionFilter && transmissionFilter.trim() !== '') count++;
     if (ownershipFilter) count++;
+    if (trustFilter) count++;
     if (yearFilter && yearFilter !== '0' && yearFilter.trim() !== '') count++;
     else if (yearBounds.min != null || yearBounds.max != null) count++;
     // Only count state filter if it was explicitly set by the user (not auto-set from location)
     if (stateFilter && stateFilter.trim() !== '' && isStateFilterUserSet) count++;
     return count;
-  }, [categoryFilter, makeFilter, modelFilter, priceRange, selectedPriceBuckets, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, yearFilter, yearBounds, stateFilter, isWishlistMode, isStateFilterUserSet, initialCategory]);
+  }, [categoryFilter, makeFilter, modelFilter, priceRange, selectedPriceBuckets, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, trustFilter, yearFilter, yearBounds, stateFilter, isWishlistMode, isStateFilterUserSet, initialCategory]);
 
   const mobileTempPreviewCount = useMemo(() => {
     const sourceVehicles = isWishlistMode ? vehicles.filter((v) => wishlist.includes(v.id)) : vehicles;
@@ -1689,6 +1700,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       selectedCity,
       transmissionFilter: tempFilters.transmissionFilter,
       ownershipFilter: tempFilters.ownershipFilter,
+      trustFilter,
       yearBounds: { min: tempFilters.yearMin ?? null, max: tempFilters.yearMax ?? null },
     };
     return sourceVehicles.filter((v) => matchesVehicleFilters(v, snap, aiSearchQuery)).length;
@@ -1697,6 +1709,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     isWishlistMode,
     wishlist,
     tempFilters,
+    trustFilter,
     stateFilter,
     isStateFilterUserSet,
     selectedCity,
@@ -2564,6 +2577,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             );
             })}
           </div>
+          <ListingTrustFilterBar value={trustFilter} onChange={setTrustFilter} className="px-1" />
           <div className="flex items-center justify-between px-1">
             <div>
               <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">{t('listings.showing')}</p>
@@ -2675,7 +2689,11 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     </div>
                     <h3 className="text-xl font-bold text-gray-900 mb-2">{t('listings.noVehiclesTitle')}</h3>
                     <p className="text-gray-600 text-sm">
-                      {selectedCity?.trim()
+                      {trustFilter
+                        ? t('listings.noVehiclesTrustHint', {
+                            defaultValue: 'No listings match this trust filter. Try another filter or browse all vehicles.',
+                          })
+                        : selectedCity?.trim()
                         ? t('listings.noVehiclesCityHint', {
                             city: selectedCity,
                             defaultValue: `No cars match your filters in ${selectedCity}. Try clearing filters or browse listings in another city.`,
@@ -2790,6 +2808,10 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           </aside>
 
           <main className="space-y-2 lg:space-y-4">
+            <div className="hidden lg:block px-1">
+              <p className="text-sm text-gray-600">{t('listings.subtitle')}</p>
+            </div>
+            <ListingTrustFilterBar value={trustFilter} onChange={setTrustFilter} className="px-1 lg:px-0" />
             {/* Mobile-optimized search - collapsible on mobile */}
             <div className="intelligent-search bg-white/80 backdrop-blur-xl rounded-xl lg:rounded-2xl shadow-xl border border-white/20 p-2.5 lg:p-4 -mt-12">
               <div className="flex items-center gap-2 mb-1.5 lg:mb-1.5">
@@ -2986,7 +3008,11 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                   <>
                     <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">{t('listings.noVehiclesTitle')}</h3>
                     <p className="text-reride-text dark:text-reride-text mt-2">
-                      {selectedCity?.trim()
+                      {trustFilter
+                        ? t('listings.noVehiclesTrustHint', {
+                            defaultValue: 'No listings match this trust filter. Try another filter or browse all vehicles.',
+                          })
+                        : selectedCity?.trim()
                         ? t('listings.noVehiclesCityHint', {
                             city: selectedCity,
                             defaultValue: `No cars match your filters in ${selectedCity}. Try clearing filters or browse all listings in this city.`,

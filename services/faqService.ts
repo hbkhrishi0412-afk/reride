@@ -1,5 +1,6 @@
 import type { FAQItem } from '../types.js';
 import { getSupabaseClient } from '../lib/supabase.js';
+import { DEFAULT_PLATFORM_FAQS } from '../constants/defaultFaqs.js';
 
 const FAQ_STORAGE_KEY = 'reRideFaqs';
 
@@ -33,12 +34,12 @@ export const fetchFaqsFromSupabase = async (): Promise<FAQItem[]> => {
       saveFaqs(faqs);
     }
     
-    return faqs;
+    return faqs.length > 0 ? faqs : DEFAULT_PLATFORM_FAQS;
   } catch (error) {
     console.error('Error fetching FAQs from Supabase:', error);
     // Fallback to localStorage if Supabase fails
     const localFaqs = getFaqs();
-    return localFaqs || [];
+    return localFaqs?.length ? localFaqs : DEFAULT_PLATFORM_FAQS;
   }
 };
 

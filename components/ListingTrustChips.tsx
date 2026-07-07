@@ -14,24 +14,33 @@ interface ListingTrustChipsProps {
   vehicle: Vehicle;
   seller?: User | null;
   className?: string;
+  /** Card view: show at most 2 compact chips */
+  compact?: boolean;
+  maxChips?: number;
 }
 
 export const ListingTrustChips: React.FC<ListingTrustChipsProps> = ({
   vehicle,
   seller,
   className = '',
+  compact = false,
+  maxChips,
 }) => {
   const { t } = useTranslation();
   const chips = getListingTrustChips(vehicle, seller);
-  if (chips.length === 0) return null;
+  const limit = maxChips ?? (compact ? 2 : chips.length);
+  const visible = chips.slice(0, limit);
+  if (visible.length === 0) return null;
 
   return (
-    <div className={`flex flex-wrap gap-1.5 ${className}`} role="list" aria-label={t('trust.chips.aria', { defaultValue: 'Listing trust signals' })}>
-      {chips.map((chip) => (
+    <div className={`flex flex-wrap gap-1 ${compact ? 'gap-1' : 'gap-1.5'} ${className}`} role="list" aria-label={t('trust.chips.aria', { defaultValue: 'Listing trust signals' })}>
+      {visible.map((chip) => (
         <span
           key={chip.id}
           role="listitem"
-          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${CHIP_TONE[chip.tone]}`}
+          className={`inline-flex items-center rounded-full border font-semibold ${CHIP_TONE[chip.tone]} ${
+            compact ? 'px-1.5 py-0 text-[10px] leading-4' : 'px-2.5 py-0.5 text-xs'
+          }`}
         >
           {t(chip.labelKey, { defaultValue: chip.defaultLabel })}
         </span>

@@ -177,14 +177,16 @@ export const OfferMessage: React.FC<{
     msg: ChatMessage;
     currentUserRole: User['role'];
     listingPrice?: number;
-    onRespond: (messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
-}> = ({ msg, currentUserRole, listingPrice, onRespond }) => {
+    onRespond?: (messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
+    onOpenDealRoom?: () => void;
+}> = ({ msg, currentUserRole, listingPrice, onRespond, onOpenDealRoom }) => {
     const [isCounterModalOpen, setIsCounterModalOpen] = useState(false);
     const { offerPrice, counterPrice, status } = msg.payload || {};
 
     const isRecipient = (currentUserRole === 'customer' && msg.sender === 'seller') || (currentUserRole === 'seller' && msg.sender === 'user');
     const statusNorm = (status ?? 'pending').toString().trim().toLowerCase();
-    const showActions = isRecipient && (statusNorm === 'pending' || statusNorm === '');
+    const showActions = !!onRespond && isRecipient && (statusNorm === 'pending' || statusNorm === '');
+    const showDealRoomCta = !showActions && !!onOpenDealRoom;
     
     const statusInfo = {
         pending: { text: "Pending", color: "bg-reride-blue-light text-reride-text-dark dark:bg-reride-blue/50 dark:text-reride-text-dark border-gray-200" },
@@ -195,7 +197,7 @@ export const OfferMessage: React.FC<{
     };
 
     const handleCounterSubmit = (price: number) => {
-        onRespond(msg.id, 'countered', price);
+        onRespond?.(msg.id, 'countered', price);
         setIsCounterModalOpen(false);
     };
     
@@ -258,6 +260,21 @@ export const OfferMessage: React.FC<{
                                 Counter
                             </button>
                         )}
+                    </div>
+                )}
+                {showDealRoomCta && (
+                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-300">
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onOpenDealRoom?.();
+                            }}
+                            className="w-full text-sm bg-slate-100 text-slate-700 font-semibold py-1.5 px-3 rounded-md hover:bg-slate-200 transition-colors"
+                        >
+                            Open Deal Room
+                        </button>
                     </div>
                 )}
             </div>

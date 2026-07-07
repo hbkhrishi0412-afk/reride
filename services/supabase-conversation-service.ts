@@ -622,7 +622,7 @@ export const supabaseConversationService = {
   },
 
   // Find conversation by vehicle ID and customer ID
-  async findByVehicleAndCustomer(vehicleId: number, customerId: string): Promise<Conversation | null> {
+  async findByVehicleAndCustomer(vehicleId: number | string, customerId: string): Promise<Conversation | null> {
     const supabase = await resolveSupabaseClient();
     const variants = await participantIdQueryValues(supabase, customerId);
     if (variants.length === 0) {
@@ -632,7 +632,7 @@ export const supabaseConversationService = {
     const { data: rows, error } = await supabase
       .from('conversations')
       .select('*')
-      .eq('vehicle_id', vehicleId.toString())
+      .eq('vehicle_id', String(vehicleId))
       .in('customer_id', variants)
       .limit(1);
 
@@ -678,83 +678,6 @@ export const supabaseConversationService = {
     const patch: Partial<Conversation> =
       role === 'customer' ? { customerHistoryClearedAt: now } : { sellerHistoryClearedAt: now };
     await this.update(conversation.id, patch);
-  },
-
-  /**
-   * Update an offer message's payload status and append the responder's chat line in one write.
-   * Required so Supabase Realtime does not overwrite client-only offer state with stale rows.
-   */
-  async respondToOffer(
-    conversationId: string,
-    offerMessageId: number | string,
-    response: 'accepted' | 'rejected' | 'countered',
-    options: {
-      counterPrice?: number;
-      responseMessage: ChatMessage;
-    },
-  ): Promise<Conversation> {
-    const conversation = await this.findById(String(conversationId));
-    if (!conversation) {
-      throw new Error(`Conversation not found: ${conversationId}`);
-    }
-
-    const idMatch = (a: unknown, b: unknown): boolean => {
-      if (a == null || b == null) return false;
-      return String(a) === String(b) || Number(a) === Number(b);
-    };
-
-    const isOfferLike = (m: ChatMessage): boolean => {
-      if (m.type === 'offer') return true;
-      const op = m.payload?.offerPrice;
-      if (typeof op === 'number' && Number.isFinite(op)) return true;
-      if (typeof m.text === 'string' && /^\s*Offer:\s*\S/i.test(m.text)) return true;
-      return false;
-    };
-
-    let foundOffer = false;
-    const patchedMessages = (conversation.messages || []).map((m) => {
-      if (idMatch(m.id, offerMessageId) && isOfferLike(m)) {
-        foundOffer = true;
-        const payload = {
-          ...(m.payload || {}),
-          status: response,
-          ...(options.counterPrice != null && Number(options.counterPrice) > 0
-            ? { counterPrice: options.counterPrice }
-            : {}),
-        };
-        return { ...m, payload };
-      }
-      return m;
-    });
-
-    if (!foundOffer) {
-      throw new Error(`Offer message not found: ${offerMessageId}`);
-    }
-
-    const newMsg = sanitizePersistedChatMessage(options.responseMessage);
-    const updatedMessages = [...patchedMessages, newMsg];
-
-    const readPatch: Partial<Conversation> = {};
-    if (newMsg.sender === 'seller') {
-      readPatch.isReadBySeller = true;
-      readPatch.isReadByCustomer = false;
-    } else if (newMsg.sender === 'user') {
-      readPatch.isReadBySeller = false;
-      readPatch.isReadByCustomer = true;
-    }
-
-    await this.update(conversation.id, {
-      messages: updatedMessages,
-      lastMessageAt: newMsg.timestamp,
-      lastMessage: newMsg.text,
-      ...readPatch,
-    });
-
-    const updated = await this.findById(conversation.id);
-    if (!updated) {
-      throw new Error('Conversation not found after offer response');
-    }
-    return updated;
   },
 
   // Add message to conversation

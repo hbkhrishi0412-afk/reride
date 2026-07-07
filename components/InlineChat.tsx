@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
-import type { Conversation, ChatMessage } from '../types.js';
-import ReadReceiptIcon, { OfferMessage, OfferModal } from './ReadReceiptIcon.js';
+import type { Conversation, ChatMessage, DealLead } from '../types.js';
+import DealStageChip from './DealStageChip';
+import ReadReceiptIcon, { OfferMessage } from './ReadReceiptIcon.js';
 import { phoneDisplayCompact } from '../utils/numberUtils.js';
 import { uploadImage, uploadChatAudio } from '../services/imageUploadService';
 import { ChatMessageImage } from './ChatMessageImage';
@@ -8,10 +9,17 @@ import { ChatMessageVoice } from './ChatMessageVoice';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { filterMessagesForViewer } from '../utils/conversationView';
 import { isOfferChatMessage } from '../utils/isOfferChatMessage';
+import DealTimelinePanel from './DealTimelinePanel';
+import { getDealLead } from '../services/dealService';
+import {
+  scrollContainerToBottom,
+  scrollContainerToShowElement,
+} from '../utils/scrollWithinContainer.js';
 
 interface InlineChatProps {
   conversation: Conversation;
   currentUserRole: 'customer' | 'seller';
+  currentUserEmail?: string;
   otherUserName: string;
   onSendMessage: (messageText: string, type?: ChatMessage['type'], payload?: any) => void;
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
@@ -22,13 +30,13 @@ interface InlineChatProps {
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   onClearChat?: (conversationId: string) => void | Promise<void>;
-  onMakeOffer?: () => void;
   onStartCall?: (phone: string) => void;
   callTargetPhone?: string;
   callTargetName?: string;
   otherUserOnline?: boolean;
   className?: string;
   height?: string;
+  dealLead?: DealLead | null;
 }
 
 const EMOJIS = ['😀', '😂', '👍', '❤️', '🙏', '😊', '🔥', '🎉', '🚗', '🤔', '👋', '👀'];
@@ -47,6 +55,7 @@ const TypingIndicator: React.FC<{ name: string }> = ({ name }) => (
 export const InlineChat: React.FC<InlineChatProps> = memo(({ 
   conversation, 
   currentUserRole, 
+  currentUserEmail,
   otherUserName, 
   onSendMessage, 
   typingStatus, 
@@ -57,17 +66,17 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
   onFlagContent, 
   onOfferResponse,
   onClearChat,
-  onMakeOffer,
   onStartCall,
   callTargetPhone,
   callTargetName,
   otherUserOnline,
   className = "",
-  height = "h-96"
+  height = "h-96",
+  dealLead: initialDealLead = null,
 }) => {
+  const [dealLead, setDealLead] = useState<DealLead | null>(initialDealLead);
   const [inputText, setInputText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -78,6 +87,7 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
     [conversation, currentUserRole],
   );
 
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const firstUnreadRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -91,10 +101,16 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
   }, [visibleMessages, currentUserRole]);
 
   useEffect(() => {
-    firstUnreadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    if (!firstUnreadRef.current) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    if (firstUnreadRef.current) {
+      scrollContainerToShowElement(container, firstUnreadRef.current, {
+        behavior: 'smooth',
+        block: 'center',
+      });
+      return;
     }
+    scrollContainerToBottom(container, 'smooth');
   }, [visibleMessages, typingStatus, firstUnreadMessageId]);
   
   useEffect(() => {
@@ -223,21 +239,27 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
     }
   };
 
-  const handleSendOffer = (price: number) => {
-    onSendMessage(`Offer: ${price}`, 'offer', {
-      offerPrice: price,
-      status: 'pending'
-    });
-    setIsOfferModalOpen(false);
-  };
-
   const senderType = currentUserRole === 'customer' ? 'user' : 'seller';
   const otherUserRole = currentUserRole === 'customer' ? 'seller' : 'customer';
+
+  const chatBlockedByDeal = dealLead?.chatStatus === 'pending' && currentUserRole === 'customer';
+
+  useEffect(() => {
+    setDealLead(initialDealLead);
+  }, [initialDealLead, conversation.id]);
+
+  useEffect(() => {
+    if (!conversation.id) return;
+    getDealLead({ conversationId: conversation.id })
+      .then(setDealLead)
+      .catch(() => setDealLead((prev) => prev || null));
+  }, [conversation.id]);
 
   return (
     <div className={`bg-white rounded-lg shadow-md border border-gray-200 flex flex-col ${className}`} style={{ height }}>
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-lg">
+      <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg space-y-2">
+        <div className="flex justify-between items-start gap-2">
         <div className="flex-grow min-w-0">
           <h3 className="text-lg font-semibold text-gray-900 truncate">{conversation.vehicleName}</h3>
           <div className="flex items-center gap-2 flex-wrap">
@@ -308,10 +330,41 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
             </svg>
           </button>
         </div>
+        </div>
+        {dealLead ? <DealStageChip lead={dealLead} /> : null}
+        {dealLead && !chatBlockedByDeal && currentUserRole === 'customer' && (
+          <p className="text-xs text-slate-500 pt-1">Use Deal Room pipeline to make or counter offers.</p>
+        )}
+        {chatBlockedByDeal ? (
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+            Your tracked deal is active. The seller must accept chat before you can message — you can still use the Deal Room below to make offers and track milestones.
+          </p>
+        ) : null}
       </div>
 
       {/* Messages */}
-      <div className={`flex-grow p-4 overflow-y-auto bg-gray-50 space-y-4 ${height}`}>
+      <div
+        ref={messagesContainerRef}
+        className={`flex-grow p-4 overflow-y-auto bg-gray-50 space-y-4 ${height}`}
+      >
+        {dealLead && currentUserEmail ? (
+          <DealTimelinePanel
+            lead={dealLead}
+            currentUser={{
+              email: currentUserEmail,
+              name: '',
+              role: currentUserRole === 'seller' ? 'seller' : 'customer',
+              mobile: '',
+              location: '',
+              status: 'active',
+              createdAt: '',
+            }}
+            currentUserRole={currentUserRole}
+            conversationId={conversation.id}
+            onLeadUpdated={setDealLead}
+            onSendPipelineMessage={(messageText, type, payload) => onSendMessage(messageText, type, payload)}
+          />
+        ) : null}
         {visibleMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-500">
             <div className="text-center">
@@ -341,7 +394,6 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
                           msg={msg} 
                           currentUserRole={currentUserRole} 
                           listingPrice={conversation.vehiclePrice} 
-                          onRespond={(messageId, response, counterPrice) => onOfferResponse(conversation.id, messageId, response, counterPrice)} 
                         />
                       ) : msg.type === 'image' && msg.payload?.imageUrl ? (
                         <div className="space-y-2">
@@ -452,33 +504,6 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
             </svg>
           </button>
           
-          {currentUserRole === 'customer' ? (
-            <button 
-              type="button" 
-              onClick={() => setIsOfferModalOpen(true)} 
-              className="p-2 text-gray-500 hover:text-orange-500 transition-colors" 
-              aria-label="Make an offer"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" />
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" />
-              </svg>
-            </button>
-          ) : ( 
-            onMakeOffer && 
-            <button 
-              type="button" 
-              onClick={onMakeOffer} 
-              className="p-2 text-gray-500 hover:text-orange-500 transition-colors" 
-              aria-label="Make an offer"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" />
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" />
-              </svg>
-            </button>
-          )}
-          
           <input
             type="text"
             value={inputText}
@@ -495,7 +520,7 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
           />
           <button 
             type="submit" 
-            disabled={!inputText.trim() || isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
+            disabled={chatBlockedByDeal || !inputText.trim() || isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
             className="p-2 text-orange-500 hover:text-orange-600 transition-colors disabled:opacity-40" 
             aria-label="Send message"
           >
@@ -506,15 +531,6 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
         </form>
       </div>
 
-      {/* Offer Modal */}
-      {isOfferModalOpen && (
-        <OfferModal
-          title="Make an Offer"
-          listingPrice={conversation.vehiclePrice}
-          onSubmit={handleSendOffer}
-          onClose={() => setIsOfferModalOpen(false)}
-        />
-      )}
     </div>
   );
 });

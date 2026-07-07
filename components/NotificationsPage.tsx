@@ -15,6 +15,7 @@ interface NotificationsPageProps {
   vehicles: Vehicle[];
   conversations?: Conversation[];
   onNotificationClick: (notification: Notification) => void;
+  onAcceptDealChat?: (leadId: string, conversationId?: string) => void | Promise<void>;
   onMarkNotificationsAsRead: (ids: number[]) => void;
   onMarkAllNotificationsAsRead: () => void;
   onBack: () => void;
@@ -30,6 +31,7 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({
   vehicles,
   conversations = [],
   onNotificationClick,
+  onAcceptDealChat,
   onMarkNotificationsAsRead,
   onMarkAllNotificationsAsRead,
   onBack,
@@ -230,37 +232,49 @@ const NotificationsPage: React.FC<NotificationsPageProps> = ({
               const m = typeMeta(n.targetType);
               return (
                 <li key={n.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleRowClick(n)}
-                    className="w-full text-left px-4 py-3 active:bg-slate-50 flex items-start gap-3 transition-colors"
-                  >
-                    <span
-                      className="w-8 h-8 rounded-xl grid place-items-center shrink-0 mt-0.5"
-                      style={{ background: m.tint, color: m.color }}
+                  <div className="w-full text-left px-4 py-3 flex items-start gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleRowClick(n)}
+                      className="flex items-start gap-3 flex-1 min-w-0 text-left active:bg-slate-50 rounded-lg -mx-1 px-1"
                     >
-                      {n.targetType === 'conversation' ? (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-                      ) : n.targetType === 'vehicle' || n.targetType === 'price_drop' ? (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14M3 13l2-5a2 2 0 0 1 1.85-1.25h10.3A2 2 0 0 1 19 8l2 5v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3z" /></svg>
-                      ) : n.targetType === 'service_request' ? (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      ) : (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
-                      )}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                          {activityTypeLabel(n.targetType)} · {notificationTimeAgo(new Date(n.timestamp))}
+                      <span
+                        className="w-8 h-8 rounded-xl grid place-items-center shrink-0 mt-0.5"
+                        style={{ background: m.tint, color: m.color }}
+                      >
+                        {n.targetType === 'conversation' ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                        ) : n.targetType === 'vehicle' || n.targetType === 'price_drop' ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14M3 13l2-5a2 2 0 0 1 1.85-1.25h10.3A2 2 0 0 1 19 8l2 5v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3z" /></svg>
+                        ) : n.targetType === 'service_request' ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        ) : (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                            {activityTypeLabel(n.targetType)} · {notificationTimeAgo(new Date(n.timestamp))}
+                          </div>
+                          {!n.isRead && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#FF6B35' }} aria-hidden />}
                         </div>
-                        {!n.isRead && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#FF6B35' }} aria-hidden />}
+                        <p className={`text-[13px] leading-snug mt-0.5 ${!n.isRead ? 'font-semibold text-slate-900' : 'text-slate-600'}`}>
+                          {n.message}
+                        </p>
                       </div>
-                      <p className={`text-[13px] leading-snug mt-0.5 ${!n.isRead ? 'font-semibold text-slate-900' : 'text-slate-600'}`}>
-                        {n.message}
-                      </p>
-                    </div>
-                  </button>
+                    </button>
+                    {n.targetType === 'deal' && n.dealAction === 'accept_chat' && n.dealLeadId && onAcceptDealChat && (
+                      <button
+                        type="button"
+                        onClick={() => void onAcceptDealChat(n.dealLeadId!, n.conversationId)}
+                        className="shrink-0 self-center px-3 py-1.5 text-xs font-bold text-white rounded-lg"
+                        style={{ background: '#FF6B35' }}
+                      >
+                        Accept Chat
+                      </button>
+                    )}
+                  </div>
                 </li>
               );
             })}

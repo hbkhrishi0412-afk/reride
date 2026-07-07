@@ -7,6 +7,9 @@ export type NativePushPayload = {
   targetType?: string;
   targetId?: string | number;
   type?: string;
+  leadId?: string;
+  action?: string;
+  conversationId?: string;
 };
 
 function readField(raw: Record<string, unknown>, key: string): string | undefined {
@@ -27,6 +30,9 @@ export function normalizeNativePushPayload(
   const targetIdRaw = readField(raw, 'targetId');
   const vehicleIdRaw = readField(raw, 'vehicleId');
   const notificationIdRaw = readField(raw, 'notificationId');
+  const leadId = readField(raw, 'leadId');
+  const action = readField(raw, 'action');
+  const conversationId = readField(raw, 'conversationId');
 
   const vehicleId =
     vehicleIdRaw != null && !Number.isNaN(Number(vehicleIdRaw))
@@ -45,6 +51,9 @@ export function normalizeNativePushPayload(
     targetId: targetIdRaw,
     vehicleId,
     notificationId,
+    leadId,
+    action,
+    conversationId,
   };
 }
 

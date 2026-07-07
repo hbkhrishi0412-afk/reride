@@ -8,6 +8,7 @@ import { getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
 import { StatCard, StatCardGrid, EmptyState } from './dashboard/shared';
 import PendingDealsBanner from './PendingDealsBanner';
+import MyDealsList from './MyDealsList';
 
 const ServiceCart = lazy(() => import('./ServiceCart'));
 
@@ -47,7 +48,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
   onLogout
 }) => {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity' | 'alerts' | 'serviceTrack'>('overview');
+  const [activeTab, setActiveTab] = useState<'deals' | 'overview' | 'searches' | 'activity' | 'alerts' | 'serviceTrack'>('deals');
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
   const [savedSearches, setSavedSearches] = useState(() =>
     buyerService.getSavedSearches(currentUser?.email || '')
@@ -120,6 +121,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
   const mobileTabs = useMemo(
     () =>
       [
+        { id: 'deals' as const, label: t('buyerDashboard.tab.myDeals', { defaultValue: 'My Deals' }) },
         { id: 'overview' as const, label: t('buyerDashboard.mobile.tab.overview') },
         { id: 'searches' as const, label: t('buyerDashboard.mobile.tab.searches') },
         { id: 'activity' as const, label: t('buyerDashboard.mobile.tab.activity') },
@@ -297,6 +299,12 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
               {t('buyerDashboard.viewAllArrow')}
             </span>
           </button>
+        )}
+
+        {activeTab === 'deals' && (
+          <div role="tabpanel" id="mbd-panel-deals" aria-labelledby="mbd-tab-deals" className="space-y-4">
+            <MyDealsList vehicles={vehicles} onSelectVehicle={onSelectVehicle} />
+          </div>
         )}
 
         {activeTab === 'overview' && (

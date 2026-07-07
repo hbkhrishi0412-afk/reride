@@ -3,7 +3,6 @@ import type { Vehicle, VehicleCategory } from '../types.js';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
 import { isVehicle, isApiResponse } from '../types.js';
 import { isDevelopmentEnvironment } from '../utils/environment.js';
-import { isCapacitorNative } from '../utils/apiConfig.js';
 
 // Fallback mock vehicles to prevent loading issues
 const FALLBACK_VEHICLES: Vehicle[] = [
@@ -301,19 +300,8 @@ const deleteVehicleApi = async (
 
 
 // --- Environment Detection ---
-// Use local storage in development, API in production (Capacitor WebView uses localhost — not dev)
-const isDevelopment = (): boolean => {
-  try {
-    if (isCapacitorNative()) return false;
-    return isDevelopmentEnvironment() ||
-           window.location.hostname === 'localhost' ||
-           window.location.hostname === '127.0.0.1' ||
-           window.location.hostname.includes('localhost') ||
-           window.location.protocol === 'file:';
-  } catch {
-    return false;
-  }
-};
+// Browser mutations go through the API (Vite proxies /api in dev) so auth and plan limits apply.
+const preferApiForMutations = (): boolean => typeof window !== 'undefined';
 
 // --- Exported Environment-Aware Service Functions ---
 
@@ -326,7 +314,7 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('❌ getVehicles: Critical error:', errorMessage);
 
-    if (!isDevelopment()) {
+    if (!isDevelopmentEnvironment()) {
       console.error('💡 Production error - returning empty array. Check API and database configuration.');
       return [];
     }
@@ -337,24 +325,23 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
 };
 export const addVehicle = async (vehicleData: Vehicle): Promise<Vehicle> => {
   console.log('🔧 vehicleService.addVehicle called');
-  console.log('📍 Environment - isDevelopment:', isDevelopment());
   console.log('📦 Vehicle data received:', vehicleData);
 
-  if (!isDevelopment()) {
+  if (preferApiForMutations()) {
     console.log('🌐 Attempting API call to /api/vehicles');
     const result = await addVehicleApi(vehicleData);
     console.log('✅ API call successful:', result);
     return result;
   }
 
-  console.log('💻 Development mode - using local storage');
+  console.log('💻 Non-browser runtime — using local storage');
   const result = await addVehicleLocal(vehicleData);
   console.log('✅ Local storage save successful:', result);
   return result;
 };
 
 export const updateVehicle = async (vehicleData: Vehicle): Promise<Vehicle> => {
-  if (!isDevelopment()) {
+  if (preferApiForMutations()) {
     return await updateVehicleApi(vehicleData);
   }
   return await updateVehicleLocal(vehicleData);
@@ -364,7 +351,7 @@ export const deleteVehicle = async (
   vehicleId: number,
   databaseId?: string,
 ): Promise<{ success: boolean, id: number }> => {
-  if (!isDevelopment()) {
+  if (preferApiForMutations()) {
     return await deleteVehicleApi(vehicleId, databaseId);
   }
   return await deleteVehicleLocal(vehicleId);

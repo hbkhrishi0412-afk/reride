@@ -20,7 +20,6 @@ import { getVehicleListingUrl } from '../utils/whatsappShare.js';
 import { buildSellerWhatsAppUrl, getSellerCallPhone } from '../utils/sellerContact.js';
 import { trackPhoneView } from '../services/listingService.js';
 import { telHrefFromRawPhone } from '../utils/numberUtils.js';
-import TestDriveModal from './TestDriveModal.js';
 import { ListingStockBadge } from './ListingStockBadge.js';
 import { ListingTrustStatusBar } from './ListingTrustStatusBar.js';
 import VehicleDetailTrustStrip from './VehicleDetailTrustStrip.js';
@@ -53,7 +52,6 @@ interface VehicleDetailProps {
   users: User[];
   onViewSellerProfile: (sellerEmail: string) => void;
   onStartChat: (vehicle: Vehicle) => void;
-  onRequestTestDrive?: (vehicle: Vehicle, details: { date: string; time: string }) => void | Promise<void>;
   recommendations: Vehicle[];
   onSelectVehicle: (vehicle: Vehicle) => void;
   updateVehicle?: (id: number, updates: Partial<Vehicle>, options?: { successMessage?: string; skipToast?: boolean }) => Promise<void>;
@@ -259,7 +257,7 @@ const CertifiedInspectionReport: React.FC<{ report: CertifiedInspection }> = ({ 
 };
 
 
-export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: onBackToHome, comparisonList, onToggleCompare, onAddSellerRating, wishlist, onToggleWishlist, currentUser, onFlagContent, users, onViewSellerProfile, onStartChat, onRequestTestDrive, recommendations, onSelectVehicle, updateVehicle: updateVehicleProp }) => {
+export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: onBackToHome, comparisonList, onToggleCompare, onAddSellerRating, wishlist, onToggleWishlist, currentUser, onFlagContent, users, onViewSellerProfile, onStartChat, recommendations, onSelectVehicle, updateVehicle: updateVehicleProp }) => {
   const { t } = useTranslation();
 
   // Get updateVehicle from context (hook must be called unconditionally)
@@ -345,7 +343,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState<boolean>(false);
   const [showEMICalculator, setShowEMICalculator] = useState<boolean>(false);
   const [vehicleDealLead, setVehicleDealLead] = useState<DealLead | null>(null);
-  const [showTestDriveModal, setShowTestDriveModal] = useState(false);
   const ratingSuccessTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emiCalculatorRef = useRef<HTMLDivElement>(null);
   const scrollToEmiOnShowRef = useRef(false);
@@ -359,7 +356,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     setShowEMICalculator(false);
     scrollToEmiOnShowRef.current = false;
     setVehicleDealLead(null);
-    setShowTestDriveModal(false);
     setActiveMediaTab(vehicle.videoUrl ? 'video' : 'images');
     scrollAppToTop();
     requestAnimationFrame(() => scrollAppToTop());
@@ -1757,15 +1753,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             </div>
                           ) : null}
                           {/* Tertiary action */}
-                          {onRequestTestDrive && listingAvailable ? (
-                            <button
-                              type="button"
-                              onClick={() => setShowTestDriveModal(true)}
-                              className="w-full text-purple-700 font-semibold py-1.5 text-sm hover:underline"
-                            >
-                              {t('vehicle.detail.bookTestDrive', { defaultValue: 'Book test drive' })}
-                            </button>
-                          ) : null}
                         </div>
 
                       </div>
@@ -1808,15 +1795,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
           </div>
       </div>
 
-      {showTestDriveModal && onRequestTestDrive ? (
-        <TestDriveModal
-          onClose={() => setShowTestDriveModal(false)}
-          onSubmit={(details) => {
-            void onRequestTestDrive(safeVehicle, details);
-            setShowTestDriveModal(false);
-          }}
-        />
-      ) : null}
     </>
   );
 };

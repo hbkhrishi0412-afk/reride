@@ -11,11 +11,6 @@ const FAQPage: React.FC<FAQPageProps> = ({ faqItems }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [openItem, setOpenItem] = useState<number | null>(null);
 
-  // Debug: Log FAQs on mount
-  React.useEffect(() => {
-    console.log('📋 FAQPage - Received FAQs:', faqItems?.length || 0, faqItems);
-  }, [faqItems]);
-
   const filteredAndGroupedFAQs = useMemo(() => {
     const filtered = faqItems.filter(
       (item) =>
@@ -44,7 +39,10 @@ const FAQPage: React.FC<FAQPageProps> = ({ faqItems }) => {
           Frequently Asked Questions
         </h1>
         <p className="mt-4 text-lg text-brand-gray-600 dark:text-reride-text">
-          Find answers to common questions about buying and selling on ReRide.
+          {t('faq.page.subtitle', {
+            defaultValue:
+              'Answers about deals, RC transfer, buying, selling, and safety — aligned with how ReRide actually works.',
+          })}
         </p>
       </div>
 

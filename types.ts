@@ -554,6 +554,11 @@ export enum View {
   FAQ = 'FAQ',
   PRIVACY_POLICY = 'PRIVACY_POLICY',
   TERMS_OF_SERVICE = 'TERMS_OF_SERVICE',
+  REFUND_POLICY = 'REFUND_POLICY',
+  COMPLAINT_RESOLUTION = 'COMPLAINT_RESOLUTION',
+  FRAUD_POLICY = 'FRAUD_POLICY',
+  COOKIE_POLICY = 'COOKIE_POLICY',
+  HELP_CENTER = 'HELP_CENTER',
   BUYER_DASHBOARD = 'BUYER_DASHBOARD',
   CITY_LANDING = 'CITY_LANDING',
   SELL_CAR = 'SELL_CAR',
@@ -622,10 +627,16 @@ export interface Notification {
   targetId: string | number;
   /** Vehicle ID when targetType is vehicle or price_drop */
   vehicleId?: number;
-  targetType: 'vehicle' | 'conversation' | 'price_drop' | 'insurance_expiry' | 'general_admin' | 'service_request';
+  targetType: 'vehicle' | 'conversation' | 'price_drop' | 'insurance_expiry' | 'general_admin' | 'service_request' | 'deal';
   type?: string;
   isRead: boolean;
   timestamp: string; // ISO String
+  /** Deal pipeline: RR-LD-xxx lead id */
+  dealLeadId?: string;
+  /** Deal notification action (e.g. seller Accept Chat, admin view complaint) */
+  dealAction?: 'accept_chat' | 'open_deal' | 'view_complaint' | 'view_assistance';
+  /** Linked conversation for deal / chat notifications */
+  conversationId?: string;
 }
 
 /** Service provider / workshop (used by service dashboards and APIs) */
@@ -1037,6 +1048,510 @@ export const isUserWithPassword = (user: any): user is User & { password: string
 export const isUserWithoutPassword = (user: any): user is Omit<User, 'password'> => {
   return isUser(user) && user.password === undefined;
 };
+
+// ============================================
+// DEAL PIPELINE (RR-LD-xxx leads + timeline)
+// ============================================
+
+export type DealChatStatus = 'pending' | 'accepted' | 'declined';
+
+export type DealStage =
+  | 'lead_created'
+  | 'chat_accepted'
+  | 'test_drive_scheduled'
+  | 'test_drive_completed'
+  | 'offer_made'
+  | 'offer_accepted'
+  | 'inspection_requested'
+  | 'inspection_completed'
+  | 'token_uploaded'
+  | 'token_confirmed'
+  | 'delivery_pending'
+  | 'delivery_completed'
+  | 'documents_pending'
+  | 'documents_completed'
+  | 'rc_pending'
+  | 'rc_completed'
+  | 'deal_completed';
+
+export type DealLeadStatus = 'active' | 'completed' | 'cancelled';
+
+export interface DealOfferRecord {
+  id: string;
+  amount: number;
+  offeredBy: 'buyer' | 'seller';
+  status: 'pending' | 'accepted' | 'rejected' | 'countered';
+  parentOfferId?: string;
+  createdAt: string;
+}
+
+export interface DealLeadMetadata {
+  testDrive?: { date: string; time: string; status: 'pending' | 'confirmed' | 'completed' };
+  offers?: DealOfferRecord[];
+  currentOfferId?: string;
+  acceptedOfferAmount?: number;
+  token?: { receiptUrl?: string; amount?: number; uploadedAt?: string; confirmedAt?: string };
+  delivery?: { buyerConfirmedAt?: string; sellerConfirmedAt?: string };
+  documents?: { saleAgreementUrl?: string; deliveryNoteUrl?: string; buyerUploadedAt?: string; sellerUploadedAt?: string };
+  rc?: { transferDocUrl?: string; sellerUploadedAt?: string; buyerConfirmedAt?: string };
+  inspection?: {
+    requestedAt?: string;
+    reportUrl?: string;
+    completedAt?: string;
+    mechanicName?: string;
+    bookingId?: string;
+    scheduledDate?: string;
+    scheduledTime?: string;
+    address?: string;
+  };
+  assistancePackage?: string;
+  assistancePayment?: {
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+    amount?: number;
+    paidAt?: string;
+  };
+  assistanceFulfillment?: AssistanceFulfillment;
+  /** Free-form survey interests (RC, insurance, etc.) */
+  surveyServicesInterested?: string[];
+  vehicleName?: string;
+}
+
+export type AssistanceFulfillmentStatus =
+  | 'requested'
+  | 'assigned'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
+
+export type AssistanceRequestSource = 'purchase' | 'survey';
+
+export interface AssistanceFulfillment {
+  status: AssistanceFulfillmentStatus;
+  source: AssistanceRequestSource;
+  requestedAt: string;
+  requestedBy?: string;
+  assignedAdminEmail?: string;
+  completedAt?: string;
+  notes?: string;
+  needsInspectionBooking?: boolean;
+  needsRcAssistance?: boolean;
+}
+
+export interface DealTimelineEvent {
+  id: string;
+  leadId: string;
+  stage: DealStage | string;
+  eventType: string;
+  actorEmail?: string;
+  label?: string;
+  payload?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export type DealKanbanStatus =
+  | 'lead_created'
+  | 'buyer_contacted'
+  | 'chat_started'
+  | 'offer_sent'
+  | 'negotiation'
+  | 'inspection'
+  | 'payment_pending'
+  | 'vehicle_delivered'
+  | 'rc_transfer'
+  | 'completed'
+  | 'cancelled';
+
+export const DEAL_KANBAN_COLUMNS: { status: DealKanbanStatus; label: string; color: string }[] = [
+  { status: 'lead_created', label: 'Lead Created', color: 'bg-slate-100 text-slate-700' },
+  { status: 'buyer_contacted', label: 'Buyer Contacted', color: 'bg-blue-100 text-blue-800' },
+  { status: 'chat_started', label: 'Chat Started', color: 'bg-indigo-100 text-indigo-800' },
+  { status: 'offer_sent', label: 'Offer Sent', color: 'bg-violet-100 text-violet-800' },
+  { status: 'negotiation', label: 'Negotiation', color: 'bg-purple-100 text-purple-800' },
+  { status: 'inspection', label: 'Inspection', color: 'bg-cyan-100 text-cyan-800' },
+  { status: 'payment_pending', label: 'Payment Pending', color: 'bg-amber-100 text-amber-800' },
+  { status: 'vehicle_delivered', label: 'Vehicle Delivered', color: 'bg-emerald-100 text-emerald-800' },
+  { status: 'rc_transfer', label: 'RC Transfer', color: 'bg-teal-100 text-teal-800' },
+  { status: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800' },
+  { status: 'cancelled', label: 'Cancelled', color: 'bg-red-100 text-red-800' },
+];
+
+export interface DealDocumentRecord {
+  id: string;
+  leadId: string;
+  docType: 'token_receipt' | 'sale_agreement' | 'delivery_note' | 'rc_transfer' | 'inspection_report';
+  url: string;
+  uploadedBy?: string;
+  createdAt: string;
+}
+
+export interface DealLead {
+  id: string;
+  vehicleId: string;
+  sellerEmail: string;
+  buyerEmail: string;
+  buyerName?: string;
+  conversationId?: string;
+  chatStatus: DealChatStatus;
+  currentStage: DealStage;
+  status: DealLeadStatus;
+  metadata: DealLeadMetadata;
+  trustDealId?: string;
+  createdAt: string;
+  updatedAt: string;
+  chatAcceptedAt?: string;
+  completedAt?: string;
+  timeline?: DealTimelineEvent[];
+  vehicleName?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  buyerDisplayName?: string;
+  sellerDisplayName?: string;
+  kanbanStatus?: DealKanbanStatus;
+  assignedAdminEmail?: string;
+  sellerNotes?: string;
+  internalNotes?: string;
+  offers?: DealOfferRecord[];
+  documents?: DealDocumentRecord[];
+}
+
+export interface DealDetail extends DealLead {
+  vehiclePrice?: number;
+  vehicleYear?: number;
+}
+
+export interface AdminKanbanBoard {
+  columns: Record<DealKanbanStatus, DealLead[]>;
+  totalCount: number;
+}
+
+export type DealCalendarEventType = 'test_drive' | 'token_followup' | 'delivery' | 'rc_deadline';
+
+export type DealCalendarEventStatus = 'upcoming' | 'today' | 'overdue' | 'completed';
+
+export interface DealCalendarEvent {
+  id: string;
+  dealId: string;
+  type: DealCalendarEventType;
+  title: string;
+  subtitle: string;
+  date: string;
+  time?: string;
+  status: DealCalendarEventStatus;
+}
+
+export interface SellerDealCalendar {
+  events: DealCalendarEvent[];
+  thisWeekCount: number;
+  overdueCount: number;
+}
+
+export interface RcQueueItem extends DealLead {
+  rcDocUrl?: string;
+  daysInQueue: number;
+  rcStatus: 'pending_upload' | 'submitted' | 'buyer_confirmed' | 'completed';
+  hasPaidRcAssistance?: boolean;
+}
+
+export interface AssistanceQueueItem extends DealLead {
+  packageId: string;
+  packageLabel: string;
+  fulfillmentStatus: AssistanceFulfillmentStatus;
+  source: AssistanceRequestSource;
+  paidAmount?: number;
+  paidAt?: string;
+  daysOpen: number;
+  needsInspectionBooking?: boolean;
+  needsRcAssistance?: boolean;
+}
+
+export type FraudSignalSeverity = 'high' | 'medium' | 'low';
+export type FraudSignalType =
+  | 'content_report'
+  | 'cancelled_deal'
+  | 'repeat_buyer'
+  | 'stale_chat'
+  | 'low_trust_seller';
+
+export interface FraudSignal {
+  id: string;
+  severity: FraudSignalSeverity;
+  type: FraudSignalType;
+  title: string;
+  description: string;
+  targetType?: string;
+  targetId?: string;
+  targetEmail?: string;
+  dealId?: string;
+  createdAt: string;
+}
+
+export interface FraudDashboard {
+  signals: FraudSignal[];
+  stats: {
+    highRisk: number;
+    mediumRisk: number;
+    pendingReports: number;
+    cancelledDeals: number;
+    rcOverdue: number;
+  };
+}
+
+export type DealComplaintCategory =
+  | 'payment_issue'
+  | 'vehicle_mismatch'
+  | 'seller_behavior'
+  | 'buyer_behavior'
+  | 'documentation'
+  | 'other';
+
+export type DealComplaintStatus = 'open' | 'investigating' | 'resolved' | 'dismissed';
+
+export interface DealComplaint {
+  id: string;
+  leadId: string;
+  reporterEmail: string;
+  category: DealComplaintCategory;
+  message: string;
+  status: DealComplaintStatus;
+  adminNotes?: string;
+  resolvedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+  dealVehicleName?: string;
+  buyerEmail?: string;
+  sellerEmail?: string;
+}
+
+export type DealInspectionBookingStatus = 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
+
+export interface DealInspectionBooking {
+  id: string;
+  leadId: string;
+  bookedBy: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  address: string;
+  notes?: string;
+  mechanicName?: string;
+  status: DealInspectionBookingStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DealRevenueDashboard {
+  stats: {
+    totalLeads: number;
+    activeDeals: number;
+    completedDeals: number;
+    cancelledDeals: number;
+    conversionRate: number;
+    assistanceRevenue: number;
+    assistancePurchases: number;
+    avgDealValue: number;
+  };
+  funnel: Array<{ stage: string; label: string; count: number }>;
+  packageBreakdown: Array<{ packageId: string; label: string; count: number; revenue: number }>;
+  recentPayments: Array<{
+    leadId: string;
+    packageId: string;
+    amount: number;
+    paidAt: string;
+    buyerEmail: string;
+    sellerEmail: string;
+  }>;
+}
+
+export type ComplaintCaseCategory = 'listing' | 'user' | 'payment' | 'deal' | 'other';
+export type ComplaintCaseStatus = 'open' | 'investigating' | 'resolved' | 'escalated';
+
+export interface ComplaintCase {
+  id: string;
+  reporterEmail: string;
+  reporterName?: string;
+  subject: string;
+  message: string;
+  category: ComplaintCaseCategory;
+  dealLeadId?: string;
+  vehicleId?: string;
+  status: ComplaintCaseStatus;
+  resolution?: string;
+  adminNotes?: string;
+  resolvedBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+  resolvedAt?: string;
+}
+
+export const COMPLAINT_CASE_CATEGORIES: { value: ComplaintCaseCategory; label: string }[] = [
+  { value: 'listing', label: 'Listing / fraud' },
+  { value: 'user', label: 'User behavior' },
+  { value: 'payment', label: 'Payment issue' },
+  { value: 'deal', label: 'Deal dispute' },
+  { value: 'other', label: 'Other' },
+];
+
+export const DEAL_COMPLAINT_CATEGORIES: { value: DealComplaintCategory; label: string }[] = [
+  { value: 'payment_issue', label: 'Payment issue' },
+  { value: 'vehicle_mismatch', label: 'Vehicle mismatch' },
+  { value: 'seller_behavior', label: 'Seller behavior' },
+  { value: 'buyer_behavior', label: 'Buyer behavior' },
+  { value: 'documentation', label: 'Documentation' },
+  { value: 'other', label: 'Other' },
+];
+
+export type DealAssistancePackage = {
+  id: string;
+  name: string;
+  price: number;
+  description: string;
+};
+
+export const DEAL_ASSISTANCE_PACKAGES: DealAssistancePackage[] = [
+  { id: 'doc_review', name: 'Document Review', price: 299, description: 'Expert review of sale documents' },
+  { id: 'inspection_coord', name: 'Inspection Coordination', price: 499, description: 'We coordinate a mechanic visit' },
+  { id: 'rc_transfer', name: 'RC Transfer Assistance', price: 699, description: 'End-to-end RC transfer help' },
+  { id: 'complete_deal', name: 'Complete Deal Assistance', price: 999, description: 'Full deal support from offer to RC' },
+];
+
+export const ASSISTANCE_FULFILLMENT_STATUSES: { value: AssistanceFulfillmentStatus; label: string }[] = [
+  { value: 'requested', label: 'Requested' },
+  { value: 'assigned', label: 'Assigned' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+export function dealAssistancePackageLabel(packageId: string): string {
+  return DEAL_ASSISTANCE_PACKAGES.find((p) => p.id === packageId)?.name
+    || packageId.replace(/_/g, ' ');
+}
+
+export function assistancePackageNeedsInspection(packageId: string): boolean {
+  return packageId === 'inspection_coord' || packageId === 'complete_deal';
+}
+
+export function assistancePackageNeedsRc(packageId: string): boolean {
+  return packageId === 'rc_transfer' || packageId === 'complete_deal';
+}
+
+/** Full pipeline order — used for progress bars, stage validation, and timeline indexing. */
+export const DEAL_PIPELINE_STAGES: readonly DealStage[] = [
+  'lead_created',
+  'chat_accepted',
+  'test_drive_scheduled',
+  'test_drive_completed',
+  'offer_made',
+  'offer_accepted',
+  'inspection_requested',
+  'inspection_completed',
+  'token_uploaded',
+  'token_confirmed',
+  'delivery_pending',
+  'delivery_completed',
+  'documents_pending',
+  'documents_completed',
+  'rc_pending',
+  'rc_completed',
+  'deal_completed',
+] as const;
+
+export function pipelineStageIndex(stage: DealStage | string): number {
+  return DEAL_PIPELINE_STAGES.indexOf(stage as DealStage);
+}
+
+export function pipelineStageProgressPercent(stage: DealStage | string): number {
+  const idx = pipelineStageIndex(stage);
+  if (idx < 0) return 10;
+  return Math.round(((idx + 1) / DEAL_PIPELINE_STAGES.length) * 100);
+}
+
+export const DEAL_TIMELINE_STAGES: { stage: DealStage; label: string }[] = [
+  { stage: 'lead_created', label: 'Lead Created' },
+  { stage: 'chat_accepted', label: 'Chat Started' },
+  { stage: 'test_drive_scheduled', label: 'Test Drive Scheduled' },
+  { stage: 'test_drive_completed', label: 'Test Drive Completed' },
+  { stage: 'offer_accepted', label: 'Offer Accepted' },
+  { stage: 'inspection_completed', label: 'Inspection Completed' },
+  { stage: 'token_confirmed', label: 'Token Confirmed' },
+  { stage: 'delivery_completed', label: 'Delivery Completed' },
+  { stage: 'documents_completed', label: 'Documents Completed' },
+  { stage: 'rc_completed', label: 'RC Completed' },
+  { stage: 'deal_completed', label: 'Deal Completed' },
+];
+
+export type SellerTaskType =
+  | 'accept_chat'
+  | 'respond_offer'
+  | 'confirm_test_drive'
+  | 'confirm_token'
+  | 'confirm_delivery';
+
+export interface SellerTask {
+  id: string;
+  dealId: string;
+  type: SellerTaskType;
+  priority: number;
+  title: string;
+  subtitle: string;
+  conversationId?: string;
+  payload?: Record<string, unknown>;
+  dueAt?: string;
+}
+
+export interface SellerCommandCenter {
+  tasks: SellerTask[];
+  activeDeals: DealLead[];
+  stats: {
+    activeDealCount: number;
+    pendingInterestCount: number;
+    tasksToday: number;
+    trustScore: number;
+    ratingAverage: number;
+    ratingCount: number;
+  };
+}
+
+export function dealStageLabel(stage: DealStage | string): string {
+  return DEAL_TIMELINE_STAGES.find((s) => s.stage === stage)?.label || String(stage).replace(/_/g, ' ');
+}
+
+export function dealKanbanLabel(status: DealKanbanStatus | string): string {
+  return DEAL_KANBAN_COLUMNS.find((c) => c.status === status)?.label || String(status).replace(/_/g, ' ');
+}
+
+export function deriveKanbanStatus(lead: Pick<DealLead, 'status' | 'currentStage' | 'chatStatus' | 'metadata'>): DealKanbanStatus {
+  if (lead.status === 'cancelled') return 'cancelled';
+  if (lead.status === 'completed' || lead.currentStage === 'deal_completed') return 'completed';
+  if (['rc_pending', 'rc_completed'].includes(lead.currentStage)) return 'rc_transfer';
+  if (['delivery_completed', 'documents_pending', 'documents_completed'].includes(lead.currentStage)) {
+    return 'vehicle_delivered';
+  }
+  if (['token_uploaded', 'token_confirmed', 'delivery_pending'].includes(lead.currentStage)) {
+    return 'payment_pending';
+  }
+  if (['inspection_requested', 'inspection_completed'].includes(lead.currentStage)) return 'inspection';
+  if (lead.currentStage === 'offer_accepted') return 'inspection';
+
+  const currentOffer = lead.metadata.offers?.find((o) => o.id === lead.metadata.currentOfferId);
+  // Keep "Negotiation" only when the current active offer is actively countered.
+  // Historical countered offers should not keep the lead stuck in Negotiation.
+  if (currentOffer?.status === 'countered') {
+    return 'negotiation';
+  }
+  if (
+    lead.currentStage === 'offer_made' ||
+    (currentOffer?.status === 'pending' && currentOffer.offeredBy === 'buyer')
+  ) {
+    return 'offer_sent';
+  }
+  if (['test_drive_scheduled', 'test_drive_completed', 'chat_accepted'].includes(lead.currentStage)) {
+    return 'chat_started';
+  }
+  if (lead.chatStatus === 'pending') return 'buyer_contacted';
+  return 'lead_created';
+}
 
 // Discriminated union for authentication states
 export type AuthState = 

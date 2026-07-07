@@ -42,7 +42,12 @@ export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-4">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Frequently Asked Questions</h1>
-        <p className="text-gray-600 text-sm">Find answers to common questions</p>
+        <p className="text-gray-600 text-sm">
+          {t('faq.page.subtitle', {
+            defaultValue:
+              'Answers about deals, RC transfer, buying, selling, and safety — aligned with how ReRide actually works.',
+          })}
+        </p>
       </div>
 
       {/* Search */}

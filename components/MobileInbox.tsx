@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Conversation, User, ChatMessage, Vehicle } from '../types';
+import type { Conversation, User, ChatMessage, Vehicle, DealLead } from '../types';
 import { findUserByParticipantId, resolveSellerPhoneFromProfileOrListing } from '../utils/chatContact';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 import { View as ViewEnum } from '../types';
@@ -16,6 +16,9 @@ import ReadReceiptIcon, { OfferMessage, TestDriveMessage } from './ReadReceiptIc
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { setHardwareBackHandler } from '../utils/hardwareBackRegistry';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
+import DealTimelinePanel from './DealTimelinePanel';
+import { DealStageChip } from './DealStageChip';
+import { getDealLead } from '../services/dealService';
 
 interface MobileInboxProps {
   conversations: Conversation[];
@@ -108,6 +111,8 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [dealLead, setDealLead] = useState<DealLead | null>(null);
+  const [dealPanelOpen, setDealPanelOpen] = useState(true);
   const voiceRecorder = useVoiceRecorder();
   const keyboardInset = useVisualViewportBottomInset();
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -229,6 +234,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
 
   const handleSendMessage = () => {
     if (!messageText.trim() || !selectedConv) return;
+    if (inboxRole === 'customer' && dealLead?.chatStatus === 'pending') return;
 
     clearTypingIdleTimer();
     signalTyping(false);
@@ -330,6 +336,19 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
 
   useEffect(() => {
     setThreadMenuOpen(false);
+    setDealLead(null);
+    if (!selectedConv?.id) return;
+    let cancelled = false;
+    void getDealLead({ conversationId: selectedConv.id })
+      .then((lead) => {
+        if (!cancelled) setDealLead(lead);
+      })
+      .catch(() => {
+        if (!cancelled) setDealLead(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedConv?.id]);
 
   useEffect(() => {
@@ -390,6 +409,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
     const counterpartInitial = counterpartName.charAt(0).toUpperCase() || '?';
     const otherPartyRole: 'customer' | 'seller' = inboxRole === 'seller' ? 'customer' : 'seller';
     const peerOnline = chatPeerOnlineByConversationId?.[String(selectedConv.id)];
+    const chatBlockedByDeal = inboxRole === 'customer' && dealLead?.chatStatus === 'pending';
 
     return (
       <div className="flex flex-col h-screen bg-[#E5E5EA]">
@@ -532,6 +552,46 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
           );
         })()}
 
+        {dealLead && currentUser ? (
+          <div className="shrink-0 border-b border-black/[0.06] bg-white">
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <DealStageChip lead={dealLead} />
+              <button
+                type="button"
+                onClick={() => setDealPanelOpen((o) => !o)}
+                className="text-xs font-semibold text-[#0084FF]"
+                aria-expanded={dealPanelOpen}
+              >
+                {dealPanelOpen
+                  ? t('deal.hideTimeline', { defaultValue: 'Hide deal' })
+                  : t('deal.showTimeline', { defaultValue: 'Show deal' })}
+              </button>
+            </div>
+            {inboxRole === 'customer' && dealLead.chatStatus === 'pending' ? (
+              <p className="mx-3 mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                {t('deal.awaitingSellerChat', {
+                  defaultValue:
+                    'Your tracked deal is active. The seller must accept chat before you can message — track progress below.',
+                })}
+              </p>
+            ) : null}
+            {dealPanelOpen ? (
+              <div className="px-2 pb-2 max-h-64 overflow-y-auto">
+                <DealTimelinePanel
+                  lead={dealLead}
+                  currentUser={currentUser}
+                  currentUserRole={inboxRole === 'seller' ? 'seller' : 'customer'}
+                  conversationId={selectedConv.id}
+                  onLeadUpdated={setDealLead}
+                  onSendPipelineMessage={(text, type, payload) =>
+                    onSendMessage(selectedConv.id, text, type, payload)
+                  }
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {/* Message thread — Messenger bubble colors */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 space-y-1">
           {visibleThreadMessages.length === 0 &&
@@ -581,9 +641,6 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                         msg={msg}
                         currentUserRole={viewerRole}
                         listingPrice={selectedConv.vehiclePrice}
-                        onRespond={(messageId, response, counterPrice) =>
-                          onOfferResponse(selectedConv.id, messageId, response, counterPrice)
-                        }
                       />
                     </div>
                   )}
@@ -696,13 +753,18 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
               {voiceRecorder.error}
             </p>
           )}
+          {chatBlockedByDeal && (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg mx-2 mb-2 px-2 py-1.5" role="status">
+              {t('deal.messagingBlocked', { defaultValue: 'Messaging unlocks when the seller accepts your chat request.' })}
+            </p>
+          )}
           <div className="flex items-end gap-1.5 pb-1">
             <button
               type="button"
               className="flex shrink-0 items-center justify-center w-10 h-10 rounded-full text-[#0084FF] active:bg-black/5 mb-0.5 disabled:opacity-40"
               aria-label="Send a photo"
               onClick={handlePickAttachment}
-              disabled={isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording || !currentUser?.email}
+              disabled={chatBlockedByDeal || isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording || !currentUser?.email}
             >
               <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
@@ -717,7 +779,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
               }`}
               aria-label={voiceRecorder.isRecording ? 'Stop recording and send' : 'Record voice message'}
               onClick={() => void handleVoiceTap()}
-              disabled={isUploadingPhoto || isUploadingVoice || !currentUser?.email}
+              disabled={chatBlockedByDeal || isUploadingPhoto || isUploadingVoice || !currentUser?.email}
             >
               <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
                 <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z" />
@@ -737,13 +799,15 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                   }
                 }}
                 placeholder={
-                  voiceRecorder.isRecording
+                  chatBlockedByDeal
+                    ? t('deal.waitingForSeller', { defaultValue: 'Waiting for seller…' })
+                    : voiceRecorder.isRecording
                     ? 'Recording… tap mic to send'
                     : isUploadingPhoto || isUploadingVoice
                       ? 'Uploading…'
                       : 'Message…'
                 }
-                disabled={isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
+                disabled={chatBlockedByDeal || isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
                 className="w-full bg-transparent text-[15px] text-gray-900 placeholder:text-gray-500 outline-none py-1.5 disabled:opacity-60"
                 autoComplete="off"
                 autoCorrect="on"
@@ -752,7 +816,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
             <button
               type="button"
               onClick={handleSendMessage}
-              disabled={!messageText.trim() || isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
+              disabled={chatBlockedByDeal || !messageText.trim() || isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
               className={`flex shrink-0 items-center justify-center w-10 h-10 rounded-full mb-0.5 transition-opacity ${
                 messageText.trim()
                   ? 'bg-[#0084FF] text-white shadow-md active:scale-95'

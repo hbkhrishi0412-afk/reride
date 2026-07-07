@@ -46,6 +46,13 @@ const storeTokens = (accessToken: string, refreshToken?: string) => {
   if (typeof window === 'undefined') {
     return;
   }
+  const trimmed = accessToken?.trim() || '';
+  if (!trimmed.startsWith('eyJ') || trimmed.split('.').length !== 3) {
+    console.warn(
+      '[ReRide] Server returned a non-JWT access token. Restart "npm run dev" (ensure port 3001 is free) and log in again.',
+    );
+    return;
+  }
   try {
     if (isCapacitorNative()) {
       void setNativeAccessToken(accessToken);
@@ -96,6 +103,24 @@ export const establishSessionFromOtpAuth = (payload: {
   user: User;
 }): void => {
   storeTokens(payload.accessToken, payload.refreshToken);
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(payload.user));
+    }
+  } catch {
+    /* ignore */
+  }
+};
+
+/** OAuth / backend sync may return app JWTs alongside the user profile. */
+export const establishSessionFromBackendAuth = (payload: {
+  accessToken?: string;
+  refreshToken?: string;
+  user: User;
+}): void => {
+  if (payload.accessToken) {
+    storeTokens(payload.accessToken, payload.refreshToken);
+  }
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(payload.user));
@@ -744,6 +769,48 @@ export const updateUser = async (userData: Partial<User> & { email: string }): P
   return await updateUserLocal(userData);
 };
 export const deleteUser = isDevelopment ? deleteUserLocal : deleteUserApi;
+
+/** Apply login API response: store JWTs and session user. */
+function applyLoginApiResult(
+  result: { success: boolean; user?: User; reason?: string; detectedRole?: string; accessToken?: string; refreshToken?: string },
+  credentials: { email?: string; password?: string; role?: string },
+): { success: boolean; user?: User; reason?: string; detectedRole?: string } {
+  if (!result.success) {
+    return {
+      success: result.success,
+      reason: result.reason,
+      detectedRole: result.detectedRole,
+    };
+  }
+
+  if (!result.user?.email || !result.user?.role) {
+    throw new Error('Invalid user data received from server');
+  }
+
+  if (credentials.role && !userRolesEqual(result.user.role, credentials.role)) {
+    return {
+      success: false,
+      reason: `User is not a registered ${credentials.role}.`,
+      detectedRole: result.user.role,
+    };
+  }
+
+  if (result.accessToken) {
+    storeTokens(result.accessToken, result.refreshToken);
+    localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
+    if (credentials.email && credentials.password) {
+      void bridgeSupabasePasswordSession(String(credentials.email), String(credentials.password));
+    }
+  }
+
+  return {
+    success: result.success,
+    user: result.user,
+    reason: result.reason,
+    detectedRole: result.detectedRole,
+  };
+}
+
 export const login = async (credentials: { email?: string; password?: string; role?: string; [key: string]: unknown }): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string }> => {
   // Validate required fields
   if (!credentials.email || String(credentials.email).trim() === '') {
@@ -762,43 +829,7 @@ export const login = async (credentials: { email?: string; password?: string; ro
         throw new Error('Invalid response from server');
       }
       
-      if (!result.success) {
-        return {
-          success: result.success,
-          reason: result.reason,
-          detectedRole: result.detectedRole,
-        };
-      }
-      
-      if (!result.user?.email || !result.user?.role) {
-        throw new Error('Invalid user data received from server');
-      }
-      
-      // Verify role matches requested role (case/alias-insensitive — DB may store "Customer", etc.)
-      if (credentials.role && !userRolesEqual(result.user.role, credentials.role)) {
-        return { 
-          success: false, 
-          reason: `User is not a registered ${credentials.role}.`,
-          detectedRole: result.user.role 
-        };
-      }
-      
-      // Store JWT tokens if provided
-      if (result.accessToken && result.refreshToken) {
-        storeTokens(result.accessToken, result.refreshToken);
-        localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
-        void bridgeSupabasePasswordSession(
-          String(credentials.email),
-          String(credentials.password),
-        );
-      }
-      
-      return {
-        success: result.success,
-        user: result.user,
-        reason: result.reason,
-        detectedRole: result.detectedRole
-      };
+      return applyLoginApiResult(result, credentials);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       // Clear stale caches on failure
@@ -811,15 +842,41 @@ export const login = async (credentials: { email?: string; password?: string; ro
       }
       return { success: false, reason: errorMessage || 'Login failed. Please try again.' };
     }
-  } else {
-    // Development — use local storage
-    const skipRoleCheck = !credentials.role;
-    const out = await loginLocal({ ...credentials, skipRoleCheck });
-    if (out.success) {
-      cleanupStaleSessionsAfterLocalAuth();
-    }
-    return out;
   }
+
+  // Development — prefer API login (issues JWTs for authenticated endpoints like /api/deals)
+  try {
+    const result = await authApi({ action: 'login', ...credentials });
+    if (result?.success && result.user?.email && result.user?.role) {
+      return applyLoginApiResult(result, credentials);
+    }
+  } catch {
+    // API unavailable or credentials not in dev mock store — fall back to localStorage demo auth
+  }
+
+  const skipRoleCheck = !credentials.role;
+  const out = await loginLocal({ ...credentials, skipRoleCheck });
+  if (out.success) {
+    cleanupStaleSessionsAfterLocalAuth();
+    // Local demo auth does not issue JWTs — retry API login so /api/deals and other authed routes work.
+    try {
+      const retry = await authApi({
+        action: 'login',
+        email: credentials.email,
+        password: credentials.password,
+        role: credentials.role,
+      });
+      if (retry?.success && retry.accessToken) {
+        storeTokens(retry.accessToken, retry.refreshToken);
+        if (retry.user) {
+          localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(retry.user));
+        }
+      }
+    } catch {
+      /* API still unavailable — user can browse UI but authed APIs need re-login */
+    }
+  }
+  return out;
 };
 export const register = async (credentials: { email?: string; password?: string; name?: string; mobile?: string; role?: string; [key: string]: unknown }): Promise<{ success: boolean, user?: User, reason?: string }> => {
   // Validate required fields
@@ -859,13 +916,24 @@ export const register = async (credentials: { email?: string; password?: string;
         reason: errorMessage || 'Registration failed. Please try again.',
       };
     }
-  } else {
-    const out = await registerLocal(credentials);
-    if (out.success) {
-      cleanupStaleSessionsAfterLocalAuth();
-    }
-    return out;
   }
+
+  try {
+    const result = await authApi({ action: 'register', ...credentials });
+    if (result?.success && result.user && result.accessToken) {
+      storeTokens(result.accessToken, result.refreshToken);
+      localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
+      return result;
+    }
+  } catch {
+    /* fall back to local demo register */
+  }
+
+  const out = await registerLocal(credentials);
+  if (out.success) {
+    cleanupStaleSessionsAfterLocalAuth();
+  }
+  return out;
 };
 
 export const logout = (): void => {

@@ -1,5 +1,5 @@
 import { LISTING_EXPIRY_DAYS, PLAN_DETAILS } from '../constants/plans.js';
-import type { SubscriptionPlan, Vehicle } from '../types.js';
+import type { PlanDetails, SubscriptionPlan, Vehicle } from '../types.js';
 
 export interface SellerPlanContext {
   subscriptionPlan?: SubscriptionPlan | string;
@@ -42,19 +42,40 @@ export function computeListingExpiresAtForSeller(seller: SellerPlanContext): str
   return expiryDate.toISOString();
 }
 
-export function getSellerPlanDetails(seller: SellerPlanContext) {
+export function planDetailsForSeller(
+  seller: SellerPlanContext,
+  override?: PlanDetails | null,
+): PlanDetails {
+  if (override) return override;
   const planKey = (seller.subscriptionPlan || 'free') as SubscriptionPlan;
   return PLAN_DETAILS[planKey] || PLAN_DETAILS.free;
+}
+
+/** @deprecated Use planDetailsForSeller — kept for existing imports. */
+export function getSellerPlanDetails(seller: SellerPlanContext) {
+  return planDetailsForSeller(seller);
 }
 
 export function countPublishedListings(vehicles: Vehicle[]): number {
   return vehicles.filter((v) => v && v.status === 'published').length;
 }
 
-export function validateListingRenewal(
+export function isListingLimitReached(
   seller: SellerPlanContext,
-  vehicle: Vehicle,
   sellerVehicles: Vehicle[],
+  planDetailsOverride?: PlanDetails | null,
+): boolean {
+  const planDetails = planDetailsForSeller(seller, planDetailsOverride);
+  if (planDetails.listingLimit === 'unlimited') return false;
+  const numericLimit = Number(planDetails.listingLimit) || 0;
+  return countPublishedListings(sellerVehicles) >= numericLimit;
+}
+
+function validatePublishSlot(
+  seller: SellerPlanContext,
+  sellerVehicles: Vehicle[],
+  planDetails: PlanDetails,
+  excludeVehicleId?: number,
 ): ListingRenewalValidation {
   if (isSellerPlanExpired(seller)) {
     return {
@@ -65,15 +86,15 @@ export function validateListingRenewal(
     };
   }
 
-  const planDetails = getSellerPlanDetails(seller);
   const listingLimit = planDetails.listingLimit;
-
   if (listingLimit !== 'unlimited') {
     const numericLimit = Number(listingLimit) || 0;
-    const activeAfterRenew =
-      sellerVehicles.filter((v) => v && v.status === 'published' && v.id !== vehicle.id).length + 1;
+    const publishedExcluding = sellerVehicles.filter(
+      (v) => v && v.status === 'published' && (excludeVehicleId == null || v.id !== excludeVehicleId),
+    ).length;
+    const activeAfterPublish = publishedExcluding + 1;
 
-    if (activeAfterRenew > numericLimit) {
+    if (activeAfterPublish > numericLimit) {
       return {
         allowed: false,
         reason: `Listing limit reached for your ${planDetails.name} plan. You can have up to ${listingLimit} active listing(s). Unpublish or sell another listing first.`,
@@ -85,6 +106,25 @@ export function validateListingRenewal(
   }
 
   return { allowed: true };
+}
+
+export function validateNewListingCreation(
+  seller: SellerPlanContext,
+  sellerVehicles: Vehicle[],
+  planDetailsOverride?: PlanDetails | null,
+): ListingRenewalValidation {
+  const planDetails = planDetailsForSeller(seller, planDetailsOverride);
+  return validatePublishSlot(seller, sellerVehicles, planDetails);
+}
+
+export function validateListingRenewal(
+  seller: SellerPlanContext,
+  vehicle: Vehicle,
+  sellerVehicles: Vehicle[],
+  planDetailsOverride?: PlanDetails | null,
+): ListingRenewalValidation {
+  const planDetails = planDetailsForSeller(seller, planDetailsOverride);
+  return validatePublishSlot(seller, sellerVehicles, planDetails, vehicle.id);
 }
 
 export function buildListingRenewalUpdates(

@@ -166,10 +166,10 @@ export const authenticateRequestDual = async (req: VercelRequest): Promise<AuthR
     if (!email) {
       return { isValid: false, error: 'Invalid Supabase token' };
     }
-    const meta = (sb.user?.app_metadata ?? sb.user?.user_metadata) as Record<string, unknown> | undefined;
-    const rawRole = typeof meta?.role === 'string' ? meta.role.toLowerCase() : 'customer';
-    const role =
-      rawRole === 'seller' || rawRole === 'admin' ? rawRole : 'customer';
+    const meta = sb.user?.app_metadata as Record<string, unknown> | undefined;
+    const appMetaRole = typeof meta?.role === 'string' ? meta.role : undefined;
+    const { resolveAuthRoleFromEmail } = await import('../utils/resolveAuthRole.js');
+    const role = await resolveAuthRoleFromEmail(email, appMetaRole);
     return {
       isValid: true,
       user: {

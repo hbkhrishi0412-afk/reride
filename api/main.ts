@@ -12,6 +12,13 @@ import {
   isSellerPlanExpired,
   validateListingRenewal,
 } from '../utils/listingPlanRules.js';
+import {
+  listingLimitGuardResponse,
+  invalidateSellerPlanCache,
+  resolveSellerPlanDetails,
+  validateSellerCanCreateListing,
+  validateSellerCanPublishListing,
+} from '../server/sellerPlanLimits.js';
 import type { User as UserType, Vehicle as VehicleType, VerificationStatus } from '../types.js';
 import { VehicleCategory } from '../vehicle-category.js';
 // Supabase services
@@ -328,10 +335,10 @@ const authenticateRequestDual = async (req: VercelRequest): Promise<AuthResult> 
     if (!email) {
       return { isValid: false, error: 'Invalid Supabase token' };
     }
-    const meta = (sb.user?.app_metadata ?? sb.user?.user_metadata) as Record<string, unknown> | undefined;
-    const rawRole = typeof meta?.role === 'string' ? meta.role.toLowerCase() : 'customer';
-    const role: 'customer' | 'seller' | 'admin' =
-      rawRole === 'seller' || rawRole === 'admin' ? rawRole : 'customer';
+    const meta = sb.user?.app_metadata as Record<string, unknown> | undefined;
+    const appMetaRole = typeof meta?.role === 'string' ? meta.role : undefined;
+    const { resolveAuthRoleFromEmail } = await import('../utils/resolveAuthRole.js');
+    const role = await resolveAuthRoleFromEmail(email, appMetaRole);
     return {
       isValid: true,
       user: {
@@ -892,6 +899,12 @@ async function mainHandler(
     } else if (pathname.includes('/vehicle-trust') || pathname.endsWith('/vehicle-trust')) {
       const { handleVehicleTrust } = await import('../server/handlers/vehicle-trust.js');
       return await handleVehicleTrust(req, res, handlerOptions);
+    } else if (pathname.includes('/deals') || pathname.endsWith('/deals')) {
+      const { handleDeals } = await import('../server/handlers/deals.js');
+      return await handleDeals(req, res, handlerOptions);
+    } else if (pathname.includes('/complaints') || pathname.endsWith('/complaints')) {
+      const { handleComplaints } = await import('../server/handlers/complaints.js');
+      return await handleComplaints(req, res, handlerOptions);
     } else     if (pathname.includes('/vehicle-data') || pathname.endsWith('/vehicle-data')) {
       try {
         return await handleVehicleData(req, res, handlerOptions);
@@ -1141,6 +1154,13 @@ function mergeQueryStringFromRequestUrl(req: VercelRequest): void {
 }
 
 function errorToPublicMessage(error: unknown): string {
+  const isDev =
+    process.env.NODE_ENV === 'development' ||
+    process.env.VERCEL_ENV === 'preview' ||
+    process.env.VERCEL_ENV === 'development';
+  if (!isDev) {
+    return 'An unexpected server error occurred.';
+  }
   if (error instanceof Error) {
     const m = error.message;
     if (m && m !== '[object Object]') return m;
@@ -4661,11 +4681,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           });
         });
         
-        // For each seller, apply plan limit
-        sellerToPublished.forEach((publishedVehicles, email) => {
+        // For each seller, apply plan limit (uses DB plan overrides when Supabase is enabled)
+        for (const [email, publishedVehicles] of sellerToPublished.entries()) {
           const seller = sellerMap.get(email);
-          const planKey = (seller?.subscriptionPlan || 'free') as keyof typeof PLAN_DETAILS;
-          const planDetails = PLAN_DETAILS[planKey] || PLAN_DETAILS.free;
+          const planDetails = seller
+            ? await resolveSellerPlanDetails(seller, USE_SUPABASE)
+            : PLAN_DETAILS.free;
           const limit = planDetails.listingLimit;
           if (limit === 'unlimited') {
             return;
@@ -4683,7 +4704,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
               }
             });
           }
-        });
+        }
       } catch (limitErr) {
         console.warn('⚠️ Error applying plan listing limits:', limitErr);
       }
@@ -4843,22 +4864,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             expiredOn: seller.planExpiryDate
           });
         }
-        // Determine listing limit for current plan
-        const planKey = (seller.subscriptionPlan || 'free') as keyof typeof PLAN_DETAILS;
-        const planDetails = PLAN_DETAILS[planKey] || PLAN_DETAILS.free;
-        const listingLimit = planDetails.listingLimit;
-        if (listingLimit !== 'unlimited') {
-          const sellerVehicles = await vehicleService.findBySellerEmail(normalizedEmail);
-          const currentActiveCount = sellerVehicles.filter(v => v.status === 'published').length;
-          if (currentActiveCount >= (Number(listingLimit) || 0)) {
-            return res.status(403).json({
-              success: false,
-              reason: `Listing limit reached for your ${planDetails.name} plan. You can have up to ${listingLimit} active listing(s).`,
-              limitReached: true,
-              activeListings: currentActiveCount,
-              limit: listingLimit
-            });
-          }
+        // Determine listing limit for current plan (includes admin DB overrides)
+        const sellerVehicles = await vehicleService.findBySellerEmail(normalizedEmail);
+        const validation = await validateSellerCanCreateListing(seller, sellerVehicles, USE_SUPABASE);
+        if (!validation.allowed) {
+          return res.status(403).json(listingLimitGuardResponse(validation));
         }
       } catch (guardError) {
         console.error('❌ Error validating plan/limits before vehicle creation:', guardError);
@@ -4894,17 +4904,14 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         }
 
         const sellerVehicles = await vehicleService.findBySellerEmail(normalizedRequestSellerEmail);
-        const validation = validateListingRenewal(seller, vehicle, sellerVehicles);
+        const validation = await validateSellerCanPublishListing(
+          seller,
+          vehicle,
+          sellerVehicles,
+          USE_SUPABASE,
+        );
         if (!validation.allowed) {
-          return res.status(403).json({
-            success: false,
-            reason: validation.reason,
-            planExpired: validation.planExpired,
-            limitReached: validation.limitReached,
-            activeListings: validation.activeListings,
-            limit: validation.limit,
-            expiredOn: validation.expiredOn,
-          });
+          return res.status(403).json(listingLimitGuardResponse(validation));
         }
 
         Object.assign(updates, buildListingRenewalUpdates(seller, vehicle));
@@ -5276,6 +5283,22 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             });
           }
           
+          const seller = await userService.findByEmail(normalizedVehicleSellerEmail);
+          if (!seller) {
+            return res.status(404).json({ success: false, reason: 'Seller not found' });
+          }
+
+          const sellerVehicles = await vehicleService.findBySellerEmail(normalizedVehicleSellerEmail);
+          const publishValidation = await validateSellerCanPublishListing(
+            seller,
+            vehicle,
+            sellerVehicles,
+            USE_SUPABASE,
+          );
+          if (!publishValidation.allowed) {
+            return res.status(403).json(listingLimitGuardResponse(publishValidation));
+          }
+
           const updatedVehicle = await vehicleService.update(mutation.primaryKey, {
             status: 'published',
             listingStatus: 'active',
@@ -5575,6 +5598,24 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         const validStatuses = new Set(['published', 'unpublished', 'sold']);
         if (typeof sanitizedUpdate.status !== 'string' || !validStatuses.has(sanitizedUpdate.status)) {
           delete sanitizedUpdate.status;
+        }
+      }
+
+      const nextStatus = sanitizedUpdate.status as string | undefined;
+      if (nextStatus === 'published' && existingVehicle.status !== 'published' && normalizedVehicleSellerEmail) {
+        const seller = await userService.findByEmail(normalizedVehicleSellerEmail);
+        if (!seller) {
+          return res.status(404).json({ success: false, reason: 'Seller not found' });
+        }
+        const sellerVehicles = await vehicleService.findBySellerEmail(normalizedVehicleSellerEmail);
+        const publishValidation = await validateSellerCanPublishListing(
+          seller,
+          existingVehicle,
+          sellerVehicles,
+          USE_SUPABASE,
+        );
+        if (!publishValidation.allowed) {
+          return res.status(403).json(listingLimitGuardResponse(publishValidation));
         }
       }
 
@@ -8292,11 +8333,12 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
         const planLowerCandidate = planStr.toLowerCase();
         const normalizedPlanCandidate = planLowerCandidate === 'basic' ? 'free' : planLowerCandidate;
         const isBoostPlan = planLowerCandidate.startsWith('boost');
+        const isDealAssistPlan = planLowerCandidate.startsWith('deal_assist');
         // Only allow supported subscription tiers to land in the user row.
         const ALLOWED_SUBSCRIPTION_PLANS = new Set(['free', 'pro', 'premium']);
         const isKnownPlan = ALLOWED_SUBSCRIPTION_PLANS.has(normalizedPlanCandidate);
         try {
-          const existingUser = (!isBoostPlan && isKnownPlan)
+          const existingUser = (!isBoostPlan && !isDealAssistPlan && isKnownPlan)
             ? await userService.findByEmail(String(sellerEmail))
             : null;
           if (existingUser) {
@@ -8317,9 +8359,9 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
             };
             await userService.update(normSeller, userUpdate);
             updatedUser = { ...(existingUser as unknown as Record<string, unknown>), ...userUpdate };
-          } else if (!isBoostPlan && !isKnownPlan) {
+          } else if (!isBoostPlan && !isDealAssistPlan && !isKnownPlan) {
             logWarn('confirm-razorpay-payment: unknown plan id, skipping user upgrade:', planStr);
-          } else if (!isBoostPlan) {
+          } else if (!isBoostPlan && !isDealAssistPlan) {
             logWarn('confirm-razorpay-payment: seller not found in users table:', sellerEmail);
           }
         } catch (planUpgradeErr) {
@@ -8755,7 +8797,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       let existing = await conversationService.findById(conversationData.id);
       if (!existing && conversationData.vehicleId != null && conversationData.customerId) {
         existing = await conversationService.findByVehicleAndCustomer(
-          Number(conversationData.vehicleId),
+          String(conversationData.vehicleId),
           String(conversationData.customerId).toLowerCase().trim(),
         );
       }
@@ -8793,14 +8835,8 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       const body = req.body as {
         conversationId?: string;
         message?: any;
-        offerResponse?: {
-          offerMessageId?: number | string;
-          response?: 'accepted' | 'rejected' | 'countered';
-          counterPrice?: number;
-          responseMessage?: any;
-        };
       };
-      const { conversationId, message, offerResponse } = body;
+      const { conversationId, message } = body;
 
       if (!conversationId) {
         return res.status(400).json({ success: false, reason: 'Conversation ID is required' });
@@ -8816,56 +8852,6 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
       if (!isAdmin && !isAuthParticipant(normalizedCustomerId) && !isAuthParticipant(normalizedSellerId)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
-      }
-
-      const isOfferPut =
-        offerResponse &&
-        typeof offerResponse === 'object' &&
-        offerResponse.offerMessageId != null &&
-        offerResponse.response != null &&
-        offerResponse.responseMessage != null;
-
-      if (isOfferPut) {
-        const { offerMessageId, response, counterPrice, responseMessage } = offerResponse;
-        try {
-          console.log('💾 API: Offer response on conversation:', { conversationId, offerMessageId, response });
-          const updatedConversation = await conversationService.respondToOffer(
-            String(conversationId),
-            offerMessageId as number | string,
-            response as 'accepted' | 'rejected' | 'countered',
-            {
-              counterPrice: typeof counterPrice === 'number' ? counterPrice : undefined,
-              responseMessage,
-            },
-          );
-
-          const actingAsCustomer = isAuthParticipant(normalizedCustomerId);
-          const recipientEmail = actingAsCustomer
-            ? String(updatedConversation.sellerId || normalizedSellerId)
-            : String(updatedConversation.customerId || normalizedCustomerId);
-          const senderName = actingAsCustomer
-            ? conversation.customerName || 'Customer'
-            : conversation.sellerName || 'Seller';
-          const messageText = typeof responseMessage?.text === 'string' ? responseMessage.text : '';
-          await insertConversationMessageNotification({
-            recipientEmail,
-            senderName,
-            messageText,
-            conversationId: String(updatedConversation.id || conversationId),
-          });
-
-          return res.status(200).json({ success: true, data: updatedConversation });
-        } catch (error) {
-          console.error('❌ API: Error applying offer response:', {
-            conversationId,
-            offerMessageId,
-            error: error instanceof Error ? error.message : 'Unknown error',
-          });
-          return res.status(500).json({
-            success: false,
-            reason: error instanceof Error ? error.message : 'Failed to apply offer response',
-          });
-        }
       }
 
       if (!message) {
@@ -9609,6 +9595,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
         };
 
         await adminCreate(plansPath, record, planId);
+        invalidateSellerPlanCache();
         return res.status(201).json(toPlanDetails(planId, record));
       }
 
@@ -9647,6 +9634,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
           await adminCreate(plansPath, { ...merged, createdAt: new Date().toISOString() }, updatePlanId);
         }
 
+        invalidateSellerPlanCache();
         return res.status(200).json(toPlanDetails(updatePlanId, merged));
       }
 
@@ -9663,6 +9651,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
         }
 
         await adminDelete(plansPath, deletePlanId);
+        invalidateSellerPlanCache();
         return res.status(200).json({ success: true, message: 'Plan deleted successfully' });
       }
 

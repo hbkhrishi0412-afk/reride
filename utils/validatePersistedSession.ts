@@ -2,7 +2,6 @@ import type { User } from '../types.js';
 import { getSupabaseClient } from '../lib/supabase.js';
 import { getBrowserAccessTokenForApi } from './authStorage.js';
 import { isTokenLikelyValid, refreshAuthToken } from './authenticatedFetch.js';
-import { isDevelopmentEnvironment } from './environment.js';
 import { isCapacitorNative } from './apiConfig.js';
 import { getNativeMemoryRefreshToken } from './nativeTokenStorage.js';
 import { useHttpOnlyRefreshCookie } from './authStorage.js';
@@ -58,23 +57,23 @@ export function clearPersistedUserSession(): void {
   }
 }
 
-/**
- * Returns true when persisted credentials can still authenticate API calls.
- * Supabase-only sessions (no custom JWT yet) also qualify.
- */
-export async function isPersistedSessionAuthenticated(): Promise<boolean> {
-  const user = readPersistedUser();
-  if (!user) return false;
-  if (isDevelopmentEnvironment()) return true;
+function hasUsableApiToken(): boolean {
+  return !!getBrowserAccessTokenForApi();
+}
 
-  if (getBrowserAccessTokenForApi() && isTokenLikelyValid()) {
+/**
+ * Attempt to restore API credentials (app JWT or Supabase access token) for persisted sessions.
+ * Call before authenticated API requests when the UI was restored from localStorage alone.
+ */
+export async function rehydrateApiCredentials(): Promise<boolean> {
+  if (hasUsableApiToken() && isTokenLikelyValid()) {
     return true;
   }
 
   if (hasLikelyRefreshSource()) {
     try {
       const refreshed = await refreshAuthToken();
-      if (refreshed && getBrowserAccessTokenForApi()) {
+      if (refreshed && hasUsableApiToken()) {
         return true;
       }
     } catch {
@@ -83,14 +82,56 @@ export async function isPersistedSessionAuthenticated(): Promise<boolean> {
   }
 
   try {
-    const supabase = getSupabaseClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
+    const { resolveSupabaseAccessTokenForApi } = await import('./authStorage.js');
+    await resolveSupabaseAccessTokenForApi(2500);
+    if (hasUsableApiToken()) {
       return true;
     }
   } catch {
-    /* ignore */
+    /* fall through */
   }
 
-  return false;
+  const user = readPersistedUser();
+  if (user?.email) {
+    try {
+      const supabase = getSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.access_token && session.user) {
+        const role: 'customer' | 'seller' =
+          user.role === 'seller' || user.role === 'admin' ? 'seller' : 'customer';
+        const meta = (session.user.app_metadata ?? {}) as Record<string, unknown>;
+        const authProvider: 'google' | 'phone' | 'email' =
+          meta.provider === 'google' ? 'google' : session.user.phone ? 'phone' : 'email';
+        const { syncWithBackend } = await import('../services/supabase-auth-service.js');
+        const result = await syncWithBackend(
+          session.user as Record<string, unknown>,
+          role,
+          authProvider,
+          session.access_token,
+        );
+        if (result.success && hasUsableApiToken()) {
+          return true;
+        }
+        if (session.access_token) {
+          return true;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return hasUsableApiToken();
+}
+
+/**
+ * Returns true when persisted credentials can still authenticate API calls.
+ * Supabase-only sessions (no custom JWT yet) also qualify after rehydration.
+ */
+export async function isPersistedSessionAuthenticated(): Promise<boolean> {
+  const user = readPersistedUser();
+  if (!user) return false;
+  return rehydrateApiCredentials();
 }
