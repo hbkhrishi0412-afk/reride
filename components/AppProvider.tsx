@@ -13,8 +13,9 @@ import { useTranslation } from 'react-i18next';
 import i18n from '../lib/i18n';
 import { useNavigate as useRouterNavigate, useLocation } from 'react-router-dom';
 import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan, ChatMessage } from '../types';
+import { View } from '../types';
 import { normalizeNotificationRow } from '../utils/normalizeNotification.js';
-import { View, VehicleCategory as CategoryEnum } from '../types';
+import { VehicleCategory as CategoryEnum } from '../vehicle-category.js';
 import {
   computeCompareToggle,
   getCategoryDisplayName,

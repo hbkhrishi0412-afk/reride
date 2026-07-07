@@ -148,7 +148,9 @@ export default defineConfig(({ mode }) => {
         // don't make every other page wait for those libraries to download.
         manualChunks(id) {
           if (!id.includes('node_modules')) {
-            if (id.includes('/components/command-center/')) return 'admin-command-center';
+            // Enum/constants with no React dependency — must load before AppProvider
+            // (avoid circular chunk: admin-command-center ↔ app-provider).
+            if (id.includes('/vehicle-category')) return 'shared-core';
             if (id.includes('/components/AppProvider')) return 'app-provider';
             return undefined;
           }
@@ -205,6 +207,29 @@ export default defineConfig(({ mode }) => {
             return 'vendor-crypto-sanitize'
           }
           if (id.includes('node_modules/socket.io-client/')) return 'vendor-socket'
+          // react-router / react-helmet-async pull these into vendor-react. If they
+          // land in vendor-misc instead, Rollup creates a circular chunk:
+          //   vendor-react → vendor-misc → vendor-react
+          // which leaves React undefined when use-sync-external-store runs:
+          //   "Cannot read properties of undefined (reading 'useState')"
+          if (
+            id.includes('node_modules/use-sync-external-store') ||
+            id.includes('node_modules/react-fast-compare') ||
+            id.includes('node_modules/invariant/') ||
+            id.includes('node_modules/shallowequal')
+          ) {
+            return 'vendor-react'
+          }
+          // Capacitor plugins — keep out of vendor-misc catch-all.
+          if (id.includes('node_modules/@capacitor/')) return 'vendor-capacitor'
+          // React UI helpers that must resolve the same React instance as vendor-react.
+          if (
+            id.includes('node_modules/react-cookie-consent') ||
+            id.includes('node_modules/react-window') ||
+            id.includes('node_modules/@vis.gl/react-google-maps')
+          ) {
+            return 'vendor-react'
+          }
           return 'vendor-misc'
         },
       },

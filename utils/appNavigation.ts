@@ -138,6 +138,8 @@ export function resolveViewFromPathAndState(
   if (pathView === View.LOGIN_PORTAL) {
     const roleView = loginViewFromSearch(search);
     if (roleView) return roleView;
+    // URL is authoritative for /login — stale history.state.view must not show HOME on /login.
+    return View.LOGIN_PORTAL;
   }
   if (pathView === View.SELLER_PROFILE) return View.SELLER_PROFILE;
   if (pathView === View.NOTIFICATIONS_CENTER) return View.NOTIFICATIONS_CENTER;
