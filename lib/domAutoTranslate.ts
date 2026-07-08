@@ -56,15 +56,15 @@ const SKIP_TAGS = new Set([
 
 const TRANSLATABLE_ATTRS = ['placeholder', 'title', 'alt', 'aria-label'] as const;
 
-const ORIGINAL_TEXT = new WeakMap<Text, string>();
-const ORIGINAL_ATTR = new WeakMap<Element, Record<string, string>>();
+/** Iterable registry so English-restore can replay after React commits unchanged VDOM text. */
+const textNodeRegistry = new Map<Text, string>();
+const attrRegistry = new Map<Element, Record<string, string>>();
 const TRANSLATING_NODES = new WeakSet<Text>();
 const ATTR_WRITING = new WeakMap<Element, Set<string>>();
 
-const translatedTextNodes = new Set<Text>();
-const translatedAttrElements = new Set<Element>();
-
 let currentLang = 'en';
+/** Bumped on every language switch — invalidates in-flight async DOM writes. */
+let langGeneration = 0;
 let observer: MutationObserver | null = null;
 let scanQueued = false;
 let installedI18n: I18nInstance | null = null;
@@ -124,6 +124,10 @@ function looksLikeEnglish(raw: string): boolean {
   return true;
 }
 
+function trackTextNode(node: Text, original: string): void {
+  textNodeRegistry.set(node, original);
+}
+
 function translateTextNode(node: Text): void {
   if (TRANSLATING_NODES.has(node)) return;
   const parent = node.parentElement;
@@ -133,7 +137,7 @@ function translateTextNode(node: Text): void {
   const raw = node.nodeValue;
   if (!raw) return;
 
-  const original = ORIGINAL_TEXT.get(node) || raw;
+  const original = textNodeRegistry.get(node) || raw;
   if (!looksLikeEnglish(original)) return;
 
   const leading = original.match(/^\s*/)?.[0] ?? '';
@@ -142,6 +146,7 @@ function translateTextNode(node: Text): void {
   if (!core) return;
 
   const langSnapshot = currentLang;
+  const genSnapshot = langGeneration;
 
   const cached = getCachedTranslation(core, langSnapshot);
   if (cached) {
@@ -151,24 +156,28 @@ function translateTextNode(node: Text): void {
       node.nodeValue = next;
       TRANSLATING_NODES.delete(node);
     }
-    ORIGINAL_TEXT.set(node, original);
-    translatedTextNodes.add(node);
+    trackTextNode(node, original);
     return;
   }
 
-  ORIGINAL_TEXT.set(node, original);
-  translatedTextNodes.add(node);
+  trackTextNode(node, original);
   void translateText(core, langSnapshot).then((translated) => {
     if (!translated || translated === core) return;
+    if (langGeneration !== genSnapshot || currentLang !== langSnapshot || currentLang === 'en') return;
     // If the node text changed since we started (React update), check if
     // the current value is still the original English — only then overwrite.
     const cur = node.nodeValue;
     if (cur !== original && cur !== (leading + core + trailing)) return;
-    if (currentLang !== langSnapshot || currentLang === 'en') return;
     TRANSLATING_NODES.add(node);
     node.nodeValue = leading + translated + trailing;
     TRANSLATING_NODES.delete(node);
   });
+}
+
+function trackAttr(el: Element, attr: string, original: string): void {
+  const originals = attrRegistry.get(el) || {};
+  originals[attr] = original;
+  attrRegistry.set(el, originals);
 }
 
 function translateAttribute(el: Element, attr: string): void {
@@ -176,7 +185,7 @@ function translateAttribute(el: Element, attr: string): void {
 
   const raw = el.getAttribute(attr);
   if (!raw) return;
-  const originals = ORIGINAL_ATTR.get(el) || {};
+  const originals = attrRegistry.get(el) || {};
   const baseline = originals[attr];
   const original = baseline ?? raw;
 
@@ -188,6 +197,7 @@ function translateAttribute(el: Element, attr: string): void {
   if (!looksLikeEnglish(original)) return;
 
   const langSnapshot = currentLang;
+  const genSnapshot = langGeneration;
 
   const cached = getCachedTranslation(original, langSnapshot);
   if (cached) {
@@ -196,19 +206,15 @@ function translateAttribute(el: Element, attr: string): void {
       el.setAttribute(attr, cached);
       markAttrWriting(el, attr, false);
     }
-    originals[attr] = original;
-    ORIGINAL_ATTR.set(el, originals);
-    translatedAttrElements.add(el);
+    trackAttr(el, attr, original);
     return;
   }
 
-  originals[attr] = original;
-  ORIGINAL_ATTR.set(el, originals);
-  translatedAttrElements.add(el);
+  trackAttr(el, attr, original);
 
   void translateText(original, langSnapshot).then((translated) => {
     if (!translated || translated === original) return;
-    if (currentLang !== langSnapshot || currentLang === 'en') return;
+    if (langGeneration !== genSnapshot || currentLang !== langSnapshot || currentLang === 'en') return;
     if (el.getAttribute(attr) !== original && el.getAttribute(attr) !== raw) return;
     markAttrWriting(el, attr, true);
     el.setAttribute(attr, translated);
@@ -316,7 +322,7 @@ function onMutations(mutations: MutationRecord[]): void {
     if (m.type === 'characterData') {
       const t = m.target;
       if (t.nodeType === Node.TEXT_NODE && !TRANSLATING_NODES.has(t as Text)) {
-        ORIGINAL_TEXT.delete(t as Text);
+        textNodeRegistry.delete(t as Text);
         translateTextNode(t as Text);
       }
       continue;
@@ -326,7 +332,7 @@ function onMutations(mutations: MutationRecord[]): void {
       const attr = m.attributeName;
       if (!attr || !TRANSLATABLE_ATTRS.includes(attr as typeof TRANSLATABLE_ATTRS[number])) continue;
       if (ATTR_WRITING.get(el)?.has(attr)) continue;
-      const prior = ORIGINAL_ATTR.get(el);
+      const prior = attrRegistry.get(el);
       if (prior) delete prior[attr];
       translateAttribute(el, attr);
       continue;
@@ -364,43 +370,99 @@ function stopObserver(): void {
   observer = null;
 }
 
-function restoreOriginals(): void {
-  for (const node of translatedTextNodes) {
-    const orig = ORIGINAL_TEXT.get(node);
-    if (orig != null && node.nodeValue !== orig) {
+function restoreTextNodesFromRegistry(): void {
+  for (const [node, orig] of textNodeRegistry) {
+    if (!node.isConnected) {
+      textNodeRegistry.delete(node);
+      continue;
+    }
+    if (node.nodeValue !== orig) {
       TRANSLATING_NODES.add(node);
       node.nodeValue = orig;
       TRANSLATING_NODES.delete(node);
     }
   }
-  translatedTextNodes.clear();
+}
 
-  for (const el of translatedAttrElements) {
-    const originals = ORIGINAL_ATTR.get(el);
-    if (originals) {
-      for (const [attr, orig] of Object.entries(originals)) {
-        if (el.getAttribute(attr) !== orig) {
-          markAttrWriting(el, attr, true);
-          el.setAttribute(attr, orig);
-          markAttrWriting(el, attr, false);
-        }
+function restoreAttrsFromRegistry(): void {
+  for (const [el, originals] of attrRegistry) {
+    if (!el.isConnected) {
+      attrRegistry.delete(el);
+      continue;
+    }
+    for (const [attr, orig] of Object.entries(originals)) {
+      if (el.getAttribute(attr) !== orig) {
+        markAttrWriting(el, attr, true);
+        el.setAttribute(attr, orig);
+        markAttrWriting(el, attr, false);
       }
-      ORIGINAL_ATTR.delete(el);
     }
   }
-  translatedAttrElements.clear();
+}
+
+function clearTranslationRegistry(): void {
+  textNodeRegistry.clear();
+  attrRegistry.clear();
+}
+
+function restoreOriginals(): void {
+  restoreTextNodesFromRegistry();
+  restoreAttrsFromRegistry();
+  if (isAutoTranslatableLanguage(currentLang)) {
+    clearTranslationRegistry();
+  }
+}
+
+/** Replay English restore after React commits — fixes stale DOM when VDOM text is unchanged. */
+let englishRestoreTimers: ReturnType<typeof setTimeout>[] = [];
+
+function cancelEnglishRestoreTimers(): void {
+  for (const t of englishRestoreTimers) clearTimeout(t);
+  englishRestoreTimers = [];
+}
+
+function scheduleEnglishRestorePasses(): void {
+  cancelEnglishRestoreTimers();
+  const replay = () => {
+    if (currentLang !== 'en') return;
+    restoreTextNodesFromRegistry();
+    restoreAttrsFromRegistry();
+  };
+  queueMicrotask(replay);
+  requestAnimationFrame(replay);
+  for (const delay of [50, 200, 600]) {
+    englishRestoreTimers.push(setTimeout(() => {
+      replay();
+      if (delay === 600) clearTranslationRegistry();
+    }, delay));
+  }
+}
+
+/** Force a final English DOM sync (callable from TranslationProvider after React re-render). */
+export function finalizeEnglishRestore(): void {
+  if (currentLang !== 'en') return;
+  restoreTextNodesFromRegistry();
+  restoreAttrsFromRegistry();
+  clearTranslationRegistry();
 }
 
 function applyLanguage(lang: string): void {
   const next = String(lang || 'en').split('-')[0].toLowerCase();
   const prev = currentLang;
+  langGeneration += 1;
   currentLang = next;
 
   cancelPendingScans();
+  cancelEnglishRestoreTimers();
 
   if (!isAutoTranslatableLanguage(next)) {
     stopObserver();
-    if (prev !== 'en') restoreOriginals();
+    if (prev !== 'en') {
+      restoreOriginals();
+      scheduleEnglishRestorePasses();
+    } else {
+      clearTranslationRegistry();
+    }
     for (const fn of langChangeListeners) fn(next);
     return;
   }

@@ -161,14 +161,6 @@ const queryClient = new QueryClient({
 const AppRouter = isCapacitorNative() ? HashRouter : BrowserRouter;
 
 void (async () => {
-  if (typeof window !== 'undefined') {
-    try {
-      await completeWebSupabaseOAuthCallbackIfNeeded();
-    } catch (e) {
-      console.warn('[ReRide] OAuth bootstrap:', e);
-    }
-  }
-
   try {
     root.render(
       <React.StrictMode>
@@ -205,6 +197,15 @@ void (async () => {
       }
     } else {
       throw mountError;
+    }
+    return;
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      await completeWebSupabaseOAuthCallbackIfNeeded();
+    } catch (e) {
+      console.warn('[ReRide] OAuth bootstrap:', e);
     }
   }
 })();

@@ -11,7 +11,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
-import { forceRescan } from '../lib/domAutoTranslate';
+import { forceRescan, finalizeEnglishRestore } from '../lib/domAutoTranslate';
 
 interface TranslationContextValue {
   /** Increments on every language change — subscribe to force re-render. */
@@ -51,6 +51,10 @@ const TranslationProvider: React.FC<TranslationProviderProps> = ({ children }) =
     const newLang = String(lng || 'en').split('-')[0].toLowerCase();
     setLang(newLang);
     setEpoch((e) => e + 1);
+    if (newLang === 'en') {
+      queueMicrotask(finalizeEnglishRestore);
+      requestAnimationFrame(finalizeEnglishRestore);
+    }
   }, []);
 
   useEffect(() => {

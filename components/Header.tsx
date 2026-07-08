@@ -1,9 +1,8 @@
-import React, { useState, useEffect, memo, useRef, useMemo } from 'react';
+import React, { useState, useEffect, memo, useRef, useMemo, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User, Notification, Toast as ToastType, Vehicle } from '../types';
 import { View as ViewEnum } from '../types';
 import NotificationCenter from './NotificationCenter';
-import LocationModal from './LocationModal';
 import Logo from './Logo';
 import CityDropdown from './CityDropdown';
 import SellerDropdown from './SellerDropdown';
@@ -12,6 +11,8 @@ import { supportTelHref } from '../utils/whatsappShare.js';
 import { useIsMdUp } from '../hooks/useIsMdUp';
 import { HomeLocationActionButtons } from './HomeLocationActionButtons';
 import { primaryLocationLabel } from '../utils/cityMapping';
+
+const LocationModal = lazy(() => import('./LocationModal'));
 
 interface HeaderProps {
     onNavigate: (view: ViewEnum, params?: { city?: string }) => void;
@@ -669,14 +670,18 @@ const Header: React.FC<HeaderProps> = memo(({
                 )}
             </header>
 
-            {/* Location Modal */}
-            <LocationModal
-                isOpen={isLocationModalOpen}
-                onClose={() => setIsLocationModalOpen(false)}
-                currentLocation={userLocation}
-                onLocationChange={onLocationChange}
-                addToast={addToast}
-            />
+            {/* Location Modal — lazy chunk; only fetch when user opens the picker */}
+            {isLocationModalOpen && (
+                <Suspense fallback={null}>
+                    <LocationModal
+                        isOpen={isLocationModalOpen}
+                        onClose={() => setIsLocationModalOpen(false)}
+                        currentLocation={userLocation}
+                        onLocationChange={onLocationChange}
+                        addToast={addToast}
+                    />
+                </Suspense>
+            )}
         </>
     );
 });

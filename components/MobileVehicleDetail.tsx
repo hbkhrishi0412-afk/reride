@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, ProsAndCons, User, RatingEligibility, DealLead } from '../types';
+import type { Vehicle, ProsAndCons, User, RatingEligibility, DealLead, CertifiedInspection } from '../types';
 import { useTranslatedText, useTranslatedArray, useTranslatedFields } from '../hooks/useTranslatedText';
 import { generateProsAndCons } from '../services/geminiService';
 import { getFirstValidImage, getValidImages, swapToPlaceholderOnError } from '../utils/imageUtils';
@@ -48,6 +48,49 @@ interface MobileVehicleDetailProps {
   recommendations: Vehicle[];
   onSelectVehicle: (vehicle: Vehicle) => void;
 }
+
+const MobileCertifiedInspectionReport: React.FC<{ report: CertifiedInspection }> = ({ report }) => {
+  const scoreColor = (score: number) => {
+    if (score >= 90) return 'bg-green-500';
+    if (score >= 75) return 'bg-blue-500';
+    return 'bg-orange-500';
+  };
+
+  return (
+    <div className="rounded-xl border border-orange-100 bg-orange-50/40 p-4">
+      <div className="mb-3 flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-600">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+            <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44-1.22a.75.75 0 00-1.06 0L8.172 6.172a.75.75 0 00-1.06 1.06L8.94 9.332a.75.75 0 001.191.04l3.22-4.294a.75.75 0 00-.04-1.19z" clipRule="evenodd" />
+          </svg>
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-gray-900">Seller Photo Check</h3>
+          <p className="text-xs text-gray-600">
+            Inspected by {report.inspector} on {new Date(report.date).toLocaleDateString()}
+          </p>
+        </div>
+      </div>
+      <p className="mb-4 text-sm italic text-gray-700">{report.summary}</p>
+      <div className="space-y-3">
+        {Object.entries(report.scores).map(([key, score]) => (
+          <div key={key}>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-800">{key}</span>
+              <span className="text-sm font-bold text-gray-900">{score}/100</span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-gray-200">
+              <div className={`${scoreColor(Number(score))} h-2 rounded-full`} style={{ width: `${score}%` }} />
+            </div>
+            {report.details[key] ? (
+              <p className="mt-1 text-xs text-gray-600">{report.details[key]}</p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 /**
  * Mobile-Optimized Vehicle Detail Page
@@ -369,8 +412,15 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
       ? createPortal(
           <div className="fixed inset-x-0 bottom-0 z-[90] border-t border-gray-200/90 bg-white/85 shadow-[0_-8px_32px_rgba(0,0,0,0.12)] backdrop-blur-xl pb-[max(12px,env(safe-area-inset-bottom,0px))]">
             {vehicleDealLead ? (
-              <div className="px-4 pt-2 border-b border-gray-100">
+              <div className="border-b border-gray-100 px-4 pt-2 pb-1">
                 <DealStageChip lead={vehicleDealLead} />
+                <button
+                  type="button"
+                  onClick={() => void handleChat()}
+                  className="mt-1 text-xs font-semibold text-blue-700"
+                >
+                  {t('vehicle.detail.viewDealTimeline', { defaultValue: 'View deal timeline' })}
+                </button>
               </div>
             ) : null}
           <div
@@ -716,6 +766,9 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                   category={safeVehicle.category}
                   vahanSnapshot={safeVehicle.vahanSnapshot}
                 />
+                {safeVehicle.certifiedInspection ? (
+                  <MobileCertifiedInspectionReport report={safeVehicle.certifiedInspection} />
+                ) : null}
                 {safeVehicle.description && (
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">

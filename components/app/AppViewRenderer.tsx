@@ -123,7 +123,6 @@ const Dashboard = React.lazy(() => {
 const AdminPanel = React.lazy(() => import('../AdminPanel'));
 const Comparison = React.lazy(() => import('../Comparison'));
 const Profile = React.lazy(() => import('../Profile'));
-const CustomerInbox = React.lazy(() => import('../CustomerInbox'));
 const SellerProfilePage = React.lazy(() => import('../SellerProfilePage'));
 const DealerProfiles = React.lazy(() => import('../DealerProfiles'));
 const CarServices = React.lazy(() => import('../CarServices'));
@@ -1374,6 +1373,30 @@ switch (currentView) {
     );
 
   case ViewEnum.ADMIN_PANEL:
+    if (isCapacitorNativeApp()) {
+      return (
+        <div className="flex min-h-[calc(100vh-140px)] items-center justify-center px-6 pb-24">
+          <div className="max-w-sm text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+              <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Admin panel needs a desktop browser</h2>
+            <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+              The admin command center is not available in the mobile app. Sign in at your ReRide website admin URL on a computer.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate(ViewEnum.HOME)}
+              className="btn-brand-primary w-full"
+            >
+              Go to Home
+            </button>
+          </div>
+        </div>
+      );
+    }
     return userHasAdminRole(currentUser) && currentUser ? (
       <AdminPanelErrorBoundary>
         <AdminPanel 
@@ -1494,18 +1517,26 @@ switch (currentView) {
     );
 
   case ViewEnum.INBOX:
-    if (currentUser?.role === 'seller' && !isMobileApp && !isCapacitorNativeApp()) {
-      navigate(ViewEnum.SELLER_DASHBOARD);
+    if (!currentUser) {
       return (
-        <div className="min-h-[40vh] flex items-center justify-center text-gray-500 text-sm">
-          Redirecting to seller dashboard…
+        <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-600 mb-4">Please Login</h2>
+            <p className="text-gray-500 mb-4">You need to be logged in to view your inbox.</p>
+            <button
+              onClick={() => navigate(ViewEnum.LOGIN_PORTAL)}
+              className="btn-brand-primary"
+            >
+              Login
+            </button>
+          </div>
         </div>
       );
     }
-    if ((isMobileApp || isCapacitorNativeApp()) && currentUser) {
+    {
       const inboxEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
       const inboxRoleNorm = normalizeInboxRole(currentUser.role);
-      const mobileInboxThreads = conversations.filter((c) => {
+      const inboxThreads = conversations.filter((c) => {
         if (!c || !inboxEmail) return false;
         if (inboxRoleNorm === 'seller') {
           return conversationBelongsToSeller(c, inboxEmail, currentUser.id);
@@ -1517,14 +1548,13 @@ switch (currentView) {
       });
       return (
         <MobileInbox
-          conversations={mobileInboxThreads}
-          inboxRole={normalizeInboxRole(currentUser.role) === 'seller' ? 'seller' : 'customer'}
+          conversations={inboxThreads}
+          inboxRole={inboxRoleNorm === 'seller' ? 'seller' : 'customer'}
           initialOpenConversationId={inboxConversationIdToOpen}
           onConsumedInitialConversation={handleInboxInitialConversationConsumed}
           chatPeerOnlineByConversationId={chatPeerOnlineByConversationId}
           openThreadInFloatingChat={
-            normalizeInboxRole(currentUser.role) === 'seller' &&
-            (isMobileApp || isCapacitorNativeApp())
+            inboxRoleNorm === 'seller' && (isMobileApp || isCapacitorNativeApp())
               ? handleSellerOpenChatFromDashboard
               : undefined
           }
@@ -1546,7 +1576,7 @@ switch (currentView) {
           onSetConversationReadState={(conversationId, isRead) =>
             setConversationReadState(
               conversationId,
-              normalizeInboxRole(currentUser.role) === 'seller' ? 'seller' : 'customer',
+              inboxRoleNorm === 'seller' ? 'seller' : 'customer',
               isRead,
             )
           }
@@ -1562,59 +1592,6 @@ switch (currentView) {
         />
       );
     }
-    return currentUser ? (
-      <CustomerInbox 
-        conversations={conversations.filter(c => {
-          if (!c || !currentUser?.email) return false;
-          return conversationBelongsToCustomer(c, currentUser.email, currentUser.id);
-        })}
-        initialOpenConversationId={inboxConversationIdToOpen}
-        onConsumedInitialConversation={handleInboxInitialConversationConsumed}
-        vehicles={vehicles}
-        onSendMessage={(conversationId, messageText, type, payload) => {
-          const conversation = conversations.find((c) => c && String(c.id) === String(conversationId));
-          if (conversation) {
-            sendMessageWithType(conversation.id, messageText, type, payload);
-          }
-        }}
-        onMarkAsRead={markAsRead}
-        users={users}
-        typingStatus={typingStatus}
-        onUserTyping={(conversationId: string, _userRole: 'customer' | 'seller') => {
-          toggleTyping(conversationId, true);
-        }}
-        onUserStoppedTyping={(conversationId: string) => toggleTyping(conversationId, false)}
-        onMarkMessagesAsRead={(conversationId, readerRole) => {
-          void markAsRead(conversationId, { readerRole });
-        }}
-        onMarkAllAsRead={() => void markAllVisibleAsRead('customer')}
-        onSetConversationReadState={(conversationId, isRead) =>
-          setConversationReadState(conversationId, 'customer', isRead)
-        }
-        onFlagContent={(type, id, _reason) => flagContent(type, id)}
-        onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-          // Handle offer responses using the AppProvider function
-          onOfferResponse(conversationId, messageId, response, counterPrice);
-        }}
-        currentUserEmail={currentUser.email}
-        onClearChat={clearConversationMessages}
-        onDeleteConversation={deleteConversation}
-        chatPeerOnlineByConversationId={chatPeerOnlineByConversationId}
-      />
-    ) : (
-      <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-600 mb-4">Please Login</h2>
-          <p className="text-gray-500 mb-4">You need to be logged in to view your inbox.</p>
-          <button 
-            onClick={() => navigate(ViewEnum.LOGIN_PORTAL)}
-            className="btn-brand-primary"
-          >
-            Login
-          </button>
-        </div>
-      </div>
-    );
 
   case ViewEnum.SELLER_PROFILE:
     if (isMobileApp && publicSellerProfile) {
@@ -2017,7 +1994,7 @@ switch (currentView) {
               setForgotPasswordRole('customer');
               navigate(ViewEnum.FORGOT_PASSWORD);
             }}
-            allowedRoles={['customer', 'seller']}
+            allowedRoles={['customer', 'seller', 'service_provider']}
             forcedRole={loginForcedRole}
           />
         </Suspense>
@@ -2115,12 +2092,22 @@ switch (currentView) {
           {isMobileApp ? (
             <MobileNotifications
               notifications={userNotifs}
+              vehicles={vehicles}
+              conversations={conversations}
               onNotificationClick={handleNotificationClick}
               onAcceptDealChat={handleAcceptDealChat}
               onMarkAsRead={handleMarkNotificationsAsRead}
               onMarkAllAsRead={handleMarkAllNotificationsAsRead}
               onBack={() => goBack(ViewEnum.HOME)}
               isLoading={isLoading && userNotifs.length === 0}
+              profileMuteKeys={currentUser.notificationMuteKeys}
+              onPersistMuteKeys={
+                currentUser.email
+                  ? async (keys) => {
+                      await updateUser(currentUser.email, { notificationMuteKeys: keys });
+                    }
+                  : undefined
+              }
             />
           ) : (
             <NotificationsPage

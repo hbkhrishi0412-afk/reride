@@ -44,6 +44,8 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
           className="max-w-[58%] truncate rounded-full border border-gray-200 bg-gray-50 px-5 py-2 text-center text-base font-extrabold uppercase tracking-wide text-slate-900 shadow-sm transition-transform active:scale-[0.98] hover:border-gray-300 hover:bg-white"
           style={{ fontFamily: 'Nunito Sans, sans-serif' }}
           aria-label={t('nav.home')}
+          data-no-translate
+          translate="no"
         >
           {t('app.name')}
         </button>

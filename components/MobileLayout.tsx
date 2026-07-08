@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import MobileHeader from './MobileHeader';
 import MobileBottomNav from './MobileBottomNav';
 import MobileBrandTopBar from './MobileBrandTopBar';
+import { useTranslationRefresh } from './TranslationProvider';
 import type { User } from '../types';
 import { View as ViewEnum } from '../types';
 
@@ -57,6 +58,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   unreadNotificationCount = 0,
   serviceProvider = null,
 }) => {
+  const { lang: uiLang, epoch: langEpoch } = useTranslationRefresh();
   const [showMenu, setShowMenu] = useState(false);
   const shouldRenderHeader = showHeader || showMenu;
   const headerRowPx = showHeader ? 56 : 0;
@@ -106,6 +108,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
     >
       {showBrandBar && (
         <MobileBrandTopBar
+          key={`brand-bar-${uiLang}-${langEpoch}`}
           onNavigate={onNavigate}
           wishlistCount={wishlistCount}
           compareCount={compareCount}
@@ -117,6 +120,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
       )}
       {shouldRenderHeader && (
         <MobileHeader
+          key={`mobile-header-${uiLang}-${langEpoch}`}
           onNavigate={onNavigate}
           currentUser={currentUser}
           onLogout={onLogout}
@@ -147,6 +151,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
       
       {showBottomNav && (
         <MobileBottomNav
+          key={`bottom-nav-${uiLang}-${langEpoch}`}
           currentView={currentView}
           onNavigate={onNavigate}
           currentUser={currentUser}

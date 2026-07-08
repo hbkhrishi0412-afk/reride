@@ -9,8 +9,10 @@ import { getThreadLastMessagePreview } from '../utils/messagePreview';
 import { StatCard, StatCardGrid, EmptyState } from './dashboard/shared';
 import PendingDealsBanner from './PendingDealsBanner';
 import MyDealsList from './MyDealsList';
+import { useApp } from './AppProvider';
 
 const ServiceCart = lazy(() => import('./ServiceCart'));
+const DealDetailPage = lazy(() => import('./command-center/DealDetailPage'));
 
 interface MobileBuyerDashboardProps {
   currentUser: User;
@@ -48,7 +50,9 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
   onLogout
 }) => {
   const { t } = useTranslation();
+  const { setActiveChat, addToast } = useApp();
   const [activeTab, setActiveTab] = useState<'deals' | 'overview' | 'searches' | 'activity' | 'alerts' | 'serviceTrack'>('deals');
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
   const [savedSearches, setSavedSearches] = useState(() =>
     buyerService.getSavedSearches(currentUser?.email || '')
@@ -130,6 +134,29 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
       ],
     [t]
   );
+
+  if (selectedDealId) {
+    return (
+      <div className="min-h-screen bg-gray-50 px-4 py-4 pb-24">
+        <Suspense fallback={<div className="animate-pulse h-40 rounded-2xl bg-gray-100" />}>
+          <DealDetailPage
+            leadId={selectedDealId}
+            currentUser={currentUser}
+            role="customer"
+            conversations={conversations}
+            onBack={() => setSelectedDealId(null)}
+            onOpenConversation={(conv) => {
+              setActiveChat(conv);
+              onNavigate(ViewEnum.INBOX);
+            }}
+            onNotify={(msg, type) =>
+              addToast(msg, type === 'error' ? 'error' : type === 'warning' ? 'warning' : type === 'info' ? 'info' : 'success')
+            }
+          />
+        </Suspense>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -303,7 +330,14 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
 
         {activeTab === 'deals' && (
           <div role="tabpanel" id="mbd-panel-deals" aria-labelledby="mbd-tab-deals" className="space-y-4">
-            <MyDealsList vehicles={vehicles} onSelectVehicle={onSelectVehicle} />
+            <MyDealsList
+              vehicles={vehicles}
+              onSelectVehicle={onSelectVehicle}
+              onOpenDeal={(leadId, vehicle) => {
+                setSelectedDealId(leadId);
+                if (vehicle) onSelectVehicle(vehicle);
+              }}
+            />
           </div>
         )}
 

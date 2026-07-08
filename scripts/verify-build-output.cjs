@@ -54,10 +54,30 @@ console.log('✅ Build output verified: dist/index.html and dist/assets/*.js are
 const vendorMiscFile = jsFiles.find((f) => f.startsWith('vendor-misc-'));
 if (vendorMiscFile) {
   const vendorMiscSource = fs.readFileSync(path.join(assetsDir, vendorMiscFile), 'utf8');
+  const vendorMiscKb = fs.statSync(path.join(assetsDir, vendorMiscFile)).size / 1024;
   if (/extends \w+\.Component/.test(vendorMiscSource)) {
     console.error(
       `❌ ${vendorMiscFile} contains React class components. ` +
         'Keep @sentry/* and web-vitals out of vendor-misc (see vite.config.ts manualChunks).',
+    );
+    process.exit(1);
+  }
+  if (vendorMiscKb > 50) {
+    console.error(
+      `❌ ${vendorMiscFile} is ${vendorMiscKb.toFixed(0)}KB — vendor-misc catch-all should be removed. ` +
+        'Large deps (xlsx, chart helpers) must use dedicated async chunks (see vite.config.ts).',
+    );
+    process.exit(1);
+  }
+}
+
+const vendorReactFile = jsFiles.find((f) => f.startsWith('vendor-react-'));
+if (vendorReactFile) {
+  const vendorReactSource = fs.readFileSync(path.join(assetsDir, vendorReactFile), 'utf8');
+  if (vendorMiscFile && vendorReactSource.includes('vendor-misc')) {
+    console.error(
+      `❌ ${vendorReactFile} imports ${vendorMiscFile}. ` +
+        'Circular vendor-react ↔ vendor-misc leaves React undefined at runtime.',
     );
     process.exit(1);
   }

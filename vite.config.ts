@@ -183,10 +183,15 @@ export default defineConfig(({ mode }) => {
             return 'vendor-maps'
           }
           if (
-            id.includes('node_modules/chart.js/') ||
-            id.includes('node_modules/react-chartjs-2/')
+            id.includes('node_modules/chart.js') ||
+            id.includes('node_modules/react-chartjs-2') ||
+            id.includes('node_modules/@kurkle/')
           ) {
             return 'vendor-charts'
+          }
+          // Admin bulk upload only — must never be in the sync vendor-misc catch-all (~435KB).
+          if (id.includes('node_modules/xlsx')) {
+            return 'vendor-xlsx'
           }
           if (
             id.includes('node_modules/i18next') ||
@@ -224,7 +229,9 @@ export default defineConfig(({ mode }) => {
             id.includes('node_modules/use-sync-external-store') ||
             id.includes('node_modules/react-fast-compare') ||
             id.includes('node_modules/invariant/') ||
-            id.includes('node_modules/shallowequal')
+            id.includes('node_modules/shallowequal') ||
+            id.includes('node_modules/tslib') ||
+            id.includes('node_modules/@babel/runtime')
           ) {
             return 'vendor-react'
           }
@@ -233,7 +240,8 @@ export default defineConfig(({ mode }) => {
           if (
             id.includes('node_modules/@capacitor/') ||
             id.includes('node_modules/@capawesome/') ||
-            id.includes('node_modules/@aparajita/')
+            id.includes('node_modules/@aparajita/') ||
+            id.includes('node_modules/@capacitor-community/')
           ) {
             return 'vendor-capacitor'
           }
@@ -253,7 +261,10 @@ export default defineConfig(({ mode }) => {
           ) {
             return 'vendor-react'
           }
-          return 'vendor-misc'
+          // No sync catch-all: vendor-misc ↔ vendor-react circular imports left React
+          // undefined at runtime ("reading 'Component'") and forced ~450KB xlsx/chart
+          // helpers to download before first paint. Unlisted packages get async chunks.
+          return undefined
         },
       },
     },
