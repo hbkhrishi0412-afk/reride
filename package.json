@@ -11,7 +11,7 @@
     "dev:full": "concurrently \"npm run dev:api\" \"npm run dev\"",
     "dev:clean": "npm run clean && vite",
     "dev:fast": "npm run clean && vite --force",
-    "build": "vite build && node scripts/verify-build-output.cjs",
+    "build": "vite build && node scripts/verify-build-output.cjs && node scripts/audit-chunk-graph.cjs",
     "build:vercel": "node scripts/vercel-prebuild-env.cjs && node scripts/verify-server-esm-imports.cjs && npm run build",
     "build:android": "cross-env CAPACITOR_BUILD=1 NODE_ENV=production npm run build",
     "android:sync": "npm run build:android && npx cap sync android",

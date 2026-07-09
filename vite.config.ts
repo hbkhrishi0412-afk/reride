@@ -35,6 +35,9 @@ export default defineConfig(({ mode }) => {
 
   return {
   base: capacitor ? './' : '/',
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   define: {
     __RERIDE_CAPACITOR__: JSON.stringify(!!capacitor),
     __RERIDE_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
@@ -144,8 +147,8 @@ export default defineConfig(({ mode }) => {
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash].[ext]',
         // Split the main vendor bundle into logical groups so a first paint only
-        // pulls the code it actually needs. Routes that use maps/charts/i18n
-        // don't make every other page wait for those libraries to download.
+        // pulls the code it actually needs. Routes that use maps/charts don't make
+        // every other page wait for those libraries to download.
         manualChunks(id) {
           if (!id.includes('node_modules')) {
             // Enum/constants with no React dependency — safe to preload before App shell.
@@ -155,14 +158,19 @@ export default defineConfig(({ mode }) => {
             // that leave React undefined at runtime ("reading 'Component'").
             return undefined;
           }
-          // React + router + head management — needed on every page
           if (
             id.includes('node_modules/react/') ||
             id.includes('node_modules/react-dom/') ||
             id.includes('node_modules/react-router-dom/') ||
             id.includes('node_modules/react-router/') ||
             id.includes('node_modules/react-helmet-async/') ||
-            id.includes('node_modules/scheduler/')
+            id.includes('node_modules/scheduler/') ||
+            // react-i18next calls React.createContext at module init — must share the
+            // same chunk as React. A separate vendor-i18n chunk creates a circular
+            // import with vendor-react → "reading 'createContext'" at startup.
+            id.includes('node_modules/i18next') ||
+            id.includes('node_modules/react-i18next/') ||
+            id.includes('node_modules/i18next-browser-languagedetector')
           ) {
             return 'vendor-react'
           }
@@ -192,12 +200,6 @@ export default defineConfig(({ mode }) => {
           // Admin bulk upload only — must never be in the sync vendor-misc catch-all (~435KB).
           if (id.includes('node_modules/xlsx')) {
             return 'vendor-xlsx'
-          }
-          if (
-            id.includes('node_modules/i18next') ||
-            id.includes('node_modules/react-i18next/')
-          ) {
-            return 'vendor-i18n'
           }
           // @sentry/* and web-vitals must NOT land in vendor-misc: index.tsx
           // synchronously imports vendor-misc, and vendor-misc ↔ vendor-react is

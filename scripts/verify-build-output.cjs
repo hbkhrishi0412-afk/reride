@@ -81,6 +81,15 @@ if (vendorReactFile) {
     );
     process.exit(1);
   }
+  const vendorI18nFile = jsFiles.find((f) => f.startsWith('vendor-i18n-'));
+  if (vendorI18nFile && vendorReactSource.includes('vendor-i18n')) {
+    console.error(
+      `❌ ${vendorReactFile} imports ${vendorI18nFile}. ` +
+        'Circular vendor-react ↔ vendor-i18n leaves React undefined at runtime ' +
+        '("reading \'createContext\'"). Keep i18next in vendor-react (see vite.config.ts).',
+    );
+    process.exit(1);
+  }
 }
 
 const capBuild = process.env.CAPACITOR_BUILD === '1' || process.env.CAPACITOR_BUILD === 'true';
