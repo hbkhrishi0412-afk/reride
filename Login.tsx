@@ -3,6 +3,11 @@ import { View, User } from './types';
 import { login, register } from './services/userService';
 import { runGoogleSignInButtonFlow } from './services/authService';
 import { setRememberMePreference } from './utils/rememberMe';
+import {
+  saveRememberedCredentialsAsync,
+  resolveRememberedCredentials,
+  hasRememberedCredentials,
+} from './utils/rememberedCredentials';
 import OTPLogin from './components/OTPLogin';
 import PasswordInput from './components/PasswordInput';
 import AuthLayout from './components/AuthLayout';
@@ -36,11 +41,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
   }, []);
 
   useEffect(() => {
-    const rememberedEmail = localStorage.getItem('rememberedSellerEmail');
-    if (rememberedEmail) {
-      setEmail(rememberedEmail);
+    let cancelled = false;
+    void resolveRememberedCredentials('seller').then((remembered) => {
+      if (cancelled || !remembered) return;
+      setEmail(remembered.email);
+      setPassword(remembered.password);
       setRememberMe(true);
-    }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,8 +66,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
             if (!result.success || !result.user) {
                 throw new Error(result.reason || 'Invalid credentials.');
             }
-            if (rememberMe) localStorage.setItem('rememberedSellerEmail', email);
-            else localStorage.removeItem('rememberedSellerEmail');
+            await saveRememberedCredentialsAsync('seller', email, password, rememberMe);
             setRememberMePreference(rememberMe);
             onLogin(result.user);
         } else {
@@ -103,7 +112,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
       setError('');
       setName('');
       setMobile('');
-      if (!localStorage.getItem('rememberedSellerEmail')) {
+      if (!hasRememberedCredentials('seller')) {
           setEmail('');
       }
       setPassword('');

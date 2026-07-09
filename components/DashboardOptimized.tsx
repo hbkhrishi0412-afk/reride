@@ -168,14 +168,14 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-reride-text-dark dark:text-reride-text-dark">
             Seller Dashboard
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
+          <p className="text-gray-600 mt-2">
             Welcome back, {seller.name}
           </p>
         </div>
@@ -183,7 +183,7 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
         <div className="grid grid-cols-1 lg:grid-cols-[250px_1fr] gap-8">
           {/* Sidebar Navigation */}
           <aside className="lg:col-span-1">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 space-y-2 sticky top-8">
+            <div className="bg-white dark:bg-white rounded-lg shadow-md p-4 space-y-2 sticky top-8">
               <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Dashboard</h3>
               {navigationItems.map((item) => (
                 <button
@@ -206,7 +206,7 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
           <main className="lg:col-span-1">
 
             {/* Content */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+            <div className="bg-white dark:bg-white rounded-lg shadow-md p-6">
               {renderContent()}
             </div>
           </main>

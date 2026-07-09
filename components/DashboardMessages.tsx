@@ -1,9 +1,11 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useCallback } from 'react';
 import type { Conversation } from '../types';
 import InlineChat from './InlineChat';
 import { getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
 import { createSafetyReport } from '../services/trustSafetyService';
+import { useConversationList } from '../hooks/useConversationList';
+import { useApp } from './AppProvider';
 
 interface DashboardMessagesProps {
   conversations: Conversation[];
@@ -18,6 +20,8 @@ interface DashboardMessagesProps {
   chatPeerOnlineByConversationId?: Record<string, boolean>;
   onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
   onMarkAllAsRead?: () => void;
+  onDeleteConversation?: (conversationId: string) => void | Promise<void>;
+  onArchiveConversation?: (conversationId: string, archived?: boolean) => void | Promise<void>;
 }
 
 const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
@@ -32,26 +36,58 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
   onOfferResponse,
   chatPeerOnlineByConversationId,
   onSetConversationReadState,
-  onMarkAllAsRead
+  onMarkAllAsRead,
+  onDeleteConversation,
+  onArchiveConversation,
 }) => {
+  const { runIfConfirmed } = useApp();
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
+  const [inboxView, setInboxView] = useState<'active' | 'archived'>('active');
 
-  // Safety check
   const safeConversations = conversations || [];
 
-  const filteredConversations = safeConversations.filter(conv => {
-    if (!conv) return false;
-    if (filter === 'unread') {
-      return !conv.isReadBySeller;
-    }
-    if (filter === 'read') {
-      return conv.isReadBySeller;
-    }
-    return true;
-  });
+  const { filteredConversations, unreadCount, archivedCount } = useConversationList(
+    safeConversations,
+    '',
+    filter,
+    {
+      viewerRole: 'seller',
+      getCounterpartLabel: (c) => c.customerName,
+      inboxView,
+    },
+  );
 
-  const unreadCount = safeConversations.filter(conv => conv && !conv.isReadBySeller).length;
+  const handleArchiveConversation = useCallback(
+    (conversationId: string, archived = true) => {
+      if (!onArchiveConversation) return;
+      const message = archived
+        ? 'Archive this conversation? Deal and message history stay intact.'
+        : 'Restore this conversation to your inbox?';
+      void runIfConfirmed(message, () => {
+        void Promise.resolve(onArchiveConversation(conversationId, archived));
+      });
+    },
+    [onArchiveConversation, runIfConfirmed],
+  );
+
+  const handleDeleteConversation = useCallback(
+    (conversationId: string, hasDeal?: boolean) => {
+      if (!onDeleteConversation) return;
+      if (hasDeal) {
+        handleArchiveConversation(conversationId, true);
+        return;
+      }
+      void runIfConfirmed(
+        'Delete this conversation? This cannot be undone.',
+        () => {
+          void Promise.resolve(onDeleteConversation(conversationId));
+        },
+        { variant: 'danger' },
+      );
+    },
+    [onDeleteConversation, handleArchiveConversation, runIfConfirmed],
+  );
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -115,7 +151,18 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
           >
             Read
           </button>
-          {onMarkAllAsRead && unreadCount > 0 && (
+          {onArchiveConversation && (
+            <button
+              type="button"
+              onClick={() => setInboxView((v) => (v === 'active' ? 'archived' : 'active'))}
+              className={`px-3 py-1 rounded-full text-sm ${
+                inboxView === 'archived' ? 'bg-reride-orange text-white' : 'bg-gray-200 text-gray-700'
+              }`}
+            >
+              {inboxView === 'archived' ? 'Active' : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ''}`}
+            </button>
+          )}
+          {onMarkAllAsRead && unreadCount > 0 && inboxView === 'active' && (
             <button
               type="button"
               onClick={onMarkAllAsRead}
@@ -181,6 +228,32 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
                             aria-label={conversation.isReadBySeller ? 'Mark conversation as unread' : 'Mark conversation as read'}
                           >
                             {conversation.isReadBySeller ? 'Mark unread' : 'Mark read'}
+                          </button>
+                        )}
+                        {onArchiveConversation && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleArchiveConversation(conversation.id, inboxView !== 'archived');
+                            }}
+                            className="text-[11px] text-gray-500 hover:text-reride-orange mt-1"
+                            aria-label={inboxView === 'archived' ? 'Restore conversation' : 'Archive conversation'}
+                          >
+                            {inboxView === 'archived' ? 'Restore' : 'Archive'}
+                          </button>
+                        )}
+                        {onDeleteConversation && inboxView !== 'archived' && !conversation.hasDeal && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteConversation(conversation.id, conversation.hasDeal);
+                            }}
+                            className="text-[11px] text-gray-500 hover:text-red-600 mt-1"
+                            aria-label="Delete conversation"
+                          >
+                            Delete
                           </button>
                         )}
                         {!conversation.isReadBySeller && (

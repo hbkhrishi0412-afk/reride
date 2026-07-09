@@ -79,22 +79,22 @@ export const SellerDealCalendar: React.FC<SellerDealCalendarProps> = ({ compact 
   }, [compact, events]);
 
   if (loading) {
-    return <div className="h-24 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />;
+    return <div className="h-24 rounded-2xl bg-slate-100 dark:bg-gray-50 animate-pulse" />;
   }
 
   if (events.length === 0) {
     return (
-      <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 p-4 shadow-sm">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Calendar</h3>
+      <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-4 shadow-sm">
+        <h3 className="text-sm font-bold text-slate-900">Calendar</h3>
         <p className="text-sm text-slate-500 mt-2">No upcoming events. Test drives and RC deadlines appear here.</p>
       </section>
     );
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Calendar</h3>
+    <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-gray-200">
+        <h3 className="text-sm font-bold text-slate-900">Calendar</h3>
         <div className="flex items-center gap-2 text-[10px] font-semibold">
           {thisWeekCount > 0 && (
             <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
@@ -108,18 +108,18 @@ export const SellerDealCalendar: React.FC<SellerDealCalendarProps> = ({ compact 
           )}
         </div>
       </div>
-      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+      <ul className="divide-y divide-slate-100 dark:divide-gray-100">
         {visibleEvents.map((evt) => (
           <li key={evt.id}>
             <button
               type="button"
               onClick={() => onOpenDeal?.(evt.dealId)}
-              className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+              className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-gray-50 transition-colors"
             >
               <span className="text-lg shrink-0 mt-0.5">{eventIcon(evt.type)}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white">{evt.title}</p>
+                  <p className="text-sm font-semibold text-slate-900">{evt.title}</p>
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusStyles(evt.status)}`}>
                     {evt.status}
                   </span>

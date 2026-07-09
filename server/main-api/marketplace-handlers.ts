@@ -4287,7 +4287,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       sanitizedBody.insuranceValidity = sanitizedBody.insuranceValidTill;
     }
     // Clamp status to the published/unpublished/sold enum — prevent free-text injection.
-    const validStatuses = new Set(['published', 'unpublished', 'sold']);
+    const validStatuses = new Set(['published', 'unpublished', 'sold', 'archived']);
     const requestedStatus = typeof sanitizedBody.status === 'string' ? sanitizedBody.status : '';
     const clampedStatus = validStatuses.has(requestedStatus) ? requestedStatus : 'published';
     // Admins may additionally seed privileged fields (e.g. bulk import of certified listings).
@@ -4454,7 +4454,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
       // Clamp status to the valid enum.
       if ('status' in sanitizedUpdate) {
-        const validStatuses = new Set(['published', 'unpublished', 'sold']);
+        const validStatuses = new Set(['published', 'unpublished', 'sold', 'archived']);
         if (typeof sanitizedUpdate.status !== 'string' || !validStatuses.has(sanitizedUpdate.status)) {
           delete sanitizedUpdate.status;
         }

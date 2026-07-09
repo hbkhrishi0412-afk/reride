@@ -25,8 +25,10 @@ interface CustomerInboxProps {
   onConsumedInitialConversation?: () => void;
   currentUserEmail?: string | null;
   onClearChat?: (conversationId: string) => void | Promise<void>;
-  /** Permanently delete the conversation (API + state). */
+  /** Permanently delete the conversation (API + state). Only allowed when no deal exists. */
   onDeleteConversation?: (conversationId: string) => void | Promise<void>;
+  /** Hide from inbox without deleting (preserves deal / message history). */
+  onArchiveConversation?: (conversationId: string, archived?: boolean) => void | Promise<void>;
   chatPeerOnlineByConversationId?: Record<string, boolean>;
   onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
   onMarkAllAsRead?: () => void;
@@ -58,6 +60,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   currentUserEmail,
   onClearChat,
   onDeleteConversation,
+  onArchiveConversation,
   chatPeerOnlineByConversationId,
   onSetConversationReadState,
   onMarkAllAsRead,
@@ -66,6 +69,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read'>('all');
+  const [inboxView, setInboxView] = useState<'active' | 'archived'>('active');
   const [mobileShowsChat, setMobileShowsChat] = useState(false);
   const [isInboxNarrow, setIsInboxNarrow] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -92,14 +96,28 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
     window.open(`tel:${phone}`);
   }, []);
 
-  const { sortedConversations, filteredConversations, unreadCount } = useConversationList(
+  const { sortedConversations, filteredConversations, unreadCount, archivedCount } = useConversationList(
     conversations,
     searchQuery,
     filterMode,
     {
       viewerRole: 'customer',
       getCounterpartLabel: (c) => getSellerName(c.sellerId),
+      inboxView,
     }
+  );
+
+  const handleArchiveConversation = useCallback(
+    (conversationId: string, archived = true) => {
+      if (!onArchiveConversation) return;
+      const message = archived
+        ? 'Archive this conversation? It will be hidden from your inbox. Deal and message history stay intact.'
+        : 'Restore this conversation to your inbox?';
+      void runIfConfirmed(message, () => {
+        void Promise.resolve(onArchiveConversation(conversationId, archived));
+      });
+    },
+    [onArchiveConversation, runIfConfirmed],
   );
 
   const handleSelectConversation = useCallback((conv: Conversation) => {
@@ -113,8 +131,12 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   }, [isInboxNarrow, onMarkMessagesAsRead]);
 
   const handleDeleteConversation = useCallback(
-    (conversationId: string) => {
+    (conversationId: string, hasDeal?: boolean) => {
       if (!onDeleteConversation) return;
+      if (hasDeal) {
+        handleArchiveConversation(conversationId, true);
+        return;
+      }
       void runIfConfirmed(
         'Delete this conversation? This cannot be undone.',
         () => {
@@ -123,7 +145,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
         { variant: 'danger' },
       );
     },
-    [onDeleteConversation, runIfConfirmed],
+    [onDeleteConversation, handleArchiveConversation, runIfConfirmed],
   );
 
   useEffect(() => {
@@ -139,8 +161,11 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
     if (!selectedConv && sortedConversations.length > 0) {
       handleSelectConversation(sortedConversations[0]);
     }
-    if (selectedConv && !conversations.find((c) => c.id === selectedConv.id)) {
+    if (selectedConv && !sortedConversations.find((c) => c.id === selectedConv.id)) {
       setSelectedConv(null);
+      if (isInboxNarrow) {
+        setMobileShowsChat(false);
+      }
     }
   }, [
     conversations,
@@ -149,6 +174,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
     handleSelectConversation,
     initialOpenConversationId,
     onConsumedInitialConversation,
+    isInboxNarrow,
   ]);
 
 
@@ -245,6 +271,18 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                 >
                   Read
                 </button>
+                {onArchiveConversation && (
+                  <button
+                    type="button"
+                    onClick={() => setInboxView((v) => (v === 'active' ? 'archived' : 'active'))}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                      inboxView === 'archived' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                    aria-label={inboxView === 'archived' ? 'Show active conversations' : 'Show archived conversations'}
+                  >
+                    {inboxView === 'archived' ? 'Active' : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ''}`}
+                  </button>
+                )}
                 {onMarkAllAsRead && unreadCount > 0 && (
                   <button
                     type="button"
@@ -323,12 +361,25 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                                     {isUnread ? 'Mark read' : 'Mark unread'}
                                   </button>
                                 )}
-                                {onDeleteConversation && (
+                                {onArchiveConversation && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleDeleteConversation(conv.id);
+                                      handleArchiveConversation(conv.id, inboxView !== 'archived');
+                                    }}
+                                    className="text-[11px] text-gray-500 hover:text-orange-600"
+                                    aria-label={inboxView === 'archived' ? 'Restore conversation' : 'Archive conversation'}
+                                  >
+                                    {inboxView === 'archived' ? 'Restore' : 'Archive'}
+                                  </button>
+                                )}
+                                {onDeleteConversation && inboxView !== 'archived' && !conv.hasDeal && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteConversation(conv.id, conv.hasDeal);
                                     }}
                                     className="text-[11px] text-gray-500 hover:text-red-600"
                                     aria-label="Delete conversation"

@@ -213,7 +213,7 @@ export interface Vehicle {
   fuelType: string;
   fuelEfficiency: string;
   color: string;
-  status: 'published' | 'unpublished' | 'sold';
+  status: 'published' | 'unpublished' | 'sold' | 'archived';
   listingType?: 'buy' | 'rental'; // 'buy' for regular sale, 'rental' for rental vehicles
   isFeatured: boolean;
   views?: number;
@@ -271,7 +271,10 @@ export interface Vehicle {
   updatedAt?: string; // ISO String
   listingExpiresAt?: string; // ISO String
   listingLastRefreshed?: string; // ISO String
-  listingStatus?: 'active' | 'expired' | 'sold' | 'suspended' | 'draft';
+  listingStatus?: 'active' | 'expired' | 'sold' | 'suspended' | 'draft' | 'archived';
+  /** Increments each time a sold vehicle is relisted after a return. */
+  listingCycle?: number;
+  archivedAt?: string;
   listingAutoRenew?: boolean;
   listingRenewalCount?: number;
   daysActive?: number;
@@ -517,6 +520,12 @@ export interface Conversation {
   customerHistoryClearedAt?: string;
   /** ISO time: seller chose "clear history" — they no longer see messages at or before this (others unaffected). */
   sellerHistoryClearedAt?: string;
+  /** ISO time: customer archived/hid this thread from their inbox (deal history preserved). */
+  customerArchivedAt?: string;
+  /** ISO time: seller archived/hid this thread from their inbox (deal history preserved). */
+  sellerArchivedAt?: string;
+  /** Server-enriched: thread is linked to a deal_lead row (not persisted on conversations). */
+  hasDeal?: boolean;
 }
 
 export interface Toast {
@@ -1078,6 +1087,9 @@ export type DealStage =
 
 export type DealLeadStatus = 'active' | 'completed' | 'cancelled';
 
+/** Post-completion return lifecycle on a deal lead. */
+export type DealReturnStatus = 'returned' | 'relisted' | 'archived';
+
 export interface DealOfferRecord {
   id: string;
   amount: number;
@@ -1203,6 +1215,10 @@ export interface DealLead {
   updatedAt: string;
   chatAcceptedAt?: string;
   completedAt?: string;
+  returnStatus?: DealReturnStatus;
+  returnedAt?: string;
+  returnReason?: string;
+  returnReviewedAt?: string;
   timeline?: DealTimelineEvent[];
   vehicleName?: string;
   vehicleMake?: string;
@@ -1444,10 +1460,10 @@ export const DEAL_PIPELINE_STAGES: readonly DealStage[] = [
   'chat_accepted',
   'test_drive_scheduled',
   'test_drive_completed',
-  'offer_made',
-  'offer_accepted',
   'inspection_requested',
   'inspection_completed',
+  'offer_made',
+  'offer_accepted',
   'token_uploaded',
   'token_confirmed',
   'delivery_pending',
@@ -1474,8 +1490,8 @@ export const DEAL_TIMELINE_STAGES: { stage: DealStage; label: string }[] = [
   { stage: 'chat_accepted', label: 'Chat Started' },
   { stage: 'test_drive_scheduled', label: 'Test Drive Scheduled' },
   { stage: 'test_drive_completed', label: 'Test Drive Completed' },
-  { stage: 'offer_accepted', label: 'Offer Accepted' },
   { stage: 'inspection_completed', label: 'Inspection Completed' },
+  { stage: 'offer_accepted', label: 'Offer Accepted' },
   { stage: 'token_confirmed', label: 'Token Confirmed' },
   { stage: 'delivery_completed', label: 'Delivery Completed' },
   { stage: 'documents_completed', label: 'Documents Completed' },
@@ -1488,7 +1504,8 @@ export type SellerTaskType =
   | 'respond_offer'
   | 'confirm_test_drive'
   | 'confirm_token'
-  | 'confirm_delivery';
+  | 'confirm_delivery'
+  | 'review_return';
 
 export interface SellerTask {
   id: string;
@@ -1534,9 +1551,9 @@ export function deriveKanbanStatus(lead: Pick<DealLead, 'status' | 'currentStage
     return 'payment_pending';
   }
   if (['inspection_requested', 'inspection_completed'].includes(lead.currentStage)) return 'inspection';
-  if (lead.currentStage === 'offer_accepted') return 'inspection';
 
   const currentOffer = lead.metadata.offers?.find((o) => o.id === lead.metadata.currentOfferId);
+  if (lead.currentStage === 'offer_accepted') return 'payment_pending';
   // Keep "Negotiation" only when the current active offer is actively countered.
   // Historical countered offers should not keep the lead stuck in Negotiation.
   if (currentOffer?.status === 'countered') {

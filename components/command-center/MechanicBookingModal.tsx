@@ -57,9 +57,9 @@ export const MechanicBookingModal: React.FC<MechanicBookingModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Book mechanic inspection</h3>
+      <div className="bg-white dark:bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-gray-200">
+          <h3 className="text-lg font-bold text-slate-900">Book mechanic inspection</h3>
           <p className="text-xs text-slate-500 mt-1 font-mono">{lead.id}</p>
         </div>
         <form onSubmit={(e) => void handleSubmit(e)} className="p-5 space-y-4">
@@ -71,7 +71,7 @@ export const MechanicBookingModal: React.FC<MechanicBookingModalProps> = ({
               value={scheduledDate}
               onChange={(e) => setScheduledDate(e.target.value)}
               required
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm dark:bg-slate-800 dark:border-slate-700"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm dark:bg-gray-50 dark:border-gray-200"
             />
           </div>
           <div>
@@ -79,7 +79,7 @@ export const MechanicBookingModal: React.FC<MechanicBookingModalProps> = ({
             <select
               value={scheduledTime}
               onChange={(e) => setScheduledTime(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm dark:bg-slate-800 dark:border-slate-700"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm dark:bg-gray-50 dark:border-gray-200"
             >
               {TIME_SLOTS.map((t) => (
                 <option key={t} value={t}>{t}</option>
@@ -94,7 +94,7 @@ export const MechanicBookingModal: React.FC<MechanicBookingModalProps> = ({
               rows={2}
               placeholder="Where should the mechanic inspect the vehicle?"
               required
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none dark:bg-slate-800 dark:border-slate-700"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none dark:bg-gray-50 dark:border-gray-200"
             />
           </div>
           <div>
@@ -104,7 +104,7 @@ export const MechanicBookingModal: React.FC<MechanicBookingModalProps> = ({
               value={mechanicName}
               onChange={(e) => setMechanicName(e.target.value)}
               placeholder="Any certified mechanic"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm dark:bg-slate-800 dark:border-slate-700"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm dark:bg-gray-50 dark:border-gray-200"
             />
           </div>
           <div>
@@ -114,7 +114,7 @@ export const MechanicBookingModal: React.FC<MechanicBookingModalProps> = ({
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               placeholder="Specific areas to check, access instructions…"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none dark:bg-slate-800 dark:border-slate-700"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none dark:bg-gray-50 dark:border-gray-200"
             />
           </div>
           <div className="flex gap-2 pt-2">

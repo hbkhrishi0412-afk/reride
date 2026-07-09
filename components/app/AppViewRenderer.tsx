@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View as ViewEnum, Vehicle, User, Notification, Conversation, SubscriptionPlan, type SearchFilters } from '../../types';
+import { View as ViewEnum, Vehicle, User, Notification, Conversation, ChatMessage, SubscriptionPlan, type SearchFilters } from '../../types';
 import { useApp } from '../AppProvider';
 import useIsMobileApp from '../../hooks/useIsMobileApp';
 import useIsLgUp from '../../hooks/useIsLgUp';
@@ -148,6 +148,7 @@ const AdminLogin = React.lazy(() => import('../../AdminLogin'));
 const MobileDashboard = React.lazy(() => import('../MobileDashboard'));
 const MobileVehicleDetail = React.lazy(() => import('../MobileVehicleDetail'));
 const MobileInbox = React.lazy(() => import('../MobileInbox'));
+const CustomerInbox = React.lazy(() => import('../CustomerInbox'));
 const NotificationsPage = React.lazy(() => import('../NotificationsPage'));
 const MobileNotifications = React.lazy(() =>
   import('../MobileNotifications').then((m) => ({ default: m.MobileNotifications }))
@@ -266,6 +267,7 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     setConversationReadState,
     clearConversationMessages,
     deleteConversation,
+    archiveConversation,
     onCreateUser,
     onImportUsers,
     onImportVehicles,
@@ -1145,6 +1147,8 @@ switch (currentView) {
             markAsRead(conversationId, { readerRole: 'seller', forceReadState: true })
           }
           onClearChat={clearConversationMessages}
+          onArchiveConversation={archiveConversation}
+          onDeleteConversation={deleteConversation}
           onUpdateSellerProfile={async (details) => {
             if (currentUser) {
               await updateUser(currentUser.email, details);
@@ -1569,49 +1573,70 @@ switch (currentView) {
         }
         return false;
       });
+      const inboxViewerRole = inboxRoleNorm === 'seller' ? 'seller' : 'customer';
+      const inboxSharedProps = {
+        conversations: inboxThreads,
+        initialOpenConversationId: inboxConversationIdToOpen,
+        onConsumedInitialConversation: handleInboxInitialConversationConsumed,
+        chatPeerOnlineByConversationId,
+        vehicles,
+        onSendMessage: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => {
+          const conv = conversations.find((c) => c && c.id === conversationId);
+          if (conv) {
+            sendMessageWithType(conv.id, messageText, type, payload);
+          }
+        },
+        onMarkAsRead: markAsRead,
+        users,
+        typingStatus,
+        onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => {
+          void markAsRead(conversationId, { readerRole });
+        },
+        onSetConversationReadState: (conversationId: string, isRead: boolean) =>
+          setConversationReadState(conversationId, inboxViewerRole, isRead),
+        onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, _reason: string) =>
+          flagContent(type, id),
+        onOfferResponse: (
+          conversationId: string,
+          messageId: number,
+          response: 'accepted' | 'rejected' | 'countered',
+          counterPrice?: number,
+        ) => {
+          onOfferResponse(conversationId, messageId, response, counterPrice);
+        },
+        onClearChat: clearConversationMessages,
+        onDeleteConversation: deleteConversation,
+        onArchiveConversation: archiveConversation,
+      };
+
+      if (!isMobileApp && isLgUp) {
+        return (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+            <CustomerInbox
+              {...inboxSharedProps}
+              onUserTyping={(conversationId, _userRole) => toggleTyping(conversationId, true)}
+              onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
+              onMarkAllAsRead={() => void markAllVisibleAsRead(inboxViewerRole)}
+              currentUserEmail={currentUser.email}
+            />
+          </div>
+        );
+      }
+
       return (
         <MobileInbox
-          conversations={inboxThreads}
-          inboxRole={inboxRoleNorm === 'seller' ? 'seller' : 'customer'}
-          initialOpenConversationId={inboxConversationIdToOpen}
-          onConsumedInitialConversation={handleInboxInitialConversationConsumed}
-          chatPeerOnlineByConversationId={chatPeerOnlineByConversationId}
+          {...inboxSharedProps}
+          inboxRole={inboxViewerRole}
           openThreadInFloatingChat={
             inboxRoleNorm === 'seller' && (isMobileApp || isCapacitorNativeApp())
               ? handleSellerOpenChatFromDashboard
               : undefined
           }
-          vehicles={vehicles}
-          onSendMessage={(conversationId, messageText, type, payload) => {
-            const conv = conversations.find((c) => c && c.id === conversationId);
-            if (conv) {
-              sendMessageWithType(conv.id, messageText, type, payload);
-            }
-          }}
-          onMarkAsRead={markAsRead}
-          users={users}
-          typingStatus={typingStatus}
           onTypingActivity={(conversationId, isTyping) => toggleTyping(conversationId, isTyping)}
-          onMarkMessagesAsRead={(conversationId, readerRole) => {
-            void markAsRead(conversationId, { readerRole });
-          }}
           onMarkAllAsRead={markAllVisibleAsRead}
-          onSetConversationReadState={(conversationId, isRead) =>
-            setConversationReadState(
-              conversationId,
-              inboxRoleNorm === 'seller' ? 'seller' : 'customer',
-              isRead,
-            )
-          }
-          onFlagContent={(type, id, _reason) => flagContent(type, id)}
-          onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-            onOfferResponse(conversationId, messageId, response, counterPrice);
-          }}
           onTestDriveResponse={handleTestDriveResponse}
           currentUser={currentUser}
           onNavigate={navigate}
-          onClearChat={clearConversationMessages}
-          onDeleteConversation={deleteConversation}
         />
       );
     }

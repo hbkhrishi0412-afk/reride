@@ -106,9 +106,9 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   // Safety check: show login prompt when no currentUser (after all hooks)
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-brand-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text mb-4">
+          <h2 className="text-2xl font-bold text-reride-text-dark mb-4">
             {t('buyerDashboard.loginPrompt')}
           </h2>
           <button
@@ -243,10 +243,10 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           <main className="lg:col-span-1">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-reride-text-dark dark:text-reride-text mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
             {t('buyerDashboard.myDashboard')}
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-gray-600">
             {t('buyerDashboard.welcomeSubtitle', { name: currentUser.name })}
           </p>
         </div>
@@ -294,7 +294,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('alerts')}
-            className="group flex items-center justify-between gap-4 w-full bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl px-5 py-4 mb-6 hover:shadow-md transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-yellow-500"
+            className="group flex items-center justify-between gap-4 w-full bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-2xl px-5 py-4 mb-6 hover:shadow-md transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-yellow-500"
             aria-label={t('buyerDashboard.newAlerts')}
           >
             <div className="flex items-center gap-3 min-w-0">
@@ -302,33 +302,33 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 🔔
               </span>
               <div className="min-w-0 text-left">
-                <p className="text-sm font-semibold text-yellow-900 dark:text-yellow-100 truncate">
+                <p className="text-sm font-semibold text-yellow-900 truncate">
                   {t('buyerDashboard.newAlerts')}
                 </p>
-                <p className="text-xs text-yellow-800/80 dark:text-yellow-200/80 truncate">
+                <p className="text-xs text-yellow-800/80 truncate">
                   {priceDrops.length > 0 && t('buyerDashboard.priceDropsHeading', { count: priceDrops.length })}
                   {priceDrops.length > 0 && newMatches.length > 0 && ' • '}
                   {newMatches.length > 0 && `${newMatches.length} ${t('buyerDashboard.newMatchesHeading')}`}
                 </p>
               </div>
             </div>
-            <span className="text-sm font-semibold text-yellow-900 dark:text-yellow-100 whitespace-nowrap group-hover:translate-x-0.5 transition-transform">
+            <span className="text-sm font-semibold text-yellow-900 whitespace-nowrap group-hover:translate-x-0.5 transition-transform">
               {t('buyerDashboard.viewAllArrow')}
             </span>
           </button>
         )}
 
         {/* Content */}
-        <div className="bg-white dark:bg-brand-gray-800 rounded-2xl shadow-soft mb-8">
+        <div className="bg-white rounded-2xl shadow-soft mb-8 border border-gray-100">
 
           <div className="p-4 sm:p-6">
             {activeTab === 'deals' && (
               <div role="tabpanel" id="buyer-panel-deals" aria-labelledby="buyer-tab-deals" className="space-y-4">
                 <div>
-                  <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-1">
+                  <h3 className="text-xl font-bold text-gray-900 mb-1">
                     {t('buyerDashboard.deals.title', { defaultValue: 'My Deals' })}
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  <p className="text-sm text-gray-600 mb-4">
                     {t('buyerDashboard.deals.subtitle', {
                       defaultValue: 'Track every vehicle deal from chat to RC transfer.',
                     })}
@@ -352,7 +352,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 {wishlistVehicles.length > 0 && (
                   <div>
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text">
+                      <h3 className="text-xl font-bold text-gray-900">
                         ❤️ {t('buyerDashboard.yourWishlist')}
                       </h3>
                       <button
@@ -383,7 +383,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 {/* Recently Viewed Section */}
                 {recentlyViewed.length > 0 && (
                   <div>
-                    <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-4">
+                    <h3 className="text-xl font-bold text-gray-900 mb-4">
                       👁️ {t('buyerDashboard.recentlyViewed')}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -428,7 +428,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             {activeTab === 'searches' && (
               <div role="tabpanel" id="buyer-panel-searches" aria-labelledby="buyer-tab-searches">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text">
+                  <h3 className="text-xl font-bold text-gray-900">
                     {t('buyerDashboard.yourSavedSearches')}
                   </h3>
                 </div>
@@ -446,14 +446,14 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                       return (
                         <div
                           key={search.id}
-                          className="bg-gray-50 dark:bg-brand-gray-700 rounded-lg p-4"
+                          className="bg-gray-50 rounded-lg p-4 border border-gray-100"
                         >
                           <div className="flex items-start justify-between mb-2">
                             <div>
-                              <h4 className="font-semibold text-reride-text-dark dark:text-reride-text">
+                              <h4 className="font-semibold text-gray-900">
                                 {search.name}
                               </h4>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                              <p className="text-sm text-gray-600">
                                 {matches.length === 1
                                   ? t('buyerDashboard.oneMatchFound')
                                   : t('buyerDashboard.nMatchesFound', { count: matches.length })}
@@ -472,17 +472,17 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                           {/* Search Filters Display */}
                           <div className="flex flex-wrap gap-2 mb-3">
                             {search.filters.make && (
-                              <span className="text-xs bg-white dark:bg-brand-gray-800 px-2 py-1 rounded">
+                              <span className="text-xs bg-white text-gray-700 border border-gray-100 px-2 py-1 rounded">
                                 {t('buyerDashboard.filter.make', { value: search.filters.make })}
                               </span>
                             )}
                             {search.filters.model && (
-                              <span className="text-xs bg-white dark:bg-brand-gray-800 px-2 py-1 rounded">
+                              <span className="text-xs bg-white text-gray-700 border border-gray-100 px-2 py-1 rounded">
                                 {t('buyerDashboard.filter.model', { value: search.filters.model })}
                               </span>
                             )}
                             {(search.filters.minPrice || search.filters.maxPrice) && (
-                              <span className="text-xs bg-white dark:bg-brand-gray-800 px-2 py-1 rounded">
+                              <span className="text-xs bg-white text-gray-700 border border-gray-100 px-2 py-1 rounded">
                                 {t('buyerDashboard.filter.price', {
                                   min: (search.filters.minPrice || 0).toLocaleString('en-IN'),
                                   max: (search.filters.maxPrice || 0).toLocaleString('en-IN'),
@@ -490,12 +490,12 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                               </span>
                             )}
                             {search.filters.transmission && (
-                              <span className="text-xs bg-white dark:bg-brand-gray-800 px-2 py-1 rounded">
+                              <span className="text-xs bg-white text-gray-700 border border-gray-100 px-2 py-1 rounded">
                                 {t('buyerDashboard.filter.transmission', { value: search.filters.transmission })}
                               </span>
                             )}
                             {search.filters.ownership && (
-                              <span className="text-xs bg-white dark:bg-brand-gray-800 px-2 py-1 rounded">
+                              <span className="text-xs bg-white text-gray-700 border border-gray-100 px-2 py-1 rounded">
                                 {t('buyerDashboard.filter.ownership', {
                                   value:
                                     search.filters.ownership === '1'
@@ -516,7 +516,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                               onChange={(e) => handleToggleAlerts(search.id, e.target.checked)}
                               className="rounded"
                             />
-                            <span className="text-sm text-gray-700 dark:text-gray-300">
+                            <span className="text-sm text-gray-700">
                               {t('buyerDashboard.emailAlerts')}
                             </span>
                           </label>
@@ -531,7 +531,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             {/* Activity Tab */}
             {activeTab === 'activity' && (
               <div role="tabpanel" id="buyer-panel-activity" aria-labelledby="buyer-tab-activity">
-                <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-6">
                   {t('buyerDashboard.recentActivity')}
                 </h3>
                 {recentlyViewed.length === 0 ? (
@@ -563,7 +563,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             {/* Alerts Tab */}
             {activeTab === 'alerts' && (
               <div role="tabpanel" id="buyer-panel-alerts" aria-labelledby="buyer-tab-alerts">
-                <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-6">
                   {t('buyerDashboard.yourAlerts')}
                 </h3>
                 {priceDrops.length === 0 && newMatches.length === 0 ? (
@@ -577,7 +577,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                   <div className="space-y-6">
                     {priceDrops.length > 0 && (
                       <div>
-                        <h4 className="font-semibold text-reride-text-dark dark:text-reride-text mb-4">
+                        <h4 className="font-semibold text-gray-900 mb-4">
                           🔽 {t('buyerDashboard.priceDropsSection')}
                         </h4>
                         <div className="space-y-3">
@@ -588,7 +588,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                               <button
                                 key={drop.vehicleId}
                                 type="button"
-                                className="w-full text-left bg-white dark:bg-brand-gray-700 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
+                                className="w-full text-left bg-white rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow border border-gray-100"
                                 onClick={() => onSelectVehicle(vehicle)}
                               >
                                 <div className="flex items-center gap-4">
@@ -600,10 +600,10 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                                     quality={80}
                                   />
                                   <div className="flex-1">
-                                    <p className="font-semibold text-reride-text-dark dark:text-reride-text">
+                                    <p className="font-semibold text-gray-900">
                                       {vehicle.year} {vehicle.make} {vehicle.model}
                                     </p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    <p className="text-sm text-gray-600">
                                       <span className="line-through">₹{drop.oldPrice.toLocaleString('en-IN')}</span>
                                       {' → '}
                                       <span className="text-reride-orange font-bold">
@@ -620,7 +620,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                     )}
                     {newMatches.length > 0 && (
                       <div className={priceDrops.length > 0 ? 'mt-6' : ''}>
-                        <h4 className="font-semibold text-reride-text-dark dark:text-reride-text mb-4">
+                        <h4 className="font-semibold text-gray-900 mb-4">
                           ✨ {t('buyerDashboard.newMatchesHeading')}
                         </h4>
                         <div className="space-y-3">
@@ -630,12 +630,12 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                             return (
                               <div
                                 key={result.searchId}
-                                className="bg-white dark:bg-brand-gray-700 rounded-lg p-4"
+                                className="bg-white rounded-lg p-4 border border-gray-100"
                               >
-                                <p className="font-semibold text-reride-text-dark dark:text-reride-text mb-1">
+                                <p className="font-semibold text-gray-900 mb-1">
                                   {search.name}
                                 </p>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                <p className="text-sm text-gray-600">
                                   {result.matches.length === 1
                                     ? t('buyerDashboard.oneNewMatch')
                                     : t('buyerDashboard.nNewMatches', { count: result.matches.length })}
@@ -655,10 +655,10 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
               <div role="tabpanel" id="buyer-panel-serviceTrack" aria-labelledby="buyer-tab-serviceTrack">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
                   <div>
-                    <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text">
+                    <h3 className="text-xl font-bold text-gray-900">
                       {t('buyerDashboard.trackRequests.title')}
                     </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    <p className="text-sm text-gray-600 mt-1">
                       {t('buyerDashboard.trackRequests.subtitle')}
                     </p>
                   </div>
@@ -672,7 +672,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 </div>
                 <Suspense
                   fallback={
-                    <div className="text-sm text-gray-600 dark:text-gray-400 py-8 text-center">
+                    <div className="text-sm text-gray-600 py-8 text-center">
                       {t('buyerDashboard.trackRequests.loading')}
                     </div>
                   }

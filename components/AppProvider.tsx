@@ -465,8 +465,10 @@ interface AppContextType {
     isRead: boolean,
   ) => void;
   clearConversationMessages: (conversationId: string) => Promise<void>;
-  /** Remove conversation for current user (API DELETE + local state). */
+  /** Remove conversation for current user (API DELETE + local state). Blocked when a deal exists. */
   deleteConversation: (conversationId: string) => Promise<void>;
+  /** Hide conversation from inbox without deleting (preserves deal / message history). */
+  archiveConversation: (conversationId: string, archived?: boolean) => Promise<void>;
   toggleTyping: (conversationId: string, isTyping: boolean) => void;
   flagContent: (type: 'vehicle' | 'conversation', id: number | string, reason?: string) => void;
   updateUser: (email: string, updates: Partial<User>, options?: UserUpdateOptions) => Promise<void>;
@@ -846,8 +848,6 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         /* ignore */
       }
       localStorage.removeItem('reRideServiceProvider');
-      localStorage.removeItem('rememberedCustomerEmail');
-      localStorage.removeItem('rememberedSellerEmail');
       clearRememberMeState();
 
       // Clear user-specific data
@@ -909,8 +909,6 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         /* ignore */
       }
       localStorage.removeItem('reRideServiceProvider');
-      localStorage.removeItem('rememberedCustomerEmail');
-      localStorage.removeItem('rememberedSellerEmail');
       clearSupabaseAuthStorage();
       try {
         localStorage.removeItem('reride_wishlist');
@@ -6190,6 +6188,13 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         const { deleteConversationById } = await import('../services/conversationService');
         const res = await deleteConversationById(String(conversationId));
         if (!res.success) {
+          if (res.reason === 'deal_exists' || res.action === 'archive') {
+            addToast(
+              'This conversation is linked to a deal and cannot be deleted. Use Archive to hide it from your inbox.',
+              'warning',
+            );
+            return;
+          }
           addToast(res.error || t('toast.failedSendMessageGeneric'), 'error');
           return;
         }
@@ -6208,6 +6213,60 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         addToast('Conversation deleted successfully.', 'success');
       } catch (error) {
         logError('deleteConversation:', error);
+        addToast(t('toast.failedSendMessageGeneric'), 'error');
+      }
+    },
+    archiveConversation: async (conversationId: string, archived = true) => {
+      if (!currentUser) return;
+      const role: 'customer' | 'seller' = currentUser.role === 'seller' ? 'seller' : 'customer';
+      try {
+        const { patchConversationArchive } = await import('../services/conversationService');
+        const res = await patchConversationArchive(String(conversationId), archived);
+        if (!res.success) {
+          addToast(res.error || t('toast.failedSendMessageGeneric'), 'error');
+          return;
+        }
+        const server = res.data;
+        const archivedAt = archived ? new Date().toISOString() : undefined;
+        const patchArchived = (c: Conversation): Conversation => {
+          if (!server) {
+            return role === 'customer'
+              ? { ...c, customerArchivedAt: archivedAt }
+              : { ...c, sellerArchivedAt: archivedAt };
+          }
+          return {
+            ...c,
+            ...server,
+            customerArchivedAt: server.customerArchivedAt ?? c.customerArchivedAt,
+            sellerArchivedAt: server.sellerArchivedAt ?? c.sellerArchivedAt,
+          };
+        };
+        setConversations((prev) => {
+          const next = Array.isArray(prev)
+            ? prev.map((c) =>
+                c && String(c.id) === String(conversationId) ? patchArchived(c) : c,
+              )
+            : [];
+          try {
+            saveConversations(next);
+          } catch {
+            /* ignore */
+          }
+          return next;
+        });
+        setActiveChat((prev) => {
+          if (!prev || String(prev.id) !== String(conversationId)) return prev;
+          if (archived) return null;
+          return patchArchived(prev);
+        });
+        addToast(
+          archived
+            ? 'Conversation archived. Deal and message history are preserved.'
+            : 'Conversation restored to your inbox.',
+          'success',
+        );
+      } catch (error) {
+        logError('archiveConversation:', error);
         addToast(t('toast.failedSendMessageGeneric'), 'error');
       }
     },

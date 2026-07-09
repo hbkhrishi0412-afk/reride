@@ -648,17 +648,17 @@ const AddNewPlanModal: React.FC<{
 
     return (
         <ModalBackdrop onClose={onClose} className="fixed inset-0 flex items-center justify-center z-50 p-4" backdropClassName="absolute inset-0 bg-black/60">
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white dark:bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit} className="p-6">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-white">Create New Plan</h2>
+                        <h2 className="text-2xl font-bold text-reride-text-dark">Create New Plan</h2>
                         <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
                     </div>
 
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
+                                <label className="block text-sm font-medium text-reride-text-dark mb-1">
                                     Plan Name <span className="text-red-500">*</span>
                                 </label>
                                 <input
@@ -666,17 +666,17 @@ const AddNewPlanModal: React.FC<{
                                     name="name"
                                     value={formData.name}
                                     onChange={handleChange}
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 transition-colors ${
                                         errors.name 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
+                                            : 'border-gray-200 dark:border-gray-200 focus:ring-reride-orange'
                                     }`}
                                     placeholder="Enter plan name"
                                 />
                                 {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
+                                <label className="block text-sm font-medium text-reride-text-dark mb-1">
                                     Price (₹/month) <span className="text-red-500">*</span>
                                 </label>
                                 <input
@@ -686,10 +686,10 @@ const AddNewPlanModal: React.FC<{
                                     onChange={handleChange}
                                     min="0"
                                     step="1"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 transition-colors ${
                                         errors.price 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
+                                            : 'border-gray-200 dark:border-gray-200 focus:ring-reride-orange'
                                     }`}
                                     placeholder="0"
                                 />
@@ -699,7 +699,7 @@ const AddNewPlanModal: React.FC<{
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Listing Limit</label>
+                                <label className="block text-sm font-medium text-reride-text-dark mb-1">Listing Limit</label>
                                 <input
                                     type="number"
                                     name="listingLimit"
@@ -707,42 +707,42 @@ const AddNewPlanModal: React.FC<{
                                     onChange={handleChange}
                                     min="1"
                                     placeholder="Leave empty for unlimited"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 transition-colors ${
                                         errors.listingLimit 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
+                                            : 'border-gray-200 dark:border-gray-200 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.listingLimit && <p className="mt-1 text-sm text-red-500">{errors.listingLimit}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Featured Credits</label>
+                                <label className="block text-sm font-medium text-reride-text-dark mb-1">Featured Credits</label>
                                 <input
                                     type="number"
                                     name="featuredCredits"
                                     value={formData.featuredCredits}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 transition-colors ${
                                         errors.featuredCredits 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
+                                            : 'border-gray-200 dark:border-gray-200 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.featuredCredits && <p className="mt-1 text-sm text-red-500">{errors.featuredCredits}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Free Certifications</label>
+                                <label className="block text-sm font-medium text-reride-text-dark mb-1">Free Certifications</label>
                                 <input
                                     type="number"
                                     name="freeCertifications"
                                     value={formData.freeCertifications}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 transition-colors ${
                                         errors.freeCertifications 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
+                                            : 'border-gray-200 dark:border-gray-200 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.freeCertifications && <p className="mt-1 text-sm text-red-500">{errors.freeCertifications}</p>}
@@ -758,14 +758,14 @@ const AddNewPlanModal: React.FC<{
                                     onChange={handleCheckboxChange}
                                     className="w-4 h-4 text-reride-orange bg-gray-100 border-gray-300 rounded focus:ring-reride-orange"
                                 />
-                                <label className="text-sm font-medium text-reride-text-dark dark:text-white">
+                                <label className="text-sm font-medium text-reride-text-dark">
                                     Mark as Most Popular
                                 </label>
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Features</label>
+                            <label className="block text-sm font-medium text-reride-text-dark mb-1">Features</label>
                             <div className="flex gap-2 mb-3">
                                 <input
                                     type="text"
@@ -773,7 +773,7 @@ const AddNewPlanModal: React.FC<{
                                     onChange={(e) => setNewFeature(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFeature(); } }}
                                     placeholder="Add new feature..."
-                                    className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-reride-orange"
+                                    className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-200 rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 focus:ring-reride-orange"
                                 />
                                 <button type="button" onClick={handleAddFeature} className="px-4 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90">
                                     Add
@@ -781,8 +781,8 @@ const AddNewPlanModal: React.FC<{
                             </div>
                             <div className="space-y-2">
                                 {formData.features.map((feature, index) => (
-                                    <div key={index} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                                        <span className="text-reride-text-dark dark:text-white">{feature}</span>
+                                    <div key={index} className="flex items-center justify-between bg-gray-50 dark:bg-white p-3 rounded-lg">
+                                        <span className="text-reride-text-dark">{feature}</span>
                                         <button
                                             type="button"
                                             onClick={() => handleRemoveFeature(feature)}
@@ -796,7 +796,7 @@ const AddNewPlanModal: React.FC<{
                         </div>
 
                         <div className="flex justify-between items-center">
-                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                            <div className="text-sm text-gray-500">
                                 {Object.keys(errors).length > 0 && (
                                     <span className="text-red-500">Please fix {Object.keys(errors).length} error(s) before creating</span>
                                 )}
@@ -805,7 +805,7 @@ const AddNewPlanModal: React.FC<{
                                 <button 
                                     type="button" 
                                     onClick={onClose} 
-                                    className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-reride-text-dark dark:text-white rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                    className="px-6 py-2 border border-gray-300 dark:border-gray-200 text-reride-text-dark rounded-lg hover:bg-gray-50 dark:hover:bg-gray-50 transition-colors"
                                 >
                                     Cancel
                                 </button>
@@ -911,17 +911,17 @@ const PlanEditModal: React.FC<{
 
     return (
         <ModalBackdrop onClose={onClose} className="fixed inset-0 flex items-center justify-center z-50 p-4" backdropClassName="absolute inset-0 bg-black/60">
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white dark:bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit} className="p-6">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-white">Edit Plan</h2>
+                        <h2 className="text-2xl font-bold text-reride-text-dark">Edit Plan</h2>
                         <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
                     </div>
 
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
+                                <label className="block text-sm font-medium text-reride-text-dark mb-1">
                                     Plan Name <span className="text-red-500">*</span>
                                 </label>
                                 <input
@@ -929,17 +929,17 @@ const PlanEditModal: React.FC<{
                                     name="name"
                                     value={formData.name}
                                     onChange={handleChange}
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 transition-colors ${
                                         errors.name 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
+                                            : 'border-gray-200 dark:border-gray-200 focus:ring-reride-orange'
                                     }`}
                                     placeholder="Enter plan name"
                                 />
                                 {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
+                                <label className="block text-sm font-medium text-reride-text-dark mb-1">
                                     Price (₹/month) <span className="text-red-500">*</span>
                                 </label>
                                 <input
@@ -949,10 +949,10 @@ const PlanEditModal: React.FC<{
                                     onChange={handleChange}
                                     min="0"
                                     step="1"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 transition-colors ${
                                         errors.price 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
+                                            : 'border-gray-200 dark:border-gray-200 focus:ring-reride-orange'
                                     }`}
                                     placeholder="0"
                                 />
@@ -962,7 +962,7 @@ const PlanEditModal: React.FC<{
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Listing Limit</label>
+                                <label className="block text-sm font-medium text-reride-text-dark mb-1">Listing Limit</label>
                                 <input
                                     type="number"
                                     name="listingLimit"
@@ -970,42 +970,42 @@ const PlanEditModal: React.FC<{
                                     onChange={handleChange}
                                     min="0"
                                     placeholder="Leave empty for unlimited"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 transition-colors ${
                                         errors.listingLimit 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
+                                            : 'border-gray-200 dark:border-gray-200 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.listingLimit && <p className="mt-1 text-sm text-red-500">{errors.listingLimit}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Featured Credits</label>
+                                <label className="block text-sm font-medium text-reride-text-dark mb-1">Featured Credits</label>
                                 <input
                                     type="number"
                                     name="featuredCredits"
                                     value={formData.featuredCredits}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 transition-colors ${
                                         errors.featuredCredits 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
+                                            : 'border-gray-200 dark:border-gray-200 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.featuredCredits && <p className="mt-1 text-sm text-red-500">{errors.featuredCredits}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Free Certifications</label>
+                                <label className="block text-sm font-medium text-reride-text-dark mb-1">Free Certifications</label>
                                 <input
                                     type="number"
                                     name="freeCertifications"
                                     value={formData.freeCertifications}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 transition-colors ${
                                         errors.freeCertifications 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
+                                            : 'border-gray-200 dark:border-gray-200 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.freeCertifications && <p className="mt-1 text-sm text-red-500">{errors.freeCertifications}</p>}
@@ -1021,14 +1021,14 @@ const PlanEditModal: React.FC<{
                                     onChange={(e) => setFormData(prev => ({ ...prev, isMostPopular: e.target.checked }))}
                                     className="w-4 h-4 text-reride-orange bg-gray-100 border-gray-300 rounded focus:ring-reride-orange"
                                 />
-                                <label className="text-sm font-medium text-reride-text-dark dark:text-white">
+                                <label className="text-sm font-medium text-reride-text-dark">
                                     Mark as Most Popular
                                 </label>
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Features</label>
+                            <label className="block text-sm font-medium text-reride-text-dark mb-1">Features</label>
                             <div className="flex gap-2 mb-3">
                                 <input
                                     type="text"
@@ -1036,7 +1036,7 @@ const PlanEditModal: React.FC<{
                                     onChange={(e) => setNewFeature(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFeature(); } }}
                                     placeholder="Add new feature..."
-                                    className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-reride-orange"
+                                    className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-200 rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 focus:ring-reride-orange"
                                 />
                                 <button type="button" onClick={handleAddFeature} className="px-4 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90">
                                     Add
@@ -1044,8 +1044,8 @@ const PlanEditModal: React.FC<{
                             </div>
                             <div className="space-y-2">
                                 {formData.features.map((feature, index) => (
-                                    <div key={index} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                                        <span className="text-reride-text-dark dark:text-white">{feature}</span>
+                                    <div key={index} className="flex items-center justify-between bg-gray-50 dark:bg-white p-3 rounded-lg">
+                                        <span className="text-reride-text-dark">{feature}</span>
                                         <button
                                             type="button"
                                             onClick={() => handleRemoveFeature(feature)}
@@ -1059,7 +1059,7 @@ const PlanEditModal: React.FC<{
                         </div>
 
                         <div className="flex justify-between items-center">
-                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                            <div className="text-sm text-gray-500">
                                 {Object.keys(errors).length > 0 && (
                                     <span className="text-red-500">Please fix {Object.keys(errors).length} error(s) before saving</span>
                                 )}
@@ -1068,7 +1068,7 @@ const PlanEditModal: React.FC<{
                                 <button 
                                     type="button" 
                                     onClick={onClose} 
-                                    className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-reride-text-dark dark:text-white rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                    className="px-6 py-2 border border-gray-300 dark:border-gray-200 text-reride-text-dark rounded-lg hover:bg-gray-50 dark:hover:bg-gray-50 transition-colors"
                                 >
                                     Cancel
                                 </button>
@@ -3048,12 +3048,12 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 />
                 <form
                     onSubmit={handleSubmit}
-                    className="space-y-5 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm ring-1 ring-slate-900/[0.04] dark:border-slate-700 dark:bg-slate-900/40"
+                    className="space-y-5 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm ring-1 ring-slate-900/[0.04] dark:border-gray-200 dark:bg-white"
                 >
                     <div>
                         <label
                             htmlFor="admin-listing-fee"
-                            className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200"
+                            className="mb-1.5 block text-sm font-medium text-slate-700"
                         >
                             Listing fee (₹)
                         </label>
@@ -3066,13 +3066,13 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             onChange={(e) =>
                                 setDraft((d) => ({ ...d, listingFee: e.target.value === '' ? 0 : Number(e.target.value) }))
                             }
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200 dark:border-slate-600 dark:bg-slate-950 dark:text-white"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200 dark:border-slate-600 dark:bg-white"
                         />
                     </div>
                     <div>
                         <label
                             htmlFor="admin-site-announcement"
-                            className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200"
+                            className="mb-1.5 block text-sm font-medium text-slate-700"
                         >
                             Site announcement
                         </label>
@@ -3082,7 +3082,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             value={draft.siteAnnouncement}
                             onChange={(e) => setDraft((d) => ({ ...d, siteAnnouncement: e.target.value }))}
                             placeholder="Short message for banners or future homepage use"
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200 dark:border-slate-600 dark:bg-slate-950 dark:text-white"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 shadow-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200 dark:border-slate-600 dark:bg-white"
                         />
                     </div>
                     <button
@@ -3259,57 +3259,57 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 {editingTicket && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                         <div
-                            className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+                            className="bg-white dark:bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
                             data-testid="ticket-details"
                             role="dialog"
                             aria-modal="true"
                             aria-labelledby="edit-ticket-title"
                         >
-                            <h3 id="edit-ticket-title" className="text-xl font-bold mb-4 text-gray-900 dark:text-white">
+                            <h3 id="edit-ticket-title" className="text-xl font-bold mb-4 text-gray-900">
                                 Edit support ticket
                             </h3>
                             <div className="space-y-4">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                                     <div>
-                                        <span className="font-medium text-gray-700 dark:text-gray-300">Ticket ID</span>
-                                        <p className="text-gray-900 dark:text-white mt-1">#{editingTicket.id}</p>
+                                        <span className="font-medium text-gray-700">Ticket ID</span>
+                                        <p className="text-gray-900 mt-1">#{editingTicket.id}</p>
                                     </div>
                                     <div>
-                                        <span className="font-medium text-gray-700 dark:text-gray-300">Created</span>
-                                        <p className="text-gray-900 dark:text-white mt-1">{formatTicketDate(editingTicket.createdAt)}</p>
+                                        <span className="font-medium text-gray-700">Created</span>
+                                        <p className="text-gray-900 mt-1">{formatTicketDate(editingTicket.createdAt)}</p>
                                     </div>
                                     <div className="sm:col-span-2">
-                                        <span className="font-medium text-gray-700 dark:text-gray-300">Requester</span>
-                                        <p className="text-gray-900 dark:text-white mt-1">{editingTicket.userName} ({editingTicket.userEmail})</p>
+                                        <span className="font-medium text-gray-700">Requester</span>
+                                        <p className="text-gray-900 mt-1">{editingTicket.userName} ({editingTicket.userEmail})</p>
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Subject</label>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Subject</label>
                                     <input
                                         type="text"
                                         value={editingTicket.subject}
                                         onChange={(e) => setEditingTicket({ ...editingTicket, subject: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-50 text-gray-900"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Message</label>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Message</label>
                                     <textarea
                                         value={editingTicket.message}
                                         onChange={(e) => setEditingTicket({ ...editingTicket, message: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-50 text-gray-900"
                                         rows={5}
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Status</label>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Status</label>
                                     <select
                                         value={editingTicket.status}
                                         onChange={(e) => setEditingTicket({
                                             ...editingTicket,
                                             status: e.target.value as SupportTicket['status']
                                         })}
-                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-50 text-gray-900"
                                     >
                                         <option value="Open">Open</option>
                                         <option value="In Progress">In Progress</option>
@@ -3322,7 +3322,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 <button
                                     type="button"
                                     onClick={() => setEditingTicket(null)}
-                                    className="px-4 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    className="px-4 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-50"
                                 >
                                     Cancel
                                 </button>
@@ -3481,36 +3481,36 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 {/* Add FAQ Modal */}
                 {showAddModal && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-                            <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Add New FAQ</h3>
+                        <div className="bg-white dark:bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                            <h3 className="text-xl font-bold mb-4 text-gray-900">Add New FAQ</h3>
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Question</label>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Question</label>
                                     <input
                                         type="text"
                                         value={newFaq.question}
                                         onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-50 text-gray-900"
                                         placeholder="Enter question"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Answer</label>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Answer</label>
                                     <textarea
                                         value={newFaq.answer}
                                         onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-50 text-gray-900"
                                         placeholder="Enter answer"
                                         rows={4}
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Category</label>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Category</label>
                                     <input
                                         type="text"
                                         value={newFaq.category}
                                         onChange={(e) => setNewFaq({ ...newFaq, category: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-50 text-gray-900"
                                         placeholder="e.g., General, Selling, Buying"
                                     />
                                 </div>
@@ -3521,7 +3521,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         setShowAddModal(false);
                                         setNewFaq({ question: '', answer: '', category: 'General' });
                                     }}
-                                    className="px-4 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    className="px-4 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-50"
                                 >
                                     Cancel
                                 </button>
@@ -3539,41 +3539,41 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 {/* Edit FAQ Modal */}
                 {editingFaq && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-                            <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Edit FAQ</h3>
+                        <div className="bg-white dark:bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                            <h3 className="text-xl font-bold mb-4 text-gray-900">Edit FAQ</h3>
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Question</label>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Question</label>
                                     <input
                                         type="text"
                                         value={editingFaq.question}
                                         onChange={(e) => setEditingFaq({ ...editingFaq, question: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-50 text-gray-900"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Answer</label>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Answer</label>
                                     <textarea
                                         value={editingFaq.answer}
                                         onChange={(e) => setEditingFaq({ ...editingFaq, answer: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-50 text-gray-900"
                                         rows={4}
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Category</label>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700">Category</label>
                                     <input
                                         type="text"
                                         value={editingFaq.category}
                                         onChange={(e) => setEditingFaq({ ...editingFaq, category: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-50 text-gray-900"
                                     />
                                 </div>
                             </div>
                             <div className="flex justify-end gap-2 mt-6">
                                 <button
                                     onClick={() => setEditingFaq(null)}
-                                    className="px-4 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    className="px-4 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-50"
                                 >
                                     Cancel
                                 </button>
@@ -3666,8 +3666,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 </div>
                             </div>
                             <div className="ml-4">
-                                <div className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</div>
-                                <div className="text-sm text-gray-500 dark:text-gray-400">{user.email}</div>
+                                <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                                <div className="text-sm text-gray-500">{user.email}</div>
                             </div>
                         </div>
                     </td>
@@ -3680,19 +3680,19 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             {planDetails.name}
                         </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {activeListings} / {planDetails.listingLimit === 'unlimited' ? '∞' : planDetails.listingLimit}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                             <div className="flex-1">
-                                <div className="text-sm text-gray-900 dark:text-white">
+                                <div className="text-sm text-gray-900">
                                                     {user.usedCertifications || 0} / {planDetails.freeCertifications}
                                                 </div>
                                             </div>
                                         </div>
                                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {planFeaturedCredits > 0 ? (
                             <div>
                                 <div className="font-medium">
@@ -3734,7 +3734,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             )}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                         {user.planActivatedDate 
                                             ? new Date(user.planActivatedDate).toLocaleDateString('en-IN', { 
                                                 year: 'numeric', 
@@ -3744,7 +3744,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             : <span className="text-gray-400">Not set</span>
                                         }
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                         <div className="flex items-center gap-2">
                                             <div className="flex-1">
                                                 {user.planExpiryDate 
@@ -3805,8 +3805,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     key={plan.id}
                     className={`rounded-2xl border p-6 shadow-sm ring-1 ring-slate-900/[0.03] transition-shadow hover:shadow-md ${
                         isCustom
-                            ? 'border-violet-300 bg-gradient-to-b from-violet-50/80 to-white dark:border-violet-600 dark:from-violet-950/40 dark:to-slate-900/40'
-                            : 'border-slate-200/90 bg-white dark:border-slate-700 dark:bg-slate-900/30'
+                            ? 'border-violet-300 bg-gradient-to-b from-violet-50/80 to-white dark:border-violet-300 dark:from-violet-50/80 dark:to-white'
+                            : 'border-slate-200/90 bg-white dark:border-gray-200 dark:bg-white'
                     }`}
                 >
                     <div className="flex justify-between items-start mb-4">
@@ -3844,22 +3844,22 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     
                     <div className="space-y-2 mb-4">
                         <div className="flex justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">Listings:</span>
+                            <span className="text-gray-600">Listings:</span>
                             <span className="font-medium">{plan.listingLimit}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">Featured Credits:</span>
+                            <span className="text-gray-600">Featured Credits:</span>
                             <span className="font-medium">{plan.featuredCredits}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">Free Certifications:</span>
+                            <span className="text-gray-600">Free Certifications:</span>
                             <span className="font-medium">{plan.freeCertifications}</span>
                         </div>
                     </div>
                     
                     <div className="space-y-1">
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Features:</p>
-                        <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                        <p className="text-sm font-medium text-gray-700">Features:</p>
+                        <ul className="text-sm text-gray-600 space-y-1">
                             {featureList.map((feature, index) => (
                                 <li key={index} className="flex items-center gap-2">
                                     <span className="w-1 h-1 bg-green-500 rounded-full"></span>
@@ -4709,7 +4709,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         )}
 
                         {sidebarCollapsed ? (
-                            <div className="mt-auto flex shrink-0 flex-col items-center gap-2 border-t border-slate-200 pt-3 dark:border-gray-700">
+                            <div className="mt-auto flex shrink-0 flex-col items-center gap-2 border-t border-slate-200 pt-3 dark:border-gray-200">
                                 <div
                                     className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white"
                                     title={`${currentUser.name ?? 'Admin'} — ${currentUser.email ?? ''}`}
@@ -4735,7 +4735,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 )}
                             </div>
                         ) : (
-                            <div className="mt-4 shrink-0 border-t border-slate-200 pt-4 dark:border-gray-700">
+                            <div className="mt-4 shrink-0 border-t border-slate-200 pt-4 dark:border-gray-200">
                                 <div className="mb-4 flex items-center space-x-3">
                                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-500">
                                         <span className="text-sm font-bold text-white">
@@ -4743,8 +4743,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         </span>
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <p className="truncate text-sm font-medium text-gray-900 dark:text-white">{currentUser.name}</p>
-                                        <p className="truncate text-xs text-gray-500 dark:text-gray-400">{currentUser.email}</p>
+                                        <p className="truncate text-sm font-medium text-gray-900">{currentUser.name}</p>
+                                        <p className="truncate text-xs text-gray-500">{currentUser.email}</p>
                                     </div>
                                 </div>
                                 {onLogout && (

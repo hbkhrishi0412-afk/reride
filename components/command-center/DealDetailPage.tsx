@@ -13,6 +13,8 @@ import {
   fetchInspectionBookings,
   updateDealNotes,
   updateAssistanceFulfillment,
+  requestDealReturn,
+  resolveDealReturn,
 } from '../../services/dealService.js';
 import {
   ASSISTANCE_FULFILLMENT_STATUSES,
@@ -53,6 +55,8 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
   const [bookings, setBookings] = useState<DealInspectionBooking[]>([]);
   const [assistanceNotes, setAssistanceNotes] = useState('');
   const [savingAssistance, setSavingAssistance] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
+  const [returnLoading, setReturnLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,6 +127,43 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
     }
   }, [deal, internalNotesDraft, notesDraft, onNotify, role]);
 
+  const handleRequestReturn = useCallback(async () => {
+    if (!deal) return;
+    setReturnLoading(true);
+    try {
+      const updated = await requestDealReturn(deal.id, returnReason.trim() || undefined);
+      setDeal((prev) => (prev ? { ...prev, ...updated } : prev));
+      setReturnReason('');
+      onNotify?.('Return recorded. Seller will review next steps.', 'success');
+    } catch (err) {
+      onNotify?.(err instanceof Error ? err.message : 'Could not record return', 'error');
+    } finally {
+      setReturnLoading(false);
+    }
+  }, [deal, onNotify, returnReason]);
+
+  const handleResolveReturn = useCallback(
+    async (action: 'relist' | 'archive') => {
+      if (!deal) return;
+      const label = action === 'relist' ? 'relist this vehicle' : 'archive this vehicle';
+      if (!window.confirm(`Are you sure you want to ${label}?`)) return;
+      setReturnLoading(true);
+      try {
+        const updated = await resolveDealReturn(deal.id, action);
+        setDeal((prev) => (prev ? { ...prev, ...updated } : prev));
+        onNotify?.(
+          action === 'relist' ? 'Vehicle relisted and available for new buyers.' : 'Vehicle archived.',
+          'success',
+        );
+      } catch (err) {
+        onNotify?.(err instanceof Error ? err.message : 'Could not resolve return', 'error');
+      } finally {
+        setReturnLoading(false);
+      }
+    },
+    [deal, onNotify],
+  );
+
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
@@ -155,7 +196,7 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
   const canBookInspection =
     deal.status === 'active' &&
     (
-      (['offer_accepted', 'inspection_requested', 'inspection_completed'].includes(deal.currentStage)
+      (['test_drive_completed', 'inspection_requested', 'inspection_completed'].includes(deal.currentStage)
         && !deal.metadata.inspection?.completedAt)
       || (role === 'admin'
         && deal.metadata.assistanceFulfillment?.needsInspectionBooking
@@ -164,6 +205,9 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
   const hasAssistance = Boolean(deal.metadata.assistancePackage || deal.metadata.assistanceFulfillment);
   const assistanceStatus = deal.metadata.assistanceFulfillment?.status || 'requested';
   const timelineForDisplay = (deal.timeline || []).filter((evt) => evt.eventType !== 'kanban_moved');
+  const isDealCompleted = deal.status === 'completed' && deal.currentStage === 'deal_completed';
+  const canRequestReturn = isDealCompleted && !deal.returnStatus && (role === 'customer' || role === 'seller' || role === 'admin');
+  const canReviewReturn = isDealCompleted && deal.returnStatus === 'returned' && (role === 'seller' || role === 'admin');
 
   return (
     <div className="space-y-5">
@@ -186,8 +230,8 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 p-5 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">{vehicle}</h2>
+          <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-bold text-slate-900">{vehicle}</h2>
             {deal.vehiclePrice != null && (
               <p className="text-sm text-slate-500 mt-1">
                 Listed at ₹{deal.vehiclePrice.toLocaleString('en-IN')}
@@ -238,8 +282,81 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Deal pipeline</h3>
+          {(canRequestReturn || canReviewReturn || deal.returnStatus) && (
+            <div
+              data-testid="deal-return-panel"
+              className="rounded-2xl border border-amber-200/80 bg-amber-50/50 p-5 shadow-sm space-y-3"
+            >
+              <h3 className="text-sm font-bold text-slate-900">Return lifecycle</h3>
+              {deal.returnStatus === 'relisted' && (
+                <p className="text-sm text-emerald-800">Vehicle was relisted after this return. Deal history is preserved.</p>
+              )}
+              {deal.returnStatus === 'archived' && (
+                <p className="text-sm text-slate-700">Vehicle was archived after this return.</p>
+              )}
+              {canRequestReturn && (
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-600">
+                    Report that the vehicle was returned. The seller will choose to relist or archive.
+                  </p>
+                  <textarea
+                    value={returnReason}
+                    onChange={(e) => setReturnReason(e.target.value)}
+                    placeholder="Reason for return (optional)"
+                    rows={2}
+                    className="w-full text-sm rounded-lg border border-slate-200 px-3 py-2"
+                  />
+                  <button
+                    type="button"
+                    data-testid="deal-return-request"
+                    disabled={returnLoading}
+                    onClick={() => void handleRequestReturn()}
+                    className="px-4 py-2 text-sm font-bold rounded-xl bg-amber-600 text-white disabled:opacity-50"
+                  >
+                    {returnLoading ? 'Submitting…' : 'Report return'}
+                  </button>
+                </div>
+              )}
+              {canReviewReturn && (
+                <div className="space-y-2">
+                  {deal.returnReason && (
+                    <p className="text-xs text-slate-600">
+                      <span className="font-semibold">Reason:</span> {deal.returnReason}
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-600">
+                    Choose whether to put this vehicle back on the market or archive it. Deal and message history stay intact.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      data-testid="deal-return-relist"
+                      disabled={returnLoading}
+                      onClick={() => void handleResolveReturn('relist')}
+                      className="px-4 py-2 text-sm font-bold rounded-xl bg-emerald-600 text-white disabled:opacity-50"
+                    >
+                      Relist vehicle
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="deal-return-archive"
+                      disabled={returnLoading}
+                      onClick={() => void handleResolveReturn('archive')}
+                      className="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-300 text-slate-700 disabled:opacity-50"
+                    >
+                      Archive vehicle
+                    </button>
+                  </div>
+                </div>
+              )}
+              {deal.returnStatus === 'returned' && role === 'customer' && (
+                <p className="text-sm text-amber-800">Return submitted — waiting for seller review.</p>
+              )}
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900 mb-4">Deal pipeline</h3>
             <DealTimelinePanel
               lead={deal}
               currentUser={currentUser}
@@ -250,8 +367,8 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
           </div>
 
           {timelineForDisplay.length > 0 && (
-            <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 p-5 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Activity log</h3>
+            <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-5 shadow-sm">
+              <h3 className="text-sm font-bold text-slate-900 mb-3">Activity log</h3>
               <ul className="space-y-2 max-h-64 overflow-y-auto">
                 {[...timelineForDisplay].reverse().map((evt) => (
                   <li key={evt.id} className="flex gap-2 text-xs text-slate-600">
@@ -273,16 +390,16 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
         </div>
 
         <aside className="space-y-4">
-          <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 p-4 shadow-sm space-y-3">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Parties</h3>
+          <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-4 shadow-sm space-y-3">
+            <h3 className="text-sm font-bold text-slate-900">Parties</h3>
             <div>
               <p className="text-[10px] uppercase tracking-wide text-slate-400">Buyer</p>
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">{buyer}</p>
+              <p className="text-sm font-semibold text-slate-900">{buyer}</p>
               <p className="text-xs text-slate-500">{deal.buyerEmail}</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-wide text-slate-400">Seller</p>
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">{seller}</p>
+              <p className="text-sm font-semibold text-slate-900">{seller}</p>
               <p className="text-xs text-slate-500">{deal.sellerEmail}</p>
             </div>
             {deal.assignedAdminEmail && (
@@ -294,10 +411,10 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
           </div>
 
           {(deal.offers?.length || deal.documents?.length || bookings.length > 0) ? (
-            <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 p-4 shadow-sm space-y-3">
+            <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-4 shadow-sm space-y-3">
               {bookings.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Inspection bookings</h3>
+                  <h3 className="text-sm font-bold text-slate-900 mb-2">Inspection bookings</h3>
                   <ul className="space-y-2">
                     {bookings.map((b) => (
                       <li key={b.id} className="text-xs border border-slate-100 rounded-lg p-2">
@@ -315,7 +432,7 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
               )}
               {deal.offers && deal.offers.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Offers</h3>
+                  <h3 className="text-sm font-bold text-slate-900 mb-2">Offers</h3>
                   <ul className="space-y-1">
                     {deal.offers.map((o) => (
                       <li key={o.id} className="text-xs flex justify-between gap-2">
@@ -328,7 +445,7 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
               )}
               {deal.documents && deal.documents.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Documents</h3>
+                  <h3 className="text-sm font-bold text-slate-900 mb-2">Documents</h3>
                   <ul className="space-y-1">
                     {deal.documents.map((d) => (
                       <li key={d.id}>
@@ -349,14 +466,14 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
           ) : null}
 
           {showSellerNotes && (
-            <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 p-4 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Seller notes</h3>
+            <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-bold text-slate-900 mb-2">Seller notes</h3>
               <textarea
                 value={notesDraft}
                 onChange={(e) => setNotesDraft(e.target.value)}
                 rows={4}
                 placeholder="Private notes about this deal…"
-                className="w-full text-sm border border-slate-200 rounded-lg p-2 resize-none dark:bg-slate-800 dark:border-slate-700"
+                className="w-full text-sm border border-slate-200 rounded-lg p-2 resize-none dark:bg-gray-50 dark:border-gray-200"
               />
             </div>
           )}

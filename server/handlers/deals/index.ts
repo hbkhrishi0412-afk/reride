@@ -19,5 +19,6 @@ export { handleAssistance } from './assistance.js';
 export { handleLeadLifecycle } from './lead-lifecycle.js';
 export { handleInspections } from './inspections.js';
 export { handleAdminOps } from './admin-ops.js';
+export { handleReturnLifecycle } from './return-lifecycle.js';
 export type { DealHandlerContext, DealActionHandler } from './context.js';
 export { validateAdvanceStage } from './stage-validation.js';

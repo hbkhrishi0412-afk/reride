@@ -73,10 +73,10 @@ export async function patchConversationClearMessages(
   }
 }
 
-/** Permanently delete a conversation (participant or admin, via API). */
+/** Permanently delete a conversation (participant or admin, via API). Blocked when a deal exists. */
 export async function deleteConversationById(
   conversationId: string,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; action?: string; reason?: string }> {
   const id = String(conversationId || '').trim();
   if (!id) {
     return { success: false, error: 'conversationId required' };
@@ -86,16 +86,46 @@ export async function deleteConversationById(
       `/api/conversations?conversationId=${encodeURIComponent(id)}`,
       { method: 'DELETE' },
     );
-    const result = await handleApiResponse<{ success?: boolean; reason?: string; error?: string }>(response);
-    if (!response.ok || result.success === false) {
-      return {
-        success: false,
-        error: result.reason || result.error || `Failed to delete (HTTP ${response.status})`,
-      };
+    const contentType = response.headers.get('content-type');
+    if (contentType?.includes('application/json')) {
+      const body = await response.json();
+      if (!response.ok || body.success === false) {
+        return {
+          success: false,
+          error: body.reason || body.message || body.error || `Failed to delete (HTTP ${response.status})`,
+          action: body.action,
+          reason: body.reason,
+        };
+      }
+      return { success: true };
+    }
+    if (!response.ok) {
+      return { success: false, error: `Failed to delete (HTTP ${response.status})` };
     }
     return { success: true };
   } catch (error) {
     console.error('deleteConversationById error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+/** Archive or unarchive a conversation for the current participant (hides from inbox, preserves deal history). */
+export async function patchConversationArchive(
+  conversationId: string,
+  archived: boolean,
+): Promise<{ success: boolean; data?: Conversation; error?: string }> {
+  try {
+    const response = await authenticatedFetch('/api/conversations', {
+      method: 'PATCH',
+      body: JSON.stringify({ conversationId, archive: archived }),
+    });
+    const result = await handleApiResponse<{ data?: Conversation; reason?: string; error?: string }>(response);
+    if (!result.success) {
+      return { success: false, error: result.reason || result.error || 'Failed to archive conversation' };
+    }
+    return { success: true, data: result.data?.data };
+  } catch (error) {
+    console.error('patchConversationArchive error:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }

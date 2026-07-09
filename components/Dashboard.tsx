@@ -133,6 +133,8 @@ interface DashboardProps {
   onUserStoppedTyping?: (conversationId: string) => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onClearChat?: (conversationId: string) => void | Promise<void>;
+  onDeleteConversation?: (conversationId: string) => void | Promise<void>;
+  onArchiveConversation?: (conversationId: string, archived?: boolean) => void | Promise<void>;
   onUpdateSellerProfile: (details: { dealershipName: string; bio: string; logoUrl: string; partnerBanks?: string[] }) => void;
   vehicleData: VehicleData;
   onFeatureListing: (vehicleId: number) => Promise<void>;
@@ -2482,7 +2484,7 @@ const ReportsView: React.FC<{
 
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat, onNotify }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onDeleteConversation, onArchiveConversation, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat, onNotify }) => {
   const notify = useCallback(
     (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') =>
       dashboardNotify(onNotify, message, type),
@@ -3630,7 +3632,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 <div className="bg-white p-4 rounded-lg shadow-md flex items-center justify-between">
                     <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">Analytics Overview</h2>
                     <div className="flex items-center gap-3">
-                        <label htmlFor="month-selector" className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                        <label htmlFor="month-selector" className="text-sm font-medium text-gray-700">
                             Filter by Month:
                         </label>
                         <select
@@ -4613,6 +4615,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             onOfferResponse={onOfferResponse}
             onTestDriveResponse={onTestDriveResponse}
             onClearChat={onClearChat}
+            onArchiveConversation={onArchiveConversation}
+            onDeleteConversation={onDeleteConversation}
           />
         )}
         

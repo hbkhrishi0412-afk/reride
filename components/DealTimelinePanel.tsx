@@ -298,7 +298,22 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
             </button>
           )}
 
-          {isStageDone(effectiveStageIndex, 'test_drive_completed') && !isStageDone(effectiveStageIndex, 'offer_accepted') && (
+          {isStageDone(effectiveStageIndex, 'test_drive_completed') && !isStageDone(effectiveStageIndex, 'inspection_completed') && isBuyer && (
+            <>
+              {!lead.metadata.inspection?.requestedAt && (
+                <button onClick={() => handleAdvance('inspection_requested')} disabled={loading} className="px-2 py-1 text-xs bg-teal-100 text-teal-800 rounded-lg font-medium">
+                  Need Inspection
+                </button>
+              )}
+              {lead.metadata.inspection?.requestedAt && !lead.metadata.inspection?.completedAt && (
+                <button onClick={() => triggerUpload('inspection')} disabled={loading} className="px-2 py-1 text-xs bg-teal-100 text-teal-800 rounded-lg font-medium">
+                  Upload Inspection Report
+                </button>
+              )}
+            </>
+          )}
+
+          {isStageDone(effectiveStageIndex, 'inspection_completed') && !isStageDone(effectiveStageIndex, 'offer_accepted') && (
             <>
               {isBuyer && !pendingOffer && (
                 <div className="flex gap-1 items-center">
@@ -342,22 +357,7 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
             </>
           )}
 
-          {isStageDone(effectiveStageIndex, 'offer_accepted') && !isStageDone(effectiveStageIndex, 'inspection_completed') && isBuyer && (
-            <>
-              {!lead.metadata.inspection?.requestedAt && (
-                <button onClick={() => handleAdvance('inspection_requested')} disabled={loading} className="px-2 py-1 text-xs bg-teal-100 text-teal-800 rounded-lg font-medium">
-                  Need Inspection
-                </button>
-              )}
-              {lead.metadata.inspection?.requestedAt && !lead.metadata.inspection?.completedAt && (
-                <button onClick={() => triggerUpload('inspection')} disabled={loading} className="px-2 py-1 text-xs bg-teal-100 text-teal-800 rounded-lg font-medium">
-                  Upload Inspection Report
-                </button>
-              )}
-            </>
-          )}
-
-          {isStageDone(effectiveStageIndex, 'inspection_completed') && !isStageDone(effectiveStageIndex, 'token_confirmed') && (
+          {isStageDone(effectiveStageIndex, 'offer_accepted') && !isStageDone(effectiveStageIndex, 'token_confirmed') && (
             <>
               {isBuyer && !lead.metadata.token?.receiptUrl && (
                 <div className="flex gap-1 items-center">

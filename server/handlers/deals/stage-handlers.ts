@@ -13,6 +13,7 @@ import {
   tryInsertDealOffer,
   tryUpdateDealOfferStatus,
   updateLeadStage,
+  markVehicleSoldForCompletedDeal,
 } from './shared.js';
 
 /** Pipeline stage advancement and offer responses. */
@@ -197,6 +198,10 @@ export const handleStageHandlers: DealActionHandler = async (ctx) => {
     });
 
     await syncDualWriteForStage(leadId, stage, metadata, auth.email);
+
+    if (isComplete) {
+      await markVehicleSoldForCompletedDeal(String(row.vehicle_id));
+    }
 
     if (stage === 'delivery_pending') {
       const d = metadata.delivery;

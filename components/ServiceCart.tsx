@@ -1582,7 +1582,7 @@ const ServiceCart: React.FC<Props> = ({
                 }
             >
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-black text-gray-900 dark:text-white">My Service Requests</h2>
+                    <h2 className="text-xl font-black text-gray-900">My Service Requests</h2>
                     <button
                         type="button"
                         onClick={() => void loadCustomerRequests('refresh-click')}
@@ -1617,7 +1617,7 @@ const ServiceCart: React.FC<Props> = ({
                     </div>
                 )}
                 {!isLoggedIn && (
-                    <div className="text-sm text-gray-600 dark:text-gray-300">Login to see your request progress.</div>
+                    <div className="text-sm text-gray-600">Login to see your request progress.</div>
                 )}
                 {isLoggedIn && requestsLoading && (
                     <div className="space-y-3" aria-busy="true" aria-label="Loading service requests">
@@ -1639,15 +1639,15 @@ const ServiceCart: React.FC<Props> = ({
                 {isLoggedIn && !requestsLoading && !requestsError && (
                     <div className="space-y-3">
                         {customerRequests.map((req) => (
-                            <div key={req.id} className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                            <div key={req.id} className="p-4 rounded-xl border border-gray-200 bg-gray-50">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div>
-                                        <div className="font-bold text-gray-900 dark:text-white">{req.serviceType || req.title || 'Service request'}</div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                                        <div className="font-bold text-gray-900">{req.serviceType || req.title || 'Service request'}</div>
+                                        <div className="text-xs text-gray-500">
                                             {req.city || 'City not provided'} {req.scheduledAt ? `• Slot: ${req.scheduledAt}` : ''}
                                         </div>
                                         {customerRequestVehicleLabel(req) && (
-                                            <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                                            <div className="text-xs text-gray-600 mt-1">
                                                 Vehicle: {customerRequestVehicleLabel(req)}
                                             </div>
                                         )}
@@ -1683,8 +1683,8 @@ const ServiceCart: React.FC<Props> = ({
                                         Assigned provider: {providerNameById[req.providerId] || req.providerId}
                                     </div>
                                 )}
-                                <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
-                                    <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Progress Timeline</div>
+                                <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
+                                    <div className="text-xs font-semibold text-gray-700 mb-2">Progress Timeline</div>
                                     <div className="mb-3">
                                         <div className="flex items-center gap-2">
                                             {TRACKING_STEPS.map((step, idx) => {
@@ -1703,7 +1703,7 @@ const ServiceCart: React.FC<Props> = ({
                                                             >
                                                                 {idx + 1}
                                                             </div>
-                                                            <span className="mt-1 text-[10px] text-gray-600 dark:text-gray-400 text-center">{step.label}</span>
+                                                            <span className="mt-1 text-[10px] text-gray-600 text-center">{step.label}</span>
                                                         </div>
                                                         {idx < TRACKING_STEPS.length - 1 && (
                                                             <div
@@ -1721,7 +1721,7 @@ const ServiceCart: React.FC<Props> = ({
                                             })}
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs text-gray-600 dark:text-gray-400">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs text-gray-600">
                                         <div>Raised: {req.createdAt || '-'}</div>
                                         <div>Accepted: {req.claimedAt || '-'}</div>
                                         <div>In progress: {req.startedAt || '-'}</div>
@@ -1734,7 +1734,7 @@ const ServiceCart: React.FC<Props> = ({
                                     </div>
                                 </div>
                                 {req.notes && (
-                                    <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                                    <div className="mt-2 text-xs text-gray-600">
                                         Note: {req.notes}
                                     </div>
                                 )}
@@ -1805,7 +1805,7 @@ const ServiceCart: React.FC<Props> = ({
                             </div>
                         ))}
                         {customerRequests.length === 0 && (
-                            <div className="text-sm text-gray-600 dark:text-gray-300">No service requests yet.</div>
+                            <div className="text-sm text-gray-600">No service requests yet.</div>
                         )}
                     </div>
                 )}

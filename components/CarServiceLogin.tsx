@@ -2,10 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { requestUsersTablePasswordReset } from '../services/passwordResetFromApi';
 import { loginServiceProviderWithUsersTable } from '../services/serviceProviderLoginSupport';
 import { setRememberMePreference } from '../utils/rememberMe';
+import {
+  saveRememberedCredentialsAsync,
+  resolveRememberedCredentials,
+} from '../utils/rememberedCredentials';
 import { View as ViewEnum } from '../types';
 import PasswordInput from './PasswordInput';
 
-const REMEMBER_EMAIL_KEY = 'rememberedService_providerEmail';
+const SERVICE_PROVIDER_ROLE = 'service_provider';
 
 interface CarServiceLoginProps {
   onNavigate: (view: ViewEnum) => void;
@@ -29,15 +33,16 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
   const isDev = process.env.NODE_ENV === 'development';
 
   useEffect(() => {
-    try {
-      const remembered = localStorage.getItem(REMEMBER_EMAIL_KEY);
-      if (remembered) {
-        setEmail(remembered);
-        setRememberMe(true);
-      }
-    } catch {
-      /* ignore */
-    }
+    let cancelled = false;
+    void resolveRememberedCredentials(SERVICE_PROVIDER_ROLE).then((remembered) => {
+      if (cancelled || !remembered) return;
+      setEmail(remembered.email);
+      setPassword(remembered.password);
+      setRememberMe(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -52,16 +57,8 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
     }
   }, []);
 
-  const persistRememberedEmail = () => {
-    try {
-      if (rememberMe && email.trim()) {
-        localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
-      } else {
-        localStorage.removeItem(REMEMBER_EMAIL_KEY);
-      }
-    } catch {
-      /* ignore */
-    }
+  const persistRememberedCredentials = async () => {
+    await saveRememberedCredentialsAsync(SERVICE_PROVIDER_ROLE, email, password, rememberMe);
   };
 
   const handleMockLogin = () => {
@@ -89,7 +86,7 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
       if (!sp.ok) {
         throw new Error(sp.message);
       }
-      persistRememberedEmail();
+      await persistRememberedCredentials();
       setRememberMePreference(rememberMe);
       onLoginSuccess(sp.provider);
       onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
@@ -157,7 +154,7 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
             'Account was created but sign-in failed. Try logging in with the same email and password.',
         );
       }
-      persistRememberedEmail();
+      await persistRememberedCredentials();
       setRememberMePreference(true);
       onLoginSuccess(sp.provider);
       onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);

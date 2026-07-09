@@ -7,6 +7,11 @@ import { syncWithBackend } from '../services/supabase-auth-service';
 import { loginServiceProviderWithUsersTable } from '../services/serviceProviderLoginSupport';
 import { getSupabaseClient } from '../lib/supabase.js';
 import { setRememberMePreference } from '../utils/rememberMe';
+import {
+  loadLastRememberedLoginRole,
+  saveRememberedCredentialsAsync,
+  resolveRememberedCredentials,
+} from '../utils/rememberedCredentials';
 import OTPLogin from './OTPLogin';
 import PasswordInput from './PasswordInput';
 import Logo from './Logo';
@@ -160,22 +165,34 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     }
   };
 
+  // Restore last remembered account type on generic /login (no ?role=).
   useEffect(() => {
-    if (!selectedRole) {
-      setEmail('');
-      setRememberMe(false);
-      return;
+    if (forcedRole || selectedRole) return;
+    const lastRole = loadLastRememberedLoginRole();
+    if (lastRole && allowedRoles.includes(lastRole as UserRole)) {
+      setSelectedRole(lastRole as UserRole);
     }
-    const rememberedEmail = localStorage.getItem(
-      `remembered${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}Email`,
-    );
-    if (rememberedEmail) {
-      setEmail(rememberedEmail);
-      setRememberMe(true);
-    } else {
-      setEmail('');
-      setRememberMe(false);
-    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRole) return;
+    let cancelled = false;
+    void resolveRememberedCredentials(selectedRole).then((remembered) => {
+      if (cancelled) return;
+      if (remembered) {
+        setEmail(remembered.email);
+        setPassword(remembered.password);
+        setRememberMe(true);
+      } else {
+        setEmail('');
+        setPassword('');
+        setRememberMe(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedRole]);
 
   useEffect(() => {
@@ -333,16 +350,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           if (!sp.ok) {
             throw new Error(sp.message);
           }
-          if (rememberMe) {
-            localStorage.setItem(
-              `remembered${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}Email`,
-              email,
-            );
-          } else {
-            localStorage.removeItem(
-              `remembered${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}Email`,
-            );
-          }
+          await saveRememberedCredentialsAsync(selectedRole, email, password, rememberMe);
           setRememberMePreference(rememberMe);
           onServiceProviderLogin(sp.provider);
           return;
@@ -366,11 +374,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
       if (result.success && result.user) {
         if (mode === 'login') {
-          if (rememberMe) {
-            localStorage.setItem(`remembered${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}Email`, email);
-          } else {
-            localStorage.removeItem(`remembered${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}Email`);
-          }
+          await saveRememberedCredentialsAsync(selectedRole, email, password, rememberMe);
           setRememberMePreference(rememberMe);
           onLogin(result.user);
         } else {
@@ -388,12 +392,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           const sp = await loginServiceProviderWithUsersTable(email, password);
           if (sp.ok) {
             setSelectedRole('service_provider');
-            const spKey = `remembered${'service_provider'.charAt(0).toUpperCase() + 'service_provider'.slice(1)}Email`;
-            if (rememberMe) {
-              localStorage.setItem(spKey, email);
-            } else {
-              localStorage.removeItem(spKey);
-            }
+            await saveRememberedCredentialsAsync('service_provider', email, password, rememberMe);
             setRememberMePreference(rememberMe);
             onServiceProviderLogin(sp.provider);
             return;
@@ -489,14 +488,10 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
     setSelectedRole(role);
     setError('');
-    // Only clear form fields if we're in login mode
-    // During registration, keep the form data so user doesn't lose their input
     if (mode === 'login') {
       setName('');
       setMobile('');
-      setPassword('');
     }
-    // Don't change the mode - keep it as is (login or register)
   };
 
   const isLogin = mode === 'login';

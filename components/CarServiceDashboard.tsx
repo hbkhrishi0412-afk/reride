@@ -1825,7 +1825,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-800 text-sm font-semibold hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-800 text-sm font-semibold hover:bg-gray-50 dark:bg-white dark:border-gray-200 dark:hover:bg-gray-50 transition-colors"
                 >
                   Log out
                 </button>

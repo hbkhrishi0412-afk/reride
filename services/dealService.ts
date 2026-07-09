@@ -346,3 +346,24 @@ export async function updateAssistanceFulfillment(params: {
   const data = await parseJson<{ success: boolean; lead: DealLead }>(response);
   return data.lead;
 }
+
+export async function requestDealReturn(leadId: string, reason?: string): Promise<DealLead> {
+  const response = await authenticatedFetch(`${BASE}?action=request-return`, {
+    method: 'POST',
+    body: JSON.stringify({ leadId, reason }),
+  });
+  const data = await parseJson<{ success: boolean; lead: DealLead }>(response);
+  return data.lead;
+}
+
+export async function resolveDealReturn(
+  leadId: string,
+  action: 'relist' | 'archive',
+): Promise<DealLead> {
+  const response = await authenticatedFetch(`${BASE}?action=resolve-return`, {
+    method: 'POST',
+    body: JSON.stringify({ leadId, action }),
+  });
+  const data = await parseJson<{ success: boolean; lead: DealLead }>(response);
+  return data.lead;
+}

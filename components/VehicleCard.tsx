@@ -112,7 +112,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   return (
     <div 
       onClick={handleCardClick}
-      className="cursor-pointer bg-white dark:bg-gray-800 overflow-hidden flex flex-col rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow"
+      className="cursor-pointer bg-white dark:bg-white overflow-hidden flex flex-col rounded-xl border border-gray-100 dark:border-gray-200 shadow-sm hover:shadow-md transition-shadow"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -309,7 +309,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
         <ListingTrustChips vehicle={vehicle} compact className="mb-2" />
 
         {/* Price */}
-        <div className="mt-auto pt-2 border-t border-[#E0E0E0]">
+        <div className="mt-auto pt-2 border-t border-[#E0E0E0] dark:border-gray-200">
           <div className="flex flex-wrap items-center gap-1.5">
             <p className="font-extrabold text-[15px] text-[#FF7F47] leading-none">
               ₹{vehicle.price.toLocaleString('en-IN')}

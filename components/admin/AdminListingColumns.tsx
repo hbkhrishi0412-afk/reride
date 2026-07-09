@@ -328,14 +328,14 @@ export function renderListingCell(
             if (!vehicle.offerEnabled) return <span className="text-gray-400">—</span>;
             if (isSellerListingOfferVisible(vehicle)) {
                 return (
-                    <span className="inline-flex rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800 dark:bg-purple-900/40 dark:text-purple-200">
+                    <span className="inline-flex rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800">
                         Active
                     </span>
                 );
             }
             return (
                 <span
-                    className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-100"
+                    className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900"
                     title="Offer is enabled but hidden from buyers (check dates or offer text)"
                 >
                     Inactive

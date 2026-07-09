@@ -1,0 +1,9 @@
+-- Per-participant conversation archive (stored in conversations.metadata JSONB).
+-- No column changes required; documents fields used by archive/hide inbox feature:
+--   metadata.customer_archived_at  TIMESTAMPTZ (ISO string)
+--   metadata.seller_archived_at    TIMESTAMPTZ (ISO string)
+--
+-- Business rules:
+--   - General inquiry (no deal): hard delete allowed
+--   - Deal exists (any status): delete blocked; archive to hide from inbox
+--   - Individual messages: never deletable (unchanged)

@@ -42,6 +42,10 @@ interface ChatWidgetProps {
     newStatus: 'confirmed' | 'rejected',
   ) => void;
   onClearChat?: (conversationId: string) => void | Promise<void>;
+  /** Hide from inbox without deleting (deal history preserved). */
+  onArchiveConversation?: (conversationId: string, archived?: boolean) => void | Promise<void>;
+  /** Permanently delete when no deal is linked. */
+  onDeleteConversation?: (conversationId: string) => void | Promise<void>;
   onStartCall?: (phone: string) => void;
   callTargetPhone?: string;
   callTargetName?: string;
@@ -80,6 +84,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     onOfferResponse,
     onTestDriveResponse,
     onClearChat,
+    onArchiveConversation,
+    onDeleteConversation,
     onStartCall,
     callTargetPhone,
     callTargetName,
@@ -101,6 +107,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [dealLead, setDealLead] = useState<DealLead | null>(null);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const voiceRecorder = useVoiceRecorder();
 
   useEffect(() => {
@@ -120,6 +127,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     getDealLead({ conversationId: conversation.id })
       .then(setDealLead)
       .catch(() => setDealLead(null));
+    setMoreMenuOpen(false);
   }, [conversation.id]);
 
   const visibleMessages = useMemo(
@@ -407,6 +415,40 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   const threadIsRead =
     currentUserRole === 'seller' ? conversation.isReadBySeller : conversation.isReadByCustomer;
 
+  const hasLinkedDeal = Boolean(dealLead) || Boolean(conversation.hasDeal);
+  const showInboxActions = Boolean(onArchiveConversation || onDeleteConversation);
+
+  const handleArchiveFromChat = () => {
+    if (!onArchiveConversation) return;
+    setMoreMenuOpen(false);
+    void runIfConfirmed(
+      'Archive this conversation? It will be hidden from your inbox. Deal and message history stay intact.',
+      () => {
+        void Promise.resolve(onArchiveConversation(conversation.id, true)).then(() => {
+          onClose();
+        });
+      },
+    );
+  };
+
+  const handleDeleteFromChat = () => {
+    if (!onDeleteConversation) return;
+    if (hasLinkedDeal) {
+      handleArchiveFromChat();
+      return;
+    }
+    setMoreMenuOpen(false);
+    void runIfConfirmed(
+      'Delete this conversation? This cannot be undone.',
+      () => {
+        void Promise.resolve(onDeleteConversation(conversation.id)).then(() => {
+          onClose();
+        });
+      },
+      { variant: 'danger' },
+    );
+  };
+
   // Handle minimize/maximize with animation
   const handleToggleMinimize = () => {
     if (!isMinimized) {
@@ -620,7 +662,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                     </svg>
                   </button>
                 )}
-                {onClearChat && (
+                {onClearChat && !isMobile && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -644,6 +686,72 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                       />
                     </svg>
                   </button>
+                )}
+                {showInboxActions && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMoreMenuOpen((o) => !o);
+                      }}
+                      className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
+                      aria-expanded={moreMenuOpen}
+                      aria-haspopup="true"
+                      aria-label="More chat options"
+                    >
+                      <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                      </svg>
+                    </button>
+                    {moreMenuOpen && (
+                      <div
+                        className="absolute right-0 top-full mt-1 w-52 rounded-xl border border-gray-200 bg-white py-1 shadow-lg z-30"
+                        role="menu"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {onArchiveConversation && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100"
+                            onClick={handleArchiveFromChat}
+                          >
+                            Archive conversation
+                          </button>
+                        )}
+                        {onDeleteConversation && !hasLinkedDeal && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 active:bg-red-100"
+                            onClick={handleDeleteFromChat}
+                          >
+                            Delete conversation
+                          </button>
+                        )}
+                        {onClearChat && isMobile && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMoreMenuOpen(false);
+                              void runIfConfirmed(
+                                'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
+                                () => {
+                                  void onClearChat(conversation.id);
+                                },
+                              );
+                            }}
+                          >
+                            Clear chat
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
                 <button onClick={handleFlagClick} disabled={conversation.isFlagged} className="disabled:opacity-50 p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors" aria-label="Report conversation" title={conversation.isFlagged ? "This conversation has been reported" : "Report conversation"}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 6a3 3 0 013-3h10a1 1 0 01.8 1.6L14.25 8l2.55 3.4A1 1 0 0116 13H6a1 1 0 01-1-1V6z" clipRule="evenodd" /></svg>

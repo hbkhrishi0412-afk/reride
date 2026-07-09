@@ -43,13 +43,13 @@ export function validateAdvanceStage(params: {
     case 'offer_made': {
       const amount = Number(payload.amount);
       if (!Number.isFinite(amount) || amount <= 0) return 'Valid offer amount is required';
+      if (pipelineStageIndex(currentStage) < pipelineStageIndex('inspection_completed')) {
+        return 'Inspection must be completed before making an offer';
+      }
       break;
     }
     case 'inspection_requested':
       if (!isBuyer) return 'Only the buyer can request inspection';
-      if (pipelineStageIndex(currentStage) < pipelineStageIndex('offer_accepted')) {
-        return 'Offer must be accepted before inspection';
-      }
       break;
     case 'inspection_completed':
       if (!isBuyer) return 'Only the buyer can complete inspection';
@@ -58,6 +58,9 @@ export function validateAdvanceStage(params: {
     case 'token_uploaded':
       if (!isBuyer) return 'Only the buyer can upload token receipt';
       if (!payload.receiptUrl) return 'Token receipt is required';
+      if (pipelineStageIndex(currentStage) < pipelineStageIndex('offer_accepted')) {
+        return 'Offer must be accepted before uploading token';
+      }
       break;
     case 'token_confirmed':
       if (!isSeller) return 'Only the seller can confirm token';

@@ -3,6 +3,12 @@ import { View, User } from './types';
 import { login, register } from './services/userService';
 import { runGoogleSignInButtonFlow } from './services/authService';
 import { setRememberMePreference } from './utils/rememberMe';
+import {
+  loadLastRememberedLoginRole,
+  saveRememberedCredentialsAsync,
+  resolveRememberedCredentials,
+  hasRememberedCredentials,
+} from './utils/rememberedCredentials';
 import OTPLogin from './components/OTPLogin';
 import PasswordInput from './components/PasswordInput';
 
@@ -35,11 +41,16 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
   }, []);
 
   useEffect(() => {
-    const rememberedEmail = localStorage.getItem('rememberedCustomerEmail');
-    if (rememberedEmail) {
-      setEmail(rememberedEmail);
+    let cancelled = false;
+    void resolveRememberedCredentials('customer').then((remembered) => {
+      if (cancelled || !remembered) return;
+      setEmail(remembered.email);
+      setPassword(remembered.password);
       setRememberMe(true);
-    }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,8 +74,7 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
 
         if (result.success && result.user) {
             if (mode === 'login') {
-                if (rememberMe) localStorage.setItem('rememberedCustomerEmail', email);
-                else localStorage.removeItem('rememberedCustomerEmail');
+                await saveRememberedCredentialsAsync('customer', email, password, rememberMe);
                 setRememberMePreference(rememberMe);
                 onLogin(result.user);
             } else {
@@ -101,7 +111,7 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
     setError('');
     setName('');
     setMobile('');
-    if (!localStorage.getItem('rememberedCustomerEmail')) {
+    if (!hasRememberedCredentials('customer')) {
       setEmail('');
     }
     setPassword('');

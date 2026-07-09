@@ -32,6 +32,8 @@ function taskActionLabel(type: SellerTask['type']): string {
       return 'Confirm';
     case 'confirm_delivery':
       return 'Confirm';
+    case 'review_return':
+      return 'Review';
     default:
       return 'Open';
   }
@@ -122,6 +124,10 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
           await load();
           return;
         }
+        if (task.type === 'review_return') {
+          onOpenDeal?.(task.dealId);
+          return;
+        }
         openDealConversation(task);
       } catch (err) {
         onNotify?.(err instanceof Error ? err.message : 'Action failed', 'error');
@@ -129,7 +135,7 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
         setActingId(null);
       }
     },
-    [load, onNotify, openDealConversation],
+    [load, onNotify, onOpenDeal, openDealConversation],
   );
 
   const firstName = seller.name?.split(' ')[0] || 'there';
@@ -139,9 +145,9 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
-        <div className="h-24 rounded-2xl bg-slate-100 dark:bg-slate-800" />
-        <div className="h-32 rounded-2xl bg-slate-100 dark:bg-slate-800" />
-        <div className="h-40 rounded-2xl bg-slate-100 dark:bg-slate-800" />
+        <div className="h-24 rounded-2xl bg-slate-100 dark:bg-gray-50" />
+        <div className="h-32 rounded-2xl bg-slate-100 dark:bg-gray-50" />
+        <div className="h-40 rounded-2xl bg-slate-100 dark:bg-gray-50" />
       </div>
     );
   }
@@ -171,12 +177,12 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
     <div className={compact ? 'space-y-3' : 'space-y-5'}>
       {/* Header strip */}
       <div
-        className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-sm"
+        className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-4 sm:p-5 shadow-sm"
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-reride-orange">Command Center</p>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">
+            <h2 className="text-xl font-bold text-slate-900 mt-0.5">
               Good {new Date().getHours() < 12 ? 'morning' : 'day'}, {firstName}
             </h2>
             <p className="text-sm text-slate-500 mt-1">
@@ -201,7 +207,7 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
             </div>
             {!compact && (
               <div className="text-right text-sm">
-                <p className="font-bold text-slate-900 dark:text-white">{stats?.activeDealCount ?? 0} active deals</p>
+                <p className="font-bold text-slate-900">{stats?.activeDealCount ?? 0} active deals</p>
                 <p className="text-slate-500">
                   {(stats?.ratingAverage ?? 0).toFixed(1)} ★ ({stats?.ratingCount ?? 0})
                 </p>
@@ -212,9 +218,9 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
       </div>
 
       {/* Today's tasks */}
-      <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Today&apos;s Tasks</h3>
+      <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white overflow-hidden shadow-sm">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-gray-200">
+          <h3 className="text-sm font-bold text-slate-900">Today&apos;s Tasks</h3>
           {tasks.length > 0 && (
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
               {tasks.length}
@@ -226,12 +232,12 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
             <p className="text-sm text-slate-500">No pending tasks. Great work!</p>
           </div>
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          <ul className="divide-y divide-slate-100 dark:divide-gray-100">
             {tasks.slice(0, compact ? 3 : 6).map((task) => (
               <li key={task.id} className="px-4 py-3 flex items-center gap-3">
                 <span className={`w-2 h-2 rounded-full shrink-0 ${taskPriorityDot(task.priority)}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{task.title}</p>
+                  <p className="text-sm font-semibold text-slate-900 truncate">{task.title}</p>
                   <p className="text-xs text-slate-500 truncate">{task.subtitle}</p>
                   <p className="text-[10px] font-mono text-reride-orange mt-0.5">{task.dealId}</p>
                 </div>
@@ -250,9 +256,9 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
       </section>
 
       {/* Active deals */}
-      <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Active Deals</h3>
+      <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white overflow-hidden shadow-sm">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-gray-200">
+          <h3 className="text-sm font-bold text-slate-900">Active Deals</h3>
           <button
             type="button"
             onClick={onNavigateToMessages}
@@ -309,14 +315,14 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
           <button
             type="button"
             onClick={onNavigateToListings}
-            className="px-4 py-2 text-sm font-semibold rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+            className="px-4 py-2 text-sm font-semibold rounded-xl bg-slate-900 text-white"
           >
             + List vehicle
           </button>
           <button
             type="button"
             onClick={onNavigateToMessages}
-            className="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-200"
+            className="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 dark:border-gray-200"
           >
             Messages
           </button>
@@ -342,12 +348,12 @@ const DealMiniCard: React.FC<{ deal: DealLead; onOpen: () => void }> = ({ deal, 
     <button
       type="button"
       onClick={onOpen}
-      className="text-left p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-reride-orange/50 transition-colors w-full"
+      className="text-left p-3 rounded-xl border border-slate-200 dark:border-gray-200 hover:border-reride-orange/50 transition-colors w-full"
     >
       <p className="text-[10px] font-mono font-bold text-reride-orange">{deal.id}</p>
-      <p className="text-sm font-semibold text-slate-900 dark:text-white truncate mt-0.5">{buyer}</p>
+      <p className="text-sm font-semibold text-slate-900 truncate mt-0.5">{buyer}</p>
       <p className="text-xs text-slate-500 truncate">{vehicle}</p>
-      <span className="inline-block mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+      <span className="inline-block mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-gray-50">
         {stage}
       </span>
       {deal.chatStatus === 'pending' && (

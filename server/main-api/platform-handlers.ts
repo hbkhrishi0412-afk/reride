@@ -1885,6 +1885,13 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
         return bTime - aTime;
       });
+
+      try {
+        const { enrichConversationsWithDealFlags } = await import('../handlers/conversation-lifecycle.js');
+        conversations = await enrichConversationsWithDealFlags(conversations);
+      } catch (enrichErr) {
+        core.logWarn('⚠️ Failed to enrich conversations with deal flags (non-fatal):', enrichErr);
+      }
       
       return res.status(200).json({ success: true, data: conversations });
     }
@@ -2059,6 +2066,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
             conversationId?: string;
             markReadMessageIds?: (number | string)[];
             clearMessages?: boolean;
+            archive?: boolean;
             threadReadBy?: 'customer' | 'seller';
             threadReadState?: boolean;
           }
@@ -2092,6 +2100,8 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           ? body.markReadMessageIds
           : [];
       const doClear = Boolean(body && typeof body === 'object' && body.clearMessages);
+      const hasArchiveFlag = body && typeof body === 'object' && typeof body.archive === 'boolean';
+      const archiveState = hasArchiveFlag ? Boolean((body as { archive?: boolean }).archive) : undefined;
       const threadReadBy =
         body &&
         typeof body === 'object' &&
@@ -2110,6 +2120,18 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           }
           const role: 'customer' | 'seller' = clearedAsCustomer ? 'customer' : 'seller';
           await core.conversationService.clearHistoryForParticipant(String(conversation.id), role);
+        } else if (hasArchiveFlag) {
+          const archivedAsCustomer = isAuthParticipant(normalizedCustomerId);
+          const archivedAsSeller = isAuthParticipant(normalizedSellerId);
+          if (!archivedAsCustomer && !archivedAsSeller && !isAdmin) {
+            return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
+          }
+          const role: 'customer' | 'seller' = archivedAsCustomer ? 'customer' : 'seller';
+          await core.conversationService.setArchivedForParticipant(
+            String(conversation.id),
+            role,
+            archiveState!,
+          );
         } else if (threadReadBy && hasThreadReadState) {
           if (!isAdmin) {
             const canUpdateCustomerReadState = isAuthParticipant(normalizedCustomerId);
@@ -2130,7 +2152,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         } else {
           return res.status(400).json({
             success: false,
-            reason: 'Provide clearMessages, markReadMessageIds, or threadReadBy/threadReadState.',
+            reason: 'Provide clearMessages, archive, markReadMessageIds, or threadReadBy/threadReadState.',
           });
         }
         const updatedConversation = await core.conversationService.findById(String(conversation.id));
@@ -2164,6 +2186,19 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
       if (!isAdmin && !isAuthParticipant(normalizedCustomerId) && !isAuthParticipant(normalizedSellerId)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation deletion' });
+      }
+
+      const { getDealForConversation } = await import('../handlers/conversation-lifecycle.js');
+      const linkedDeal = await getDealForConversation(String(conversation.id));
+      if (linkedDeal) {
+        return res.status(403).json({
+          success: false,
+          reason: 'deal_exists',
+          message:
+            'This conversation is part of a deal record and cannot be deleted. Archive it to hide it from your inbox instead.',
+          action: 'archive',
+          dealStatus: linkedDeal.status,
+        });
       }
 
       await core.conversationService.delete(conversation.id);

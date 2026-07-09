@@ -9,6 +9,7 @@ import { handleStageHandlers } from './deals/stage-handlers.js';
 import { handleAssistance } from './deals/assistance.js';
 import { handleInspections } from './deals/inspections.js';
 import { handleAdminOps } from './deals/admin-ops.js';
+import { handleReturnLifecycle } from './deals/return-lifecycle.js';
 import { firstQueryParam } from './deals/shared.js';
 
 export async function handleDeals(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
@@ -26,6 +27,7 @@ export async function handleDeals(req: VercelRequest, res: VercelResponse, _opti
     if (await handleStageHandlers(ctx)) return;
     if (await handleAssistance(ctx)) return;
     if (await handleInspections(ctx)) return;
+    if (await handleReturnLifecycle(ctx)) return;
     if (await handleAdminOps(ctx)) return;
 
     return res.status(404).json({ success: false, reason: 'Unknown deals action' });

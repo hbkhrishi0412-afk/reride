@@ -129,7 +129,27 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       { includeOffers: false, includeDocuments: false },
     );
 
-    const tasks = buildSellerTasks(leads);
+    const { data: returnReviewRows } = await supabase
+      .from('deal_leads')
+      .select('*')
+      .eq('seller_email', auth.email)
+      .eq('status', 'completed')
+      .eq('return_status', 'returned')
+      .order('returned_at', { ascending: false });
+
+    const returnReviewLeads = await enrichLeadsBatch(
+      await leadsFromRows(returnReviewRows || []),
+      { includeOffers: false, includeDocuments: false },
+    );
+
+    const leadsForTasks = [...leads];
+    for (const rl of returnReviewLeads) {
+      if (!leadsForTasks.some((l) => l.id === rl.id)) {
+        leadsForTasks.push(rl);
+      }
+    }
+
+    const tasks = buildSellerTasks(leadsForTasks);
     const pendingInterestCount = leads.filter((l) => l.chatStatus === 'pending').length;
     const sellerUser = await supabaseUserService.findByEmail(auth.email);
 
@@ -652,8 +672,8 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       'lead_created',
       'chat_accepted',
       'test_drive_completed',
-      'offer_accepted',
       'inspection_completed',
+      'offer_accepted',
       'token_confirmed',
       'delivery_completed',
       'rc_completed',

@@ -79,8 +79,8 @@ export const StatCard = memo(({
       type={onClick ? 'button' : undefined}
       aria-label={onClick ? (ariaLabel ?? `${label}: ${typeof value === 'string' || typeof value === 'number' ? value : ''}`) : undefined}
       className={[
-        'group relative text-left bg-white dark:bg-gray-800',
-        'rounded-2xl border border-gray-100 dark:border-gray-700',
+        'group relative text-left bg-white dark:bg-white',
+        'rounded-2xl border border-gray-100 dark:border-gray-200',
         'shadow-sm hover:shadow-md transition-all duration-200',
         ACCENT_RING[accent],
         onClick ? 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 active:scale-[0.99]' : '',
@@ -102,7 +102,7 @@ export const StatCard = memo(({
           </div>
         )}
         {badge !== undefined && (
-          <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+          <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-gray-100 text-gray-700">
             {badge}
           </span>
         )}
@@ -112,16 +112,16 @@ export const StatCard = memo(({
         <p
           className={[
             valueSize,
-            'font-bold text-gray-900 dark:text-gray-50 leading-tight tracking-tight truncate',
+            'font-bold text-gray-900 leading-tight tracking-tight truncate',
           ].join(' ')}
         >
           {value}
         </p>
-        <p className={['mt-1 text-sm font-medium text-gray-600 dark:text-gray-400 group-hover:', ACCENT_TEXT[accent], 'transition-colors'].join(' ')}>
+        <p className={['mt-1 text-sm font-medium text-gray-600 group-hover:', ACCENT_TEXT[accent], 'transition-colors'].join(' ')}>
           {label}
         </p>
         {sublabel !== undefined && (
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-500 truncate">{sublabel}</p>
+          <p className="mt-1 text-xs text-gray-500 truncate">{sublabel}</p>
         )}
       </div>
     </Wrapper>
@@ -182,8 +182,8 @@ export function EmptyState({
       role="status"
       className={[
         'flex flex-col items-center justify-center text-center rounded-2xl',
-        'border border-dashed border-gray-200 dark:border-gray-700',
-        'bg-gray-50/50 dark:bg-gray-800/30',
+        'border border-dashed border-gray-200 dark:border-gray-200',
+        'bg-gray-50/50 dark:bg-gray-50',
         dense ? 'px-4 py-8' : 'px-6 py-12 sm:py-16',
         className,
       ].join(' ')}
@@ -194,18 +194,18 @@ export function EmptyState({
           className={[
             dense ? 'w-10 h-10' : 'w-14 h-14',
             'mb-3 flex items-center justify-center rounded-full',
-            'bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800',
-            'text-gray-500 dark:text-gray-300',
+            'bg-gradient-to-br from-gray-100 to-gray-50',
+            'text-gray-500',
           ].join(' ')}
         >
           {typeof icon === 'string' ? <span className="text-2xl">{icon}</span> : icon}
         </div>
       )}
-      <h3 className={[dense ? 'text-base' : 'text-lg', 'font-semibold text-gray-900 dark:text-gray-100'].join(' ')}>
+      <h3 className={[dense ? 'text-base' : 'text-lg', 'font-semibold text-gray-900'].join(' ')}>
         {title}
       </h3>
       {description && (
-        <p className={[dense ? 'mt-1 text-xs' : 'mt-2 text-sm', 'max-w-md text-gray-600 dark:text-gray-400'].join(' ')}>
+        <p className={[dense ? 'mt-1 text-xs' : 'mt-2 text-sm', 'max-w-md text-gray-600'].join(' ')}>
           {description}
         </p>
       )}
@@ -224,7 +224,7 @@ export function EmptyState({
             <button
               type="button"
               onClick={secondaryAction.onClick}
-              className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 text-sm font-semibold border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-gray-400 transition"
+              className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-white dark:bg-white text-gray-800 text-sm font-semibold border border-gray-200 dark:border-gray-200 hover:bg-gray-50 dark:hover:bg-gray-50 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-gray-400 transition"
             >
               {secondaryAction.label}
             </button>
@@ -255,9 +255,9 @@ export function SectionHeader({ title, subtitle, action, as = 'h2', className = 
   return (
     <div className={`flex items-end justify-between gap-3 mb-3 ${className}`}>
       <div className="min-w-0">
-        <Heading className={`${size} font-semibold text-gray-900 dark:text-gray-100 truncate`}>{title}</Heading>
+        <Heading className={`${size} font-semibold text-gray-900 truncate`}>{title}</Heading>
         {subtitle && (
-          <p className="mt-0.5 text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{subtitle}</p>
+          <p className="mt-0.5 text-xs sm:text-sm text-gray-500 truncate">{subtitle}</p>
         )}
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
@@ -274,15 +274,15 @@ export function StatCardSkeleton({ dense = false }: { dense?: boolean }) {
     <div
       aria-hidden="true"
       className={[
-        'bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm',
+        'bg-white dark:bg-white rounded-2xl border border-gray-100 dark:border-gray-200 shadow-sm',
         dense ? 'p-3 sm:p-4' : 'p-4 sm:p-5',
       ].join(' ')}
     >
       <div className="flex items-start gap-3">
-        <div className={[dense ? 'w-9 h-9' : 'w-11 h-11', 'rounded-xl bg-gray-200 dark:bg-gray-700 animate-pulse'].join(' ')} />
+        <div className={[dense ? 'w-9 h-9' : 'w-11 h-11', 'rounded-xl bg-gray-200 dark:bg-gray-50 animate-pulse'].join(' ')} />
       </div>
-      <div className="mt-3 h-6 w-24 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
-      <div className="mt-2 h-3 w-16 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+      <div className="mt-3 h-6 w-24 rounded bg-gray-200 dark:bg-gray-50 animate-pulse" />
+      <div className="mt-2 h-3 w-16 rounded bg-gray-200 dark:bg-gray-50 animate-pulse" />
     </div>
   );
 }
@@ -291,15 +291,15 @@ export function SkeletonRow({ lines = 2 }: { lines?: number }) {
   return (
     <div
       aria-hidden="true"
-      className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4 flex items-center gap-3"
+      className="bg-white dark:bg-white rounded-xl border border-gray-100 dark:border-gray-200 p-4 flex items-center gap-3"
     >
-      <div className="w-12 h-12 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse flex-shrink-0" />
+      <div className="w-12 h-12 rounded-lg bg-gray-200 dark:bg-gray-50 animate-pulse flex-shrink-0" />
       <div className="flex-1 space-y-2">
         {Array.from({ length: lines }).map((_, i) => (
           <div
             key={i}
             className={[
-              'h-3 rounded bg-gray-200 dark:bg-gray-700 animate-pulse',
+              'h-3 rounded bg-gray-200 dark:bg-gray-50 animate-pulse',
               i === 0 ? 'w-3/4' : 'w-1/2',
             ].join(' ')}
           />
@@ -401,7 +401,7 @@ export function TabNav<T extends string>({
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500',
               selected
                 ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700',
+                : 'bg-white dark:bg-white text-gray-700 border border-gray-200 dark:border-gray-200 hover:bg-gray-50 dark:hover:bg-gray-50',
               tab.disabled ? 'opacity-50 cursor-not-allowed' : '',
             ].join(' ')}
           >
@@ -415,7 +415,7 @@ export function TabNav<T extends string>({
               <span
                 className={[
                   'inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold',
-                  selected ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+                  selected ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700',
                 ].join(' ')}
               >
                 {tab.badge}
@@ -460,10 +460,10 @@ export function TabPanel({ id, active, children, className = '' }: TabPanelProps
 
 export function SummaryBadge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'success' | 'warning' | 'info' }) {
   const tones: Record<string, string> = {
-    neutral: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
-    success: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-    warning: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
-    info: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200',
+    neutral: 'bg-gray-100 text-gray-700',
+    success: 'bg-emerald-100 text-emerald-700',
+    warning: 'bg-amber-100 text-amber-800',
+    info: 'bg-blue-100 text-blue-700',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${tones[tone]}`}>

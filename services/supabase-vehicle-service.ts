@@ -141,7 +141,7 @@ function supabaseRowToVehicle(row: any): Vehicle {
     fuelType: row.fuel_type || '',
     fuelEfficiency: row.fuel_efficiency || '',
     color: row.color || '',
-    status: (row.status || 'published') as 'published' | 'unpublished' | 'sold',
+    status: (row.status || 'published') as 'published' | 'unpublished' | 'sold' | 'archived',
     isFeatured: row.is_featured || false,
     views: row.views || 0,
     inquiriesCount: row.inquiries_count || 0,
@@ -164,6 +164,8 @@ function supabaseRowToVehicle(row: any): Vehicle {
     // Ensure DB columns for listing lifecycle override metadata values
     listingExpiresAt: row.listing_expires_at || meta?.listingExpiresAt || undefined,
     listingStatus: row.listing_status || meta?.listingStatus || 'active',
+    listingCycle: row.listing_cycle != null ? Number(row.listing_cycle) : (meta?.listingCycle ?? 1),
+    archivedAt: row.archived_at || meta?.archivedAt || undefined,
   };
 }
 
@@ -273,6 +275,12 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, options?: { partial?: b
   }
   if (partial ? has('listingStatus') : vehicle.listingStatus !== undefined) {
     row.listing_status = vehicle.listingStatus || 'active';
+  }
+  if (partial ? has('listingCycle') : vehicle.listingCycle !== undefined) {
+    row.listing_cycle = vehicle.listingCycle ?? 1;
+  }
+  if (partial ? has('archivedAt') : vehicle.archivedAt !== undefined) {
+    row.archived_at = vehicle.archivedAt || null;
   }
 
   if (partial) {

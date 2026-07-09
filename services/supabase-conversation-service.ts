@@ -166,6 +166,12 @@ export interface Conversation {
   customerHistoryClearedAt?: string;
   /** ISO: seller cleared their view of history. */
   sellerHistoryClearedAt?: string;
+  /** ISO: customer archived/hid thread from inbox (deal history preserved). */
+  customerArchivedAt?: string;
+  /** ISO: seller archived/hid thread from inbox (deal history preserved). */
+  sellerArchivedAt?: string;
+  /** Server-enriched when listing inbox (not stored on row). */
+  hasDeal?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -197,6 +203,10 @@ export function supabaseRowToConversation(row: any): Conversation {
       typeof meta.customer_history_cleared_at === 'string' ? meta.customer_history_cleared_at : undefined,
     sellerHistoryClearedAt:
       typeof meta.seller_history_cleared_at === 'string' ? meta.seller_history_cleared_at : undefined,
+    customerArchivedAt:
+      typeof meta.customer_archived_at === 'string' ? meta.customer_archived_at : undefined,
+    sellerArchivedAt:
+      typeof meta.seller_archived_at === 'string' ? meta.seller_archived_at : undefined,
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString(),
   };
@@ -242,7 +252,9 @@ function conversationToSupabaseRow(conversation: Partial<Conversation>, isUpdate
   const needsMeta =
     conversation.messages !== undefined ||
     conversation.customerHistoryClearedAt !== undefined ||
-    conversation.sellerHistoryClearedAt !== undefined;
+    conversation.sellerHistoryClearedAt !== undefined ||
+    conversation.customerArchivedAt !== undefined ||
+    conversation.sellerArchivedAt !== undefined;
   if (needsMeta) {
     row.metadata = {} as Record<string, unknown>;
     if (conversation.messages !== undefined) {
@@ -257,6 +269,14 @@ function conversationToSupabaseRow(conversation: Partial<Conversation>, isUpdate
     if (conversation.sellerHistoryClearedAt !== undefined) {
       (row.metadata as Record<string, unknown>).seller_history_cleared_at =
         conversation.sellerHistoryClearedAt ?? null;
+    }
+    if (conversation.customerArchivedAt !== undefined) {
+      (row.metadata as Record<string, unknown>).customer_archived_at =
+        conversation.customerArchivedAt ?? null;
+    }
+    if (conversation.sellerArchivedAt !== undefined) {
+      (row.metadata as Record<string, unknown>).seller_archived_at =
+        conversation.sellerArchivedAt ?? null;
     }
   }
 
@@ -678,6 +698,26 @@ export const supabaseConversationService = {
     const now = new Date().toISOString();
     const patch: Partial<Conversation> =
       role === 'customer' ? { customerHistoryClearedAt: now } : { sellerHistoryClearedAt: now };
+    await this.update(conversation.id, patch);
+  },
+
+  /**
+   * Archive or unarchive a thread for one participant. Messages and deal history stay intact.
+   */
+  async setArchivedForParticipant(
+    conversationId: string,
+    role: 'customer' | 'seller',
+    archived: boolean,
+  ): Promise<void> {
+    const conversation = await this.findById(String(conversationId));
+    if (!conversation) {
+      throw new Error(`Conversation not found: ${conversationId}`);
+    }
+    const now = archived ? new Date().toISOString() : undefined;
+    const patch: Partial<Conversation> =
+      role === 'customer'
+        ? { customerArchivedAt: now }
+        : { sellerArchivedAt: now };
     await this.update(conversation.id, patch);
   },
 

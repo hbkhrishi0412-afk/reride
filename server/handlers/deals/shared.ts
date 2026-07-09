@@ -458,6 +458,10 @@ export function mapLeadRow(row: Record<string, unknown>, timeline?: DealTimeline
     updatedAt: String(row.updated_at),
     chatAcceptedAt: row.chat_accepted_at ? String(row.chat_accepted_at) : undefined,
     completedAt: row.completed_at ? String(row.completed_at) : undefined,
+    returnStatus: row.return_status ? (String(row.return_status) as DealLead['returnStatus']) : undefined,
+    returnedAt: row.returned_at ? String(row.returned_at) : undefined,
+    returnReason: row.return_reason ? String(row.return_reason) : undefined,
+    returnReviewedAt: row.return_reviewed_at ? String(row.return_reviewed_at) : undefined,
     timeline,
     kanbanStatus: row.kanban_status ? (String(row.kanban_status) as DealKanbanStatus) : undefined,
     assignedAdminEmail: row.assigned_admin_email ? String(row.assigned_admin_email) : undefined,
@@ -719,7 +723,7 @@ export async function assertDealParticipant(
 }
 
 export const INSPECTION_BOOKING_STAGES = new Set([
-  'offer_accepted',
+  'test_drive_completed',
   'inspection_requested',
   'inspection_completed',
 ]);
@@ -1039,6 +1043,23 @@ export async function enrichLeadsBatch(
   });
 }
 
+/** Mark the linked vehicle sold when a deal pipeline completes. */
+export async function markVehicleSoldForCompletedDeal(vehicleIdRaw: string): Promise<void> {
+  const resolved = await resolveVehicleId(vehicleIdRaw);
+  if (!resolved?.vehicle) return;
+
+  const now = new Date().toISOString();
+  try {
+    await supabaseVehicleService.update(resolved.primaryKey, {
+      status: 'sold',
+      listingStatus: 'sold',
+      soldAt: now,
+    });
+  } catch (err) {
+    console.warn('markVehicleSoldForCompletedDeal failed:', err);
+  }
+}
+
 export function buildSellerTasks(leads: DealLead[]): SellerTask[] {
   const tasks: SellerTask[] = [];
 
@@ -1111,6 +1132,22 @@ export function buildSellerTasks(leads: DealLead[]): SellerTask[] {
         type: 'confirm_delivery',
         priority: 65,
         title: 'Confirm vehicle delivered',
+        subtitle: `${buyer} · ${vehicleName}`,
+        conversationId: lead.conversationId,
+      });
+    }
+  }
+
+  for (const lead of leads) {
+    if (lead.status === 'completed' && lead.returnStatus === 'returned') {
+      const vehicleName = lead.metadata.vehicleName || lead.vehicleName || 'your listing';
+      const buyer = lead.buyerName || lead.buyerDisplayName || 'Buyer';
+      tasks.push({
+        id: `${lead.id}_review_return`,
+        dealId: lead.id,
+        type: 'review_return',
+        priority: 95,
+        title: 'Review vehicle return',
         subtitle: `${buyer} · ${vehicleName}`,
         conversationId: lead.conversationId,
       });

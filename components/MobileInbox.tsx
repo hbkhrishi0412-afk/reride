@@ -54,8 +54,10 @@ interface MobileInboxProps {
   onConsumedInitialConversation?: () => void;
   /** Clear message history for this thread (conversation row kept). */
   onClearChat?: (conversationId: string) => void | Promise<void>;
-  /** Permanently delete the conversation (API + state). Swipe left to reveal. */
+  /** Permanently delete the conversation (API + state). Swipe left to reveal. Only when no deal exists. */
   onDeleteConversation?: (conversationId: string) => void | Promise<void>;
+  /** Hide from inbox without deleting (preserves deal / message history). */
+  onArchiveConversation?: (conversationId: string, archived?: boolean) => void | Promise<void>;
   /** Counterpart online per conversation id (Supabase presence / Socket.io). */
   chatPeerOnlineByConversationId?: Record<string, boolean>;
   /** Optional manual read/unread toggle for thread rows. */
@@ -96,6 +98,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   onConsumedInitialConversation,
   onClearChat,
   onDeleteConversation,
+  onArchiveConversation,
   chatPeerOnlineByConversationId,
   onSetConversationReadState,
   onMarkAllAsRead,
@@ -106,7 +109,8 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read'>('all');
-  /** Swipe right → report (left panel); swipe left → delete (right panel). */
+  const [inboxView, setInboxView] = useState<'active' | 'archived'>('active');
+  /** Swipe right → report (left panel); swipe left → archive/delete (right panel). */
   const [swipeOpen, setSwipeOpen] = useState<{ id: string; side: 'report' | 'delete' } | null>(null);
   const [messageText, setMessageText] = useState('');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -175,15 +179,58 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
     [inboxRole, users, getSellerName]
   );
 
-  const { sortedConversations, filteredConversations, unreadCount } = useConversationList(
+  const { sortedConversations, filteredConversations, unreadCount, archivedCount } = useConversationList(
     conversations,
     searchQuery,
     filterMode,
     {
       viewerRole: inboxRole,
       getCounterpartLabel,
+      inboxView,
     }
   );
+
+  const handleArchiveConversation = useCallback(
+    (conversationId: string, archived = true, onSuccess?: () => void) => {
+      if (!onArchiveConversation) return;
+      const message = archived
+        ? 'Archive this conversation? Deal and message history stay intact.'
+        : 'Restore this conversation to your inbox?';
+      void runIfConfirmed(message, () => {
+        void Promise.resolve(onArchiveConversation(conversationId, archived)).then(() => {
+          setSwipeOpen(null);
+          onSuccess?.();
+        });
+      });
+    },
+    [onArchiveConversation, runIfConfirmed],
+  );
+
+  const handleDeleteConversation = useCallback(
+    (conversationId: string, hasDeal?: boolean, onSuccess?: () => void) => {
+      if (!onDeleteConversation) return;
+      if (hasDeal) {
+        handleArchiveConversation(conversationId, true, onSuccess);
+        return;
+      }
+      void runIfConfirmed(
+        'Delete this conversation? This cannot be undone.',
+        () => {
+          void Promise.resolve(onDeleteConversation(conversationId)).then(() => {
+            setSwipeOpen(null);
+            onSuccess?.();
+          });
+        },
+        { variant: 'danger' },
+      );
+    },
+    [onDeleteConversation, handleArchiveConversation, runIfConfirmed],
+  );
+
+  const closeOpenThread = useCallback(() => {
+    setSelectedConv(null);
+    setThreadMenuOpen(false);
+  }, []);
 
   const visibleThreadMessages = useMemo(
     () => (selectedConv ? filterMessagesForViewer(selectedConv, inboxRole) : []),
@@ -481,6 +528,36 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                       }}
                     >
                       View listing
+                    </button>
+                  )}
+                  {onArchiveConversation && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="w-full text-left px-4 py-2.5 text-[15px] text-gray-900 active:bg-black/5"
+                      onClick={() => {
+                        setThreadMenuOpen(false);
+                        handleArchiveConversation(
+                          selectedConv.id,
+                          inboxView !== 'archived',
+                          closeOpenThread,
+                        );
+                      }}
+                    >
+                      {inboxView === 'archived' ? 'Restore conversation' : 'Archive conversation'}
+                    </button>
+                  )}
+                  {onDeleteConversation && inboxView !== 'archived' && !selectedConv.hasDeal && !dealLead && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="w-full text-left px-4 py-2.5 text-[15px] text-red-600 active:bg-red-50"
+                      onClick={() => {
+                        setThreadMenuOpen(false);
+                        handleDeleteConversation(selectedConv.id, selectedConv.hasDeal, closeOpenThread);
+                      }}
+                    >
+                      Delete conversation
                     </button>
                   )}
                   {onClearChat && (
@@ -960,7 +1037,22 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
               </button>
             );
           })}
-          {onMarkAllAsRead && unreadCount > 0 && (
+          {onArchiveConversation && (
+            <button
+              type="button"
+              onClick={() => setInboxView((v) => (v === 'active' ? 'archived' : 'active'))}
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-semibold active:scale-95 transition-transform"
+              style={{
+                background: inboxView === 'archived' ? '#0B0B0F' : 'rgba(15,23,42,0.04)',
+                color: inboxView === 'archived' ? '#FFFFFF' : '#475569',
+                border: inboxView === 'archived' ? '1px solid #0B0B0F' : '1px solid rgba(15,23,42,0.06)',
+              }}
+              aria-label={inboxView === 'archived' ? 'Show active conversations' : 'Show archived conversations'}
+            >
+              {inboxView === 'archived' ? 'Active' : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ''}`}
+            </button>
+          )}
+          {onMarkAllAsRead && unreadCount > 0 && inboxView === 'active' && (
             <button
               type="button"
               onClick={() => void onMarkAllAsRead(inboxRole)}
@@ -1131,38 +1223,45 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                   </span>
                 </div>
 
-                {/* Swipe left → delete (panel on the right) */}
+                {/* Swipe left → archive / delete (panel on the right) */}
                 <div
-                  className={`absolute right-0 top-0 bottom-0 z-0 flex w-28 items-stretch transition-transform duration-200 ease-out ${
+                  className={`absolute right-0 top-0 bottom-0 z-0 flex w-36 items-stretch transition-transform duration-200 ease-out ${
                     openSide === 'delete' ? 'translate-x-0' : 'translate-x-full'
                   }`}
                 >
-                  {onDeleteConversation ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void runIfConfirmed(
-                          'Delete this conversation? This cannot be undone.',
-                          () => {
-                            void Promise.resolve(onDeleteConversation(conv.id)).then(() => {
-                              setSwipeOpen(null);
-                            });
-                          },
-                          { variant: 'danger' },
-                        );
-                      }}
-                      className="h-full w-28 flex-1 text-white flex items-center justify-center gap-1.5 text-[12px] font-semibold px-1"
-                      style={{ background: 'linear-gradient(135deg, #64748B 0%, #1E293B 100%)' }}
-                      aria-label="Delete conversation"
-                    >
-                      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                      </svg>
-                      Delete
-                    </button>
+                  {(onArchiveConversation || onDeleteConversation) ? (
+                    <div className="flex h-full w-36 flex-col">
+                      {onArchiveConversation && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleArchiveConversation(conv.id, inboxView !== 'archived');
+                          }}
+                          className="h-1/2 w-full flex-1 text-white flex items-center justify-center gap-1 text-[11px] font-semibold px-1"
+                          style={{ background: 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)' }}
+                          aria-label={inboxView === 'archived' ? 'Restore conversation' : 'Archive conversation'}
+                        >
+                          {inboxView === 'archived' ? 'Restore' : 'Archive'}
+                        </button>
+                      )}
+                      {onDeleteConversation && inboxView !== 'archived' && !conv.hasDeal && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteConversation(conv.id, conv.hasDeal);
+                          }}
+                          className="h-1/2 w-full flex-1 text-white flex items-center justify-center gap-1 text-[11px] font-semibold px-1"
+                          style={{ background: 'linear-gradient(135deg, #64748B 0%, #1E293B 100%)' }}
+                          aria-label="Delete conversation"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   ) : (
-                    <div className="h-full w-28 bg-slate-200" aria-hidden />
+                    <div className="h-full w-36 bg-slate-200" aria-hidden />
                   )}
                 </div>
               </div>

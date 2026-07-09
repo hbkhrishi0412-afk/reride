@@ -1,13 +1,16 @@
 import { useMemo } from 'react';
 import type { Conversation } from '../types';
 import { filterMessagesForViewer } from '../utils/conversationView';
+import { filterConversationsForInboxView, type InboxViewerRole } from '../utils/conversationInbox';
 
-export type InboxViewerRole = 'customer' | 'seller';
+export type { InboxViewerRole };
 
 export interface UseConversationListConfig {
   viewerRole: InboxViewerRole;
   /** Used for search matching (seller name for customers, buyer name for sellers). */
   getCounterpartLabel: (conv: Conversation) => string;
+  /** Active inbox vs archived (hidden) threads. */
+  inboxView?: 'active' | 'archived';
 }
 
 /**
@@ -20,13 +23,18 @@ export const useConversationList = (
   filterMode: 'all' | 'unread' | 'read',
   config: UseConversationListConfig
 ) => {
-  const { viewerRole, getCounterpartLabel } = config;
+  const { viewerRole, getCounterpartLabel, inboxView = 'active' } = config;
+
+  const inboxScopedConversations = useMemo(
+    () => filterConversationsForInboxView(conversations, viewerRole, inboxView),
+    [conversations, viewerRole, inboxView],
+  );
 
   const sortedConversations = useMemo(() => {
-    return [...conversations].sort(
+    return [...inboxScopedConversations].sort(
       (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
     );
-  }, [conversations]);
+  }, [inboxScopedConversations]);
 
   const filteredConversations = useMemo(() => {
     let filtered = sortedConversations;
@@ -54,10 +62,14 @@ export const useConversationList = (
   }, [sortedConversations, searchQuery, filterMode, getCounterpartLabel, viewerRole]);
 
   const unreadCount = useMemo(() => {
-    return conversations.filter((c) =>
+    return inboxScopedConversations.filter((c) =>
       viewerRole === 'customer' ? !c.isReadByCustomer : !c.isReadBySeller
     ).length;
+  }, [inboxScopedConversations, viewerRole]);
+
+  const archivedCount = useMemo(() => {
+    return filterConversationsForInboxView(conversations, viewerRole, 'archived').length;
   }, [conversations, viewerRole]);
 
-  return { sortedConversations, filteredConversations, unreadCount };
+  return { sortedConversations, filteredConversations, unreadCount, archivedCount };
 };

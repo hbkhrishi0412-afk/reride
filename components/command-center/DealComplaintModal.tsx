@@ -41,9 +41,9 @@ export const DealComplaintModal: React.FC<DealComplaintModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md">
-        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Report an issue</h3>
+      <div className="bg-white dark:bg-white rounded-2xl shadow-xl w-full max-w-md">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-gray-200">
+          <h3 className="text-lg font-bold text-slate-900">Report an issue</h3>
           <p className="text-xs text-slate-500 mt-1">
             Linked to deal <span className="font-mono text-reride-orange">{leadId}</span>
           </p>
@@ -54,7 +54,7 @@ export const DealComplaintModal: React.FC<DealComplaintModalProps> = ({
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as DealComplaintCategory)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm dark:bg-slate-800 dark:border-slate-700"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm dark:bg-gray-50 dark:border-gray-200"
             >
               {DEAL_COMPLAINT_CATEGORIES.map((c) => (
                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -69,7 +69,7 @@ export const DealComplaintModal: React.FC<DealComplaintModalProps> = ({
               rows={5}
               placeholder="What went wrong? Include dates, amounts, or document issues if relevant."
               required
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none dark:bg-slate-800 dark:border-slate-700"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none dark:bg-gray-50 dark:border-gray-200"
             />
           </div>
           <p className="text-[10px] text-slate-400">

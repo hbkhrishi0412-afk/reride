@@ -218,6 +218,7 @@ const AppContent: React.FC = () => {
     setConversationReadState,
     clearConversationMessages,
     deleteConversation,
+    archiveConversation,
     toggleTyping,
     flagContent,
     updateUser,
@@ -2236,6 +2237,8 @@ const AppContent: React.FC = () => {
                 }}
                 onTestDriveResponse={handleTestDriveResponse}
                 onClearChat={clearConversationMessages}
+                onArchiveConversation={archiveConversation}
+                onDeleteConversation={deleteConversation}
                 onSetConversationReadState={(conversationId, isRead) =>
                   setConversationReadState(
                     conversationId,
@@ -2383,6 +2386,8 @@ const AppContent: React.FC = () => {
                 }}
                 onTestDriveResponse={handleTestDriveResponse}
                 onClearChat={clearConversationMessages}
+                onArchiveConversation={archiveConversation}
+                onDeleteConversation={deleteConversation}
                 onSetConversationReadState={(conversationId, isRead) =>
                   setConversationReadState(
                     conversationId,
