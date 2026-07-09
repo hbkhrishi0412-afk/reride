@@ -1,4 +1,4 @@
-import type { Conversation } from '../types';
+import type { Conversation } from '../types.js';
 
 export type InboxViewerRole = 'customer' | 'seller';
 

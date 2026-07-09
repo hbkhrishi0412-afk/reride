@@ -5,8 +5,8 @@
  * Capacitor: also mirrors to native secure/preferences storage so credentials
  * survive WebView localStorage clears on iOS/Android.
  */
-import { isCapacitorNative } from './apiConfig';
-import { nativeKvGet, nativeKvRemove, nativeKvSet } from './nativeKeyValueStorage';
+import { isCapacitorNative } from './apiConfig.js';
+import { nativeKvGet, nativeKvRemove, nativeKvSet } from './nativeKeyValueStorage.js';
 
 const PWD_PREFIX = 'v1:';
 const LAST_ROLE_KEY = 'reride_last_login_role';
