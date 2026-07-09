@@ -26,8 +26,8 @@ async function main() {
       const entryUrl = new URL(entry, url).href;
       const entryRes = await fetch(entryUrl, { signal: AbortSignal.timeout(20000) });
       const entryJs = await entryRes.text();
-      const entryImportsI18n = entryJs.includes('vendor-i18n');
-      console.log(`Entry imports vendor-i18n: ${entryImportsI18n ? 'YES (BROKEN)' : 'no'}`);
+      const entryImportsI18n = /vendor-i18n-[A-Za-z0-9_-]+\.js/.test(entryJs);
+      console.log(`Entry imports vendor-i18n chunk: ${entryImportsI18n ? 'YES (BROKEN)' : 'no'}`);
       if (hasVendorI18n || entryImportsI18n) process.exit(1);
     } catch (e) {
       console.warn(`Could not fetch entry bundle: ${e.message}`);
