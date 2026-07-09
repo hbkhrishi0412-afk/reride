@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { Vehicle, BoostPackage } from '../types';
+import { useApp } from './AppProvider';
 
 interface BoostListingModalProps {
   vehicle: Vehicle | null;
@@ -43,6 +44,7 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
   onClose,
   onBoost,
 }) => {
+  const { addToast } = useApp();
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [boostPackages, setBoostPackages] = useState<BoostPackage[]>([]);
@@ -69,7 +71,7 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
       onClose();
     } catch (error) {
       console.error('Boost error:', error);
-      alert('Failed to boost listing. Please try again.');
+      addToast('Failed to boost listing. Please try again.', 'error');
     } finally {
       setIsProcessing(false);
     }

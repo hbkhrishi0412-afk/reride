@@ -67,7 +67,7 @@ export interface AppViewRendererLocals {
   handleRegister: (user: User) => void;
   handleLogoutAll: () => void;
   handleNotificationClick: (notification: Notification) => void;
-  handleAcceptDealChat: (leadId: string, conversationId?: string) => void | Promise<boolean>;
+  handleAcceptDealChat: (leadId: string, conversationId?: string) => void | Promise<void>;
   handleMarkNotificationsAsRead: (ids: number[]) => void | Promise<void>;
   handleMarkAllNotificationsAsRead: () => void | Promise<void>;
   markAllVisibleAsRead: (role: 'customer' | 'seller') => void | Promise<void>;
@@ -299,6 +299,19 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     locationError,
   } = locals;
 
+  React.useEffect(() => {
+    if (currentView !== ViewEnum.DETAIL || selectedVehicle) return;
+    try {
+      const storedVehicle = sessionStorage.getItem('selectedVehicle');
+      if (storedVehicle) {
+        const parsed = JSON.parse(storedVehicle) as Vehicle;
+        if (parsed?.id) setSelectedVehicle(parsed);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [currentView, selectedVehicle, setSelectedVehicle]);
+
 switch (currentView) {
   case ViewEnum.HOME:
     if (isMobileApp) {
@@ -483,8 +496,6 @@ switch (currentView) {
           if (process.env.NODE_ENV === 'development') {
             logInfo('ðŸ”§ App.tsx: Recovered vehicle from sessionStorage for rendering:', vehicleToDisplay?.id, vehicleToDisplay?.make, vehicleToDisplay?.model);
           }
-          // Update state for future renders
-          setSelectedVehicle(vehicleToDisplay);
         } else {
           if (process.env.NODE_ENV === 'development') {
             logWarn('âš ï¸ App.tsx: No vehicle in sessionStorage');
@@ -516,7 +527,7 @@ switch (currentView) {
           <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-reride-orange mx-auto mb-4" />
-              <p className="text-gray-600">Loading vehicle detailsâ€¦</p>
+              <p className="text-gray-600">Loading vehicle details…</p>
             </div>
           </div>
         );
@@ -682,6 +693,7 @@ switch (currentView) {
         onSaveSearch={(search) => {
           addToast(`Search "${search.name}" saved successfully!`, 'success');
         }}
+        onBrowseAll={() => navigate(ViewEnum.USED_CARS)}
       />
     );
 
@@ -974,7 +986,7 @@ switch (currentView) {
               onFlagContent={flagContent}
               onLogout={handleLogoutAll}
               onViewVehicle={selectVehicle}
-              onAddVehicle={async (vehicleData, isFeaturing = false) =>
+              onAddVehicle={(vehicleData, isFeaturing = false) =>
                 addSellerListing({
                   currentUser,
                   vehicleData,
@@ -1036,8 +1048,8 @@ switch (currentView) {
             users || []
           )}
           reportedVehicles={sellerReportedVehicles}
-          onAddVehicle={async (vehicleData, isFeaturing = false) =>
-            addSellerListing({
+          onAddVehicle={async (vehicleData, isFeaturing = false) => {
+            await addSellerListing({
               currentUser,
               vehicleData,
               isFeaturing,
@@ -1049,8 +1061,8 @@ switch (currentView) {
               logError,
               errorMessage: 'Failed to add vehicle',
               sellerVehicles: sellerVehiclesFiltered || [],
-            })
-          }
+            });
+          }}
           onAddMultipleVehicles={async (vehiclesData) => {
             if (currentUser.planExpiryDate) {
               const expiryDate = new Date(currentUser.planExpiryDate);

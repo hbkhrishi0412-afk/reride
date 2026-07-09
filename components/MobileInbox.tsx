@@ -19,6 +19,7 @@ import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomIn
 import DealTimelinePanel from './DealTimelinePanel';
 import { DealStageChip } from './DealStageChip';
 import { getDealLead } from '../services/dealService';
+import { useApp } from './AppProvider';
 
 interface MobileInboxProps {
   conversations: Conversation[];
@@ -101,6 +102,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   openThreadInFloatingChat,
 }) => {
   const { t } = useTranslation();
+  const { runIfConfirmed } = useApp();
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read'>('all');
@@ -488,13 +490,12 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                       className="w-full text-left px-4 py-2.5 text-[15px] text-red-600 active:bg-red-50"
                       onClick={() => {
                         setThreadMenuOpen(false);
-                        if (
-                          window.confirm(
-                            'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
-                          )
-                        ) {
-                          void onClearChat(selectedConv.id);
-                        }
+                        void runIfConfirmed(
+                          'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
+                          () => {
+                            void onClearChat!(selectedConv.id);
+                          },
+                        );
                       }}
                     >
                       Clear chat
@@ -1141,12 +1142,15 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (typeof window !== 'undefined' && !window.confirm('Delete this conversation? This cannot be undone.')) {
-                          return;
-                        }
-                        void Promise.resolve(onDeleteConversation(conv.id)).then(() => {
-                          setSwipeOpen(null);
-                        });
+                        void runIfConfirmed(
+                          'Delete this conversation? This cannot be undone.',
+                          () => {
+                            void Promise.resolve(onDeleteConversation(conv.id)).then(() => {
+                              setSwipeOpen(null);
+                            });
+                          },
+                          { variant: 'danger' },
+                        );
                       }}
                       className="h-full w-28 flex-1 text-white flex items-center justify-center gap-1.5 text-[12px] font-semibold px-1"
                       style={{ background: 'linear-gradient(135deg, #64748B 0%, #1E293B 100%)' }}

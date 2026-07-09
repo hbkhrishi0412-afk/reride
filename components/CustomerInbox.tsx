@@ -6,6 +6,7 @@ import { useConversationList } from '../hooks/useConversationList';
 import { formatRelativeTime } from '../utils/date';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
 import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../utils/conversationView';
+import { useApp } from './AppProvider';
 
 interface CustomerInboxProps {
   conversations: Conversation[];
@@ -61,6 +62,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   onSetConversationReadState,
   onMarkAllAsRead,
 }) => {
+  const { runIfConfirmed } = useApp();
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read'>('all');
@@ -113,12 +115,15 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   const handleDeleteConversation = useCallback(
     (conversationId: string) => {
       if (!onDeleteConversation) return;
-      if (typeof window !== 'undefined' && !window.confirm('Delete this conversation? This cannot be undone.')) {
-        return;
-      }
-      void Promise.resolve(onDeleteConversation(conversationId));
+      void runIfConfirmed(
+        'Delete this conversation? This cannot be undone.',
+        () => {
+          void Promise.resolve(onDeleteConversation(conversationId));
+        },
+        { variant: 'danger' },
+      );
     },
-    [onDeleteConversation],
+    [onDeleteConversation, runIfConfirmed],
   );
 
   useEffect(() => {
@@ -372,12 +377,13 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                   <p className="text-sm text-gray-600 max-w-xs mb-4">
                     Start inquiring about vehicles to begin conversations with sellers.
                   </p>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Browse vehicles to get started</span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => window.location.assign('/used-cars')}
+                    className="btn-brand-primary text-sm px-4 py-2"
+                  >
+                    Browse vehicles
+                  </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center p-8">

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { FAQItem } from '../types';
 
 interface MobileFAQPageProps {
@@ -13,6 +14,7 @@ interface MobileFAQPageProps {
  * - Search functionality
  */
 export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
+  const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [openItem, setOpenItem] = useState<number | null>(null);
 

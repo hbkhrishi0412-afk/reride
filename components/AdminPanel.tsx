@@ -1,8 +1,10 @@
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { Vehicle, User, Conversation, PlatformSettings, AuditLogEntry, VehicleData, SupportTicket, FAQItem, SubscriptionPlan, PlanDetails } from '../types';
+import type { Vehicle, User, Conversation, PlatformSettings, AuditLogEntry, VehicleData, SupportTicket, FAQItem, SubscriptionPlan, PlanDetails, Toast } from '../types';
 import { View } from '../types';
+import { useApp } from './AppProvider';
+import ConfirmDialog from './ConfirmDialog';
 // Removed blocking import - will lazy load PLAN_DETAILS when needed
 import { planService } from '../services/planService';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
@@ -1102,6 +1104,43 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         supportTickets, onUpdateSupportTicket, faqItems, onAddFaq, onUpdateFaq, onDeleteFaq,
         onCertificationApproval,
     } = props;
+    const { addToast } = useApp();
+    const [confirmState, setConfirmState] = useState<{
+        title: string;
+        message: string;
+        variant?: 'danger';
+        resolve: (ok: boolean) => void;
+    } | null>(null);
+
+    const notify = useCallback(
+        (message: string, type: Toast['type'] = 'info') => {
+            addToast(message, type);
+        },
+        [addToast],
+    );
+
+    const askConfirm = useCallback(
+        (message: string, opts?: { title?: string; variant?: 'danger' }) =>
+            new Promise<boolean>((resolve) => {
+                setConfirmState({
+                    title: opts?.title ?? 'Please confirm',
+                    message,
+                    variant: opts?.variant,
+                    resolve,
+                });
+            }),
+        [],
+    );
+
+    const runIfConfirmed = useCallback(
+        async (message: string, action: () => void | Promise<void>, opts?: { title?: string; variant?: 'danger' }) => {
+            if (await askConfirm(message, opts)) {
+                await action();
+            }
+        },
+        [askConfirm],
+    );
+
     const [searchParams, setSearchParams] = useSearchParams();
     const listingsQ = searchParams.get('listingsQ') ?? '';
 
@@ -1295,7 +1334,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             }
         } catch (error) {
             console.error('Failed to refresh data:', error);
-            alert('Failed to refresh data. Please try again.');
+            notify('Failed to refresh data. Please try again.', 'error');
         } finally {
             setIsRefreshing(false);
         }
@@ -1946,11 +1985,13 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                         type="button"
                                                         onClick={() => {
                                                             const action = user.status === 'active' ? 'suspend' : 'activate';
-                                                            if (window.confirm(`Are you sure you want to ${action} user ${user.email}?`)) {
-                                                                handleActionWithLoading(`toggle-user-${user.email}`, () =>
-                                                                    onToggleUserStatus(user.email)
-                                                                );
-                                                            }
+                                                            void runIfConfirmed(
+                                                                `Are you sure you want to ${action} user ${user.email}?`,
+                                                                () =>
+                                                                    handleActionWithLoading(`toggle-user-${user.email}`, () =>
+                                                                        onToggleUserStatus(user.email),
+                                                                    ),
+                                                            );
                                                         }}
                                                         disabled={loadingActions.has(`toggle-user-${user.email}`)}
                                                         className="min-h-[44px] rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-50"
@@ -1960,15 +2001,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     <button
                                                         type="button"
                                                         onClick={() => {
-                                                            if (
-                                                                window.confirm(
-                                                                    `Are you sure you want to delete user ${user.email}? This action cannot be undone.`
-                                                                )
-                                                            ) {
-                                                                handleActionWithLoading(`delete-user-${user.email}`, () =>
-                                                                    onDeleteUser(user.email)
-                                                                );
-                                                            }
+                                                            void runIfConfirmed(
+                                                                `Are you sure you want to delete user ${user.email}? This action cannot be undone.`,
+                                                                () =>
+                                                                    handleActionWithLoading(`delete-user-${user.email}`, () =>
+                                                                        onDeleteUser(user.email),
+                                                                    ),
+                                                                { variant: 'danger', title: 'Delete user' },
+                                                            );
                                                         }}
                                                         disabled={loadingActions.has(`delete-user-${user.email}`)}
                                                         className="min-h-[44px] rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50"
@@ -2198,11 +2238,13 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
                                                                 const action = user.status === 'active' ? 'suspend' : 'activate';
-                                                                if (window.confirm(`Are you sure you want to ${action} user ${user.email}?`)) {
-                                                                    handleActionWithLoading(`toggle-user-${user.email}`, () =>
-                                                                        onToggleUserStatus(user.email)
-                                                                    );
-                                                                }
+                                                                void runIfConfirmed(
+                                                                    `Are you sure you want to ${action} user ${user.email}?`,
+                                                                    () =>
+                                                                        handleActionWithLoading(`toggle-user-${user.email}`, () =>
+                                                                            onToggleUserStatus(user.email),
+                                                                        ),
+                                                                );
                                                             }}
                                                             disabled={loadingActions.has(`toggle-user-${user.email}`)}
                                                             title={
@@ -2237,15 +2279,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
-                                                                if (
-                                                                    window.confirm(
-                                                                        `Are you sure you want to delete user ${user.email}? This action cannot be undone.`
-                                                                    )
-                                                                ) {
-                                                                    handleActionWithLoading(`delete-user-${user.email}`, () =>
-                                                                        onDeleteUser(user.email)
-                                                                    );
-                                                                }
+                                                                void runIfConfirmed(
+                                                                    `Are you sure you want to delete user ${user.email}? This action cannot be undone.`,
+                                                                    () =>
+                                                                        handleActionWithLoading(`delete-user-${user.email}`, () =>
+                                                                            onDeleteUser(user.email),
+                                                                        ),
+                                                                    { variant: 'danger', title: 'Delete user' },
+                                                                );
                                                             }}
                                                             disabled={loadingActions.has(`delete-user-${user.email}`)}
                                                             title="Delete user"
@@ -2447,11 +2488,13 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                         type="button"
                                                         onClick={() => {
                                                             const action = vehicle.status === 'published' ? 'unpublish' : 'publish';
-                                                            if (window.confirm(`Are you sure you want to ${action} this vehicle listing?`)) {
-                                                                handleActionWithLoading(`toggle-vehicle-${vehicle.id}`, () =>
-                                                                    onToggleVehicleStatus(vehicle.id)
-                                                                );
-                                                            }
+                                                            void runIfConfirmed(
+                                                                `Are you sure you want to ${action} this vehicle listing?`,
+                                                                () =>
+                                                                    handleActionWithLoading(`toggle-vehicle-${vehicle.id}`, () =>
+                                                                        onToggleVehicleStatus(vehicle.id),
+                                                                    ),
+                                                            );
                                                         }}
                                                         disabled={loadingActions.has(`toggle-vehicle-${vehicle.id}`)}
                                                         className="min-h-[44px] rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 disabled:opacity-50"
@@ -2474,15 +2517,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     <button
                                                         type="button"
                                                         onClick={() => {
-                                                            if (
-                                                                window.confirm(
-                                                                    'Are you sure you want to delete this vehicle listing? This action cannot be undone.'
-                                                                )
-                                                            ) {
-                                                                handleActionWithLoading(`delete-vehicle-${vehicle.id}`, () =>
-                                                                    onDeleteVehicle(vehicle.id)
-                                                                );
-                                                            }
+                                                            void runIfConfirmed(
+                                                                'Are you sure you want to delete this vehicle listing? This action cannot be undone.',
+                                                                () =>
+                                                                    handleActionWithLoading(`delete-vehicle-${vehicle.id}`, () =>
+                                                                        onDeleteVehicle(vehicle.id),
+                                                                    ),
+                                                                { variant: 'danger', title: 'Delete listing' },
+                                                            );
                                                         }}
                                                         disabled={loadingActions.has(`delete-vehicle-${vehicle.id}`)}
                                                         className="min-h-[44px] rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50"
@@ -2570,9 +2612,13 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
                                                         const action = vehicle.status === 'published' ? 'unpublish' : 'publish';
-                                                        if (window.confirm(`Are you sure you want to ${action} this vehicle listing?`)) {
-                                                            handleActionWithLoading(`toggle-vehicle-${vehicle.id}`, () => onToggleVehicleStatus(vehicle.id));
-                                                        }
+                                                        void runIfConfirmed(
+                                                            `Are you sure you want to ${action} this vehicle listing?`,
+                                                            () =>
+                                                                handleActionWithLoading(`toggle-vehicle-${vehicle.id}`, () =>
+                                                                    onToggleVehicleStatus(vehicle.id),
+                                                                ),
+                                                        );
                                                     }} 
                                                     disabled={loadingActions.has(`toggle-vehicle-${vehicle.id}`)}
                                                     className={`cursor-pointer ${
@@ -2611,9 +2657,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     onClick={(e) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
-                                                        if (window.confirm(`Are you sure you want to delete this vehicle listing? This action cannot be undone.`)) {
-                                                            handleActionWithLoading(`delete-vehicle-${vehicle.id}`, () => onDeleteVehicle(vehicle.id));
-                                                        }
+                                                        void runIfConfirmed(
+                                                            'Are you sure you want to delete this vehicle listing? This action cannot be undone.',
+                                                            () =>
+                                                                handleActionWithLoading(`delete-vehicle-${vehicle.id}`, () =>
+                                                                    onDeleteVehicle(vehicle.id),
+                                                                ),
+                                                            { variant: 'danger', title: 'Delete listing' },
+                                                        );
                                                     }} 
                                                     disabled={loadingActions.has(`delete-vehicle-${vehicle.id}`)}
                                                     className={`cursor-pointer ${
@@ -2728,10 +2779,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         };
 
         const handleResolveFlag = (type: 'vehicle' | 'conversation', id: number | string) => {
-            if (window.confirm(`Are you sure you want to resolve this ${type} flag?`)) {
+            void runIfConfirmed(`Are you sure you want to resolve this ${type} flag?`, () => {
                 onResolveFlag(type, id);
-        }
-    };
+            });
+        };
 
     return (
             <div className="space-y-6">
@@ -3089,7 +3140,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         const handleSaveEditedTicket = async () => {
             if (!editingTicket) return;
             if (!editingTicket.subject.trim() || !editingTicket.message.trim()) {
-                alert('Subject and message are required.');
+                notify('Subject and message are required.', 'error');
                 return;
             }
             try {
@@ -3316,7 +3367,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 setEditingFaq(null);
             } else {
                 if (!newFaq.question || !newFaq.answer || !newFaq.category) {
-                    alert('Please fill in all fields');
+                    notify('Please fill in all fields', 'error');
                     return;
                 }
                 onAddFaq(newFaq);
@@ -3326,9 +3377,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         };
 
         const handleDeleteFaq = (id: number) => {
-            if (window.confirm('Are you sure you want to delete this FAQ?')) {
+            void runIfConfirmed('Are you sure you want to delete this FAQ?', () => {
                 onDeleteFaq(id);
-            }
+            }, { variant: 'danger', title: 'Delete FAQ' });
         };
 
         const faqTabItems = [
@@ -3877,7 +3928,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
         const handleAddNewPlan = async () => {
             if (!(await planService.canAddNewPlan())) {
-                alert('Maximum of 4 plans allowed. Please delete an existing custom plan first.');
+                notify('Maximum of 4 plans allowed. Please delete an existing custom plan first.', 'error');
                 return;
             }
             setShowAddPlanModal(true);
@@ -3893,10 +3944,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 setShowPlanModal(false);
                 setEditingPlan(null);
                 notifyPlanConfigUpdated();
-                alert(`Plan "${updatedPlan.name}" has been updated successfully!`);
+                notify(`Plan "${updatedPlan.name}" has been updated successfully!`, 'success');
             } catch (error) {
                 console.error('Failed to update plan:', error);
-                alert(error instanceof Error ? error.message : 'Failed to update plan. Please try again.');
+                notify(error instanceof Error ? error.message : 'Failed to update plan. Please try again.', 'error');
             }
         };
 
@@ -3907,10 +3958,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 setPlans(allPlans);
                 setShowAddPlanModal(false);
                 notifyPlanConfigUpdated();
-                alert(`Plan "${newPlanData.name}" has been created successfully!`);
+                notify(`Plan "${newPlanData.name}" has been created successfully!`, 'success');
             } catch (error) {
                 console.error('Failed to create plan:', error);
-                alert(error instanceof Error ? error.message : 'Failed to create plan. Please try again.');
+                notify(error instanceof Error ? error.message : 'Failed to create plan. Please try again.', 'error');
             }
         };
 
@@ -3919,20 +3970,24 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             try {
                 const originalPlan = await planService.getOriginalPlanDetails(plan.id as SubscriptionPlan);
                 if (originalPlan) {
-                    alert('Cannot delete base plans (Free, Pro, Premium).');
+                    notify('Cannot delete base plans (Free, Pro, Premium).', 'error');
                     return;
                 }
             } catch (error) {
                 // If we can't get original details, it's likely a custom plan
             }
             
-            if (window.confirm(`Are you sure you want to delete the "${plan.name}" plan? This action cannot be undone.`)) {
-                if (await planService.deletePlan(plan.id)) {
-                    setPlans(await planService.getAllPlans());
-                    notifyPlanConfigUpdated();
-                    alert(`Plan "${plan.name}" has been deleted successfully!`);
-                }
-            }
+            void runIfConfirmed(
+                `Are you sure you want to delete the "${plan.name}" plan? This action cannot be undone.`,
+                async () => {
+                    if (await planService.deletePlan(plan.id)) {
+                        setPlans(await planService.getAllPlans());
+                        notifyPlanConfigUpdated();
+                        notify(`Plan "${plan.name}" has been deleted successfully!`, 'success');
+                    }
+                },
+                { variant: 'danger', title: 'Delete plan' },
+            );
         };
 
         const handleAssignPlan = (user: User, plan: SubscriptionPlan) => {
@@ -3993,7 +4048,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 onClick={async () => {
                                     const allPlans = await planService.getAllPlans();
                                     setPlans(allPlans);
-                                    alert('Plans refreshed successfully!');
+                                    notify('Plans refreshed successfully!', 'success');
                                 }}
                                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
                             >
@@ -4170,11 +4225,11 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 setAssigningUser(null);
                                 setAssigningPlan(null);
                                 
-                                alert(`Plan "${assigningPlan}" assigned successfully. Vehicle listing expiry dates have been updated.`);
+                                notify(`Plan "${assigningPlan}" assigned successfully. Vehicle listing expiry dates have been updated.`, 'success');
                                 window.location.reload();
                             } catch (error) {
                                 console.error('Failed to assign plan with dates:', error);
-                                alert('Failed to save plan dates. Please try again.');
+                                notify('Failed to save plan dates. Please try again.', 'error');
                             }
                         }}
                     />
@@ -4333,7 +4388,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             } else if (useCustomExpiry && expiryDate) {
                 onSave(new Date(expiryDate).toISOString());
             } else {
-                alert('Please select an expiry date or choose to remove expiry.');
+                notify('Please select an expiry date or choose to remove expiry.', 'error');
             }
         };
 
@@ -4836,6 +4891,20 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         onImportUsers={onImportUsers}
                     />,
                 )}
+            <ConfirmDialog
+                open={confirmState != null}
+                title={confirmState?.title ?? ''}
+                message={confirmState?.message ?? ''}
+                variant={confirmState?.variant === 'danger' ? 'danger' : 'default'}
+                onConfirm={() => {
+                    confirmState?.resolve(true);
+                    setConfirmState(null);
+                }}
+                onCancel={() => {
+                    confirmState?.resolve(false);
+                    setConfirmState(null);
+                }}
+            />
         </div>
     );
 };

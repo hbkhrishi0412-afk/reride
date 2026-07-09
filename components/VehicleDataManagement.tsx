@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { VehicleData, VehicleCategory } from '../types.js';
+import { useApp } from './AppProvider';
 
 interface VehicleDataManagementProps {
   vehicleData: VehicleData;
@@ -28,6 +29,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
   onPreview,
   onBulkUpload
 }) => {
+  const { addToast, runIfConfirmed } = useApp();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedMake, setSelectedMake] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
@@ -149,7 +151,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
     handleUpdateData(draft => {
       if (editing.type === 'category') {
         if (newValue !== editing.originalValue && draft[newValue]) {
-          alert(`Category "${newValue}" already exists.`);
+          addToast(`Category "${newValue}" already exists.`, 'warning');
           return;
         }
         const data = draft[editing.originalValue];
@@ -161,7 +163,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
           const makeIndex = categoryData.findIndex(make => make.name === editing.originalValue);
           if (makeIndex !== -1) {
             if (categoryData.some(make => make.name === newValue && make !== categoryData[makeIndex])) {
-              alert(`Make "${newValue}" already exists.`);
+              addToast(`Make "${newValue}" already exists.`, 'warning');
               return;
             }
             categoryData[makeIndex].name = newValue;
@@ -173,7 +175,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
           const modelIndex = make.models.findIndex(model => model.name === editing.originalValue);
           if (modelIndex !== -1) {
             if (make.models.some(model => model.name === newValue && model !== make.models[modelIndex])) {
-              alert(`Model "${newValue}" already exists.`);
+              addToast(`Model "${newValue}" already exists.`, 'warning');
               return;
             }
             make.models[modelIndex].name = newValue;
@@ -185,7 +187,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
           const variantIndex = model.variants.findIndex(variant => variant === editing.originalValue);
           if (variantIndex !== -1) {
             if (model.variants.includes(newValue) && model.variants[variantIndex] !== newValue) {
-              alert(`Variant "${newValue}" already exists.`);
+              addToast(`Variant "${newValue}" already exists.`, 'warning');
               return;
             }
             model.variants[variantIndex] = newValue;
@@ -198,10 +200,9 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
   };
 
   const handleDelete = (type: EditingState['type'], path: string[], value: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${value}"? This action cannot be undone.`)) {
-      return;
-    }
-
+    void runIfConfirmed(
+      `Are you sure you want to delete "${value}"? This action cannot be undone.`,
+      () => {
     handleUpdateData(draft => {
       if (type === 'category') {
         delete draft[value];
@@ -231,6 +232,9 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
         }
       }
     });
+      },
+      { variant: 'danger' },
+    );
   };
 
   const handleAddNew = (type: string, path: string[]) => {
@@ -251,13 +255,13 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
     handleUpdateData(draft => {
       if (adding.type === 'category') {
         if (draft[newValue]) {
-          alert(`Category "${newValue}" already exists.`);
+          addToast(`Category "${newValue}" already exists.`, 'warning');
           return;
         }
         draft[newValue] = [];
       } else if (adding.type === 'make') {
         if (draft[adding.path[0]].some(m => m.name === newValue)) {
-          alert(`Make "${newValue}" already exists.`);
+          addToast(`Make "${newValue}" already exists.`, 'warning');
           return;
         }
         draft[adding.path[0]].push({ name: newValue, models: [] });
@@ -265,7 +269,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
         const make = draft[adding.path[0]].find(m => m.name === adding.path[1]);
         if (make) {
           if (make.models.some(m => m.name === newValue)) {
-            alert(`Model "${newValue}" already exists.`);
+            addToast(`Model "${newValue}" already exists.`, 'warning');
             return;
           }
           make.models.push({ name: newValue, variants: [] });
@@ -274,7 +278,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
         const model = draft[adding.path[0]].find(m => m.name === adding.path[1])?.models.find(mo => mo.name === adding.path[2]);
         if (model) {
           if (model.variants.includes(newValue)) {
-            alert(`Variant "${newValue}" already exists.`);
+            addToast(`Variant "${newValue}" already exists.`, 'warning');
             return;
           }
           model.variants.push(newValue);

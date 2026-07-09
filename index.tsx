@@ -1,4 +1,9 @@
 import './utils/capacitorInit';
+import { initThemeFromPreference } from './utils/initTheme';
+
+if (typeof document !== 'undefined') {
+  initThemeFromPreference();
+}
 
 import { enforceRememberMePolicyOnBoot } from './utils/rememberMe';
 

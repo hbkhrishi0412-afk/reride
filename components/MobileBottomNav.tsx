@@ -151,6 +151,14 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                 onNavigate(ViewEnum.INBOX);
                 return;
               }
+              if (item.id === 'sell') {
+                if (currentUser?.role === 'seller') {
+                  onNavigate(ViewEnum.SELLER_DASHBOARD);
+                } else {
+                  onNavigate(ViewEnum.SELL_CAR);
+                }
+                return;
+              }
               if (item.view === ViewEnum.INBOX && !currentUser) {
                 onNavigate(ViewEnum.LOGIN_PORTAL);
                 return;

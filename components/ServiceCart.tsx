@@ -9,6 +9,7 @@ import {
 import { CAR_SERVICE_OPTIONS } from '../constants/serviceProviderCatalog.js';
 import { useIsMobileApp } from '../hooks/useIsMobileApp';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
+import { useApp } from './AppProvider';
 
 type ServicePackage = {
     id: string;
@@ -329,6 +330,7 @@ const ServiceCart: React.FC<Props> = ({
     initialTab = 'book',
     customerUserId = null,
 }) => {
+    const { runIfConfirmed } = useApp();
     const [activeTab, setActiveTab] = useState<'book' | 'track'>(initialTab);
     const [customerRequests, setCustomerRequests] = useState<CustomerServiceRequest[]>([]);
     const [providerNameById, setProviderNameById] = useState<Record<string, string>>({});
@@ -558,9 +560,9 @@ const ServiceCart: React.FC<Props> = ({
     }, [loadCustomerRequests]);
 
     const cancelCustomerRequest = async (requestId: string) => {
-        if (!window.confirm('Cancel this service request? Providers will no longer see it as active.')) {
-            return;
-        }
+        void runIfConfirmed(
+            'Cancel this service request? Providers will no longer see it as active.',
+            async () => {
         try {
             setCancellingId(requestId);
             setRequestsError(null);
@@ -587,12 +589,14 @@ const ServiceCart: React.FC<Props> = ({
         } finally {
             setCancellingId(null);
         }
+            },
+        );
     };
 
     const deleteCustomerRequest = async (requestId: string) => {
-        if (!window.confirm('Delete this cancelled request permanently?')) {
-            return;
-        }
+        void runIfConfirmed(
+            'Delete this cancelled request permanently?',
+            async () => {
         const previousRequests = customerRequests;
         try {
             setDeletingRequestId(requestId);
@@ -619,6 +623,9 @@ const ServiceCart: React.FC<Props> = ({
         } finally {
             setDeletingRequestId(null);
         }
+            },
+            { variant: 'danger' },
+        );
     };
 
     const submitCustomerReview = async (requestId: string) => {

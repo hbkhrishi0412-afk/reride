@@ -43,6 +43,9 @@ import {
 import { isPublicBuyListing } from '../services/listingLifecycleService.js';
 import { lookupVehicleSpecsFromCarQuery } from '../lib/carquerySpecs.js';
 import { participantIdMatchesAppUser } from '../utils/conversationParticipants.js';
+import {
+  detectBufferContentType,
+} from '../utils/fileContentValidation.js';
 // Supabase admin database utilities (replaces Firebase admin functions)
 import { 
   adminRead, 
@@ -52,6 +55,8 @@ import {
   adminDelete,
   DB_PATHS 
 } from '../server/supabase-admin-db.js';
+import { handleAdmin, seedUsers, seedVehicles } from '../server/handlers/admin.js';
+import { handleHealth, handleSystem, handleUtils } from '../server/handlers/system.js';
 
 // Use Supabase instead of Firebase
 // Note: This is checked at module load time. If Supabase is not available,
@@ -640,7 +645,7 @@ async function mainHandler(
       let rateLimitResult: { allowed: boolean; remaining: number };
       try {
         const upstashResult = await checkUpstashRateLimit(rateLimitIdentifier);
-        if (upstashResult.remaining !== 999) {
+        if (upstashResult.configured) {
           rateLimitResult = upstashResult;
         } else {
           rateLimitResult = await checkRateLimit(rateLimitIdentifier);
@@ -701,7 +706,6 @@ async function mainHandler(
       pathname.includes('/csrf-token') ||
       pathname.includes('/health') ||
       pathname.includes('/db-health') ||
-      pathname.includes('/service-providers/register') ||
       urlHasGemini ||
       skipCsrfForCapacitorNative ||
       isPublicTrackView;
@@ -893,6 +897,12 @@ async function mainHandler(
       }
     } else if ((pathname.includes('/api/admin') || pathname === '/api/admin' || pathname.endsWith('/api/admin')) && !pathname.includes('/admin/login')) {
       return await handleAdmin(req, res, handlerOptions);
+    } else if ((pathname.includes('/health') || pathname.endsWith('/health')) && !pathname.includes('/db-health')) {
+      return res.status(200).json({
+        status: 'ok',
+        message: 'API is running',
+        timestamp: new Date().toISOString(),
+      });
     } else if (pathname.includes('/db-health') || pathname.endsWith('/db-health')) {
       return await handleHealth(req, res);
     } else if (pathname.includes('/seed') || pathname.endsWith('/seed')) {
@@ -1748,7 +1758,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           usedCertifications: user.usedCertifications ?? 0,
           location: user.location || '',
           authProvider: (user.authProvider || 'email') as 'email' | 'google' | 'phone',
+          hasPassword: !!(user.password && String(user.password).trim()),
         };
+      }
+
+      if (!normalizedUser) {
+        return res.status(500).json({ success: false, reason: 'Failed to normalize user account' });
       }
 
       // Validate role matches requested role (critical for seller dashboard access)
@@ -2575,6 +2590,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             phone: cleanedNumber,
             otp_hash: otpHash,
             expires_at: expiresAt,
+            attempt_count: 0,
+            locked_until: null,
             created_at: new Date().toISOString(),
           }, {
             onConflict: 'phone'
@@ -2757,6 +2774,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
               phone: cleanedNumber,
               otp_hash: otpHash,
               expires_at: expiresAt,
+              attempt_count: 0,
+              locked_until: null,
               created_at: new Date().toISOString(),
             },
             { onConflict: 'phone' },
@@ -2825,7 +2844,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
         const { data: row, error: fetchError } = await supabase
           .from('otp_verifications')
-          .select('otp_hash, expires_at')
+          .select('otp_hash, expires_at, attempt_count, locked_until')
           .eq('phone', cleanedNumber)
           .maybeSingle();
 
@@ -2833,6 +2852,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           return res.status(400).json({
             success: false,
             reason: 'No OTP found for this number. Please request a new code.',
+          });
+        }
+
+        const lockedUntil = row.locked_until ? new Date(String(row.locked_until)) : null;
+        if (lockedUntil && lockedUntil.getTime() > Date.now()) {
+          return res.status(429).json({
+            success: false,
+            reason: 'Too many failed attempts. Please request a new code in a few minutes.',
           });
         }
 
@@ -2847,9 +2874,21 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
         const expectedHash = crypto.createHash('sha256').update(String(otp) + jwtSecret).digest('hex');
         if (expectedHash !== row.otp_hash) {
+          const priorAttempts = typeof row.attempt_count === 'number' ? row.attempt_count : 0;
+          const nextAttempts = priorAttempts + 1;
+          const maxAttempts = 5;
+          const lockoutMs = 30 * 60 * 1000;
+          const updatePayload: Record<string, unknown> = { attempt_count: nextAttempts };
+          if (nextAttempts >= maxAttempts) {
+            updatePayload.locked_until = new Date(Date.now() + lockoutMs).toISOString();
+          }
+          await supabase.from('otp_verifications').update(updatePayload).eq('phone', cleanedNumber);
           return res.status(400).json({
             success: false,
-            reason: 'Invalid OTP. Please try again.',
+            reason:
+              nextAttempts >= maxAttempts
+                ? 'Too many failed attempts. Please request a new code.'
+                : 'Invalid OTP. Please try again.',
           });
         }
 
@@ -3378,9 +3417,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           // Check if password is already hashed (bcrypt hashes start with $2)
           // If not hashed, hash it before updating
           const isAlreadyHashed = updateData.password.startsWith('$2');
-          
+
           if (isAlreadyHashed) {
-            // Password is already hashed (edge case - for backward compatibility)
+            if (process.env.NODE_ENV === 'production') {
+              return res.status(400).json({
+                success: false,
+                reason: 'Invalid password format. Submit a plain-text password.',
+              });
+            }
+            // Dev-only backward compatibility for pre-hashed payloads
             updateFields.password = updateData.password;
             // Only log in development to avoid information leakage
             if (process.env.NODE_ENV !== 'production') {
@@ -3624,7 +3669,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
                 const vehicleUpdateFields: Record<string, unknown> = {};
                 
                 if (updatedUser.subscriptionPlan === 'premium' && newPlanExpiryDate) {
-                  const expiryDate = typeof newPlanExpiryDate === 'string' ? new Date(newPlanExpiryDate) : newPlanExpiryDate;
+                  const expiryDate =
+                    newPlanExpiryDate instanceof Date
+                      ? newPlanExpiryDate
+                      : new Date(String(newPlanExpiryDate));
                   vehicleUpdateFields.listingExpiresAt = expiryDate.toISOString();
                   
                   if (expiryDate >= now) {
@@ -5782,123 +5830,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
   }
 }
 
-// Admin handler - preserves exact functionality from admin.ts
-async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
-  const action = firstQueryParam(req.query.action as string | string[] | undefined) || '';
-
-  // SECURITY: Require authentication for all admin endpoints (legacy JWT or Supabase)
-  const adminAuth = await authenticateRequestDual(req);
-  if (!adminAuth.isValid || !adminAuth.user) {
-    return res.status(401).json({
-      success: false,
-      reason: 'Unauthorized. Admin endpoints require authentication.',
-      message: 'Please provide a valid JWT token in the Authorization header (Bearer token)',
-    });
-  }
-
-  let adminRole = adminAuth.user.role;
-  if (adminRole !== 'admin' && adminAuth.user.email && USE_SUPABASE) {
-    try {
-      const dbUser = await userService.findByEmail(adminAuth.user.email.toLowerCase().trim());
-      if (dbUser && normalizeUserRoleString(dbUser.role) === 'admin') {
-        adminRole = 'admin';
-      }
-    } catch {
-      /* non-fatal */
-    }
-  }
-
-  if (adminRole !== 'admin') {
-    return res.status(403).json({
-      success: false,
-      reason: 'Forbidden. Admin access required.',
-      message: 'This endpoint requires administrator privileges. Your current role does not have access.',
-      userRole: adminAuth.user.role,
-    });
-  }
-
-  const decoded = {
-    userId: adminAuth.user.userId,
-    email: adminAuth.user.email,
-    role: 'admin' as const,
-  };
-
-  // Log admin action for security auditing
-  logSecurity(`Admin action '${action}' accessed by user: ${decoded.email}`, { userId: decoded.userId, action });
-
-  if (action === 'health') {
-    try {
-      if (!USE_SUPABASE) {
-        return res.status(200).json({
-          success: false,
-          message: 'Firebase environment variables are not configured',
-          details: 'Please add Firebase environment variables in Vercel dashboard under Environment Variables',
-          checks: [
-            { name: 'Firebase Configuration', status: 'FAIL', details: 'Firebase environment variables not found' }
-          ]
-        });
-      }
-
-      // Test Firebase connection using Admin SDK (bypasses security rules)
-      await adminRead(DB_PATHS.USERS, 'test');
-      
-      return res.status(200).json({
-        success: true,
-        message: 'Firebase connected successfully',
-        collections: Object.values(DB_PATHS),
-        checks: [
-          { name: 'Firebase Configuration', status: 'PASS', details: 'Firebase environment variables are set' },
-          { name: 'Database Connection', status: 'PASS', details: 'Successfully connected to Firebase Realtime Database' }
-        ]
-      });
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-        message: 'Database connection failed',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  }
-
-  if (action === 'seed') {
-    // Prevent seed function from running in production
-    if (process.env.NODE_ENV === 'production') {
-      return res.status(403).json({
-        success: false,
-        reason: 'Seed function cannot run in production environment'
-      });
-    }
-    
-    if (!USE_SUPABASE) {
-      return res.status(503).json({
-        success: false,
-        message: 'Firebase is not configured. Cannot seed data.',
-        fallback: true
-      });
-    }
-    try {
-      const users = await seedUsers();
-      const vehicles = await seedVehicles();
-      
-      return res.status(200).json({
-        success: true,
-        message: 'Database seeded successfully',
-        data: { users: users.length, vehicles: vehicles.length }
-      });
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-        message: 'Seeding failed',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  }
-
-  return res.status(400).json({ success: false, reason: 'Invalid admin action' });
-}
-
-// Health handler - preserves exact functionality from db-health.ts
-/** Public GET proxy for CarQuery (browser cannot call carqueryapi.com due to CORS). */
+// Vehicle specs proxy — CarQuery (browser cannot call carqueryapi.com due to CORS).
 async function handleVehicleSpecs(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
@@ -5928,45 +5860,6 @@ async function handleVehicleSpecs(req: VercelRequest, res: VercelResponse) {
       success: false,
       specs: null,
       reason: 'CarQuery lookup failed',
-    });
-  }
-}
-
-async function handleHealth(_req: VercelRequest, res: VercelResponse) {
-  try {
-    if (!USE_SUPABASE) {
-      return res.status(500).json({
-        status: 'error',
-        message: 'Firebase is not configured. Please set Firebase environment variables.',
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    // Test Firebase connection using Admin SDK
-    await adminRead(DB_PATHS.USERS, 'test');
-    
-    return res.status(200).json({
-      status: 'ok',
-      message: 'Firebase connected successfully.',
-      database: 'Firebase Realtime Database',
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    let errorMessage = 'Firebase connection failed';
-    
-    if (error instanceof Error) {
-      if (error.message.includes('Firebase') || error.message.includes('firebase')) {
-        errorMessage += ' - Check Firebase environment variables in Vercel dashboard';
-      } else if (error.message.includes('connect') || error.message.includes('timeout')) {
-        errorMessage += ' - Check Firebase project status and network connectivity';
-      }
-    }
-    
-    return res.status(500).json({
-      status: 'error',
-      message: errorMessage,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
     });
   }
 }
@@ -6047,18 +5940,41 @@ async function handleUploadImage(req: VercelRequest, res: VercelResponse) {
       'audio/x-m4a',
       'audio/m4a',
     ];
-    const mime = (mimeType || 'image/jpeg').toLowerCase().split(';')[0].trim();
-    const isChatFolder = String(folder || '').startsWith('chat-messages');
-    const isAllowed =
-      allowedImageMime.includes(mime) || (isChatFolder && allowedAudioMime.includes(mime));
-    if (!isAllowed) {
+    const detectedMime = detectBufferContentType(buffer);
+    if (!detectedMime) {
       return res.status(400).json({
         success: false,
-        reason: isChatFolder
-          ? 'Only images (JPEG, PNG, WebP) or voice (WebM, MP4, OGG, etc.) are allowed in chat uploads.'
-          : 'Only JPEG, PNG and WebP images are allowed.',
+        reason: 'Unrecognized file content. Only valid images or chat audio are allowed.',
       });
     }
+    const sanitizedFolder = String(folder || 'vehicles').replace(/[^a-zA-Z0-9@._\-/]/g, '').slice(0, 120);
+    const isChatFolder = sanitizedFolder.startsWith('chat-messages');
+    const isImageMime = allowedImageMime.includes(detectedMime);
+    const isAudioMime =
+      allowedAudioMime.includes(detectedMime) || detectedMime === 'audio/mp4';
+    if (isChatFolder) {
+      if (!isImageMime && !isAudioMime) {
+        return res.status(400).json({
+          success: false,
+          reason:
+            'Only images (JPEG, PNG, WebP) or voice (WebM, MP4, OGG, etc.) are allowed in chat uploads.',
+        });
+      }
+    } else if (!isImageMime) {
+      return res.status(400).json({
+        success: false,
+        reason: 'Only JPEG, PNG and WebP images are allowed.',
+      });
+    }
+    const allowedFolderPrefixes = ['vehicles', 'chat-messages', 'listings', 'profiles'];
+    const folderBase = sanitizedFolder.split('/')[0] || 'vehicles';
+    if (!allowedFolderPrefixes.includes(folderBase) && !folderBase.includes('@')) {
+      return res.status(400).json({
+        success: false,
+        reason: 'Invalid upload folder.',
+      });
+    }
+    const mime = detectedMime;
     const timestamp = Date.now();
     const randomStr = randomBytes(8).toString('hex');
     let ext = (fileName.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, '');
@@ -6073,12 +5989,12 @@ async function handleUploadImage(req: VercelRequest, res: VercelResponse) {
       }
     }
     const storageFileName = `${timestamp}_${randomStr}.${ext}`;
-    const filePath = `${folder}/${storageFileName}`;
+    const filePath = `${sanitizedFolder}/${storageFileName}`;
     const supabase = getSupabaseAdminClient();
     const { data, error } = await supabase.storage
       .from('Images')
       .upload(filePath, buffer, {
-        contentType: mimeType || 'image/jpeg',
+        contentType: mime,
         cacheControl: '3600',
         upsert: false,
       });
@@ -6349,7 +6265,8 @@ async function getFallbackUsers(): Promise<NormalizedUser[]> {
       status: 'active',
       createdAt: new Date().toISOString(),
       subscriptionPlan: 'free',
-      isVerified: false
+      isVerified: false,
+      hasPassword: false,
     }
   ];
 }
@@ -6387,510 +6304,6 @@ function getPriceRange(vehicles: VehicleType[]): { min: number; max: number } {
     min: Math.min(...prices),
     max: Math.max(...prices)
   };
-}
-
-// Generate cryptographically random password
-function generateRandomPassword(): string {
-  return randomBytes(32).toString('hex');
-}
-
-async function seedUsers(productionSecret?: string): Promise<UserType[]> {
-  // Allow production seeding if secret is provided
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
-  if (isProduction && !productionSecret) {
-    throw new Error('Production seeding requires secret key');
-  }
-  
-  // Use environment variables for seed passwords or use defaults based on environment
-  const adminPasswordEnv = process.env.SEED_ADMIN_PASSWORD;
-  const sellerPasswordEnv = process.env.SEED_SELLER_PASSWORD;
-  const customerPasswordEnv = process.env.SEED_CUSTOMER_PASSWORD;
-  
-  // In production, require env vars or generate random passwords (security)
-  // In development, allow 'password' as fallback for testing convenience
-  const adminPasswordPlain = adminPasswordEnv || (isProduction ? generateRandomPassword() : 'password');
-  const sellerPasswordPlain = sellerPasswordEnv || (isProduction ? generateRandomPassword() : 'password');
-  const customerPasswordPlain = customerPasswordEnv || (isProduction ? generateRandomPassword() : 'password');
-  
-  // Hash passwords before inserting
-  const adminPassword = await hashPassword(adminPasswordPlain);
-  const sellerPassword = await hashPassword(sellerPasswordPlain);
-  const customerPassword = await hashPassword(customerPasswordPlain);
-  
-  // Log generated passwords in development (not in production)
-  if (process.env.NODE_ENV !== 'production') {
-    logInfo('⚠️ SEED PASSWORDS (Development only):');
-    logInfo('Admin:', adminPasswordEnv ? '[from env]' : adminPasswordPlain);
-    logInfo('Seller:', sellerPasswordEnv ? '[from env]' : sellerPasswordPlain);
-    logInfo('Customer:', customerPasswordEnv ? '[from env]' : customerPasswordPlain);
-  }
-  
-  // Set plan dates for seller
-  const now = new Date();
-  const expiryDate = new Date(now);
-  expiryDate.setMonth(expiryDate.getMonth() + 1); // 1 month from now
-  
-  const sampleUsers: Array<Omit<UserType, 'id'>> = [
-    {
-      email: 'admin@test.com',
-      password: adminPassword,
-      name: 'Admin User',
-      mobile: '9876543210',
-      location: 'Mumbai, Maharashtra',
-      role: 'admin' as const,
-      status: 'active' as const,
-      isVerified: true,
-      subscriptionPlan: 'premium' as const,
-      featuredCredits: 100,
-      createdAt: new Date().toISOString()
-    },
-    {
-      email: 'seller@test.com',
-      password: sellerPassword,
-      name: 'Prestige Motors',
-      mobile: '+91-98765-43210',
-      location: 'Delhi, NCR',
-      role: 'seller' as const,
-      status: 'active' as const,
-      isVerified: true,
-      subscriptionPlan: 'premium' as const,
-      featuredCredits: 5,
-      usedCertifications: 1,
-      dealershipName: 'Prestige Motors',
-      bio: 'Specializing in luxury and performance electric vehicles since 2020.',
-      logoUrl: 'https://i.pravatar.cc/100?u=seller',
-      avatarUrl: 'https://i.pravatar.cc/150?u=seller@test.com',
-      planActivatedDate: now.toISOString(),
-      planExpiryDate: expiryDate.toISOString(),
-      createdAt: new Date().toISOString()
-    },
-    {
-      email: 'customer@test.com',
-      password: customerPassword,
-      name: 'Test Customer',
-      mobile: '9876543212',
-      location: 'Bangalore, Karnataka',
-      role: 'customer' as const,
-      status: 'active' as const,
-      isVerified: false,
-      subscriptionPlan: 'free' as const,
-      featuredCredits: 0,
-      avatarUrl: 'https://i.pravatar.cc/150?u=customer@test.com',
-      createdAt: new Date().toISOString()
-    }
-  ];
-
-  // Delete existing users and create new ones in Firebase
-  const existingUsers = await userService.findAll();
-  for (const user of existingUsers) {
-    if (['admin@test.com', 'seller@test.com', 'customer@test.com'].includes(user.email.toLowerCase())) {
-      await userService.delete(user.email);
-    }
-  }
-  
-  const users: UserType[] = [];
-  for (const userData of sampleUsers) {
-    const user = await userService.create(userData);
-    users.push(user);
-  }
-  
-  return users;
-}
-
-async function seedVehicles(): Promise<VehicleType[]> {
-  // Generate 50 vehicles instead of just 2
-  const vehicleCount = 50;
-  const sampleVehicles: Array<Omit<VehicleType, 'id'>> = [];
-  
-  const makes = ['Tata', 'Mahindra', 'Hyundai', 'Maruti Suzuki', 'Honda', 'Toyota', 'Kia', 'MG'];
-  const modelsByMake: Record<string, string[]> = {
-    'Tata': ['Nexon', 'Harrier', 'Safari', 'Punch', 'Altroz'],
-    'Mahindra': ['XUV700', 'Scorpio', 'Thar', 'XUV300', 'Bolero'],
-    'Hyundai': ['Creta', 'Venue', 'i20', 'Verna', 'Alcazar'],
-    'Maruti Suzuki': ['Brezza', 'Swift', 'Baleno', 'Ertiga', 'Dzire'],
-    'Honda': ['City', 'Amaze', 'Jazz', 'WR-V', 'Civic'],
-    'Toyota': ['Fortuner', 'Innova Crysta', 'Glanza', 'Urban Cruiser', 'Camry'],
-    'Kia': ['Seltos', 'Sonet', 'Carens', 'Carnival', 'EV6'],
-    'MG': ['Hector', 'Astor', 'ZS EV', 'Gloster', 'Comet']
-  };
-  const colors = ['White', 'Black', 'Silver', 'Red', 'Blue', 'Grey', 'Brown'];
-  const fuelTypes = ['Petrol', 'Diesel', 'Electric', 'CNG', 'Hybrid'];
-  const transmissions = ['Manual', 'Automatic', 'AMT', 'CVT', 'DCT'];
-  const variants = ['ZX', 'VX', 'SX', 'LX', 'Base', 'Top'];
-  const sellers = ['seller@test.com'];
-  const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Chennai', 'Hyderabad'];
-  const statesByCity: Record<string, string> = {
-    'Mumbai': 'MH', 'Pune': 'MH', 'Delhi': 'DL', 'Bangalore': 'KA', 
-    'Chennai': 'TN', 'Hyderabad': 'TS'
-  };
-  
-  const pick = <T>(arr: T[]): T => arr[randomInt(0, arr.length)]!;
-  for (let i = 1; i <= vehicleCount; i++) {
-    const make = pick(makes);
-    const models = modelsByMake[make] || ['Model'];
-    const model = pick(models);
-    const variant = pick(variants);
-    const year = 2015 + randomInt(0, 10);
-    const city = pick(cities);
-    const state = statesByCity[city] || 'MH';
-    const price = Math.round((300000 + randomInt(0, 2_000_000)) / 5000) * 5000;
-    const mileage = randomInt(0, 100_000);
-    const fuelType = pick(fuelTypes);
-    const transmission = pick(transmissions);
-    const color = pick(colors);
-    const engineSize = 1000 + randomInt(0, 1500);
-    
-    sampleVehicles.push({
-      make,
-      model,
-      variant: `${model} ${variant}`,
-      year,
-      price,
-      mileage,
-      category: VehicleCategory.FOUR_WHEELER,
-      sellerEmail: sellers[0],
-      status: 'published' as const,
-      isFeatured: randomInt(0, 10) > 6,
-      views: randomInt(0, 1000),
-      inquiriesCount: randomInt(0, 50),
-      images: [
-        `https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=800&auto=format&q=80&sig=${i}`,
-        `https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&auto=format&q=80&sig=${i + 1000}`
-      ],
-      features: ['Power Steering', 'Air Conditioning', 'Alloy Wheels', 'ABS', 'Airbags', 'Music System'],
-      description: `Well maintained ${year} ${make} ${model} in excellent condition. Single owner, full service history. Available in ${city}.`,
-      engine: `${engineSize} cc`,
-      transmission,
-      fuelType,
-      fuelEfficiency: `${12 + randomInt(0, 13)} km/l`,
-      color,
-      location: `${city}, ${state}`,
-      city,
-      state,
-      registrationYear: year,
-      insuranceValidity: new Date(Date.now() + randomInt(0, 365) * 24 * 60 * 60 * 1000).toISOString(),
-      insuranceType: randomInt(0, 2) === 0 ? 'Comprehensive' : 'Third Party',
-      rto: `${state}-${String(randomInt(1, 51)).padStart(2, '0')}`,
-      noOfOwners: 1 + randomInt(0, 3),
-      displacement: `${engineSize} cc`,
-      groundClearance: `${150 + randomInt(0, 70)} mm`,
-      bootSpace: `${250 + randomInt(0, 250)} litres`,
-      createdAt: new Date(Date.now() - randomInt(0, 90) * 24 * 60 * 60 * 1000).toISOString()
-    });
-  }
-
-  // Delete existing test vehicles (from seller@test.com) before creating new ones
-  // This prevents duplicates when re-seeding
-  try {
-    const existingVehicles = await vehicleService.findAll();
-    const testVehicles = existingVehicles.filter(v => 
-      v.sellerEmail?.toLowerCase() === 'seller@test.com'
-    );
-    
-    if (testVehicles.length > 0) {
-      console.log(`🗑️ Deleting ${testVehicles.length} existing test vehicles...`);
-      for (const vehicle of testVehicles) {
-        try {
-          await vehicleService.delete(vehicle.databaseId || String(vehicle.id));
-        } catch (deleteError) {
-          console.warn(`⚠️ Failed to delete vehicle ${vehicle.id}:`, deleteError);
-        }
-      }
-    }
-  } catch (cleanupError) {
-    console.warn('⚠️ Error during vehicle cleanup, continuing with seed:', cleanupError);
-  }
-  
-  // Create new vehicles
-  const vehicles: VehicleType[] = [];
-  console.log(`🚗 Creating ${sampleVehicles.length} vehicles...`);
-  
-  for (let i = 0; i < sampleVehicles.length; i++) {
-    const vehicleData = sampleVehicles[i];
-    try {
-      const vehicle = await vehicleService.create(vehicleData);
-      vehicles.push(vehicle);
-      if ((i + 1) % 10 === 0) {
-        console.log(`   ✓ Created ${i + 1}/${sampleVehicles.length} vehicles...`);
-      }
-    } catch (createError) {
-      console.error(`❌ Failed to create vehicle ${i + 1}:`, createError);
-      // Continue with other vehicles even if one fails
-    }
-  }
-  
-  console.log(`✅ Successfully created ${vehicles.length} vehicles`);
-  return vehicles;
-}
-
-// System handler - consolidates system.ts
-async function handleSystem(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
-  const { action } = req.query;
-  
-  switch (action) {
-    case 'health':
-      return await handleHealth(req, res);
-    case 'test-connection':
-      return await handleTestConnection(req, res);
-    default:
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Invalid system action. Use ?action=health or ?action=test-connection' 
-      });
-  }
-}
-
-// Test Connection Handler
-async function handleTestConnection(_req: VercelRequest, res: VercelResponse) {
-  try {
-    console.log('🔍 Testing Firebase connection...');
-    
-    if (!USE_SUPABASE) {
-      return res.status(503).json({
-        success: false,
-        message: 'Firebase is not configured',
-        timestamp: new Date().toISOString(),
-        details: {
-          connection: 'failed',
-          database: 'unreachable',
-          reason: 'Firebase environment variables not set'
-        }
-      });
-    }
-    
-    // Test Firebase connection by reading a test path
-    await adminRead(DB_PATHS.USERS, 'test');
-    
-    return res.status(200).json({
-      success: true,
-      message: 'Firebase connection test successful',
-      timestamp: new Date().toISOString(),
-      details: {
-        connection: 'active',
-        database: 'Firebase Realtime Database',
-        collections: 'accessible'
-      }
-    });
-  } catch (error) {
-    console.error('❌ Firebase connection test failed:', error);
-    
-    return res.status(500).json({
-      success: false,
-      message: 'Firebase connection test failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString(),
-      details: {
-        connection: 'failed',
-        database: 'unreachable',
-        collections: 'inaccessible'
-      }
-    });
-  }
-}
-
-// Firebase write operations test handler
-async function handleTestFirebaseWrites(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ 
-      success: false, 
-      reason: 'Method not allowed. Use POST to run tests.' 
-    });
-  }
-
-  try {
-    console.log('🧪 Testing Firebase write operations...');
-    
-    if (!USE_SUPABASE) {
-      return res.status(503).json({
-        success: false,
-        message: 'Firebase is not configured',
-        timestamp: new Date().toISOString(),
-        details: {
-          connection: 'failed',
-          database: 'unreachable',
-          reason: 'Firebase environment variables not set'
-        }
-      });
-    }
-
-    const testResults: {
-      create: { success: boolean; error?: string; testId?: string };
-      update: { success: boolean; error?: string };
-      modify: { success: boolean; error?: string };
-      delete: { success: boolean; error?: string };
-    } = {
-      create: { success: false },
-      update: { success: false },
-      modify: { success: false },
-      delete: { success: false },
-    };
-
-    const testCollection = 'test_firebase_writes';
-    const testId = `test_${Date.now()}`;
-
-    // Type for test data
-    type TestData = {
-      testField: string;
-      testNumber: number;
-      testBoolean: boolean;
-      createdAt?: string;
-      updatedAt?: string;
-    };
-
-    // Test 1: CREATE Operation
-    try {
-      console.log(`📋 Test 1: CREATE - Creating test document ${testId}`);
-      const testData = {
-        testField: 'original_value',
-        testNumber: 100,
-        testBoolean: true,
-        createdAt: new Date().toISOString(),
-      };
-      
-      await adminCreate(testCollection, testData, testId);
-      
-      // Verify create
-      const created = await adminRead<TestData>(testCollection, testId);
-      if (created && created.testField === 'original_value') {
-        testResults.create = { success: true, testId };
-        console.log(`✅ CREATE test passed: ${testId}`);
-      } else {
-        testResults.create = { success: false, error: 'Created document verification failed', testId };
-        console.log(`❌ CREATE test failed: Verification failed`);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      testResults.create = { success: false, error: errorMessage, testId };
-      console.error(`❌ CREATE test failed:`, errorMessage);
-    }
-
-    // Test 2: UPDATE Operation (only if CREATE succeeded)
-    if (testResults.create.success) {
-      try {
-        console.log(`📋 Test 2: UPDATE - Updating test document ${testId}`);
-        const updates = {
-          testField: 'updated_value',
-          testNumber: 200,
-          updatedAt: new Date().toISOString(),
-        };
-        
-        await adminUpdate(testCollection, testId, updates);
-        
-        // Verify update
-        const updated = await adminRead<TestData>(testCollection, testId);
-        if (updated && updated.testField === 'updated_value' && updated.testNumber === 200) {
-          testResults.update = { success: true };
-          console.log(`✅ UPDATE test passed: ${testId}`);
-        } else {
-          testResults.update = { success: false, error: 'Update verification failed' };
-          console.log(`❌ UPDATE test failed: Verification failed`);
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        testResults.update = { success: false, error: errorMessage };
-        console.error(`❌ UPDATE test failed:`, errorMessage);
-      }
-    } else {
-      testResults.update = { success: false, error: 'Skipped: CREATE test failed' };
-    }
-
-    // Test 3: MODIFY Operation (partial update)
-    if (testResults.update.success) {
-      try {
-        console.log(`📋 Test 3: MODIFY - Partially updating test document ${testId}`);
-        const partialUpdates = {
-          testNumber: 300,
-        };
-        
-        await adminUpdate(testCollection, testId, partialUpdates);
-        
-        // Verify modify
-        const modified = await adminRead<TestData>(testCollection, testId);
-        if (modified && modified.testNumber === 300 && modified.testField === 'updated_value') {
-          testResults.modify = { success: true };
-          console.log(`✅ MODIFY test passed: ${testId}`);
-        } else {
-          testResults.modify = { success: false, error: 'Modify verification failed' };
-          console.log(`❌ MODIFY test failed: Verification failed`);
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        testResults.modify = { success: false, error: errorMessage };
-        console.error(`❌ MODIFY test failed:`, errorMessage);
-      }
-    } else {
-      testResults.modify = { success: false, error: 'Skipped: UPDATE test failed' };
-    }
-
-    // Test 4: DELETE Operation (only if previous tests succeeded)
-    if (testResults.create.success) {
-      try {
-        console.log(`📋 Test 4: DELETE - Deleting test document ${testId}`);
-        await adminDelete(testCollection, testId);
-        
-        // Verify delete
-        const deleted = await adminRead(testCollection, testId);
-        if (!deleted) {
-          testResults.delete = { success: true };
-          console.log(`✅ DELETE test passed: ${testId}`);
-        } else {
-          testResults.delete = { success: false, error: 'Delete verification failed - document still exists' };
-          console.log(`❌ DELETE test failed: Document still exists`);
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        testResults.delete = { success: false, error: errorMessage };
-        console.error(`❌ DELETE test failed:`, errorMessage);
-      }
-    } else {
-      testResults.delete = { success: false, error: 'Skipped: CREATE test failed' };
-    }
-
-    // Calculate overall success
-    const allTestsPassed = Object.values(testResults).every(test => test.success);
-    const passedCount = Object.values(testResults).filter(test => test.success).length;
-    const totalCount = Object.keys(testResults).length;
-
-    return res.status(allTestsPassed ? 200 : 500).json({
-      success: allTestsPassed,
-      message: allTestsPassed 
-        ? `All ${totalCount} Firebase write operation tests passed!`
-        : `${passedCount}/${totalCount} tests passed`,
-      timestamp: new Date().toISOString(),
-      results: testResults,
-      summary: {
-        total: totalCount,
-        passed: passedCount,
-        failed: totalCount - passedCount,
-        testId: testResults.create.testId,
-        collection: testCollection,
-      },
-    });
-
-  } catch (error) {
-    console.error('❌ Firebase write operations test failed:', error);
-    
-    return res.status(500).json({
-      success: false,
-      message: 'Firebase write operations test failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString(),
-    });
-  }
-}
-
-// Utils handler - consolidates utils.ts
-async function handleUtils(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
-  const url = new URL(req.url || '', `http://${req.headers.host}`);
-  const pathname = url.pathname;
-
-  if (pathname.includes('/test-connection') || pathname.endsWith('/test-connection')) {
-    return await handleTestConnection(req, res);
-  } else if (pathname.includes('/test-firebase-writes') || pathname.endsWith('/test-firebase-writes')) {
-    return await handleTestFirebaseWrites(req, res);
-  } else {
-    return res.status(404).json({ success: false, reason: 'Utility endpoint not found' });
-  }
 }
 
 // AI handler - consolidates ai.ts

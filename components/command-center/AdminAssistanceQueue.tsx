@@ -38,7 +38,7 @@ function formatInr(amount?: number): string {
 }
 
 export const AdminAssistanceQueue: React.FC = () => {
-  const { currentUser } = useApp();
+  const { currentUser, addToast } = useApp();
   const [searchParams] = useSearchParams();
   const [queue, setQueue] = useState<AssistanceQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,12 +81,12 @@ export const AdminAssistanceQueue: React.FC = () => {
         await updateAssistanceFulfillment({ leadId: item.id, status });
         await load();
       } catch (err) {
-        alert(err instanceof Error ? err.message : 'Update failed');
+        addToast(err instanceof Error ? err.message : 'Update failed', 'error');
       } finally {
         setActingId(null);
       }
     },
-    [load],
+    [load, addToast],
   );
 
   const handleAssignToMe = useCallback(
@@ -96,12 +96,12 @@ export const AdminAssistanceQueue: React.FC = () => {
         await updateAssistanceFulfillment({ leadId: item.id, assignToMe: true });
         await load();
       } catch (err) {
-        alert(err instanceof Error ? err.message : 'Assign failed');
+        addToast(err instanceof Error ? err.message : 'Assign failed', 'error');
       } finally {
         setActingId(null);
       }
     },
-    [load],
+    [load, addToast],
   );
 
   if (selectedLeadId && currentUser) {

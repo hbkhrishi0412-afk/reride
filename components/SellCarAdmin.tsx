@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
 import { sellCarAPI } from '../services/sellCarService';
+import { useApp } from './AppProvider';
 
 interface SellCarSubmission {
   _id?: string;
@@ -31,6 +32,7 @@ interface SellCarAdminProps {
 }
 
 const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate, embedded = false }) => {
+  const { addToast, runIfConfirmed } = useApp();
   const [submissions, setSubmissions] = useState<SellCarSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -88,31 +90,33 @@ const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate, embedded = fals
         setAdminNotes('');
         setEstimatedPrice('');
       } else {
-        alert(result.error || 'Failed to update submission');
+        addToast(result.error || 'Failed to update submission', 'error');
       }
     } catch (err) {
-      alert('Failed to update submission');
+      addToast('Failed to update submission', 'error');
       console.error('Error updating submission:', err);
     }
   };
 
   const deleteSubmission = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this submission?')) {
-      return;
-    }
-
+    void runIfConfirmed(
+      'Are you sure you want to delete this submission?',
+      async () => {
     try {
       const result = await sellCarAPI.deleteSubmission(id);
       
       if (result.success) {
         fetchSubmissions();
       } else {
-        alert(result.error || 'Failed to delete submission');
+        addToast(result.error || 'Failed to delete submission', 'error');
       }
     } catch (err) {
-      alert('Failed to delete submission');
+      addToast('Failed to delete submission', 'error');
       console.error('Error deleting submission:', err);
     }
+      },
+      { variant: 'danger' },
+    );
   };
 
   const getStatusColor = (status: string) => {

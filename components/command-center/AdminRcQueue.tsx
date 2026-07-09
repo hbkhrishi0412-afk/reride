@@ -41,7 +41,7 @@ function rcStatusColor(status: RcQueueItem['rcStatus']): string {
 }
 
 export const AdminRcQueue: React.FC = () => {
-  const { currentUser } = useApp();
+  const { currentUser, addToast } = useApp();
   const [queue, setQueue] = useState<RcQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -69,12 +69,12 @@ export const AdminRcQueue: React.FC = () => {
         await advanceDealStage(item.id, 'rc_completed', {}, 'RC transfer marked complete by admin');
         await load();
       } catch (err) {
-        alert(err instanceof Error ? err.message : 'Action failed');
+        addToast(err instanceof Error ? err.message : 'Action failed', 'error');
       } finally {
         setActingId(null);
       }
     },
-    [load],
+    [load, addToast],
   );
 
   if (selectedLeadId && currentUser) {

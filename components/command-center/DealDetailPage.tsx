@@ -29,7 +29,7 @@ export interface DealDetailPageProps {
   conversations?: Conversation[];
   onBack: () => void;
   onOpenConversation?: (conversation: Conversation) => void;
-  onNotify?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onNotify?: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
 export const DealDetailPage: React.FC<DealDetailPageProps> = ({

@@ -19,6 +19,7 @@ import {
 import DealTimelinePanel from './DealTimelinePanel';
 import DealStageChip from './DealStageChip';
 import { getDealLead } from '../services/dealService';
+import { useApp } from './AppProvider';
 
 interface ChatWidgetProps {
   conversation: Conversation;
@@ -86,6 +87,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     uploaderEmail,
     onSetConversationReadState,
   }) => {
+  const { runIfConfirmed } = useApp();
   const [inputText, setInputText] = useState('');
   const [isMinimized, setIsMinimized] = useState(!isInlineLaunch); // Inline launches (CTA click) start opened
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -386,12 +388,12 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   const handleFlagClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (conversation && !conversation.isFlagged) {
-        if(window.confirm('Are you sure you want to report this conversation for review?')) {
+        void runIfConfirmed('Are you sure you want to report this conversation for review?', () => {
             const reason = window.prompt("Please provide a reason for reporting this conversation (optional):");
             if (reason !== null) {
                 onFlagContent('conversation', conversation.id, reason || "No reason provided");
             }
-        }
+        });
     }
   };
 
@@ -622,13 +624,12 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (
-                    window.confirm(
-                      'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
-                    )
-                      ) {
-                        void onClearChat(conversation.id);
-                      }
+                      void runIfConfirmed(
+                        'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
+                        () => {
+                          void onClearChat(conversation.id);
+                        },
+                      );
                     }}
                     className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
                     aria-label="Clear chat history"

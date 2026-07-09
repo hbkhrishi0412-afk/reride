@@ -52,6 +52,7 @@ import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
+import { setUserContext, clearUserContext } from '../utils/monitoring';
 import { logBackgroundSyncFailure, hasCachedVehicleCatalog } from '../utils/toastPolicy.js';
 import {
   buildVehicleMutationBody,
@@ -73,6 +74,7 @@ import * as buyerService from '../services/buyerService';
 import { createSafetyReport } from '../services/trustSafetyService';
 import { addLocalRecentId } from '../utils/recentlyViewed';
 import { stringifyVehicleForSession } from '../utils/vehicleSessionCache';
+import ConfirmDialog from './ConfirmDialog';
 import {
   getAppPathFromRouter,
   pathToView,
@@ -416,6 +418,12 @@ interface AppContextType {
   // Helper functions
   addToast: (message: string, type: ToastType['type']) => void;
   removeToast: (id: number) => void;
+  askConfirm: (message: string, opts?: { title?: string; variant?: 'danger' }) => Promise<boolean>;
+  runIfConfirmed: (
+    message: string,
+    action: () => void | Promise<void>,
+    opts?: { title?: string; variant?: 'danger' },
+  ) => Promise<void>;
   handleLogout: () => void;
   handleLogin: (user: User) => void;
   handleRegister: (user: User) => void;
@@ -891,6 +899,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
+  const [confirmState, setConfirmState] = useState<{
+    title: string;
+    message: string;
+    variant?: 'danger';
+    resolve: (ok: boolean) => void;
+  } | null>(null);
+
+  const askConfirm = useCallback(
+    (message: string, opts?: { title?: string; variant?: 'danger' }) =>
+      new Promise<boolean>((resolve) => {
+        setConfirmState({
+          title: opts?.title ?? 'Please confirm',
+          message,
+          variant: opts?.variant,
+          resolve,
+        });
+      }),
+    [],
+  );
+
+  const runIfConfirmed = useCallback(
+    async (
+      message: string,
+      action: () => void | Promise<void>,
+      opts?: { title?: string; variant?: 'danger' },
+    ) => {
+      if (await askConfirm(message, opts)) {
+        await action();
+      }
+    },
+    [askConfirm],
+  );
+
   // CRITICAL: Emergency fail-safe to prevent infinite loading
   // Only show notification if we have no vehicles loaded at all
   useEffect(() => {
@@ -941,6 +982,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Clear user state
       setCurrentUser(null);
+      clearUserContext();
       
       // Clear storage
       sessionStorage.removeItem('currentUser');
@@ -1114,6 +1156,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Set user first (this is critical - navigate checks currentUser)
     setCurrentUser(userForSession);
+    setUserContext({ id: userForSession.id || userForSession.email, email: userForSession.email });
     sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(userForSession));
     localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(userForSession));
     try {
@@ -4434,10 +4477,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!currentUser || currentUser.role !== 'seller' || !currentUser.email) return;
     
     const normalizedSellerEmail = currentUser.email.toLowerCase().trim();
+    let sellerPollInFlight = false;
     
     // Load conversations immediately when seller logs in
     const loadSellerConversations = async () => {
       if (typeof document !== 'undefined' && document.hidden) return;
+      if (sellerPollInFlight) return;
+      sellerPollInFlight = true;
       try {
         const { getConversationsFromSupabase } = await import('../services/conversationService');
         
@@ -4496,14 +4542,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (process.env.NODE_ENV === 'development') {
           logError('Error details:', error);
         }
+      } finally {
+        sellerPollInFlight = false;
       }
     };
     
     // Load immediately
     loadSellerConversations();
     
-    // Fallback sync if Realtime/WebSocket misses an update (keep well under perceived “10s lag”)
-    const refreshInterval = setInterval(loadSellerConversations, 3000);
+    // Fallback sync if Realtime/WebSocket misses an update
+    const refreshInterval = setInterval(loadSellerConversations, 10000);
     
     return () => clearInterval(refreshInterval);
   }, [currentUser?.email, currentUser?.role, currentUser?.id, addToast]);
@@ -4514,9 +4562,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     const normalizedCustomerEmail = currentUser.email.toLowerCase().trim();
+    let customerPollInFlight = false;
 
     const loadCustomerConversations = async () => {
       if (typeof document !== 'undefined' && document.hidden) return;
+      if (customerPollInFlight) return;
+      customerPollInFlight = true;
       try {
         const { getConversationsFromSupabase } = await import('../services/conversationService');
         const result = await getConversationsFromSupabase(normalizedCustomerEmail);
@@ -4541,11 +4592,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (process.env.NODE_ENV === 'development') {
           logWarn('Failed to refresh customer conversations:', e);
         }
+      } finally {
+        customerPollInFlight = false;
       }
     };
 
     loadCustomerConversations();
-    const interval = setInterval(loadCustomerConversations, 3000);
+    const interval = setInterval(loadCustomerConversations, 10000);
     return () => clearInterval(interval);
   }, [currentUser?.email, currentUser?.role]);
 
@@ -4635,7 +4688,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     void syncOpenThread();
-    const interval = setInterval(syncOpenThread, 1500);
+    const interval = setInterval(syncOpenThread, 5000);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -4932,6 +4985,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Helper functions
     addToast,
     removeToast,
+    askConfirm,
+    runIfConfirmed,
     handleLogout,
     handleLogin,
     handleRegister,
@@ -6882,7 +6937,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveChat, setIsAnnouncementVisible, setInitialSearchQuery,
     setIsCommandPaletteOpen, updateUserLocation, updateSelectedCity, setUsers,
     setPlatformSettings, setAuditLog, setVehicleData, setFaqItems, setSupportTickets,
-    setNotifications, addToast, removeToast, navigate, goBack, refreshVehicles, handleLogin, handleRegister, handleLogout,
+    setNotifications, addToast, removeToast, askConfirm, runIfConfirmed, navigate, goBack, refreshVehicles, handleLogin, handleRegister, handleLogout,
     updateVehicleHandler, syncUserCachesByEmail, syncAllUserCaches, syncVehicleCachesById,
     t,
   ]);
@@ -6890,6 +6945,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={contextValue}>
       {children}
+      <ConfirmDialog
+        open={confirmState != null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        variant={confirmState?.variant === 'danger' ? 'danger' : 'default'}
+        onConfirm={() => {
+          confirmState?.resolve(true);
+          setConfirmState(null);
+        }}
+        onCancel={() => {
+          confirmState?.resolve(false);
+          setConfirmState(null);
+        }}
+      />
     </AppContext.Provider>
   );
 };

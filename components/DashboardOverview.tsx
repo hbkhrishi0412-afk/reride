@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import type { Vehicle, User } from '../types';
-import { countInquiriesForVehicles, countUnreadMessageThreads } from '../utils/conversationParticipants';
+import { countInquiriesForVehicles } from '../utils/conversationParticipants';
+import { countUnreadMessageThreads } from '../utils/unreadCounts';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
 

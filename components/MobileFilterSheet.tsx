@@ -79,6 +79,9 @@ export const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({
       <div
         ref={sheetRef}
         className="mobile-sheet z-[9999] flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mobile-filter-sheet-title"
         style={{
           maxHeight: '85vh',
           paddingBottom: 'env(safe-area-inset-bottom, 0)'
@@ -91,7 +94,7 @@ export const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-200">
-          <h2 className="native-text-title">{title}</h2>
+          <h2 id="mobile-filter-sheet-title" className="native-text-title">{title}</h2>
           <button
             onClick={onClose}
             className="mobile-tap-target p-2 -mr-2 active:opacity-50"

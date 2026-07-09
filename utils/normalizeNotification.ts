@@ -24,12 +24,11 @@ export function normalizeNotificationRow(row: Record<string, unknown>): Notifica
     targetType = 'insurance_expiry';
   }
 
-  const targetId =
-    meta.targetId ??
-    meta.conversationId ??
-    meta.leadId ??
-    row.id ??
-    '';
+  const rawTargetId = meta.targetId ?? meta.conversationId ?? meta.leadId ?? row.id ?? '';
+  const targetId: string | number =
+    typeof rawTargetId === 'number' || typeof rawTargetId === 'string'
+      ? rawTargetId
+      : String(rawTargetId || '');
 
   const vehicleIdRaw = meta.vehicleId ?? (targetType === 'vehicle' ? targetId : undefined);
   const vehicleId =

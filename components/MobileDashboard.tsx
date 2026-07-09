@@ -382,6 +382,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   onMarkAllAsReadBySeller,
 }) => {
   const { t } = useTranslation();
+  const identityT = useCallback(
+    (key: string, defaultValue?: string) => String(t(key, defaultValue ?? key)),
+    [t],
+  );
   const notify = useCallback(
     (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
       if (addToast) {
@@ -2774,7 +2778,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               variants={addAvailableVariants}
               errors={addErrors}
               onChange={handleAddFormChange}
-              t={t}
+              t={identityT}
             />
 
             <div className="grid grid-cols-2 gap-4">
@@ -3368,7 +3372,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               errors={editErrors}
               onChange={handleChange}
               selectClassName="w-full px-3 py-2 border rounded-lg border-gray-300 bg-white"
-              t={t}
+              t={identityT}
             />
 
             <div className="grid grid-cols-2 gap-4">

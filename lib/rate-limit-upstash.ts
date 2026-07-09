@@ -6,6 +6,7 @@
 
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { getSecurityConfig } from '../utils/security-config.js';
 
 let ratelimit: Ratelimit | null = null;
 
@@ -28,7 +29,7 @@ export function getUpstashRatelimit(): Ratelimit | null {
     ratelimit = new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(
-        process.env.RATE_LIMIT_MAX_REQUESTS ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) : 1000,
+        getSecurityConfig().RATE_LIMIT.MAX_REQUESTS,
         '15 m'
       ),
       analytics: true,
@@ -39,12 +40,15 @@ export function getUpstashRatelimit(): Ratelimit | null {
   return ratelimit;
 }
 
-export async function checkUpstashRateLimit(identifier: string): Promise<{ allowed: boolean; remaining: number }> {
+export async function checkUpstashRateLimit(
+  identifier: string,
+): Promise<{ allowed: boolean; remaining: number; configured: boolean }> {
   const rl = getUpstashRatelimit();
-  if (!rl) return { allowed: true, remaining: 999 };
+  if (!rl) return { allowed: true, remaining: -1, configured: false };
   const result = await rl.limit(identifier);
   return {
     allowed: result.success,
     remaining: result.remaining,
+    configured: true,
   };
 }

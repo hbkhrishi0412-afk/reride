@@ -268,6 +268,8 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     vehicles: contextVehicles,
     navigate,
     setCurrentView,
+    addToast,
+    runIfConfirmed,
   } = context;
   
   // ✅ FIX: Memoize safeVehicle to prevent unnecessary re-renders
@@ -442,7 +444,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
         setShowSellerRatingSuccess(true);
         setRatingEligibility((prev) => prev ? { ...prev, canRateSeller: false } : prev);
       } catch (e) {
-        alert(e instanceof Error ? e.message : 'Could not submit rating');
+        addToast(e instanceof Error ? e.message : 'Could not submit rating', 'error');
         return;
       }
     } else {
@@ -456,12 +458,15 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   };
 
   const handleFlagClick = () => {
-      if(window.confirm('Are you sure you want to report this listing for review by an administrator?')) {
-        const reason = window.prompt("Please provide a reason for reporting this listing (optional):");
-        if (reason !== null) {
-            onFlagContent('vehicle', safeVehicle.id, reason || "No reason provided");
-        }
-      }
+      void runIfConfirmed(
+        'Are you sure you want to report this listing for review by an administrator?',
+        () => {
+          const reason = window.prompt("Please provide a reason for reporting this listing (optional):");
+          if (reason !== null) {
+              onFlagContent('vehicle', safeVehicle.id, reason || "No reason provided");
+          }
+        },
+      );
   }
 
   const isComparing = comparisonList.includes(safeVehicle.id);

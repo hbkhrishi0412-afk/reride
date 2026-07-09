@@ -119,7 +119,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   onSelectVehicle
 }) => {
   const { t } = useTranslation();
-  const { vehicles: contextVehicles, comparisonCategory } = useApp();
+  const { vehicles: contextVehicles, comparisonCategory, addToast, runIfConfirmed } = useApp();
   const ratingSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
@@ -242,7 +242,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
         setShowSellerRatingSuccess(true);
         setRatingEligibility((prev) => (prev ? { ...prev, canRateSeller: false } : prev));
       } catch (e) {
-        alert(e instanceof Error ? e.message : 'Could not submit rating');
+        addToast(e instanceof Error ? e.message : 'Could not submit rating', 'error');
         return;
       }
     } else if (onAddSellerRating && safeVehicle.sellerEmail) {
@@ -259,12 +259,15 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
 
   const handleFlagClick = () => {
     if (!onFlagContent) return;
-    if (window.confirm('Are you sure you want to report this listing for review by an administrator?')) {
-      const reason = window.prompt('Please provide a reason for reporting this listing (optional):');
-      if (reason !== null) {
-        onFlagContent('vehicle', safeVehicle.id, reason || 'No reason provided');
-      }
-    }
+    void runIfConfirmed(
+      'Are you sure you want to report this listing for review by an administrator?',
+      () => {
+        const reason = window.prompt('Please provide a reason for reporting this listing (optional):');
+        if (reason !== null) {
+          onFlagContent('vehicle', safeVehicle.id, reason || 'No reason provided');
+        }
+      },
+    );
   };
 
   const formatCurrency = (value: number) => {

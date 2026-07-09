@@ -6,6 +6,7 @@ import { fetchVehicleSpecs, cacheAISpecs } from '../services/vehicleSpecsService
 import { getAiVehicleSuggestions } from '../services/geminiService';
 import AutoT from './AutoT';
 import { useAutoT } from '../hooks/useAutoT';
+import { useApp } from './AppProvider';
 
 interface SellCarPageProps {
   onNavigate: (view: ViewEnum) => void;
@@ -123,6 +124,7 @@ const POPULAR_METRO_LOCATIONS: readonly { label: string; state: string; district
 /* ---------------- Main component ---------------- */
 
 const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
+  const { addToast } = useApp();
   const [currentStep, setCurrentStep] = useState(0);
   const [sellerType, setSellerType] = useState<'individual' | 'dealer'>('individual');
   const [registrationNumber, setRegistrationNumber] = useState('');
@@ -494,15 +496,15 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
       setIsLoading(true);
       const result = await sellCarAPI.submitCarData(carSubmissionData);
       if (result.success) {
-        alert('Car details submitted successfully! We will contact you soon.');
+        addToast('Car details submitted successfully! We will contact you soon.', 'success');
         onNavigate(ViewEnum.HOME);
       } else {
-        alert(result.error || 'Failed to submit car details. Please check your connection and try again.');
+        addToast(result.error || 'Failed to submit car details. Please check your connection and try again.', 'error');
       }
     } catch (error) {
       console.error('Error submitting car data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`Failed to submit car details: ${errorMessage}. Please check your connection and try again.`);
+      addToast(`Failed to submit car details: ${errorMessage}. Please check your connection and try again.`, 'error');
     } finally {
       setIsLoading(false);
     }

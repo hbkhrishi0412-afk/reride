@@ -5,6 +5,7 @@ import VehicleCard from './VehicleCard';
 import VirtualizedVehicleList from './VirtualizedVehicleList';
 import BulkUploadModal from './BulkUploadModal';
 import DashboardQuickAction from './DashboardQuickAction';
+import { useApp } from './AppProvider';
 
 interface DashboardListingsProps {
   sellerVehicles: Vehicle[];
@@ -44,6 +45,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
   onViewVehicle
 }) => {
   const { t } = useTranslation();
+  const { addToast } = useApp();
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   // Safety check
   const safeSellerVehicles = sellerVehicles || [];
@@ -102,7 +104,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
       console.log(`✅ Exported ${safeSellerVehicles.length} vehicles successfully`);
     } catch (error) {
       console.error('Failed to export data:', error);
-      alert(t('dashboard.exportFailed'));
+      addToast(t('dashboard.exportFailed'), 'error');
     }
   }, [safeSellerVehicles, t]);
 
@@ -138,7 +140,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
           if (onBulkUpload && sellerEmail) {
             setIsBulkUploadOpen(true);
           } else {
-            alert(t('dashboard.bulkUploadUnavailable'));
+            addToast(t('dashboard.bulkUploadUnavailable'), 'warning');
           }
         },
       },

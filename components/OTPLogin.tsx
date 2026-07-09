@@ -125,6 +125,9 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
         {!otpSent ? (
           <form onSubmit={handleSendOTP} className="space-y-5">
             <div>
+              <label htmlFor="phone-number" className="sr-only">
+                {t('auth.otp.phoneLabel', { defaultValue: 'Phone number' })}
+              </label>
               <div className="flex">
                 <span className="inline-flex items-center px-4 py-4 rounded-l-2xl bg-white/20 backdrop-blur-sm text-white text-base font-semibold border border-white/30">
                   +91

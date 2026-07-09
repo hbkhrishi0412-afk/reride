@@ -14,6 +14,7 @@ import {
 import { downloadProfileExport, requestAccountDeletion } from '../services/accountPrivacyService';
 import { userNeedsPasswordSetup } from '../utils/profilePassword';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
+import { useApp } from './AppProvider';
 
 interface MobileProfileProps {
   currentUser: User;
@@ -49,6 +50,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   addToast,
   onNavigate,
 }) => {
+  const { runIfConfirmed } = useApp();
   const needsPasswordSetup = userNeedsPasswordSetup(currentUser);
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
@@ -648,14 +650,10 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
             </button>
             <button
               type="button"
-              onClick={async () => {
-                if (
-                  !window.confirm(
-                    'Permanently delete your account? This cannot be undone. You will be signed out immediately.',
-                  )
-                ) {
-                  return;
-                }
+              onClick={() => {
+                void runIfConfirmed(
+                  'Permanently delete your account? This cannot be undone. You will be signed out immediately.',
+                  async () => {
                 const r = await requestAccountDeletion(currentUser.email);
                 if (r.success) {
                   addToast?.(r.message || 'Your account has been deleted.', 'success');
@@ -663,6 +661,9 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
                 } else {
                   addToast?.(r.reason || 'Could not delete your account. Please try again.', 'error');
                 }
+                  },
+                  { variant: 'danger' },
+                );
               }}
               className="w-full py-2.5 rounded-lg text-sm font-medium text-red-700 bg-red-50 border border-red-200"
             >

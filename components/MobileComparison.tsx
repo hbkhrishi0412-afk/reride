@@ -167,9 +167,9 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
 
   const isRowDifferent = (key: string) => {
     if (comparisonVehicles.length <= 1) return false;
-    const first = JSON.stringify((comparisonVehicles[0] as Record<string, unknown>)[key]);
+    const first = JSON.stringify((comparisonVehicles[0] as unknown as Record<string, unknown>)[key]);
     return comparisonVehicles.slice(1).some(
-      (v) => JSON.stringify((v as Record<string, unknown>)[key]) !== first,
+      (v) => JSON.stringify((v as unknown as Record<string, unknown>)[key]) !== first,
     );
   };
 

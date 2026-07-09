@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { submitDealSurvey } from '../services/dealService.js';
 import { DEAL_ASSISTANCE_PACKAGES } from '../types.js';
+import { useApp } from './AppProvider';
 
 interface DealSurveyModalProps {
   surveyId: string;
@@ -17,6 +18,7 @@ export const DealSurveyModal: React.FC<DealSurveyModalProps> = ({
   onClose,
   onSubmitted,
 }) => {
+  const { addToast } = useApp();
   const [step, setStep] = useState<'purchase' | 'services'>('purchase');
   const [loading, setLoading] = useState(false);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
@@ -32,7 +34,7 @@ export const DealSurveyModal: React.FC<DealSurveyModalProps> = ({
       onSubmitted();
       onClose();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to submit');
+      addToast(err instanceof Error ? err.message : 'Failed to submit', 'error');
     } finally {
       setLoading(false);
     }
@@ -45,7 +47,7 @@ export const DealSurveyModal: React.FC<DealSurveyModalProps> = ({
       onSubmitted();
       onClose();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to submit');
+      addToast(err instanceof Error ? err.message : 'Failed to submit', 'error');
     } finally {
       setLoading(false);
     }

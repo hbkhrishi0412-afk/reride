@@ -17,6 +17,7 @@ import {
 } from '../lib/universalChecklist/helpers';
 import type { VahanSnapshot } from '../lib/vehicleDisclosureChecklist';
 import { uploadImages, validateImageFile } from '../services/imageUploadService';
+import { useApp } from './AppProvider';
 
 export interface VahanVerifyFeedback {
   verified: boolean;
@@ -49,6 +50,7 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
   compact = false,
   hideTitle = false,
 }) => {
+  const { addToast } = useApp();
   const [items, setItems] = useState<ChecklistItemResponse[]>(() =>
     mergeSellerResponses(category, value),
   );
@@ -95,7 +97,7 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
   const handlePhotoUpload = async (id: string, file: File) => {
     const validation = validateImageFile(file);
     if (!validation.valid) {
-      alert(validation.error || 'Invalid image');
+      addToast(validation.error || 'Invalid image', 'error');
       return;
     }
     setUploadingId(id);
@@ -105,7 +107,7 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
         updateItem(id, { photoUrl: results[0].url, status: 'pass' });
       }
     } catch {
-      alert('Failed to upload photo');
+      addToast('Failed to upload photo', 'error');
     } finally {
       setUploadingId(null);
     }

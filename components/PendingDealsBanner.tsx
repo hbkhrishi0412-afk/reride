@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Vehicle, VehicleTrustDeal } from '../types';
 import { confirmTrustDeal, fetchPendingDeals } from '../services/vehicleTrustService';
+import { useApp } from './AppProvider';
 
 interface PendingDealsBannerProps {
   vehicles: Vehicle[];
@@ -11,6 +12,7 @@ interface PendingDealsBannerProps {
 }
 
 export const PendingDealsBanner: React.FC<PendingDealsBannerProps> = ({ vehicles, onConfirmed }) => {
+  const { addToast } = useApp();
   const [deals, setDeals] = useState<VehicleTrustDeal[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
 
@@ -47,7 +49,7 @@ export const PendingDealsBanner: React.FC<PendingDealsBannerProps> = ({ vehicles
                   setDeals((d) => d.filter((x) => x.id !== deal.id));
                   onConfirmed?.();
                 } catch {
-                  alert('Could not confirm — try again');
+                  addToast('Could not confirm — try again', 'error');
                 } finally {
                   setConfirming(null);
                 }

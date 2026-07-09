@@ -136,7 +136,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
               setActiveChat(conv);
               onNavigate(View.INBOX);
             }}
-            onNotify={(msg, type) => addToast(msg, type === 'error' ? 'error' : type === 'warning' ? 'warning' : type === 'info' ? 'info' : 'success')}
+            onNotify={(msg, type) => addToast(msg, type ?? 'info')}
           />
         </Suspense>
       </div>
@@ -336,6 +336,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                   <MyDealsList
                     vehicles={vehicles}
                     onSelectVehicle={onSelectVehicle}
+                    onBrowseVehicles={() => onNavigate(View.USED_CARS)}
                     onOpenDeal={(leadId, vehicle) => {
                       setSelectedDealId(leadId);
                       if (vehicle) onSelectVehicle(vehicle);

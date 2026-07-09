@@ -6,6 +6,7 @@ import {
   updateSavedSearch,
   findNewMatches 
 } from '../services/buyerEngagementService';
+import { useApp } from './AppProvider';
 
 interface SavedSearchesPanelProps {
   userId: string;
@@ -18,6 +19,7 @@ const SavedSearchesPanel: React.FC<SavedSearchesPanelProps> = ({
   vehicles,
   onSearchClick,
 }) => {
+  const { runIfConfirmed } = useApp();
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [expandedSearch, setExpandedSearch] = useState<string | null>(null);
 
@@ -31,10 +33,14 @@ const SavedSearchesPanel: React.FC<SavedSearchesPanelProps> = ({
   };
 
   const handleDelete = (searchId: string) => {
-    if (confirm('Are you sure you want to delete this saved search?')) {
-      deleteSavedSearch(searchId);
-      loadSavedSearches();
-    }
+    void runIfConfirmed(
+      'Are you sure you want to delete this saved search?',
+      () => {
+        deleteSavedSearch(searchId);
+        loadSavedSearches();
+      },
+      { variant: 'danger' },
+    );
   };
 
   const handleToggleAlerts = (search: SavedSearch) => {

@@ -10,6 +10,7 @@ import {
   sellerQrDownloadFileName,
 } from '../utils/sellerQrCode';
 import { userNeedsPasswordSetup } from '../utils/profilePassword';
+import { useApp } from './AppProvider';
 
 interface ProfileProps {
   currentUser: User;
@@ -140,6 +141,7 @@ const calculatePasswordStrength = (password: string): PasswordStrength => {
 };
 
 const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdatePassword }) => {
+  const { addToast, runIfConfirmed } = useApp();
   const needsPasswordSetup = userNeedsPasswordSetup(currentUser);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1417,20 +1419,25 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                   <p className="text-sm text-gray-500 mb-4">You can permanently delete your account and sign-in. This cannot be undone.</p>
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (!window.confirm('Permanently delete your account? This cannot be undone. You will be signed out immediately.')) return;
+                    onClick={() => {
+                      void runIfConfirmed(
+                        'Permanently delete your account? This cannot be undone. You will be signed out immediately.',
+                        async () => {
                       try {
                         const { requestAccountDeletion } = await import('../services/accountPrivacyService');
                         const result = await requestAccountDeletion(currentUser.email);
                         if (result.success) {
-                          alert(result.message || 'Your account has been deleted.');
+                          addToast(result.message || 'Your account has been deleted.', 'success');
                           window.location.href = '/';
                         } else {
-                          alert(result.reason || 'Could not delete your account. Please try again.');
+                          addToast(result.reason || 'Could not delete your account. Please try again.', 'error');
                         }
                       } catch {
-                        alert('Could not delete your account. Please try again.');
+                        addToast('Could not delete your account. Please try again.', 'error');
                       }
+                        },
+                        { variant: 'danger' },
+                      );
                     }}
                     className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500"
                   >

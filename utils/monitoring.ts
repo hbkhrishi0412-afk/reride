@@ -46,6 +46,18 @@ export async function initErrorTracking(): Promise<void> {
       setUser: (user) => Sentry.setUser(user),
       setContext: (key, context) => Sentry.setContext(key, context),
     };
+
+    // Bridge utils/logger.ts production error reporting
+    window.errorTracker = {
+      captureException: (error, context) => {
+        Sentry.captureException(error instanceof Error ? error : new Error(String(error)), {
+          contexts: { custom: context },
+        });
+      },
+      captureMessage: (message, level) => {
+        Sentry.captureMessage(message, level === 'warning' ? 'warning' : level === 'info' ? 'info' : 'error');
+      },
+    };
   } catch (error) {
     console.warn('Failed to initialize error tracking:', error);
   }
@@ -80,6 +92,12 @@ export function trackMessage(message: string, level: 'info' | 'warning' | 'error
 export function setUserContext(user: { id: string; email?: string }): void {
   if (errorTracker) {
     errorTracker.setUser(user);
+  }
+}
+
+export function clearUserContext(): void {
+  if (errorTracker) {
+    errorTracker.setUser({ id: '' });
   }
 }
 

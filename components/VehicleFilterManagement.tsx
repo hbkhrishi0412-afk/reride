@@ -2,6 +2,7 @@ import React, { useState, useEffect, memo } from 'react';
 import type { VehicleData } from '../types';
 import { VehicleCategory } from '../types';
 import { getVehicleData, createVehicleData, updateVehicleData, deleteVehicleData } from '../services/vehicleDataService';
+import { useApp } from './AppProvider';
 
 interface VehicleFilterManagementProps {
   onDataUpdate?: (data: VehicleData) => void;
@@ -18,6 +19,7 @@ interface VehicleDataItem {
 }
 
 const VehicleFilterManagement: React.FC<VehicleFilterManagementProps> = memo(({ onDataUpdate }) => {
+  const { runIfConfirmed } = useApp();
   const [vehicleData, setVehicleData] = useState<VehicleData>({});
   const [vehicleDataItems, setVehicleDataItems] = useState<VehicleDataItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -153,9 +155,11 @@ const VehicleFilterManagement: React.FC<VehicleFilterManagementProps> = memo(({ 
   const handleDelete = async (item: VehicleDataItem) => {
     if (!item._id) return;
     
-    if (window.confirm('Are you sure you want to delete this vehicle data?')) {
+    void runIfConfirmed(
+      'Are you sure you want to delete this vehicle data?',
+      async () => {
       try {
-        const result = await deleteVehicleData(item._id);
+        const result = await deleteVehicleData(item._id!);
         if (result.success) {
           await loadVehicleData();
         } else {
@@ -164,7 +168,9 @@ const VehicleFilterManagement: React.FC<VehicleFilterManagementProps> = memo(({ 
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
       }
-    }
+      },
+      { variant: 'danger' },
+    );
   };
 
   const resetForm = () => {

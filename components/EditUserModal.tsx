@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../types.js';
+import { useApp } from './AppProvider';
 import { isRerideStaffPick } from '../utils/staffPick.js';
 
 interface EditUserModalProps {
@@ -10,6 +11,7 @@ interface EditUserModalProps {
 }
 
 const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, onVerifyDocument }) => {
+    const { addToast } = useApp();
     const [formData, setFormData] = useState({
         name: '',
         mobile: '',
@@ -88,7 +90,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
             setNewPassword('');
             setConfirmPassword('');
             setShowPasswordReset(false);
-            alert(`Password reset successfully for ${user.email}`);
+            addToast(`Password reset successfully for ${user.email}`, 'success');
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to reset password';
             setPasswordError(message);
@@ -107,13 +109,18 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
     if (!user) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 md:p-8 lg:p-12 animate-fade-in">
+        <div
+            className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 md:p-8 lg:p-12 animate-fade-in"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-user-modal-title"
+        >
             <div className="absolute inset-0" onClick={onClose} aria-hidden="true"></div>
             <div className="relative bg-white rounded-[24px] shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-hidden transform transition-transform animate-scale-in mx-4 sm:mx-0">
                 <header className="bg-gradient-to-r from-orange-500 via-orange-400 to-orange-300 text-white px-4 sm:px-8 py-5 sm:py-6 flex items-center justify-between">
                     <div>
                         <p className="text-xs uppercase tracking-[0.3em] font-semibold opacity-80">Edit User</p>
-                        <h2 className="mt-1 text-2xl md:text-3xl font-bold tracking-tight">
+                        <h2 id="edit-user-modal-title" className="mt-1 text-2xl md:text-3xl font-bold tracking-tight">
                             {user.name}
                         </h2>
                         <p className="text-xs md:text-sm opacity-80 mt-1">{user.email}</p>
@@ -131,10 +138,11 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                     <div className="max-h-[70vh] overflow-y-auto px-4 sm:px-8 py-5 sm:py-6 space-y-6 sm:space-y-8 custom-scrollbar">
                         <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                                <label htmlFor="edit-user-name" className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
                                     Full Name
                                 </label>
                                 <input
+                                    id="edit-user-name"
                                     type="text"
                                     name="name"
                                     value={formData.name}

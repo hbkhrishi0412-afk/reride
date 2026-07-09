@@ -9,6 +9,7 @@ interface MyDealsListProps {
   vehicles: Vehicle[];
   onSelectVehicle: (vehicle: Vehicle) => void;
   onOpenDeal?: (leadId: string, vehicle?: Vehicle) => void;
+  onBrowseVehicles?: () => void;
 }
 
 function vehicleForLead(vehicles: Vehicle[], lead: DealLead): Vehicle | undefined {
@@ -17,7 +18,7 @@ function vehicleForLead(vehicles: Vehicle[], lead: DealLead): Vehicle | undefine
   );
 }
 
-export const MyDealsList: React.FC<MyDealsListProps> = ({ vehicles, onSelectVehicle, onOpenDeal }) => {
+export const MyDealsList: React.FC<MyDealsListProps> = ({ vehicles, onSelectVehicle, onOpenDeal, onBrowseVehicles }) => {
   const { t } = useTranslation();
   const { activeLeads, loading, error, reload } = useMyDealLeads();
 
@@ -50,6 +51,14 @@ export const MyDealsList: React.FC<MyDealsListProps> = ({ vehicles, onSelectVehi
         description={t('buyerDashboard.deals.emptyBody', {
           defaultValue: 'When you start a tracked deal on a listing, it will appear here with every milestone.',
         })}
+        action={
+          onBrowseVehicles
+            ? {
+                label: t('buyerDashboard.deals.browse', { defaultValue: 'Browse vehicles' }),
+                onClick: onBrowseVehicles,
+              }
+            : undefined
+        }
       />
     );
   }

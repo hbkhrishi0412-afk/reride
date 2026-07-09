@@ -106,7 +106,7 @@ export async function rehydrateApiCredentials(): Promise<boolean> {
           meta.provider === 'google' ? 'google' : session.user.phone ? 'phone' : 'email';
         const { syncWithBackend } = await import('../services/supabase-auth-service.js');
         const result = await syncWithBackend(
-          session.user as Record<string, unknown>,
+          session.user as unknown as Record<string, unknown>,
           role,
           authProvider,
           session.access_token,

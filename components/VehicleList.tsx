@@ -28,6 +28,7 @@ import type { BuyerVisibleDealLabel } from '../utils/vehiclePricing.js';
 import type { VehicleData } from '../types.js';
 import type { VehicleMake, VehicleModel } from '../vehicleDataTypes.js';
 import ListingTrustFilterBar from './ListingTrustFilterBar.js';
+import { useApp } from './AppProvider';
 import type { TrustFilterValue } from '../utils/listingTrust.js';
 import { vehicleMatchesTrustFilter, getListingDisclosureScore } from '../utils/listingTrust.js';
 // Lazy load location data when needed
@@ -64,6 +65,8 @@ interface VehicleListProps {
   sourceVehicleCount?: number;
   /** Called when user taps Retry in the "Unable to load vehicles" state. */
   onRetryLoadVehicles?: () => void | Promise<void>;
+  /** Optional CTA when wishlist/filter results are empty */
+  onBrowseAll?: () => void;
 }
 
 // Base items per page - optimized for performance (10-12 vehicles per load)
@@ -340,7 +343,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   selectedCity,
   onCityChange,
   sourceVehicleCount,
-  onRetryLoadVehicles
+  onRetryLoadVehicles,
+  onBrowseAll,
 }) => {
   const [aiSearchQuery, setAiSearchQuery] = useState(initialSearchQuery);
   const [isAiSearching, setIsAiSearching] = useState(false);
@@ -489,6 +493,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   // Mobile app detection
   const { isMobileApp } = useIsMobileApp();
   const { t } = useTranslation();
+  const { addToast } = useApp();
   const sortOptions = useMemo(
     () => ({
       YEAR_DESC: t('listings.sort.yearDesc'),
@@ -1456,7 +1461,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
   const handleSaveSearch = () => {
     if (!currentUser) {
-      alert(t('listings.loginToSaveSearch'));
+      addToast(t('listings.loginToSaveSearch'), 'error');
       return;
     }
 
@@ -1492,12 +1497,12 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       if (onSaveSearch) {
         onSaveSearch(savedSearch);
       }
-      alert(t('listings.saveSearchSuccess'));
+      addToast(t('listings.saveSearchSuccess'), 'success');
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         logError('Error saving search:', error);
       }
-      alert(t('listings.saveSearchFailed'));
+      addToast(t('listings.saveSearchFailed'), 'error');
     }
   };
 
@@ -2162,6 +2167,11 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             <div className="col-span-full text-center py-16 bg-white rounded-xl shadow-soft-lg">
               <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">Your Wishlist is Empty</h3>
               <p className="text-reride-text dark:text-reride-text mt-2">Click the heart icon on any vehicle to save it here.</p>
+              {onBrowseAll ? (
+                <button type="button" onClick={onBrowseAll} className="mt-4 btn-brand-primary">
+                  Browse Vehicles
+                </button>
+              ) : null}
             </div>
           )}
         </div>
@@ -2700,6 +2710,16 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                           })
                         : t('listings.noVehiclesHint')}
                     </p>
+                    {sourceVehicleCount != null && sourceVehicleCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={handleResetFilters}
+                        className="mt-4 px-5 py-2.5 rounded-xl font-semibold text-white transition-all active:scale-95"
+                        style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}
+                      >
+                        {t('listings.resetFilters')}
+                      </button>
+                    ) : null}
                   </>
                 )}
               </div>

@@ -20,6 +20,7 @@ import {
   primaryAdvanceButtonLabel,
 } from '../utils/serviceRequestStatusFlow';
 import { spApiFetch } from '../utils/spApiFetch';
+import { useApp } from './AppProvider';
 
 interface Provider {
   name: string;
@@ -521,6 +522,7 @@ const includedDraftsToPayload = (drafts: IncludedServiceDraft[]): IncludedServic
     .filter((entry): entry is IncludedServicePrice => entry !== null);
 
 const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onLogout }) => {
+  const { runIfConfirmed } = useApp();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [openRequests, setOpenRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1291,7 +1293,9 @@ const body = { serviceType, active };
   };
 
   const deleteService = async (serviceType: string) => {
-    if (!window.confirm(`Delete "${serviceType}" from your service list?`)) return;
+    void runIfConfirmed(
+      `Delete "${serviceType}" from your service list?`,
+      async () => {
     setSavingService(true);
     setServicesError(null);
     try {
@@ -1312,6 +1316,9 @@ const body = { serviceType, active };
     } finally {
       setSavingService(false);
     }
+      },
+      { variant: 'danger' },
+    );
   };
 
   const fetchRequests = async () => {
@@ -1499,7 +1506,9 @@ body: JSON.stringify({ id, status }),
   };
 
   const deleteCancelledRequest = async (id: string) => {
-    if (!window.confirm('Delete this cancelled request permanently?')) return;
+    void runIfConfirmed(
+      'Delete this cancelled request permanently?',
+      async () => {
     setDeletingId(id);
     setError(null);
     try {
@@ -1516,6 +1525,9 @@ body: JSON.stringify({ id, status }),
     } finally {
       setDeletingId(null);
     }
+      },
+      { variant: 'danger' },
+    );
   };
 
   useEffect(() => {

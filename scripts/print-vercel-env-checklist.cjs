@@ -19,6 +19,9 @@ ReRide — Vercel "Needs Attention" quick fix
    - SUPABASE_SERVICE_ROLE_KEY  (from Supabase → Settings → API → service_role)
    - JWT_SECRET                 (long random; openssl rand -base64 48)
    - ALLOWED_ORIGINS            (e.g. https://www.reride.co.in,https://reride.co.in)
+   - UPSTASH_REDIS_REST_URL     (distributed rate limiting + token revocation in production)
+   - UPSTASH_REDIS_REST_TOKEN
+   - VITE_SENTRY_DSN            (client error tracking; add https://*.ingest.sentry.io to CSP — already in vercel.json)
 
 4) Google Sign-In is configured in Supabase Auth → Providers → Google and Google Cloud
    OAuth, not as GOOGLE_CLIENT_ID in Vercel (unless you add custom tooling).

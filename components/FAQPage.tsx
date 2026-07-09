@@ -1,6 +1,7 @@
 
 
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { FAQItem } from '../types';
 
 interface FAQPageProps {
@@ -8,6 +9,7 @@ interface FAQPageProps {
 }
 
 const FAQPage: React.FC<FAQPageProps> = ({ faqItems }) => {
+  const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [openItem, setOpenItem] = useState<number | null>(null);
 

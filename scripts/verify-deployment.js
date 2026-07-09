@@ -107,16 +107,14 @@ async function checkHealth() {
   try {
     const response = await retryRequest(`${CONFIG.BASE_URL}/api/db-health`);
     
-    if (response.status === 200 && response.data.success) {
+    if (response.status === 200 && response.data.status === 'ok') {
       log('✅ Database health check passed', 'green');
-      log(`   Database: ${response.data.details?.database || 'Unknown'}`, 'blue');
-      log(`   Collections: ${response.data.details?.collections?.length || 0}`, 'blue');
-      log(`   Vehicle Data Count: ${response.data.details?.vehicleDataCount || 0}`, 'blue');
+      log(`   Database: ${response.data.database || 'Supabase'}`, 'blue');
       return true;
     } else {
       log('❌ Database health check failed', 'red');
       log(`   Status: ${response.status}`, 'red');
-      log(`   Message: ${response.data.message || 'Unknown error'}`, 'red');
+      log(`   Message: ${response.data.message || response.data.error || 'Unknown error'}`, 'red');
       return false;
     }
   } catch (error) {

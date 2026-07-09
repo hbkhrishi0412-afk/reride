@@ -163,6 +163,17 @@ USING (
       AND u.role = 'admin'
   )
   OR (SELECT auth.uid())::text = id
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM users AS u
+    WHERE u.id = (SELECT auth.uid())::text
+      AND u.role = 'admin'
+  )
+  OR (
+    (SELECT auth.uid())::text = id
+    AND role <> 'admin'
+  )
 );
 
 -- Column-level protection: VITE_SUPABASE_ANON_KEY is in every client bundle.
@@ -212,6 +223,13 @@ CREATE POLICY "Vehicles update access"
 ON vehicles
 FOR UPDATE
 USING (
+  EXISTS (
+    SELECT 1 FROM users u
+    WHERE u.id = (SELECT auth.uid())::text
+      AND (u.role = 'admin' OR lower(trim(u.email)) = lower(trim(vehicles.seller_email)))
+  )
+)
+WITH CHECK (
   EXISTS (
     SELECT 1 FROM users u
     WHERE u.id = (SELECT auth.uid())::text
@@ -282,6 +300,22 @@ CREATE POLICY "Conversations update access"
 ON conversations
 FOR UPDATE
 USING (
+  EXISTS (
+    SELECT 1 FROM users u
+    WHERE u.id = (SELECT auth.uid())::text
+      AND u.role = 'admin'
+  )
+  OR (SELECT auth.uid())::text = customer_id
+  OR (SELECT auth.uid())::text = seller_id
+  OR EXISTS (
+    SELECT 1 FROM users u
+    WHERE u.id IN (conversations.customer_id, conversations.seller_id)
+      AND u.email IS NOT NULL
+      AND lower(trim(u.email)) = lower(trim(coalesce(((SELECT auth.jwt()) ->> 'email')::text, '')))
+      AND coalesce(trim(((SELECT auth.jwt()) ->> 'email')::text), '') <> ''
+  )
+)
+WITH CHECK (
   EXISTS (
     SELECT 1 FROM users u
     WHERE u.id = (SELECT auth.uid())::text
@@ -400,6 +434,14 @@ USING (
       AND u.role = 'admin'
   )
   OR (SELECT auth.uid())::text = user_id
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM users u
+    WHERE u.id = (SELECT auth.uid())::text
+      AND u.role = 'admin'
+  )
+  OR (SELECT auth.uid())::text = user_id
 );
 
 -- ============================================================================
@@ -445,6 +487,15 @@ USING (
   )
   OR (SELECT auth.uid())::text = user_id
   OR (SELECT auth.uid())::text = provider_id
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM users u
+    WHERE u.id = (SELECT auth.uid())::text
+      AND u.role = 'admin'
+  )
+  OR (SELECT auth.uid())::text = user_id
+  OR (SELECT auth.uid())::text = provider_id
 );
 
 -- ============================================================================
@@ -478,6 +529,20 @@ CREATE POLICY "Service providers update access"
 ON service_providers
 FOR UPDATE
 USING (
+  EXISTS (
+    SELECT 1 FROM users u
+    WHERE u.id = (SELECT auth.uid())::text
+      AND (
+        u.role = 'admin'
+        OR (
+          u.email IS NOT NULL
+          AND service_providers.email IS NOT NULL
+          AND lower(trim(u.email)) = lower(trim(service_providers.email))
+        )
+      )
+  )
+)
+WITH CHECK (
   EXISTS (
     SELECT 1 FROM users u
     WHERE u.id = (SELECT auth.uid())::text
@@ -824,6 +889,10 @@ FOR INSERT
 WITH CHECK (
   bucket_id = 'Images'
   AND (SELECT auth.role()) = 'authenticated'
+  AND (
+    (storage.foldername(name))[1] = (SELECT auth.email())
+    OR (storage.foldername(name))[1] IN ('vehicles', 'chat-messages', 'listings', 'profiles')
+  )
 );
 
 -- Update: owner (first folder segment = user's email) or admin.

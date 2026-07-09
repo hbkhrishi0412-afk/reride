@@ -15,6 +15,7 @@ import {
   scrollContainerToBottom,
   scrollContainerToShowElement,
 } from '../utils/scrollWithinContainer.js';
+import { useApp } from './AppProvider';
 
 interface InlineChatProps {
   conversation: Conversation;
@@ -74,6 +75,7 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
   height = "h-96",
   dealLead: initialDealLead = null,
 }) => {
+  const { runIfConfirmed } = useApp();
   const [dealLead, setDealLead] = useState<DealLead | null>(initialDealLead);
   const [inputText, setInputText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -230,12 +232,12 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
   const handleFlagClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (conversation && !conversation.isFlagged) {
-        if(window.confirm('Are you sure you want to report this conversation for review?')) {
+        void runIfConfirmed('Are you sure you want to report this conversation for review?', () => {
             const reason = window.prompt("Please provide a reason for reporting this conversation (optional):");
             if (reason !== null) {
                 onFlagContent('conversation', conversation.id, reason || "No reason provided");
             }
-        }
+        });
     }
   };
 
@@ -297,13 +299,12 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
             <button
               type="button"
               onClick={() => {
-                if (
-                  window.confirm(
-                    'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
-                  )
-                ) {
-                  void onClearChat(conversation.id);
-                }
+                void runIfConfirmed(
+                  'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
+                  () => {
+                    void onClearChat!(conversation.id);
+                  },
+                );
               }}
               className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors"
               aria-label="Clear chat history"

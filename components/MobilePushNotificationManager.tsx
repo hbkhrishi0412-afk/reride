@@ -88,7 +88,7 @@ export const MobilePushNotificationManager: React.FC<MobilePushNotificationManag
       const notificationId = d.notificationId;
       // Defer navigation / state updates off the SW message task (avoids long "message" handler violations).
       queueMicrotask(() => {
-        if (data.pushType === 'deal' && d.leadId && d.action === 'accept_chat') {
+        if (d.pushType === 'deal' && d.leadId && d.action === 'accept_chat') {
           window.dispatchEvent(
             new CustomEvent('reride:native-push-tap', {
               detail: {

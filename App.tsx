@@ -1663,7 +1663,7 @@ const AppContent: React.FC = () => {
     async (leadId: string, conversationId?: string) => {
       if (!currentUser || currentUser.role !== 'seller') {
         addToast('Only the seller can accept chat', 'error');
-        return false;
+        return;
       }
       try {
         await acceptDealChat(leadId, conversationId);
@@ -1680,10 +1680,8 @@ const AppContent: React.FC = () => {
             }
           }
         }
-        return true;
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Failed to accept chat', 'error');
-        return false;
       }
     },
     [currentUser, conversations, addToast, isMobileApp, navigate, setActiveChat, setInboxConversationIdToOpen],

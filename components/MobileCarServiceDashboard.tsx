@@ -16,6 +16,7 @@ import {
 import { nextPrimaryStatus, primaryAdvanceButtonLabel } from '../utils/serviceRequestStatusFlow';
 import { View as ViewEnum } from '../types';
 import { spApiFetch } from '../utils/spApiFetch';
+import { useApp } from './AppProvider';
 
 type IncludedServicePrice = {
   id: string;
@@ -332,6 +333,7 @@ const normalizeRequest = (req: ServiceRequest): ServiceRequest => ({
 });
 
 const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLogout }) => {
+  const { runIfConfirmed } = useApp();
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [localProvider, setLocalProvider] = useState<Provider | null>(provider);
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
@@ -639,8 +641,10 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
   );
 
   const deleteRequest = useCallback(
-    async (id: string) => {
-      if (!window.confirm('Delete this cancelled request?')) return;
+    (id: string) => {
+      void runIfConfirmed(
+        'Delete this cancelled request?',
+        async () => {
       setDeletingId(id);
       setError(null);
       try {
@@ -658,8 +662,11 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       } finally {
         setDeletingId(null);
       }
+        },
+        { variant: 'danger' },
+      );
     },
-    [ flashInfo],
+    [flashInfo, runIfConfirmed],
   );
 
   const toggleServiceActive = useCallback(
@@ -687,8 +694,10 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
   );
 
   const deleteService = useCallback(
-    async (serviceType: string) => {
-      if (!window.confirm(`Remove "${serviceType}" from your services?`)) return;
+    (serviceType: string) => {
+      void runIfConfirmed(
+        `Remove "${serviceType}" from your services?`,
+        async () => {
       setSavingService(true);
       setError(null);
       try {
@@ -708,8 +717,11 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       } finally {
         setSavingService(false);
       }
+        },
+        { variant: 'danger' },
+      );
     },
-    [ flashInfo],
+    [flashInfo, runIfConfirmed],
   );
 
   const upsertService = useCallback(

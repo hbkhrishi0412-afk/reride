@@ -8,7 +8,7 @@
  *   addToast('Saved successfully', 'success');
  */
 
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type { Toast } from '../types';
 
 // ── Context type ────────────────────────────────────────────────────────────
@@ -37,6 +37,15 @@ const AUTO_DISMISS_MS = 5000;
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counterRef = useRef(0);
+  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
 
   const addToast = useCallback((message: string, type: Toast['type']) => {
     counterRef.current += 1;
@@ -44,13 +53,19 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setToasts((prev) => [...prev, { id, message, type }]);
 
-    // Auto-dismiss after timeout
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
+      timersRef.current.delete(id);
     }, AUTO_DISMISS_MS);
+    timersRef.current.set(id, timer);
   }, []);
 
   const removeToast = useCallback((id: number) => {
+    const timer = timersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      timersRef.current.delete(id);
+    }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 

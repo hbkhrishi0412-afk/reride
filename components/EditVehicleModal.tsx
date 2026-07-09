@@ -18,6 +18,7 @@ import {
   getExtraGalleryImages,
   mergeListingImages,
 } from '../lib/universalChecklist/mediaSync';
+import { useApp } from './AppProvider';
 
 interface EditVehicleModalProps {
     vehicle: Vehicle;
@@ -26,6 +27,7 @@ interface EditVehicleModalProps {
 }
 
 const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, onSave }) => {
+    const { addToast } = useApp();
     const [formData, setFormData] = useState<Vehicle>(vehicle);
     const [featureInput, setFeatureInput] = useState('');
     const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'media' | 'offer'>('basic');
@@ -167,7 +169,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
             for (const file of files) {
                 const validation = validateImageFile(file);
                 if (!validation.valid) {
-                    alert(validation.error || 'Invalid image file');
+                    addToast(validation.error || 'Invalid image file', 'error');
                     if (input) input.value = '';
                     return;
                 }
@@ -181,7 +183,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
             const failedUploads = uploadResults.filter(r => !r.success);
             if (failedUploads.length > 0) {
                 const errorMessage = failedUploads.map(r => r.error).join(', ');
-                alert(`Failed to upload ${failedUploads.length} file(s): ${errorMessage}`);
+                addToast(`Failed to upload ${failedUploads.length} file(s): ${errorMessage}`, 'error');
                 if (input) input.value = '';
                 return;
             }
@@ -198,21 +200,21 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                 const remainingSlots = maxImages - currentImages.length;
                 
                 if (remainingSlots <= 0) {
-                    alert(`Maximum ${maxImages} images allowed per vehicle. Please remove some images before adding more.`);
+                    addToast(`Maximum ${maxImages} images allowed per vehicle. Please remove some images before adding more.`, 'warning');
                     if (input) input.value = '';
                     return;
                 }
                 
                 const imagesToAdd = successfulUrls.slice(0, remainingSlots);
                 if (successfulUrls.length > remainingSlots) {
-                    alert(`Only ${remainingSlots} image(s) added. Maximum ${maxImages} images allowed per vehicle.`);
+                    addToast(`Only ${remainingSlots} image(s) added. Maximum ${maxImages} images allowed per vehicle.`, 'warning');
                 }
                 
                 setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...imagesToAdd] }));
             }
         } catch (error) {
             console.error('Error uploading images:', error);
-            alert('Failed to upload images. Please try again.');
+            addToast('Failed to upload images. Please try again.', 'error');
         } finally {
             if (input) input.value = '';
         }
