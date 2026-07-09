@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import type { VehicleData } from '../types';
 import type { VehicleMake, VehicleModel } from '../vehicleDataTypes';
 import { VEHICLE_DATA } from './vehicleData';
+import { ModalBackdrop } from './primitives/Pressable';
 
 interface BulkUploadModalProps {
     onClose: () => void;
@@ -368,8 +369,12 @@ export const VehicleDataBulkUploadModal: React.FC<BulkUploadModalProps> = ({ onC
         : 0;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}>
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <ModalBackdrop
+            onClose={onClose}
+            className="fixed inset-0 flex items-center justify-center z-50 p-4 animate-fade-in"
+            backdropClassName="absolute inset-0 bg-black/60"
+        >
+            <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
                 <div className="p-6 border-b dark:border-gray-200">
                     <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">Bulk Upload Vehicle Data</h2>
                     <p className="text-sm text-reride-text-dark dark:text-reride-text-dark">Upload makes, models, and variants from a CSV or Excel file.</p>
@@ -452,6 +457,6 @@ export const VehicleDataBulkUploadModal: React.FC<BulkUploadModalProps> = ({ onC
                     )}
                 </div>
             </div>
-        </div>
+        </ModalBackdrop>
     );
 };

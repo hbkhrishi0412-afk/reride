@@ -133,6 +133,18 @@ module.exports = {
       },
     },
     {
+      files: ['services/**/*.ts', 'components/**/*.tsx', 'hooks/**/*.ts', 'lib/**/*.ts'],
+      rules: {
+        'no-console': ['error', { allow: ['warn', 'error'] }],
+      },
+    },
+    {
+      files: ['server/**/*.ts', 'api/**/*.ts'],
+      rules: {
+        'no-console': ['error', { allow: ['warn', 'error'] }],
+      },
+    },
+    {
       files: ['api/main.ts'],
       rules: {
         'no-console': 'off',

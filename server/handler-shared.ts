@@ -8,6 +8,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { User as UserType, Vehicle as VehicleType } from '../types.js';
 import { getSecurityConfig } from '../utils/security-config.js';
+import { getTrustedClientIP } from '../utils/trusted-client-ip.js';
 import { verifyToken } from '../utils/security.js';
 import { logWarn } from '../utils/logger.js';
 import { supabaseUserService } from '../services/supabase-user-service.js';
@@ -183,12 +184,12 @@ export const authenticateRequestDual = async (req: VercelRequest): Promise<AuthR
   }
 };
 
-export const requireAuth = (
+export const requireAuth = async (
   req: VercelRequest,
   res: VercelResponse,
   context: string,
-): AuthResult | null => {
-  const auth = authenticateRequest(req);
+): Promise<AuthResult | null> => {
+  const auth = await authenticateRequestDual(req);
   if (!auth.isValid) {
     res.status(401).json({
       success: false,
@@ -199,12 +200,12 @@ export const requireAuth = (
   return auth;
 };
 
-export const requireAdmin = (
+export const requireAdmin = async (
   req: VercelRequest,
   res: VercelResponse,
   context: string,
-): AuthResult | null => {
-  const auth = requireAuth(req, res, context);
+): Promise<AuthResult | null> => {
+  const auth = await requireAuth(req, res, context);
   if (!auth) return null;
   if (auth.user?.role !== 'admin') {
     res.status(403).json({ success: false, reason: 'Admin access required.' });
@@ -253,21 +254,7 @@ export async function checkRateLimit(
 // ── Client IP extraction ────────────────────────────────────────────────────
 
 export function getClientIP(req: VercelRequest): string {
-  const tryHeader = (name: string): string | undefined => {
-    const val = req.headers[name];
-    const str = Array.isArray(val) ? val[0] : val;
-    const ip = str?.split(',')[0]?.trim();
-    return ip && ip !== '::1' && ip !== '127.0.0.1' ? ip : undefined;
-  };
-
-  return (
-    tryHeader('x-vercel-forwarded-for') ??
-    tryHeader('cf-connecting-ip') ??
-    tryHeader('x-forwarded-for') ??
-    tryHeader('x-real-ip') ??
-    req.socket?.remoteAddress ??
-    'unknown'
-  );
+  return getTrustedClientIP(req);
 }
 
 // ── Vehicle cache ───────────────────────────────────────────────────────────

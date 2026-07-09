@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import React, { memo, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
@@ -101,7 +102,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
       URL.revokeObjectURL(url);
       
       // Show success message (you can use a toast here if available)
-      console.log(`✅ Exported ${safeSellerVehicles.length} vehicles successfully`);
+      logInfo(`✅ Exported ${safeSellerVehicles.length} vehicles successfully`);
     } catch (error) {
       console.error('Failed to export data:', error);
       addToast(t('dashboard.exportFailed'), 'error');
@@ -158,7 +159,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
           if (onNavigateToAnalytics) {
             onNavigateToAnalytics();
           } else {
-            console.log('Analytics navigation not available');
+            logInfo('Analytics navigation not available');
           }
         },
       },

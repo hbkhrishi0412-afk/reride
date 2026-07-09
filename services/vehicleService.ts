@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 
 import type { Vehicle, VehicleCategory } from '../types.js';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
@@ -115,12 +116,12 @@ export const getVehiclesLocal = async (): Promise<Vehicle[]> => {
         }
         
         if (process.env.NODE_ENV !== 'production') {
-            console.log('getVehiclesLocal: Starting...');
+            logInfo('getVehiclesLocal: Starting...');
         }
         let vehiclesJson = localStorage.getItem('reRideVehicles');
         if (!vehiclesJson) {
             if (process.env.NODE_ENV !== 'production') {
-                console.log('getVehiclesLocal: No cached data, loading MOCK_VEHICLES...');
+                logInfo('getVehiclesLocal: No cached data, loading MOCK_VEHICLES...');
             }
             // Dynamically import MOCK_VEHICLES to avoid blocking initial load
             const { MOCK_VEHICLES } = await import('../constants');
@@ -128,18 +129,18 @@ export const getVehiclesLocal = async (): Promise<Vehicle[]> => {
             vehiclesJson = JSON.stringify(MOCK_VEHICLES);
         } else {
             if (process.env.NODE_ENV !== 'production') {
-                console.log('getVehiclesLocal: Using cached data');
+                logInfo('getVehiclesLocal: Using cached data');
             }
         }
         const vehicles = JSON.parse(vehiclesJson);
         if (process.env.NODE_ENV !== 'production') {
-            console.log('getVehiclesLocal: Successfully loaded', vehicles.length, 'vehicles');
+            logInfo('getVehiclesLocal: Successfully loaded', vehicles.length, 'vehicles');
         }
         return vehicles;
     } catch (error) {
         if (process.env.NODE_ENV !== 'production') {
             console.error('getVehiclesLocal: Error loading vehicles:', error);
-            console.log('getVehiclesLocal: Returning FALLBACK_VEHICLES as fallback');
+            logInfo('getVehiclesLocal: Returning FALLBACK_VEHICLES as fallback');
         }
         // Return FALLBACK_VEHICLES as final fallback
         return FALLBACK_VEHICLES;
@@ -324,19 +325,19 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
   }
 };
 export const addVehicle = async (vehicleData: Vehicle): Promise<Vehicle> => {
-  console.log('🔧 vehicleService.addVehicle called');
-  console.log('📦 Vehicle data received:', vehicleData);
+  logInfo('🔧 vehicleService.addVehicle called');
+  logInfo('📦 Vehicle data received:', vehicleData);
 
   if (preferApiForMutations()) {
-    console.log('🌐 Attempting API call to /api/vehicles');
+    logInfo('🌐 Attempting API call to /api/vehicles');
     const result = await addVehicleApi(vehicleData);
-    console.log('✅ API call successful:', result);
+    logInfo('✅ API call successful:', result);
     return result;
   }
 
-  console.log('💻 Non-browser runtime — using local storage');
+  logInfo('💻 Non-browser runtime — using local storage');
   const result = await addVehicleLocal(vehicleData);
-  console.log('✅ Local storage save successful:', result);
+  logInfo('✅ Local storage save successful:', result);
   return result;
 };
 

@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import type { ChatMessage, Conversation } from '../types.js';
 import { queueRequest } from '../utils/requestQueue.js';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
@@ -125,7 +126,7 @@ export async function saveConversationToSupabase(conversation: Conversation): Pr
  */
 export async function addMessageToConversation(conversationId: string, message: any): Promise<{ success: boolean; data?: Conversation; error?: string }> {
   try {
-    console.log('📡 Calling API to save message:', { 
+    logInfo('📡 Calling API to save message:', { 
       url: `/api/conversations`, 
       conversationId, 
       messageId: message?.id,
@@ -137,7 +138,7 @@ export async function addMessageToConversation(conversationId: string, message: 
       body: JSON.stringify({ conversationId, message }),
     });
 
-    console.log('📡 API response status:', response.status, response.statusText);
+    logInfo('📡 API response status:', response.status, response.statusText);
 
     const result = await handleApiResponse<{ data?: Conversation; reason?: string; error?: string }>(response);
     if (!result.success) {
@@ -152,7 +153,7 @@ export async function addMessageToConversation(conversationId: string, message: 
       return { success: false, error: errorMessage };
     }
 
-    console.log('✅ API success response:', { conversationId, hasData: !!result.data?.data });
+    logInfo('✅ API success response:', { conversationId, hasData: !!result.data?.data });
     return { success: true, data: result.data?.data };
   } catch (error) {
     console.error('❌ Network error adding message to conversation:', {

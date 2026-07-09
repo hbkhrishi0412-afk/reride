@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { VehicleData } from '../types';
 import { VehicleCategory } from '../types';
+import { ModalBackdrop } from './primitives/Pressable';
 
 interface SellerFormPreviewProps {
   vehicleData: VehicleData;
@@ -67,8 +68,8 @@ const SellerFormPreview: React.FC<SellerFormPreviewProps> = ({ vehicleData, onCl
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+    <ModalBackdrop onClose={onClose} className="fixed inset-0 flex items-center justify-center z-50 p-4" backdropClassName="absolute inset-0 bg-black/60">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="bg-gradient-to-r from-green-600 to-emerald-700 p-6 rounded-t-2xl text-white">
           <div className="flex items-center justify-between">
@@ -300,7 +301,7 @@ const SellerFormPreview: React.FC<SellerFormPreviewProps> = ({ vehicleData, onCl
           </div>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 };
 

@@ -19,6 +19,7 @@ import {
   mergeListingImages,
 } from '../lib/universalChecklist/mediaSync';
 import { useApp } from './AppProvider';
+import { ModalBackdrop } from './primitives/Pressable';
 
 interface EditVehicleModalProps {
     vehicle: Vehicle;
@@ -361,8 +362,12 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
     );
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <ModalBackdrop
+            onClose={onClose}
+            className="fixed inset-0 flex items-center justify-center z-50 p-4 animate-fade-in"
+            backdropClassName="absolute inset-0 bg-black/60"
+        >
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col">
                 <form onSubmit={handleSubmit} className="flex flex-col h-full">
                     {/* Header */}
                     <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-reride-orange to-reride-blue">
@@ -845,7 +850,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                     </div>
                 </form>
             </div>
-        </div>
+        </ModalBackdrop>
     );
 };
 

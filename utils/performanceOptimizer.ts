@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 /**
  * Performance optimization utilities for the ReRide application
  */
@@ -94,7 +95,7 @@ export const measurePerformance = (name: string, fn: () => void) => {
     const start = performance.now();
     fn();
     const end = performance.now();
-    console.log(`${name} took ${end - start} milliseconds`);
+    logInfo(`${name} took ${end - start} milliseconds`);
   } else {
     fn();
   }
@@ -110,7 +111,7 @@ export const analyzeBundleSize = () => {
       return total + (resource.transferSize || 0);
     }, 0);
 
-    console.log('Bundle Analysis:', {
+    logInfo('Bundle Analysis:', {
       totalSize: `${(totalSize / 1024).toFixed(2)} KB`,
       loadTime: `${navigation.loadEventEnd - navigation.loadEventStart}ms`,
       domContentLoaded: `${navigation.domContentLoadedEventEnd - navigation.domContentLoadedEventStart}ms`,

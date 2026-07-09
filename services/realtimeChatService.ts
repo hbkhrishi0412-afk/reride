@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 /**
  * Real-time Chat Service for Buyer-Seller Conversations
  *
@@ -256,7 +257,7 @@ class RealtimeChatService {
       const messageForPersistence: ChatMessage = { ...message };
       delete messageForPersistence.status;
 
-      console.log('💾 Saving message to database:', { conversationId, messageId: message.id });
+      logInfo('💾 Saving message to database:', { conversationId, messageId: message.id });
       const saveResult = await addMessageToConversation(conversationId, messageForPersistence);
       const persisted = !!saveResult.success;
 
@@ -275,7 +276,7 @@ class RealtimeChatService {
           console.warn('⚠️ Database save failed');
         }
       } else {
-        console.log('✅ Message saved to database successfully');
+        logInfo('✅ Message saved to database successfully');
       }
 
       return { success: saveResult.success, persisted, error: saveResult.error };

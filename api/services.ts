@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
-import { authenticateRequest } from './auth.js';
+import { authenticateRequestDual } from './auth.js';
 import { applyCors } from '../lib/api-route-cors.js';
 
 interface Service {
@@ -23,7 +22,7 @@ interface AuthContext {
   isAuthenticated: boolean;
   isAdmin: boolean;
   email?: string;
-  source: 'supabase' | 'legacy-jwt' | 'none';
+  source: 'dual' | 'none';
   error?: string;
 }
 
@@ -46,47 +45,25 @@ async function getUserRoleByEmail(email: string, supabase: ReturnType<typeof get
 }
 
 async function getAuthContext(req: VercelRequest, supabase: ReturnType<typeof getSupabaseAdminClient>): Promise<AuthContext> {
-  // Try Supabase JWT first
-  try {
-    const decoded = await verifyIdTokenFromHeader(req);
-    const email = decoded.email?.toLowerCase().trim();
-    const metadataRole =
-      decoded.user?.app_metadata?.role ||
-      decoded.user?.user_metadata?.role;
-
-    const dbRole = email ? await getUserRoleByEmail(email, supabase) : null;
-    const resolvedRole = metadataRole || dbRole;
-
-    return {
-      isAuthenticated: true,
-      isAdmin: resolvedRole === 'admin',
-      email,
-      source: 'supabase',
-    };
-  } catch {
-    // Fall through to legacy JWT auth
-  }
-
-  // Legacy application JWT (reRideAccessToken)
-  const legacyAuth = authenticateRequest(req);
-  if (!legacyAuth.isValid || !legacyAuth.user) {
+  const auth = await authenticateRequestDual(req);
+  if (!auth.isValid || !auth.user) {
     return {
       isAuthenticated: false,
       isAdmin: false,
       source: 'none',
-      error: legacyAuth.error || 'Authentication required',
+      error: auth.error || 'Authentication required',
     };
   }
 
-  const legacyEmail = legacyAuth.user.email?.toLowerCase().trim();
-  const dbRole = legacyEmail ? await getUserRoleByEmail(legacyEmail, supabase) : null;
-  const resolvedRole = dbRole || legacyAuth.user.role;
+  const email = auth.user.email?.toLowerCase().trim();
+  const dbRole = email ? await getUserRoleByEmail(email, supabase) : null;
+  const resolvedRole = dbRole || auth.user.role;
 
   return {
     isAuthenticated: true,
     isAdmin: resolvedRole === 'admin',
-    email: legacyEmail,
-    source: 'legacy-jwt',
+    email,
+    source: 'dual',
   };
 }
 

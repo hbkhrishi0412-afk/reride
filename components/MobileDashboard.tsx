@@ -1,5 +1,6 @@
 import React, { useState, memo, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { logInfo } from '../utils/logger.js';
 import type { User, Vehicle, Conversation, Notification } from '../types';
 import { View as ViewEnum, VehicleCategory } from '../types';
 import { planService } from '../services/planService';
@@ -393,7 +394,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         return;
       }
       if (type === 'error') console.error(message);
-      else console.info(message);
+      else logInfo(message);
     },
     [addToast],
   );

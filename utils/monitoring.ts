@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 /**
  * Monitoring and Observability Utilities
  * Centralized error tracking, performance monitoring, and logging
@@ -126,7 +127,7 @@ export function initWebVitals(onPerfEntry?: (metric: WebVitals) => void): void {
       
       // Log to console in development
       if (process.env.NODE_ENV === 'development') {
-        console.log(`[Web Vitals] ${metric.name}: ${metric.value.toFixed(2)}ms`);
+        logInfo(`[Web Vitals] ${metric.name}: ${metric.value.toFixed(2)}ms`);
       }
     };
 
@@ -171,10 +172,13 @@ export function structuredLog(
     logBuffer.shift();
   }
 
-  // In production, send to logging service
+  // In production, forward to error tracking / remote logging when configured.
   if (process.env.NODE_ENV === 'production') {
-    // TODO: Send to centralized logging service
-    // fetch('/api/logs', { method: 'POST', body: JSON.stringify(entry) })
+    if (level === 'error') {
+      trackError(new Error(message), context);
+    } else {
+      trackMessage(message, level === 'debug' ? 'info' : level);
+    }
   } else {
     console[level](`[${entry.timestamp}] ${message}`, context || '');
   }

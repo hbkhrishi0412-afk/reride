@@ -43,8 +43,15 @@ module.exports = {
     '!**/e2e/**',
     '!**/dist/**',
   ],
-  // Global 70% is not met while collectCoverageFrom includes most UI; threshold removed so CI passes.
-  // Raise thresholds or narrow collectCoverageFrom when you want enforcement.
+  // Incremental coverage enforcement — raise as test suite grows.
+  coverageThreshold: {
+    global: {
+      branches: 5,
+      functions: 5,
+      lines: 8,
+      statements: 8,
+    },
+  },
   coverageReporters: ['text', 'lcov', 'html'],
   testTimeout: 10000,
   clearMocks: true,

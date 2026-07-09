@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import React, { useState, useMemo, useEffect, useCallback, memo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle, User, Conversation, VehicleData, ChatMessage, PlanDetails, SubscriptionPlan } from '../types';
@@ -48,7 +49,7 @@ function dashboardNotify(
     return;
   }
   if (type === 'error') console.error(message);
-  else console.info(message);
+  else logInfo(message);
 }
 import { getPlaceholderImage } from './vehicleData';
 import PricingGuidance from './PricingGuidance';
@@ -64,6 +65,7 @@ import {
 } from '../utils/listingPlanRules';
 import PaymentStatusCard from './PaymentStatusCard';
 import { PaymentErrorBoundary } from './ErrorBoundaries';
+import { Pressable } from './primitives/Pressable';
 import { VehicleOfferBanner } from './VehicleOfferBanner';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
@@ -1455,7 +1457,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 }
                 
                 setFormData(prev => ({ ...prev, images: [...prev.images, ...imagesToAdd] }));
-                console.log(`✅ Successfully uploaded ${imagesToAdd.length} image(s) (${currentImages.length + imagesToAdd.length}/${maxImages} total)`);
+                logInfo(`✅ Successfully uploaded ${imagesToAdd.length} image(s) (${currentImages.length + imagesToAdd.length}/${maxImages} total)`);
             } else {
                 console.warn('⚠️ No images were successfully uploaded');
                 notify('No images were uploaded. Please try again.');
@@ -1521,10 +1523,10 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             notify('Your subscription plan has expired. Please renew your plan to create new listings.');
             return;
         }
-        console.log('📝 Dashboard form submitted');
-        console.log('📋 Form data:', formData);
-        console.log('⭐ Is featuring:', isFeaturing);
-        console.log('✉️ Seller email in form:', formData.sellerEmail);
+        logInfo('📝 Dashboard form submitted');
+        logInfo('📋 Form data:', formData);
+        logInfo('⭐ Is featuring:', isFeaturing);
+        logInfo('✉️ Seller email in form:', formData.sellerEmail);
         
         // CRITICAL FIX: Validate required numeric fields BEFORE sanitization
         const priceValue = typeof formData.price === 'string' ? parseFloat(formData.price) : formData.price;
@@ -1552,8 +1554,8 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             noOfOwners: typeof formData.noOfOwners === 'string' ? parseInt(formData.noOfOwners, 10) : formData.noOfOwners,
         };
         
-        console.log('🔄 Sanitized form data:', sanitizedFormData);
-        console.log('💰 Price check:', { original: formData.price, sanitized: sanitizedFormData.price, type: typeof sanitizedFormData.price });
+        logInfo('🔄 Sanitized form data:', sanitizedFormData);
+        logInfo('💰 Price check:', { original: formData.price, sanitized: sanitizedFormData.price, type: typeof sanitizedFormData.price });
         
         const runEnhancement = async (base: typeof sanitizedFormData) => {
             const result = await enhanceVehicleListing(
@@ -1574,7 +1576,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         };
 
         if (editingVehicle) {
-            console.log('✏️ Editing existing vehicle:', editingVehicle.id);
+            logInfo('✏️ Editing existing vehicle:', editingVehicle.id);
             try {
                 const enhanced = await runEnhancement(sanitizedFormData);
                 if (!enhanced) return;
@@ -1589,9 +1591,9 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             return;
         }
 
-        console.log('➕ Adding new vehicle');
-        console.log('📧 Seller email in sanitized data:', sanitizedFormData.sellerEmail);
-        console.log('📧 Seller email from props:', seller.email);
+        logInfo('➕ Adding new vehicle');
+        logInfo('📧 Seller email in sanitized data:', sanitizedFormData.sellerEmail);
+        logInfo('📧 Seller email from props:', seller.email);
         try {
             const enhanced = await runEnhancement(sanitizedFormData);
             if (!enhanced) return;
@@ -2288,7 +2290,7 @@ const InquiriesView: React.FC<{
         // Filter conversations to only show those for the current seller
         if (!conversations || !Array.isArray(conversations) || !sellerEmail) {
           if (process.env.NODE_ENV === 'development') {
-            console.log('🔍 InquiriesView: No conversations or sellerEmail', {
+            logInfo('🔍 InquiriesView: No conversations or sellerEmail', {
               conversationsLength: conversations?.length || 0,
               sellerEmail: sellerEmail || 'missing'
             });
@@ -2300,7 +2302,7 @@ const InquiriesView: React.FC<{
         const normalizedSellerEmail = (sellerEmail || '').toLowerCase().trim();
         
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔍 InquiriesView: Filtering conversations', {
+          logInfo('🔍 InquiriesView: Filtering conversations', {
             totalConversations: conversations.length,
             normalizedSellerEmail,
             conversations: conversations.map(c => ({
@@ -2317,7 +2319,7 @@ const InquiriesView: React.FC<{
         const sellerConversations = conversations.filter(conv => {
           if (!conv || !conv.sellerId) {
             if (process.env.NODE_ENV === 'development') {
-              console.log('⚠️ InquiriesView: Skipping conversation - missing sellerId', { convId: conv?.id });
+              logInfo('⚠️ InquiriesView: Skipping conversation - missing sellerId', { convId: conv?.id });
             }
             return false;
           }
@@ -2325,7 +2327,7 @@ const InquiriesView: React.FC<{
         });
         
         if (process.env.NODE_ENV === 'development') {
-          console.log('✅ InquiriesView: Filtered conversations', {
+          logInfo('✅ InquiriesView: Filtered conversations', {
             matchedCount: sellerConversations.length,
             matchedIds: sellerConversations.map(c => c.id)
           });
@@ -2367,7 +2369,11 @@ const InquiriesView: React.FC<{
                 ? new Date(conv.lastMessageAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
                 : 'N/A';
               return (
-              <div key={conv.id} onClick={() => handleSelectConversation(conv)} className="p-4 rounded-lg cursor-pointer hover:bg-brand-gray-light dark:hover:bg-white border-b dark:border-gray-200 flex items-center justify-between">
+              <Pressable
+                key={conv.id}
+                onPress={() => handleSelectConversation(conv)}
+                className="p-4 rounded-lg cursor-pointer hover:bg-brand-gray-light dark:hover:bg-white border-b dark:border-gray-200 flex items-center justify-between w-full text-left"
+              >
                 <div className="flex items-center gap-3">
                     {!conv.isReadBySeller && <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF6B35' }}></div>}
                     <div>
@@ -2395,7 +2401,7 @@ const InquiriesView: React.FC<{
                   )}
                   <span className="text-xs text-reride-text-dark dark:text-reride-text-dark">{lastMessageTime}</span>
                 </div>
-              </div>
+              </Pressable>
             );
             }) : (
                 <div className="text-center py-16 px-6">
@@ -2761,7 +2767,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   }));
                   
                   if (process.env.NODE_ENV === 'development') {
-                    console.log('✅ User data updated in localStorage (plan expiry changed)');
+                    logInfo('✅ User data updated in localStorage (plan expiry changed)');
                   }
                 } catch (storageError) {
                   if (process.env.NODE_ENV === 'development') {
@@ -2859,7 +2865,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               // Dispatch custom event for same-tab sync
               window.dispatchEvent(new CustomEvent('vehicleDataUpdated', { detail: { vehicleData: freshData } }));
               if (process.env.NODE_ENV === 'development') {
-                console.log('✅ Vehicle data refreshed when opening form');
+                logInfo('✅ Vehicle data refreshed when opening form');
               }
             } catch (storageError) {
               // Log storage errors but don't crash
@@ -3101,7 +3107,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               // Update local state instead of reloading page
               onUpdateVehicle(result.vehicle);
               if (process.env.NODE_ENV === 'development') {
-                console.log('✅ Vehicle refreshed successfully');
+                logInfo('✅ Vehicle refreshed successfully');
               }
             }
           } catch (jsonError) {
@@ -3207,7 +3213,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               // Update local state
               onUpdateVehicle(result.vehicle);
               if (process.env.NODE_ENV === 'development') {
-                console.log('✅ Certification request submitted');
+                logInfo('✅ Certification request submitted');
               }
             }
           } catch (jsonError) {
@@ -3255,7 +3261,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               // Update local state
               onUpdateVehicle(result.vehicle);
               if (process.env.NODE_ENV === 'development') {
-                console.log('✅ Vehicle marked as sold');
+                logInfo('✅ Vehicle marked as sold');
               }
             } else if (result && result.reason) {
               if (process.env.NODE_ENV === 'development') {
@@ -3310,7 +3316,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               // Update local state
               onUpdateVehicle(result.vehicle);
               if (process.env.NODE_ENV === 'development') {
-                console.log('✅ Vehicle marked as unsold');
+                logInfo('✅ Vehicle marked as unsold');
               }
             } else if (result && result.reason) {
               if (process.env.NODE_ENV === 'development') {
@@ -3345,7 +3351,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   };
 
   const handleFeatureVehicle = async (vehicleId: number) => {
-    console.log('🚀 handleFeatureVehicle called for vehicle:', vehicleId);
+    logInfo('🚀 handleFeatureVehicle called for vehicle:', vehicleId);
     try {
       await onFeatureListing(vehicleId);
     } catch (error) {
@@ -3925,7 +3931,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    console.log('🔄 Mark as sold button clicked for vehicle:', v.id);
+                                    logInfo('🔄 Mark as sold button clicked for vehicle:', v.id);
                                     handleMarkAsSold(v.id);
                                 }} 
                                 className="px-1.5 py-0.5 text-reride-orange hover:text-reride-orange text-xs border border-reride-orange rounded hover:bg-reride-orange-light cursor-pointer"
@@ -3937,7 +3943,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    console.log('🔄 Edit vehicle button clicked for vehicle:', v.id);
+                                    logInfo('🔄 Edit vehicle button clicked for vehicle:', v.id);
                                     handleEditClick(v);
                                 }} 
                                 className="px-1.5 py-0.5 text-reride-blue hover:text-reride-blue text-xs border border-reride-blue rounded hover:bg-reride-blue-light cursor-pointer"
@@ -3949,7 +3955,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    console.log('🔄 Delete vehicle button clicked for vehicle:', v.id);
+                                    logInfo('🔄 Delete vehicle button clicked for vehicle:', v.id);
                                     onDeleteVehicle(v.id);
                                 }} 
                                 className="px-1.5 py-0.5 text-red-600 hover:text-red-700 text-xs border border-red-600 rounded hover:bg-red-50 cursor-pointer"
@@ -4014,7 +4020,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                   onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
-                                      console.log('🔄 Mark as sold button clicked for vehicle:', v.id);
+                                      logInfo('🔄 Mark as sold button clicked for vehicle:', v.id);
                                       handleMarkAsSold(v.id);
                                   }} 
                                   className="px-1.5 py-0.5 text-reride-orange text-xs border border-reride-orange rounded cursor-pointer"
@@ -4027,7 +4033,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                   onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
-                                      console.log('🔄 Edit vehicle button clicked for vehicle:', v.id);
+                                      logInfo('🔄 Edit vehicle button clicked for vehicle:', v.id);
                                       handleEditClick(v);
                                   }} 
                                   className="px-1.5 py-0.5 text-reride-blue text-xs border border-reride-blue rounded cursor-pointer"
@@ -4040,7 +4046,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                   onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
-                                      console.log('🔄 Delete vehicle button clicked for vehicle:', v.id);
+                                      logInfo('🔄 Delete vehicle button clicked for vehicle:', v.id);
                                       onDeleteVehicle(v.id);
                                   }} 
                                   className="px-1.5 py-0.5 text-red-600 text-xs border border-red-600 rounded cursor-pointer"

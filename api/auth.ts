@@ -1,6 +1,8 @@
 import type { VercelRequest } from '@vercel/node';
 import { verifyToken } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
+import { verifySupabaseToken } from '../server/supabase-auth.js';
+import { resolveAuthRoleFromEmail } from '../utils/resolveAuthRole.js';
 
 // Authentication middleware
 export interface AuthResult {
@@ -37,6 +39,33 @@ export const authenticateRequest = (req: VercelRequest): AuthResult => {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Invalid or expired token';
     return { isValid: false, error: message };
+  }
+};
+
+/** App JWT (reRideAccessToken) or Supabase access_token in Authorization header. */
+export const authenticateRequestDual = async (req: VercelRequest): Promise<AuthResult> => {
+  const legacy = authenticateRequest(req);
+  if (legacy.isValid) return legacy;
+
+  try {
+    const sb = await verifySupabaseToken(req.headers.authorization);
+    const email = (sb.email || '').toLowerCase().trim();
+    if (!email) {
+      return { isValid: false, error: 'Invalid Supabase token' };
+    }
+    const meta = sb.user?.app_metadata as Record<string, unknown> | undefined;
+    const appMetaRole = typeof meta?.role === 'string' ? meta.role : undefined;
+    const role = await resolveAuthRoleFromEmail(email, appMetaRole);
+    return {
+      isValid: true,
+      user: {
+        userId: sb.uid,
+        email,
+        role,
+      },
+    };
+  } catch {
+    return { isValid: false, error: legacy.error || 'Authentication required' };
   }
 };
 

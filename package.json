@@ -130,7 +130,8 @@
     "validator": "^13.15.35",
     "web-push": "^3.6.7",
     "web-vitals": "^5.1.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.2.1"
   },
   "devDependencies": {
     "@babel/core": "^7.24.9",

@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
-import { authenticateRequest } from './auth.js';
+import { authenticateRequestDual } from './auth.js';
 import { supabaseServiceRequestService } from '../services/supabase-service-request-service.js';
 import { supabaseUserService } from '../services/supabase-user-service.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
@@ -274,28 +273,16 @@ async function notifyProviderOnCancel(
   }
 }
 
-async function resolveRoleForSupabaseUser(decoded: {
-  uid: string;
-  email: string;
-  user: { app_metadata?: { role?: string }; user_metadata?: { role?: string } } | null;
-}): Promise<string> {
-  let resolvedRole =
-    decoded.user?.app_metadata?.role || decoded.user?.user_metadata?.role || 'customer';
-
-  if (resolvedRole !== 'admin' && decoded.email) {
-    try {
-      const profile = await supabaseUserService.findByEmail(decoded.email);
-      if (profile?.role) {
-        resolvedRole = profile.role;
-      }
-    } catch {
-      // Keep JWT-derived role if user lookup fails
-    }
+async function resolveServiceRequestActor(req: VercelRequest): Promise<ActorInfo> {
+  const auth = await authenticateRequestDual(req);
+  if (!auth.isValid || !auth.user?.userId) {
+    throw new Error(auth.error || 'Authentication required');
   }
 
+  let resolvedRole = auth.user.role || 'customer';
   if (resolvedRole !== 'admin' && !isServiceProviderRole(String(resolvedRole))) {
     try {
-      const sp = await supabaseServiceProviderService.findById(decoded.uid);
+      const sp = await supabaseServiceProviderService.findById(auth.user.userId);
       if (sp) {
         resolvedRole = 'service_provider';
       }
@@ -303,52 +290,7 @@ async function resolveRoleForSupabaseUser(decoded: {
       /* ignore */
     }
   }
-  return String(resolvedRole);
-}
-
-/**
- * Order matches `getBrowserAccessTokenForApi`: try app JWT first, then Supabase.
- * Supabase getUser() rejects reRide tokens; if we try Supabase first, we still fall back, but
- * "Invalid token format" from jsonwebtoken for the wrong *kind* of JWT confused operators.
- */
-async function resolveServiceRequestActor(req: VercelRequest): Promise<ActorInfo> {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ') || authHeader.substring(7).trim() === '') {
-    throw new Error('Missing bearer token');
-  }
-
-  const legacy = authenticateRequest(req);
-  if (legacy.isValid && legacy.user?.userId) {
-    let resolvedRole = legacy.user.role || 'customer';
-    if (resolvedRole !== 'admin' && !isServiceProviderRole(String(resolvedRole))) {
-      try {
-        const sp = await supabaseServiceProviderService.findById(legacy.user.userId);
-        if (sp) {
-          resolvedRole = 'service_provider';
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    return { id: legacy.user.userId, role: String(resolvedRole) };
-  }
-
-  try {
-    const decoded = await verifyIdTokenFromHeader(req);
-    const resolvedRole = await resolveRoleForSupabaseUser(decoded);
-    return { id: decoded.uid, role: resolvedRole };
-  } catch (supabaseErr) {
-    const supMsg = supabaseErr instanceof Error ? supabaseErr.message : String(supabaseErr);
-    const legMsg = legacy.error;
-    // reRide JWT and Supabase JWT use different secrets; a valid Supabase access token
-    // always fails legacy verify with "Invalid token format". Do not chain that with
-    // the real error (e.g. expired session) or operators see a useless combined message.
-    const legacyFormatMismatch = !legacy.isValid && legMsg === 'Invalid token format';
-    if (legMsg && supMsg && legMsg !== supMsg && !legacyFormatMismatch) {
-      throw new Error(`Authentication failed: ${legMsg} | ${supMsg}`);
-    }
-    throw new Error(supMsg || legMsg || 'Authentication required');
-  }
+  return { id: auth.user.userId, role: String(resolvedRole) };
 }
 
 // ServiceRequestPayload is now imported from the service file

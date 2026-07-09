@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import type { Conversation, Notification, BuyerActivity } from '../types.js';
 import { saveConversationToSupabase, addMessageToConversation } from './conversationService.js';
 import { saveNotificationToSupabase, updateNotificationInSupabase } from './notificationService.js';
@@ -113,13 +114,13 @@ export async function processSyncQueue(): Promise<{ success: number; failed: num
       if (syncSuccess) {
         success++;
         toRemove.push(item.id);
-        console.log(`✅ Successfully synced ${item.type}:`, item.id);
+        logInfo(`✅ Successfully synced ${item.type}:`, item.id);
       } else {
         // Retry logic
         if (item.retries < MAX_RETRIES) {
           item.retries++;
           toRetry.push(item);
-          console.log(`⚠️ Retrying sync for ${item.type} (attempt ${item.retries}/${MAX_RETRIES}):`, item.id);
+          logInfo(`⚠️ Retrying sync for ${item.type} (attempt ${item.retries}/${MAX_RETRIES}):`, item.id);
         } else {
           failed++;
           toRemove.push(item.id);

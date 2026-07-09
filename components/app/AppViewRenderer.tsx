@@ -30,6 +30,9 @@ import {
   DashboardErrorBoundary,
   AdminPanelErrorBoundary,
   AuthenticationErrorBoundary,
+  HomeErrorBoundary,
+  VehicleDetailErrorBoundary,
+  ServiceCartErrorBoundary,
 } from '../ErrorBoundaries';
 import { DashboardSkeleton, MobileDashboardSkeleton, LoadingSpinner } from './AppViewSkeletons';
 import type { AppApiResponse, AppServiceProvider, AppServiceRequestPayload } from '../../types/appServiceTypes';
@@ -317,6 +320,7 @@ switch (currentView) {
     if (isMobileApp) {
       // Return just the component - MobileLayout wrapper is handled by outer wrapper
       return (
+        <HomeErrorBoundary>
         <MobileHomePage
           onSearch={(query) => {
             setInitialSearchQuery(query);
@@ -360,9 +364,11 @@ switch (currentView) {
           onRetryCatalogLoad={() => void refreshVehicles({ userInitiated: true })}
           currentUser={currentUser}
         />
+        </HomeErrorBoundary>
       );
     }
     return (
+      <HomeErrorBoundary>
       <Home 
         onSearch={(query) => {
           setInitialSearchQuery(query);
@@ -410,6 +416,7 @@ switch (currentView) {
         onRetryCatalogLoad={() => void refreshVehicles({ userInitiated: true })}
         currentUser={currentUser}
       />
+      </HomeErrorBoundary>
     );
 
   case ViewEnum.USED_CARS: {
@@ -558,6 +565,7 @@ switch (currentView) {
     // Use MobileVehicleDetail for mobile app, VehicleDetail for desktop
     if (isMobileApp) {
       return (
+        <VehicleDetailErrorBoundary>
         <MobileVehicleDetail
           vehicle={vehicleToDisplay}
           onBack={() => goBack(ViewEnum.USED_CARS)}
@@ -583,10 +591,12 @@ switch (currentView) {
           recommendations={recommendations}
           onSelectVehicle={selectVehicle}
         />
+        </VehicleDetailErrorBoundary>
       );
     }
     
     return (
+      <VehicleDetailErrorBoundary>
       <VehicleDetail
         vehicle={vehicleToDisplay}
         onBack={() => goBack(ViewEnum.USED_CARS)}
@@ -604,6 +614,7 @@ switch (currentView) {
         recommendations={recommendations}
         onSelectVehicle={selectVehicle}
       />
+      </VehicleDetailErrorBoundary>
     );
   }
 
@@ -1764,6 +1775,7 @@ switch (currentView) {
 
   case ViewEnum.SERVICE_CART:
     return (
+      <ServiceCartErrorBoundary>
       <ServiceCart
         isLoggedIn={!!currentUser}
         customerUserId={currentUser?.id ?? null}
@@ -1774,6 +1786,7 @@ switch (currentView) {
         isLocating={isLocating}
         locationError={locationError || undefined}
       />
+      </ServiceCartErrorBoundary>
     );
 
   case ViewEnum.PRICING: {

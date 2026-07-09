@@ -185,7 +185,7 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    console.log(`🌐 Attempt ${attempt}/${maxRetries}: Trying to save to Supabase...`);
+    logInfo(`🌐 Attempt ${attempt}/${maxRetries}: Trying to save to Supabase...`);
     
     // Try consolidated endpoint first
     try {
@@ -199,7 +199,7 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
         if (result && typeof result === 'object' && result.success === false) {
           console.warn('⚠️ Consolidated endpoint returned success:false:', result.reason || result);
         } else {
-        console.log('✅ Vehicle data saved to Supabase via consolidated endpoint:', result);
+        logInfo('✅ Vehicle data saved to Supabase via consolidated endpoint:', result);
         
         // Supabase save succeeded - NOW save to localStorage
         if (isStorageAvailable()) {
@@ -236,7 +236,7 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
         if (result && typeof result === 'object' && result.success === false) {
           console.warn('⚠️ Standalone endpoint returned success:false:', result.reason || result);
         } else {
-        console.log('✅ Vehicle data saved to Supabase via standalone endpoint:', result);
+        logInfo('✅ Vehicle data saved to Supabase via standalone endpoint:', result);
         
         // Supabase save succeeded - NOW save to localStorage
         if (isStorageAvailable()) {
@@ -264,7 +264,7 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
     // Wait before retry (exponential backoff)
     if (attempt < maxRetries) {
       const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
-      console.log(`⏳ Waiting ${delay}ms before retry...`);
+      logInfo(`⏳ Waiting ${delay}ms before retry...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }

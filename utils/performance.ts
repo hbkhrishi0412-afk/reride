@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 // Performance monitoring utilities
 
 /**
@@ -14,12 +15,12 @@ export const measurePerformance = <T extends (...args: unknown[]) => unknown>(
     if (result instanceof Promise) {
       return result.finally(() => {
         const end = performance.now();
-        console.log(`⚡ ${label}: ${(end - start).toFixed(2)}ms`);
+        logInfo(`⚡ ${label}: ${(end - start).toFixed(2)}ms`);
       });
     }
     
     const end = performance.now();
-    console.log(`⚡ ${label}: ${(end - start).toFixed(2)}ms`);
+    logInfo(`⚡ ${label}: ${(end - start).toFixed(2)}ms`);
     return result;
   }) as T;
 };
@@ -52,7 +53,7 @@ export const reportWebVitals = (onPerfEntry?: (metric: PerformanceEntry) => void
           }
         };
       } catch (error) {
-        console.log('PerformanceObserver not available');
+        logInfo('PerformanceObserver not available');
         return () => {}; // Return empty cleanup function
       }
     }
@@ -129,9 +130,9 @@ export const logPerformanceMetrics = () => {
     const renderTime = perfData.domComplete - perfData.domLoading;
     
     console.group('📊 Performance Metrics');
-    console.log(`Page Load Time: ${pageLoadTime}ms`);
-    console.log(`Connect Time: ${connectTime}ms`);
-    console.log(`Render Time: ${renderTime}ms`);
+    logInfo(`Page Load Time: ${pageLoadTime}ms`);
+    logInfo(`Connect Time: ${connectTime}ms`);
+    logInfo(`Render Time: ${renderTime}ms`);
     console.groupEnd();
   }
 };

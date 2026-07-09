@@ -11,6 +11,11 @@
 import { resolveApiUrl, isCapacitorNative, isApiRequestCrossOrigin } from './apiConfig.js';
 import { getNativeMemoryAccessToken } from './nativeTokenStorage.js';
 import { getCachedSupabaseAccessTokenSync } from './supabaseNativeAuthStorage.js';
+import {
+  clearWebMemoryAccessToken,
+  getWebMemoryAccessToken,
+  setWebMemoryAccessToken,
+} from './webTokenStorage.js';
 
 /** First-party web: refresh token is HttpOnly; Capacitor / cross-API-origin still use JSON + localStorage. */
 export function useHttpOnlyRefreshCookie(): boolean {
@@ -130,13 +135,32 @@ function getCustomJwtFromBrowserStorage(): string | null {
       if (exp == null || exp > nowSec + 60) return native.trim();
     }
   }
+  if (useHttpOnlyRefreshCookie()) {
+    const mem = getWebMemoryAccessToken();
+    if (mem && looksLikeJwt(mem)) {
+      const exp = jwtExpSeconds(mem);
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (exp == null || exp > nowSec + 60) return mem;
+    }
+    return getSupabaseAccessTokenFromStorage();
+  }
   let custom: string | null = null;
   try {
     if (typeof sessionStorage !== 'undefined') {
       custom = sessionStorage.getItem('reRideAccessToken');
     }
-    if (!custom && typeof localStorage !== 'undefined') {
-      custom = localStorage.getItem('reRideAccessToken');
+    // Migrate legacy localStorage tokens to sessionStorage (web only; never read from localStorage)
+    if (!custom && !isCapacitorNative() && typeof localStorage !== 'undefined') {
+      const legacy = localStorage.getItem('reRideAccessToken');
+      if (legacy) {
+        try {
+          sessionStorage?.setItem('reRideAccessToken', legacy);
+        } catch {
+          /* ignore */
+        }
+        localStorage.removeItem('reRideAccessToken');
+        custom = legacy;
+      }
     }
   } catch {
     return null;
@@ -170,6 +194,7 @@ function getCustomJwtFromBrowserStorage(): string | null {
 }
 
 export function clearSessionStoredAccessToken(): void {
+  clearWebMemoryAccessToken();
   try {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem('reRideAccessToken');

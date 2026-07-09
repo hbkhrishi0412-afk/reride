@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 
 import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
@@ -154,7 +155,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     // Auto-open when conversation is first set (even with no messages)
     if (!hasOpenedOnce) {
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔧 Auto-opening chat - conversation initialized', { 
+        logInfo('🔧 Auto-opening chat - conversation initialized', { 
           conversationId: conversation.id,
           hasMessages: visibleMessages.length > 0
         });
@@ -164,7 +165,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     } else if (visibleMessages.length > 0 && isMinimized && !userManuallyClosed && !isExiting) {
       // Also auto-open if new messages arrive while minimized (only if not manually closed and not exiting)
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔧 Auto-opening chat - new messages received');
+        logInfo('🔧 Auto-opening chat - new messages received');
       }
       setIsMinimized(false);
     }
@@ -261,7 +262,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
     onUserStoppedTyping?.(conversation.id);
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔧 ChatWidget sending message:', inputText);
+      logInfo('🔧 ChatWidget sending message:', inputText);
     }
     onSendMessage(inputText);
     setInputText('');
@@ -344,7 +345,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     }
     
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔧 ChatWidget: handleClose called', { 
+      logInfo('🔧 ChatWidget: handleClose called', { 
         isExiting, 
         isMinimized,
         conversationId: conversation.id 
@@ -354,7 +355,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     // Prevent multiple close calls
     if (isExiting) {
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔧 ChatWidget: Already closing, ignoring duplicate close call');
+        logInfo('🔧 ChatWidget: Already closing, ignoring duplicate close call');
       }
       return;
     }
@@ -368,7 +369,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     // Close immediately - call onClose directly
     try {
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔧 ChatWidget: Calling onClose callback immediately');
+        logInfo('🔧 ChatWidget: Calling onClose callback immediately');
       }
       // Call onClose directly - no delays
       onClose();
@@ -444,7 +445,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
         if (document.body) {
           setPortalTarget(document.body);
           if (process.env.NODE_ENV === 'development') {
-            console.log('🔧 ChatWidget: Portal target set to document.body');
+            logInfo('🔧 ChatWidget: Portal target set to document.body');
           }
         } else {
           // Retry after a short delay
@@ -453,7 +454,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
       };
       checkBody();
     } else if (portalTarget && process.env.NODE_ENV === 'development') {
-      console.log('🔧 ChatWidget: Portal target already set');
+      logInfo('🔧 ChatWidget: Portal target already set');
     }
   }, [portalTarget]);
 
@@ -489,7 +490,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
             onClick={(e) => {
               e.stopPropagation();
               if (process.env.NODE_ENV === 'development') {
-                console.log('🔧 Chat button clicked, isMinimized:', isMinimized);
+                logInfo('🔧 Chat button clicked, isMinimized:', isMinimized);
               }
               handleToggleMinimize();
             }}
@@ -655,7 +656,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                     e.stopPropagation();
                     e.preventDefault();
                     if (process.env.NODE_ENV === 'development') {
-                      console.log('🔧 Close button clicked - calling handleClose');
+                      logInfo('🔧 Close button clicked - calling handleClose');
                     }
                     // Call handleClose directly without delay
                     if (!isExiting) {
@@ -1015,13 +1016,13 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   // The useEffect will set portalTarget once document.body is ready
   if (!portalTarget) {
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔧 ChatWidget: Waiting for portal target (document.body)');
+      logInfo('🔧 ChatWidget: Waiting for portal target (document.body)');
     }
     return null;
   }
 
   if (process.env.NODE_ENV === 'development') {
-    console.log('🔧 ChatWidget: Rendering chat button and window', { 
+    logInfo('🔧 ChatWidget: Rendering chat button and window', { 
       isMinimized, 
       hasMessages: visibleMessages.length > 0,
       portalTarget: !!portalTarget,

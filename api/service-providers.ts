@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { emailToKey, supabaseUserService } from '../services/supabase-user-service.js';
 import type { ServiceProviderPayload } from '../services/supabase-service-provider-service.js';
 import { applyCors } from '../lib/api-route-cors.js';
 import { sanitizeServiceCategories } from '../constants/serviceProviderCatalog.js';
-import { authenticateRequest } from './auth.js';
+import { authenticateRequestDual } from './auth.js';
 import { hashPassword, validateEmail } from '../utils/security.js';
+import { logInfo } from '../utils/logger.js';
 
 function parseStringList(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -235,7 +235,7 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
     const scope = (req.query.scope as string) || 'mine';
 
     if (req.method === 'GET' && scope === 'all') {
-      const adminAuth = authenticateRequest(req);
+      const adminAuth = await authenticateRequestDual(req);
       if (!adminAuth.isValid || adminAuth.user?.role !== 'admin') {
         return res.status(403).json({ error: 'Admin authentication required.' });
       }
@@ -244,28 +244,18 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
     }
 
     /** Supabase Auth JWT and/or reRide app JWT (POST /api/users login — `users` table bcrypt). */
-    let uid: string | null = null;
-    let email = '';
-
-    try {
-      const decoded = await verifyIdTokenFromHeader(req);
-      uid = decoded.uid;
-      email = (decoded.email || '').toLowerCase().trim();
-    } catch {
-      const legacy = authenticateRequest(req);
-      if (legacy.isValid && legacy.user?.email) {
-        if (legacy.user.role && legacy.user.role !== 'service_provider') {
-          return res.status(403).json({ error: 'Service provider sign-in only for this resource.' });
-        }
-        uid = legacy.user.userId || null;
-        email = legacy.user.email.toLowerCase().trim();
-      } else {
-        return res.status(401).json({
-          error: 'Authentication required. Please sign up or log in first.',
-          details: 'Missing or invalid authorization token',
-        });
-      }
+    const auth = await authenticateRequestDual(req);
+    if (!auth.isValid || !auth.user) {
+      return res.status(401).json({
+        error: 'Authentication required. Please sign up or log in first.',
+        details: 'Missing or invalid authorization token',
+      });
     }
+    if (auth.user.role && auth.user.role !== 'service_provider') {
+      return res.status(403).json({ error: 'Service provider sign-in only for this resource.' });
+    }
+    const uid = auth.user.userId || null;
+    const email = auth.user.email.toLowerCase().trim();
 
     const resolveProviderForActor = async (): Promise<{ id: string } & ServiceProviderPayload | null> => {
       if (uid) {
@@ -342,7 +332,7 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
         }
       } catch (error) {
         // If findByEmail throws (not found), that's fine - we can create new
-        console.log('No existing provider found, proceeding with creation');
+        logInfo('No existing provider found, proceeding with creation');
       }
 
       try {

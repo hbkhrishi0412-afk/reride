@@ -3,6 +3,7 @@
  */
 import type { Vehicle, AIInspectionReport } from '../../types.js';
 import { generateAIInspectionForServer } from '../../services/aiInspectionService.js';
+import { logInfo } from '../../utils/logger.js';
 
 type VehicleUpdater = {
   update: (primaryKey: string, updates: Partial<Vehicle>) => Promise<Vehicle>;
@@ -73,7 +74,7 @@ export async function runAutoAIInspection(
   }
 
   const primaryKey = vehiclePrimaryKey(vehicle);
-  console.log(`🔍 Auto-generating AI inspection for vehicle ${primaryKey} (${images.length} photo(s))`);
+  logInfo(`🔍 Auto-generating AI inspection for vehicle ${primaryKey} (${images.length} photo(s))`);
 
   const report = await generateAIInspectionForServer({
     vehicleId: vehicle.id,
@@ -89,7 +90,7 @@ export async function runAutoAIInspection(
   });
 
   await vehicleService.update(primaryKey, { aiInspectionReport: report });
-  console.log(`✅ AI inspection saved for vehicle ${primaryKey} — grade ${report.overallGrade} (${report.overallScore}/100)`);
+  logInfo(`✅ AI inspection saved for vehicle ${primaryKey} — grade ${report.overallGrade} (${report.overallScore}/100)`);
   return report;
 }
 

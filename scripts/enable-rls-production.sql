@@ -73,6 +73,7 @@ ALTER TABLE IF EXISTS service_request_audit_logs  ENABLE ROW LEVEL SECURITY;
 -- 0b. Columns referenced by policies (older DBs may predate these columns)
 -- ----------------------------------------------------------------------------
 ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS pincode TEXT;
 ALTER TABLE IF EXISTS vehicles ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'published';
 ALTER TABLE IF EXISTS service_providers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
 
@@ -130,7 +131,8 @@ END $$;
 -- 1. USERS
 --    - admins: read/update all
 --    - authenticated owner: read/update own
---    - anon: read active users only (needed for public seller profiles)
+--    - anon: read active seller/service_provider rows (public directory only)
+--      Sensitive columns are revoked below; use API toPublicDirectoryUser for shaping.
 -- ============================================================================
 DROP POLICY IF EXISTS "Users read access"    ON users;
 DROP POLICY IF EXISTS "Users update access"  ON users;
@@ -150,7 +152,7 @@ USING (
       AND u.role = 'admin'
   )
   OR (SELECT auth.uid())::text = id
-  OR status = 'active'
+  OR status = 'active' AND role IN ('seller', 'service_provider')
 );
 
 CREATE POLICY "Users update access"
@@ -177,8 +179,19 @@ WITH CHECK (
 );
 
 -- Column-level protection: VITE_SUPABASE_ANON_KEY is in every client bundle.
--- RLS controls rows; REVOKE prevents direct PostgREST reads of password hashes.
+-- RLS controls rows; REVOKE prevents direct PostgREST reads of sensitive fields.
 REVOKE SELECT (password) ON public.users FROM anon, authenticated;
+-- alternatePhone lives in metadata JSONB, not a dedicated column.
+REVOKE SELECT (
+  mobile,
+  address,
+  pincode,
+  firebase_uid,
+  metadata,
+  subscription_plan,
+  featured_credits,
+  used_certifications
+) ON public.users FROM anon;
 
 -- ============================================================================
 -- 2. VEHICLES

@@ -8,12 +8,13 @@ alwaysApply: false
 
 **Hard limit:** The `api/` directory may have **at most 12 top-level items** (route files + folders combined). Do not add a 13th entry.
 
-## Current inventory (9 — three slots free)
+## Current inventory (10 — two slots free)
 
 | # | Entry | Role |
 |---|--------|------|
-| 1 | `main.ts` | Vercel catch-all router (`/api/*` → here) |
-| 2 | `send-sms-hook.ts` | Dedicated webhook (`/api/send-sms-hook`) |
+| 1 | `main.ts` | Marketplace API entry (users, vehicles, deals, services) |
+| 2 | `platform.ts` | Platform API entry (chat, payments, AI, notifications) |
+| 3 | `send-sms-hook.ts` | Dedicated webhook (`/api/send-sms-hook`) |
 | 3 | `auth.ts` | Auth helpers / route module (imported by main) |
 | 4 | `login.ts` | Login route module |
 | 5 | `services.ts` | Car-services catalog |

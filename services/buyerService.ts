@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import type { SavedSearch, BuyerActivity, Vehicle } from '../types.js';
 import { saveBuyerActivityToSupabase, getBuyerActivityFromSupabase } from './buyerActivityService.js';
 import { saveBuyerActivityWithSync } from './syncService.js';
@@ -211,7 +212,7 @@ export const saveBuyerActivity = async (activity: BuyerActivity): Promise<void> 
   try {
     const result = await saveBuyerActivityToSupabase(activity);
     if (result.success) {
-      console.log('✅ Buyer activity synced to database');
+      logInfo('✅ Buyer activity synced to database');
     } else {
       console.warn('⚠️ Failed to sync buyer activity to database:', result.error);
       // Add to sync queue for retry

@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import { resolveSupabaseClient } from '../lib/resolveSupabaseClient.js';
 import type { Vehicle } from '../types.js';
@@ -379,7 +380,7 @@ export const supabaseVehicleService = {
     let offset = 0;
     let hasMore = true;
     
-    console.log('📊 findAll: Starting to fetch all vehicles with pagination...');
+    logInfo('📊 findAll: Starting to fetch all vehicles with pagination...');
     
     while (hasMore) {
       const { data, error } = await supabase
@@ -407,7 +408,7 @@ export const supabaseVehicleService = {
       const vehicles = data.map(supabaseRowToVehicle);
       allVehicles.push(...vehicles);
       
-      console.log(`📊 findAll: Fetched ${vehicles.length} vehicles (total so far: ${allVehicles.length})`);
+      logInfo(`📊 findAll: Fetched ${vehicles.length} vehicles (total so far: ${allVehicles.length})`);
       
       // If we got fewer than pageSize, we've reached the end
       if (data.length < pageSize) {
@@ -417,7 +418,7 @@ export const supabaseVehicleService = {
       }
     }
     
-    console.log(`✅ findAll: Retrieved ${allVehicles.length} total vehicles from database`);
+    logInfo(`✅ findAll: Retrieved ${allVehicles.length} total vehicles from database`);
     return allVehicles;
   },
 

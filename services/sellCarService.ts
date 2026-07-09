@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 // Client-side API service for sell car submissions
 // This file should only contain client-side code, not server-side MongoDB imports
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch.js';
@@ -54,7 +55,7 @@ class SellCarAPI {
         (typeof import.meta !== 'undefined' && (import.meta as { env?: { PROD?: boolean } }).env?.PROD) ||
         (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production');
       if (!isProduction && error instanceof Error && error.message.includes('Failed to fetch')) {
-        console.log('API not available, using demo mode');
+        logInfo('API not available, using demo mode');
         return {
           success: true,
           id: 'demo-' + Date.now(),

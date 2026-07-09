@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { getMobileLocalApiOrigin, isLocalDevApiReachable } from '../utils/apiConfig';
@@ -127,7 +128,7 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
         reconnectAttemptsRef.current = 0;
         setIsConnected(true);
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔧 SupportChat: WebSocket connected');
+          logInfo('🔧 SupportChat: WebSocket connected');
         }
 
         if (currentUser) {
@@ -213,7 +214,7 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
           setSocket(null);
         }
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔧 SupportChat: WebSocket disconnected');
+          logInfo('🔧 SupportChat: WebSocket disconnected');
         }
         if (!cancelled) {
           scheduleReconnect();

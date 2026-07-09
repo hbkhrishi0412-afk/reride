@@ -92,7 +92,7 @@ export async function handleSellCar(req: VercelRequest, res: VercelResponse, _op
 
   try {
     if (method === 'GET' || method === 'PUT' || method === 'DELETE') {
-      if (!requireAdmin(req, res, 'Sell car submissions')) {
+      if (!(await requireAdmin(req, res, 'Sell car submissions'))) {
         return;
       }
     }

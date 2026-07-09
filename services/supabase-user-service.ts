@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import { resolveSupabaseClient } from '../lib/resolveSupabaseClient.js';
 import type { User } from '../types.js';
@@ -301,7 +302,7 @@ export const supabaseUserService = {
         supabase = await resolveSupabaseClient();
         
         if (isServerSide) {
-          console.log('📊 findAll: Using Supabase Admin Client (server-side)');
+          logInfo('📊 findAll: Using Supabase Admin Client (server-side)');
           // Verify service role key is configured
           if (!process.env.SUPABASE_SERVICE_ROLE_KEY || 
               process.env.SUPABASE_SERVICE_ROLE_KEY.trim() === '' ||
@@ -315,10 +316,10 @@ export const supabaseUserService = {
               'Without it, RLS policies may block access to users, resulting in 0 users being returned.'
             );
           } else {
-            console.log('✅ findAll: SUPABASE_SERVICE_ROLE_KEY is configured');
+            logInfo('✅ findAll: SUPABASE_SERVICE_ROLE_KEY is configured');
           }
         } else {
-          console.log('📊 findAll: Using Supabase Client (client-side)');
+          logInfo('📊 findAll: Using Supabase Client (client-side)');
         }
       } catch (clientError: any) {
         // CRITICAL: Catch service role key errors and provide helpful message
@@ -342,8 +343,8 @@ export const supabaseUserService = {
       let offset = 0;
       let hasMore = true;
       
-      console.log('📊 findAll: Starting to fetch all users with pagination...');
-      console.log('📊 findAll: Using Supabase client type:', isServerSide ? 'Admin (service_role)' : 'Client (anon)');
+      logInfo('📊 findAll: Starting to fetch all users with pagination...');
+      logInfo('📊 findAll: Using Supabase client type:', isServerSide ? 'Admin (service_role)' : 'Client (anon)');
       
       // CRITICAL: First, test with a count query to verify connection
       try {
@@ -359,7 +360,7 @@ export const supabaseUserService = {
             code: countError.code
           });
         } else {
-          console.log(`📊 findAll: Count query result: ${count || 0} users in database`);
+          logInfo(`📊 findAll: Count query result: ${count || 0} users in database`);
           if (count === 0) {
             console.warn('⚠️ Count query returned 0 - no users in database or RLS blocking');
           }
@@ -369,7 +370,7 @@ export const supabaseUserService = {
       }
       
       while (hasMore) {
-        console.log(`📊 findAll: Fetching page ${Math.floor(offset / pageSize) + 1} (offset: ${offset}, limit: ${pageSize})...`);
+        logInfo(`📊 findAll: Fetching page ${Math.floor(offset / pageSize) + 1} (offset: ${offset}, limit: ${pageSize})...`);
         
         const { data, error } = await supabase
           .from('users')
@@ -406,14 +407,14 @@ export const supabaseUserService = {
         }
         
         if (data.length === 0) {
-          console.log('📊 findAll: No more data, reached end of results');
+          logInfo('📊 findAll: No more data, reached end of results');
           hasMore = false;
           break;
         }
         
-        console.log(`📊 findAll: Raw data received: ${data.length} rows`);
+        logInfo(`📊 findAll: Raw data received: ${data.length} rows`);
         if (data.length > 0) {
-          console.log('📊 findAll: Sample raw row:', {
+          logInfo('📊 findAll: Sample raw row:', {
             hasId: !!data[0].id,
             id: data[0].id,
             hasEmail: !!data[0].email,
@@ -425,9 +426,9 @@ export const supabaseUserService = {
         }
         
         const users = data.map(supabaseRowToUser);
-        console.log(`📊 findAll: Converted ${users.length} rows to User objects`);
+        logInfo(`📊 findAll: Converted ${users.length} rows to User objects`);
         if (users.length > 0) {
-          console.log('📊 findAll: Sample converted user:', {
+          logInfo('📊 findAll: Sample converted user:', {
             hasId: !!users[0].id,
             id: users[0].id,
             hasEmail: !!users[0].email,
@@ -439,7 +440,7 @@ export const supabaseUserService = {
         
         allUsers.push(...users);
         
-        console.log(`📊 findAll: Fetched ${users.length} users (total so far: ${allUsers.length})`);
+        logInfo(`📊 findAll: Fetched ${users.length} users (total so far: ${allUsers.length})`);
         
         // If we got fewer than pageSize, we've reached the end
         if (data.length < pageSize) {
@@ -449,7 +450,7 @@ export const supabaseUserService = {
         }
       }
       
-      console.log(`✅ Supabase findAll: Retrieved ${allUsers.length} total users from database`);
+      logInfo(`✅ Supabase findAll: Retrieved ${allUsers.length} total users from database`);
       
       if (allUsers.length === 0 && isServerSide) {
         console.warn('⚠️ WARNING: Admin client returned 0 users. This might indicate:');

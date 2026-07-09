@@ -1,28 +1,22 @@
 /**
  * contexts/ToastContext.tsx — Toast notification state management
  *
- * Manages toast messages (success, error, info, warning) with auto-dismiss.
- *
- * Usage:
- *   const { addToast, removeToast, toasts } = useToast();
- *   addToast('Saved successfully', 'success');
+ * Manages toast messages (success, error, info, warning) with auto-dismiss
+ * and duplicate suppression (same message within 3s).
  */
 
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import type { Toast } from '../types';
-
-// ── Context type ────────────────────────────────────────────────────────────
+import { logDebug, logError, logWarn } from '../utils/logger';
 
 interface ToastContextType {
   toasts: Toast[];
-  setToasts: (toasts: Toast[]) => void;
+  setToasts: React.Dispatch<React.SetStateAction<Toast[]>>;
   addToast: (message: string, type: Toast['type']) => void;
   removeToast: (id: number) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
-
-// ── Hook ────────────────────────────────────────────────────────────────────
 
 export function useToast(): ToastContextType {
   const ctx = useContext(ToastContext);
@@ -30,47 +24,74 @@ export function useToast(): ToastContextType {
   return ctx;
 }
 
-// ── Provider ────────────────────────────────────────────────────────────────
-
 const AUTO_DISMISS_MS = 5000;
+const DUPLICATE_WINDOW_MS = 3000;
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counterRef = useRef(0);
-  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const timestampsRef = useRef<Map<number, number>>(new Map());
 
-  useEffect(() => {
-    const timers = timersRef.current;
-    return () => {
-      timers.forEach((timer) => clearTimeout(timer));
-      timers.clear();
-    };
+  const removeToast = useCallback((id: number) => {
+    setToasts((prev) => {
+      const filtered = prev.filter((toast) => toast.id !== id);
+      if (filtered.length < prev.length) {
+        timestampsRef.current.delete(id);
+      }
+      return filtered;
+    });
   }, []);
 
   const addToast = useCallback((message: string, type: Toast['type']) => {
-    counterRef.current += 1;
-    const id = counterRef.current;
+    try {
+      if (!message || typeof message !== 'string' || message.trim() === '') {
+        logWarn('Invalid toast message provided');
+        return;
+      }
+      if (!['success', 'error', 'warning', 'info'].includes(type)) {
+        logWarn('Invalid toast type provided:', type);
+        return;
+      }
 
-    setToasts((prev) => [...prev, { id, message, type }]);
+      const trimmedMessage = message.trim();
+      const now = Date.now();
+      const id = counterRef.current;
+      counterRef.current += 1;
+      timestampsRef.current.set(id, now);
 
-    const timer = setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-      timersRef.current.delete(id);
-    }, AUTO_DISMISS_MS);
-    timersRef.current.set(id, timer);
-  }, []);
+      setToasts((prev) => {
+        const recentDuplicate = prev.find((toast) => {
+          if (toast.message !== trimmedMessage || toast.type !== type) return false;
+          const toastTimestamp = timestampsRef.current.get(toast.id);
+          if (toastTimestamp === undefined) return false;
+          return now - toastTimestamp < DUPLICATE_WINDOW_MS;
+        });
 
-  const removeToast = useCallback((id: number) => {
-    const timer = timersRef.current.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      timersRef.current.delete(id);
+        if (recentDuplicate) {
+          logDebug('Skipping duplicate toast:', trimmedMessage);
+          timestampsRef.current.delete(id);
+          return prev;
+        }
+
+        const toastId = id;
+        setTimeout(() => {
+          setToasts((prevToasts) => {
+            const filtered = prevToasts.filter((t) => t.id !== toastId);
+            if (filtered.length < prevToasts.length) {
+              timestampsRef.current.delete(toastId);
+            }
+            return filtered;
+          });
+        }, AUTO_DISMISS_MS);
+
+        return [...prev, { id, message: trimmedMessage, type }];
+      });
+    } catch (error) {
+      logError('Error adding toast:', error);
     }
-    setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   const value: ToastContextType = { toasts, setToasts, addToast, removeToast };
 
   return <ToastContext.Provider value={value}>{children}</ToastContext.Provider>;
 };
-

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { SubscriptionPlan } from '../types';
 import { createPaymentRequest } from '../services/paymentService';
 import { isRazorpayConfiguredInClient, openRazorpayPlanCheckout } from '../services/razorpayPlanPayment';
+import { logInfo } from '../utils/logger.js';
 
 interface PaymentRequestModalProps {
   isOpen: boolean;
@@ -26,7 +27,7 @@ const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
   const notify = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     if (onNotify) onNotify(message, type);
     else if (type === 'error') console.error(message);
-    else console.info(message);
+    else logInfo(message);
   };
 
   const razorpayEnabled = isRazorpayConfiguredInClient();

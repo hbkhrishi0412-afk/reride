@@ -8,6 +8,9 @@
     "api/main.ts": {
       "includeFiles": "{server,lib,utils,services}/**"
     },
+    "api/platform.ts": {
+      "includeFiles": "{server,lib,utils,services}/**"
+    },
     "api/send-sms-hook.ts": {
       "includeFiles": "{server,lib,utils,services}/**"
     }
@@ -129,6 +132,40 @@
   ],
   "rewrites": [
     { "source": "/api/send-sms-hook", "destination": "/api/send-sms-hook.ts" },
+    { "source": "/api/conversations", "destination": "/api/platform.ts" },
+    { "source": "/api/conversations/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/notifications", "destination": "/api/platform.ts" },
+    { "source": "/api/notifications/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/payments", "destination": "/api/platform.ts" },
+    { "source": "/api/payments/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/plans", "destination": "/api/platform.ts" },
+    { "source": "/api/plans/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/business", "destination": "/api/platform.ts" },
+    { "source": "/api/business/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/ai", "destination": "/api/platform.ts" },
+    { "source": "/api/ai/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/gemini", "destination": "/api/platform.ts" },
+    { "source": "/api/gemini/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/ai-inspection", "destination": "/api/platform.ts" },
+    { "source": "/api/ai-inspection/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/faqs", "destination": "/api/platform.ts" },
+    { "source": "/api/faqs/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/support-tickets", "destination": "/api/platform.ts" },
+    { "source": "/api/support-tickets/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/content", "destination": "/api/platform.ts" },
+    { "source": "/api/content/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/sell-car", "destination": "/api/platform.ts" },
+    { "source": "/api/sell-car/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/buyer-activity", "destination": "/api/platform.ts" },
+    { "source": "/api/buyer-activity/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/content-reports", "destination": "/api/platform.ts" },
+    { "source": "/api/content-reports/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/chat", "destination": "/api/platform.ts" },
+    { "source": "/api/chat/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/audit-log", "destination": "/api/platform.ts" },
+    { "source": "/api/audit-log/(.*)", "destination": "/api/platform.ts" },
+    { "source": "/api/settings", "destination": "/api/platform.ts" },
+    { "source": "/api/settings/(.*)", "destination": "/api/platform.ts" },
     { "source": "/api/(.*)", "destination": "/api/main.ts" },
     { "source": "/", "destination": "/index.html" },
     { "source": "/((?!assets/)(?!api/)(?!\\.well-known/).*)", "destination": "/index.html" }

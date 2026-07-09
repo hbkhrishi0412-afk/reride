@@ -56,6 +56,7 @@ export default defineConfig(({ mode }) => {
     {
       name: 'reride-debug-nav-log',
       configureServer(server) {
+        if (process.env.VITE_DEBUG_NAV_LOG !== 'true') return
         server.middlewares.use((req, res, next) => {
           if (req.method !== 'POST' || req.url !== '/__debug_nav_log') {
             next()
@@ -69,7 +70,7 @@ export default defineConfig(({ mode }) => {
             try {
               const parsed = JSON.parse(raw || '{}')
               const line = `${JSON.stringify(parsed)}\n`
-              fs.appendFileSync(path.join(process.cwd(), 'debug-4f3bea.log'), line, 'utf8')
+              fs.appendFileSync(path.join(process.cwd(), 'debug-nav.log'), line, 'utf8')
             } catch {
               /* ignore */
             }

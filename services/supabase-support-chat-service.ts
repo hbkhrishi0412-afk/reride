@@ -97,6 +97,17 @@ export const supabaseSupportChatService = {
     return data as SupportChatMessageRow;
   },
 
+  async getSession(sessionId: string): Promise<SupportChatSessionRow | null> {
+    const supabase = requireAdmin();
+    const { data, error } = await supabase
+      .from('support_chat_sessions')
+      .select('*')
+      .eq('session_id', sessionId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data as SupportChatSessionRow | null) ?? null;
+  },
+
   async getMessagesBySession(sessionId: string, limit = 100): Promise<SupportChatMessageRow[]> {
     const supabase = requireAdmin();
     const { data, error } = await supabase

@@ -217,6 +217,8 @@ export interface Vehicle {
   listingType?: 'buy' | 'rental'; // 'buy' for regular sale, 'rental' for rental vehicles
   isFeatured: boolean;
   views?: number;
+  /** Short-lived HMAC token for track-view POST (issued with published listings). */
+  viewTrackToken?: string;
   inquiriesCount?: number;
   isFlagged?: boolean;
   flagReason?: string;

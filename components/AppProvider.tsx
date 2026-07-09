@@ -19,9 +19,7 @@ import { VehicleCategory as CategoryEnum } from '../vehicle-category.js';
 import {
   computeCompareToggle,
   getCategoryDisplayName,
-  getComparisonCategory,
   MAX_COMPARE_VEHICLES,
-  sanitizeComparisonList,
 } from '../utils/compareList.js';
 import { getConversations, saveConversations } from '../services/chatService';
 import {
@@ -111,6 +109,15 @@ import {
   isPersistedSessionAuthenticated,
   readPersistedUser,
 } from '../utils/validatePersistedSession';
+import {
+  ToastProvider,
+  useToast,
+  CatalogProvider,
+  useCatalog,
+  ChatProvider,
+  useChat,
+} from '../contexts';
+import { mergeVehicleCatalog } from '../utils/mergeVehicleCatalog';
 
 /** PostgREST realtime filter value: quote emails so `@` and special chars parse correctly. */
 function postgrestEqQuoted(value: string): string {
@@ -237,25 +244,6 @@ function scheduleCapacitorPostLoginUi(fn: () => void): void {
       }, 0);
     });
   });
-}
-
-/**
- * After login sync: avoid replacing a full catalog with a tiny partial response (stale dedup / bad cache).
- * Admins always take the server result so bulk deletes stay correct.
- */
-function mergeVehicleCatalog(prev: Vehicle[], incoming: Vehicle[], isAdmin: boolean): Vehicle[] {
-  const normPrev = normalizeVehiclesList(Array.isArray(prev) ? prev : []);
-  const normIncoming = normalizeVehiclesList(Array.isArray(incoming) ? incoming : []);
-  if (normIncoming.length === 0) return normPrev.length > 0 ? normPrev : [];
-  if (normPrev.length === 0 || normIncoming.length >= normPrev.length) return normIncoming;
-  if (isAdmin) return normIncoming;
-  if (normPrev.length >= 5 && normIncoming.length <= 2) {
-    logWarn(
-      `⚠️ Skipping vehicle state shrink (${normIncoming.length} vs ${normPrev.length} cached) — likely partial API response.`
-    );
-    return normPrev;
-  }
-  return normIncoming;
 }
 
 interface VehicleUpdateOptions {
@@ -508,8 +496,49 @@ export const useApp = () => {
 
 // Component export - Fast Refresh compatible with displayName
 // Note: Context providers should NOT be memoized as they need to re-render when state changes
-export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <ToastProvider>
+    <CatalogProvider>
+      <ChatProvider>
+        <AppProviderCore>{children}</AppProviderCore>
+      </ChatProvider>
+    </CatalogProvider>
+  </ToastProvider>
+);
+
+const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { t } = useTranslation();
+  const { toasts, setToasts, addToast, removeToast } = useToast();
+  const {
+    vehicles,
+    setVehicles,
+    users,
+    setUsers,
+    isLoading,
+    setIsLoading,
+    vehiclesCatalogReady,
+    setVehiclesCatalogReady,
+    comparisonList,
+    setComparisonList,
+    wishlist,
+    setWishlist,
+    ratings,
+    setRatings,
+    sellerRatings,
+    setSellerRatings,
+    comparisonCategory,
+    recommendations,
+  } = useCatalog();
+  const {
+    conversations,
+    setConversations,
+    activeChat,
+    setActiveChat,
+    typingStatus,
+    setTypingStatus,
+    chatPeerOnlineByConversationId,
+    setChatPeerOnlineByConversationId,
+  } = useChat();
   // React Router hooks for proper URL management
   const routerNavigate = useRouterNavigate();
   const location = useLocation();
@@ -518,11 +547,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const shownNotificationIdsRef = useRef<Set<number>>(new Set());
   // Track vehicles currently being updated to prevent duplicate updates
   const updatingVehiclesRef = useRef<Set<number>>(new Set());
-  // Counter for generating unique toast IDs to prevent collisions
-  // FIXED: Use simple incrementing counter to avoid precision issues with large numbers
-  const toastCounterRef = useRef<number>(0);
-  // FIXED: Store timestamps separately to avoid precision loss from division operations
-  const toastTimestampsRef = useRef<Map<number, number>>(new Map());
   
   // All state from App.tsx moved here
   const [currentView, setCurrentView] = useState<View>(readInitialAppViewFromBrowser);
@@ -549,9 +573,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleRegisterRef = useRef<(user: User) => void>(() => {});
   /** Mutex for session-restore sync (auth events can fire in bursts) */
   const profileRestoreFromSupabaseInFlightRef = useRef(false);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [vehiclesCatalogReady, setVehiclesCatalogReady] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const currentUserRef = useRef<User | null>(null);
   currentUserRef.current = currentUser;
@@ -600,102 +621,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     ensureSyncQueueOnlineListener();
   }, []);
-  const [comparisonList, setComparisonList] = useState<number[]>(() => {
-    try {
-      if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
-      const stored = localStorage.getItem('reride_comparison_list');
-      const parsed = stored ? JSON.parse(stored) : [];
-      return Array.isArray(parsed) ? parsed.filter((n: unknown) => typeof n === 'number') : [];
-    } catch { return []; }
-  });
-  const [ratings, setRatings] = useState<{ [key: string]: number[] }>(() => {
-    try {
-      if (typeof window === 'undefined' || typeof localStorage === 'undefined') return {};
-      const stored = localStorage.getItem('vehicleRatings');
-      return stored ? JSON.parse(stored) : {};
-    } catch { return {}; }
-  });
-  const [sellerRatings, setSellerRatings] = useState<{ [key: string]: number[] }>(() => {
-    try {
-      if (typeof window === 'undefined' || typeof localStorage === 'undefined') return {};
-      const stored = localStorage.getItem('sellerRatings');
-      return stored ? JSON.parse(stored) : {};
-    } catch { return {}; }
-  });
-  const [wishlist, setWishlist] = useState<number[]>(() => {
-    try {
-      if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
-      const stored = localStorage.getItem('reride_wishlist');
-      const parsed = stored ? JSON.parse(stored) : [];
-      return Array.isArray(parsed) ? parsed.filter((n: unknown) => typeof n === 'number') : [];
-    } catch { return []; }
-  });
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [toasts, setToasts] = useState<ToastType[]>([]);
   const [forgotPasswordRole, setForgotPasswordRole] = useState<'customer' | 'seller' | null>(null);
-  const [typingStatus, setTypingStatus] = useState<{ conversationId: string; userRole: 'customer' | 'seller' } | null>(null);
-  const [chatPeerOnlineByConversationId, setChatPeerOnlineByConversationId] = useState<Record<string, boolean>>({});
   const [selectedCategory, setSelectedCategory] = useState<VehicleCategory | 'ALL'>(CategoryEnum.FOUR_WHEELER);
   const [publicSellerProfile, setPublicSellerProfile] = useState<User | null>(null);
-  const [activeChat, setActiveChat] = useState<Conversation | null>(null);
   const [isAnnouncementVisible, setIsAnnouncementVisible] = useState(true);
-  // PERFORMANCE: Memoize recommendations calculation to avoid recalculating on every render
-  // Recommendations are derived from vehicles, so we compute them instead of storing in state
-  const recommendations = useMemo(() => {
-    if (!vehicles || vehicles.length === 0) return [];
-    // Return top 6 vehicles, prioritizing recent listings
-    return vehicles
-      .filter(v => v.status === 'published')
-      .sort((a, b) => {
-        // Sort by creation date (newest first)
-        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bDate - aDate;
-      })
-      .slice(0, 6);
-  }, [vehicles]);
   const [initialSearchQuery, setInitialSearchQuery] = useState<string>('');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-
-  // Persist wishlist / comparison / ratings to localStorage so they survive refresh.
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-        localStorage.setItem('reride_wishlist', JSON.stringify(wishlist || []));
-      }
-    } catch (error) { logWarn('Failed to persist wishlist:', error); }
-  }, [wishlist]);
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-        localStorage.setItem('reride_comparison_list', JSON.stringify(comparisonList || []));
-      }
-    } catch (error) { logWarn('Failed to persist comparison list:', error); }
-  }, [comparisonList]);
-  useEffect(() => {
-    if (!vehicles.length || !comparisonList.length) return;
-    const sanitized = sanitizeComparisonList(vehicles, comparisonList);
-    const changed =
-      sanitized.length !== comparisonList.length ||
-      sanitized.some((id, index) => id !== comparisonList[index]);
-    if (changed) {
-      setComparisonList(sanitized);
-    }
-  }, [vehicles, comparisonList]);
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-        localStorage.setItem('vehicleRatings', JSON.stringify(ratings || {}));
-      }
-    } catch (error) { logWarn('Failed to persist ratings:', error); }
-  }, [ratings]);
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-        localStorage.setItem('sellerRatings', JSON.stringify(sellerRatings || {}));
-      }
-    } catch (error) { logWarn('Failed to persist seller ratings:', error); }
-  }, [sellerRatings]);
   const [userLocation, setUserLocationState] = useState<string>(() => {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return '';
     try {
@@ -722,7 +653,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return '';
   });
-  const [users, setUsers] = useState<User[]>([]);
 
   // Merge seller phone/name from `users` when the directory loads after opening a listing (production race).
   useEffect(() => {
@@ -812,92 +742,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       /* ignore */
     }
   }, [currentUser?.email, setNotifications]);
-
-  const addToast = useCallback((message: string, type: ToastType['type']) => {
-    try {
-      // Validate inputs
-      if (!message || typeof message !== 'string' || message.trim() === '') {
-        logWarn('Invalid toast message provided');
-        return;
-      }
-      
-      if (!['success', 'error', 'warning', 'info'].includes(type)) {
-        logWarn('Invalid toast type provided:', type);
-        return;
-      }
-
-      const trimmedMessage = message.trim();
-      const now = Date.now();
-      
-      // FIXED: Generate unique toast ID using simple incrementing counter
-      // This avoids precision issues with large numbers (now * 1000 creates ~1.7×10^15)
-      // JavaScript's floating point precision can cause Math.floor(id / 1000) to fail
-      const id = toastCounterRef.current;
-      toastCounterRef.current += 1;
-      
-      // Store timestamp separately to avoid precision loss from division operations
-      toastTimestampsRef.current.set(id, now);
-      
-      // Prevent duplicate toasts: Check if the same message and type already exists
-      // and was added within the last 3 seconds
-      const toastId = id;
-      
-      setToasts(prev => {
-        const recentDuplicate = prev.find(
-          toast => {
-            if (toast.message !== trimmedMessage || toast.type !== type) {
-              return false;
-            }
-            // Use stored timestamp instead of extracting from ID to avoid precision issues
-            const toastTimestamp = toastTimestampsRef.current.get(toast.id);
-            if (toastTimestamp === undefined) {
-              return false; // Timestamp not found, assume not recent
-            }
-            return (now - toastTimestamp) < 3000;
-          }
-        );
-        
-        if (recentDuplicate) {
-          // Toast with same message already exists and is recent, skip adding duplicate
-          logDebug('Skipping duplicate toast:', trimmedMessage);
-          // Clean up the timestamp we just stored since we're not using this ID
-          toastTimestampsRef.current.delete(id);
-          return prev;
-        }
-        
-        const toast: ToastType = { id, message: trimmedMessage, type };
-        
-        // Schedule auto-remove after 5 seconds - do this inside the state update callback
-        // to ensure it only runs when the toast is actually added (not a duplicate)
-        // Use setTimeout to schedule after the current state update completes
-        setTimeout(() => {
-          setToasts(prevToasts => {
-            const filtered = prevToasts.filter(t => t.id !== toastId);
-            // Clean up timestamp when toast is removed
-            if (filtered.length < prevToasts.length) {
-              toastTimestampsRef.current.delete(toastId);
-            }
-            return filtered;
-          });
-        }, 5000);
-        
-        return [...prev, toast];
-      });
-    } catch (error) {
-      logError('Error adding toast:', error);
-    }
-  }, []);
-
-  const removeToast = useCallback((id: number) => {
-    setToasts(prev => {
-      const filtered = prev.filter(toast => toast.id !== id);
-      // Clean up timestamp when toast is manually removed
-      if (filtered.length < prev.length) {
-        toastTimestampsRef.current.delete(id);
-      }
-      return filtered;
-    });
-  }, []);
 
   const [confirmState, setConfirmState] = useState<{
     title: string;
@@ -4908,11 +4752,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // But including them is harmless and makes the intent clear
   }, [vehicles, addToast, currentUser, t, syncVehicleCachesById]);
 
-  const comparisonCategory = useMemo(
-    () => getComparisonCategory(vehicles, comparisonList),
-    [vehicles, comparisonList],
-  );
-
   const contextValue: AppContextType = useMemo(() => {
     const inboxMarkRead: { fn?: AppContextType['markAsRead'] } = {};
     return {
@@ -6964,5 +6803,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 };
 
 // Add displayName for better debugging and Fast Refresh compatibility
+AppProviderCore.displayName = 'AppProviderCore';
 AppProvider.displayName = 'AppProvider';
 

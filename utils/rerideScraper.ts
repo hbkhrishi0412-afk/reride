@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 // utils/rerideScraper.ts
 
 import {
@@ -388,11 +389,11 @@ export const simulateScrapingDelay = (ms: number = 1000): Promise<void> => {
 
 // Function to get car data with simulated scraping
 export const fetchCarDataFromReride = async (): Promise<ScrapedCarData> => {
-  console.log('🔍 Simulating web scraping from Reride...');
+  logInfo('🔍 Simulating web scraping from Reride...');
   await simulateScrapingDelay(1500);
   
   const data = getCarData();
-  console.log('✅ Successfully extracted car data:', data.makes.length, 'makes found');
+  logInfo('✅ Successfully extracted car data:', data.makes.length, 'makes found');
   
   return data;
 };

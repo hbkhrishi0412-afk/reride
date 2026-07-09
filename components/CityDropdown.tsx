@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Vehicle } from '../types';
@@ -53,7 +54,7 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
     e.preventDefault();
     e.stopPropagation();
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔵 CityDropdown: View all cars clicked');
+      logInfo('🔵 CityDropdown: View all cars clicked');
     }
     // Close dropdown immediately to prevent backdrop interference
     setIsOpen(false);

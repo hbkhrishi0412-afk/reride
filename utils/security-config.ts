@@ -42,9 +42,31 @@ export const SECURITY_CONFIG = {
     // Each authenticated user gets their own rate limit bucket, so this is per-user
     MAX_REQUESTS: process.env.RATE_LIMIT_MAX_REQUESTS 
       ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10)
-      : process.env.NODE_ENV === 'production' ? 1000 : 100, // 1000 requests/15min in production (reduced from 10000), 100 in dev
+      : process.env.NODE_ENV === 'production' ? 300 : 100,
     LOGIN_MAX_ATTEMPTS: 5,
     LOGIN_LOCKOUT_TIME: 30 * 60 * 1000 // 30 minutes
+  },
+
+  /** Per-endpoint rate limits (tighter than global gateway bucket). */
+  ENDPOINT_RATE_LIMITS: {
+    TRACK_VIEW: {
+      MAX_REQUESTS: process.env.TRACK_VIEW_RATE_LIMIT_MAX
+        ? parseInt(process.env.TRACK_VIEW_RATE_LIMIT_MAX, 10)
+        : 30,
+      WINDOW_MS: 15 * 60 * 1000,
+    },
+    CHAT_POST: {
+      MAX_REQUESTS: 20,
+      WINDOW_MS: 15 * 60 * 1000,
+    },
+    CHAT_HISTORY: {
+      MAX_REQUESTS: 60,
+      WINDOW_MS: 15 * 60 * 1000,
+    },
+    AI_PROXY: {
+      MAX_REQUESTS: 60,
+      WINDOW_MS: 15 * 60 * 1000,
+    },
   },
 
   // CORS Configuration

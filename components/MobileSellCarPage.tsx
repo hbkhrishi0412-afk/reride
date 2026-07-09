@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { View as ViewEnum } from '../types';
@@ -491,7 +492,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
     }
     
     autoFetchTimeoutRef.current = setTimeout(async () => {
-      console.log('🚗 Mobile: Auto-fetching specs for:', { make, model, year });
+      logInfo('🚗 Mobile: Auto-fetching specs for:', { make, model, year });
       lastFetchedKey.current = vehicleKey;
       
       try {
@@ -502,7 +503,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
             fuelType: prev.fuelType || specs.fuelType || '',
             transmission: prev.transmission || specs.transmission || '',
           }));
-          console.log('✅ Mobile: Auto-filled fuel/transmission:', specs.fuelType, specs.transmission);
+          logInfo('✅ Mobile: Auto-filled fuel/transmission:', specs.fuelType, specs.transmission);
         } else {
           const suggestions = await getAiVehicleSuggestions({ make, model, year: parseInt(year, 10) });
           if (suggestions.structuredSpecs) {

@@ -1,5 +1,10 @@
 // Development API server for testing Plan Management
-// 
+//
+// SECURITY: Local development only — never expose this server to the public internet.
+// - Binds to 127.0.0.1 by default (set DEV_API_BIND_HOST=0.0.0.0 only with DEV_API_ALLOW_PUBLIC_BIND=true)
+// - CORS restricted to localhost / LAN dev origins (not open *)
+// - Upload + CSRF routes delegate to production api/main.ts handlers (real auth + validation)
+//
 // REAL-TIME UPDATES: This server emits Socket.io events for all database operations
 // to enable real-time synchronization across all connected clients in production.
 // 
@@ -68,29 +73,84 @@ const sendSmsHookRateLimit = rateLimit({
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
+    origin: (origin, callback) => {
+      if (!origin || isDevApiCorsOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS not allowed in dev API'));
+      }
+    },
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
 });
 const PORT = parseInt(process.env.VITE_LOCAL_API_PORT || '3001', 10) || 3001;
+const DEV_API_BIND_HOST = process.env.DEV_API_BIND_HOST || '127.0.0.1';
 
-/** Delegate to production api/main.ts handler for routes not duplicated in dev-api-server. */
+if (
+  DEV_API_BIND_HOST === '0.0.0.0' &&
+  process.env.DEV_API_ALLOW_PUBLIC_BIND !== 'true'
+) {
+  console.error(
+    '\n❌ Refusing to bind dev API to 0.0.0.0 without DEV_API_ALLOW_PUBLIC_BIND=true.\n' +
+      '   Use DEV_API_BIND_HOST=127.0.0.1 (default) for local-only development.\n',
+  );
+  process.exit(1);
+}
+
+/** Local dev only — never expose this server to the public internet. */
+function isDevApiCorsOriginAllowed(origin) {
+  if (!origin) return true;
+  return (
+    /^https?:\/\/localhost(:\d+)?$/i.test(origin) ||
+    /^https?:\/\/127\.0\.0\.1(:\d+)?$/i.test(origin) ||
+    /^https?:\/\/10\.0\.2\.2(:\d+)?$/i.test(origin) ||
+    /^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/i.test(origin) ||
+    /^https?:\/\/\[::1\](:\d+)?$/i.test(origin)
+  );
+}
+
+/** Delegate to production api handlers for routes not duplicated in dev-api-server. */
 const MAIN_HANDLER_DELEGATED_PREFIXES = [
+  '/api/upload-image',
+  '/api/csrf-token',
+];
+const PLATFORM_HANDLER_DELEGATED_PREFIXES = [
   '/api/settings',
   '/api/audit-log',
+  '/api/conversations',
+  '/api/notifications',
+  '/api/payments',
+  '/api/plans',
+  '/api/business',
+  '/api/ai',
+  '/api/gemini',
+  '/api/faqs',
+  '/api/support-tickets',
+  '/api/content',
+  '/api/sell-car',
+  '/api/buyer-activity',
+  '/api/content-reports',
+  '/api/chat',
 ];
 let mainHandlerModulePromise = null;
+let platformHandlerModulePromise = null;
 function loadMainHandler() {
   if (!mainHandlerModulePromise) {
     mainHandlerModulePromise = import('./api/main.ts').then((m) => m.default);
   }
   return mainHandlerModulePromise;
 }
+function loadPlatformHandler() {
+  if (!platformHandlerModulePromise) {
+    platformHandlerModulePromise = import('./api/platform.ts').then((m) => m.default);
+  }
+  return platformHandlerModulePromise;
+}
 async function delegateToMainHandler(req, res) {
   try {
     const handler = await loadMainHandler();
     const url = req.originalUrl || req.url;
-    // Express Request getters (headers, query, …) are not copied by object spread.
     await handler(
       {
         method: req.method,
@@ -106,6 +166,28 @@ async function delegateToMainHandler(req, res) {
     console.error('delegateToMainHandler error:', error);
     if (!res.headersSent) {
       res.status(500).json({ success: false, reason: 'API delegation failed' });
+    }
+  }
+}
+async function delegateToPlatformHandler(req, res) {
+  try {
+    const handler = await loadPlatformHandler();
+    const url = req.originalUrl || req.url;
+    await handler(
+      {
+        method: req.method,
+        url,
+        headers: req.headers ?? {},
+        query: req.query ?? {},
+        body: req.body,
+        cookies: req.cookies,
+      },
+      res,
+    );
+  } catch (error) {
+    console.error('delegateToPlatformHandler error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, reason: 'Platform API delegation failed' });
     }
   }
 }
@@ -192,8 +274,19 @@ function sessionFromJwtPayload(payload) {
   };
 }
 
-// Enable CORS for all routes
-app.use(cors());
+// Enable CORS for local dev origins only (never use open CORS — mirrors production intent)
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || isDevApiCorsOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS blocked for origin: ${origin}`));
+      }
+    },
+    credentials: true,
+  }),
+);
 // Supabase Send SMS Hook — raw JSON body required for Standard Webhooks signature (see api/send-sms-hook.ts)
 app.post(
   '/api/send-sms-hook',
@@ -2835,8 +2928,6 @@ let Conversation = null;
 // })();
 
 // Conversations — Supabase persistence via production api/main.ts (same as Vercel)
-app.all('/api/conversations', delegateToMainHandler);
-
 // Notifications endpoints (mock handlers for development)
 app.get('/api/notifications', (req, res) => {
   try {
@@ -3291,6 +3382,9 @@ app.get('/api/geocode/reverse', async (req, res) => {
 
 for (const prefix of MAIN_HANDLER_DELEGATED_PREFIXES) {
   app.all(prefix, delegateToMainHandler);
+}
+for (const prefix of PLATFORM_HANDLER_DELEGATED_PREFIXES) {
+  app.all(prefix, delegateToPlatformHandler);
 }
 
 app.all(/^\/api\/buyer-activity(?:\/.*)?$/, async (req, res) => {
@@ -4021,92 +4115,7 @@ app.post('/api/content-reports', (req, res) => {
   res.json({ success: true });
 });
 
-// Image upload endpoint - uploads to Supabase Storage
-app.post('/api/upload-image', async (req, res) => {
-  console.log('📸 POST /api/upload-image - Processing image upload');
-  
-  try {
-    const { fileBase64, fileName, mimeType, folder } = req.body;
-    
-    if (!fileBase64) {
-      return res.status(400).json({ 
-        success: false, 
-        reason: 'Missing fileBase64 in request body' 
-      });
-    }
-    
-    // Import Supabase client
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('❌ Supabase credentials not configured');
-      return res.status(500).json({ 
-        success: false, 
-        reason: 'Storage not configured. Please set SUPABASE_SERVICE_ROLE_KEY.' 
-      });
-    }
-    
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
-    // Convert base64 to buffer
-    const buffer = Buffer.from(fileBase64, 'base64');
-    
-    // Generate unique filename
-    const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(2, 12);
-    const ext = (fileName || 'image.jpg').split('.').pop() || 'jpg';
-    const uniqueFileName = `${timestamp}_${randomStr}.${ext}`;
-    const folderPath = folder || 'vehicles';
-    const filePath = `${folderPath}/${uniqueFileName}`;
-    
-    // Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from('Images')
-      .upload(filePath, buffer, {
-        contentType: mimeType || 'image/jpeg',
-        cacheControl: '3600',
-        upsert: false
-      });
-    
-    if (uploadError) {
-      console.error('❌ Supabase Storage upload error:', uploadError);
-      return res.status(500).json({ 
-        success: false, 
-        reason: `Upload failed: ${uploadError.message}` 
-      });
-    }
-    
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('Images')
-      .getPublicUrl(filePath);
-    
-    const publicUrl = urlData.publicUrl;
-    console.log(`✅ Image uploaded successfully: ${publicUrl}`);
-    
-    return res.json({
-      success: true,
-      url: publicUrl,
-      imageId: filePath
-    });
-    
-  } catch (error) {
-    console.error('❌ Upload error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      reason: error.message || 'Upload failed' 
-    });
-  }
-});
-
-// CSRF token endpoint (required for authenticated requests)
-app.get('/api/csrf-token', (req, res) => {
-  // In dev, return a mock CSRF token
-  const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
-  res.json({ token });
-});
+// CSRF + image upload are delegated to api/main.ts (real token validation) via MAIN_HANDLER_DELEGATED_PREFIXES.
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -4154,8 +4163,16 @@ server.on('error', (err) => {
   throw err;
 });
 
-server.listen(PORT, () => {
-  console.log(`🚀 Development API server running on http://localhost:${PORT}`);
+server.listen(PORT, DEV_API_BIND_HOST, () => {
+  if (DEV_API_BIND_HOST === '0.0.0.0') {
+    console.warn(
+      '\n⚠️  Dev API is listening on all interfaces (DEV_API_BIND_HOST=0.0.0.0). ' +
+        'Do not expose port ' +
+        PORT +
+        ' to the public internet. Set DEV_API_BIND_HOST=127.0.0.1 for local-only binding.\n',
+    );
+  }
+  console.log(`🚀 Development API server running on http://${DEV_API_BIND_HOST === '0.0.0.0' ? 'localhost' : DEV_API_BIND_HOST}:${PORT}`);
   console.log(`   Android emulator: http://10.0.2.2:${PORT} (localhost in the emulator is not your PC)`);
   console.log(`📡 Socket.io server ready for real-time chat`);
   console.log(`📋 Available endpoints:`);

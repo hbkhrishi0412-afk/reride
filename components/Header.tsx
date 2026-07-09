@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import React, { useState, useEffect, memo, useRef, useMemo, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User, Notification, Toast as ToastType, Vehicle } from '../types';
@@ -286,14 +287,14 @@ const Header: React.FC<HeaderProps> = memo(({
                                     onCitySelect={(city) => {
                                         // Navigate to used cars with city filter
                                         if (process.env.NODE_ENV === 'development') {
-                                            console.log('ðŸ”µ Header: City selected from dropdown:', city);
+                                            logInfo('ðŸ”µ Header: City selected from dropdown:', city);
                                         }
                                         // Ensure city is passed correctly
                                         onNavigate(ViewEnum.USED_CARS, { city: city || '' });
                                     }}
                                     onViewAllCars={() => {
                                         if (process.env.NODE_ENV === 'development') {
-                                            console.log('ðŸ”µ Header: View all cars clicked - clearing city filter');
+                                            logInfo('ðŸ”µ Header: View all cars clicked - clearing city filter');
                                         }
                                         // Explicitly pass empty city to clear filter
                                         onNavigate(ViewEnum.USED_CARS, { city: '' });

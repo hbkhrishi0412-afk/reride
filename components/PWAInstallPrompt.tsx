@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -67,9 +68,9 @@ const PWAInstallPrompt: React.FC = () => {
     const choiceResult = await deferredPrompt.userChoice;
 
     if (choiceResult.outcome === 'accepted') {
-      console.log('User accepted the install prompt');
+      logInfo('User accepted the install prompt');
     } else {
-      console.log('User dismissed the install prompt');
+      logInfo('User dismissed the install prompt');
     }
 
     setDeferredPrompt(null);

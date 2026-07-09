@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 
 import type { User } from '../types.js';
 import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot.js';
@@ -23,6 +24,7 @@ import {
   setNativeAccessToken,
   setNativeRefreshToken,
 } from '../utils/nativeTokenStorage.js';
+import { setWebMemoryAccessToken } from '../utils/webTokenStorage.js';
 
 // --- Request Deduplication ---
 // Track ongoing requests to prevent duplicate simultaneous requests
@@ -64,8 +66,9 @@ const storeTokens = (accessToken: string, refreshToken?: string) => {
         /* ignore */
       }
     } else if (useHttpOnlyRefreshCookie()) {
+      setWebMemoryAccessToken(accessToken);
       try {
-        sessionStorage.setItem('reRideAccessToken', accessToken);
+        sessionStorage.removeItem('reRideAccessToken');
       } catch {
         /* ignore */
       }
@@ -75,10 +78,13 @@ const storeTokens = (accessToken: string, refreshToken?: string) => {
       } catch {
         /* ignore */
       }
-    } else if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('reRideAccessToken', accessToken);
-      if (refreshToken) {
-        localStorage.setItem('reRideRefreshToken', refreshToken);
+    } else if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('reRideAccessToken', accessToken);
+      try {
+        localStorage.removeItem('reRideAccessToken');
+        localStorage.removeItem('reRideRefreshToken');
+      } catch {
+        /* ignore */
       }
     }
 
@@ -258,7 +264,7 @@ const handleResponse = async (response: Response): Promise<any> => {
                         const refreshData = await refreshResponse.json();
                         if (refreshData.success && refreshData.accessToken) {
                             storeTokens(refreshData.accessToken, refreshData.refreshToken || legacyRefresh || undefined);
-                            console.log('✅ Token refreshed successfully, retrying original request');
+                            logInfo('✅ Token refreshed successfully, retrying original request');
                             // Return a special indicator that token was refreshed
                             // The caller should retry the original request
                             throw new Error('TOKEN_REFRESHED');
@@ -522,7 +528,7 @@ const authApi = async (body: any): Promise<any> => {
     
     // Check if there's already a pending request with the same key
     if (pendingRequests.has(requestKey)) {
-        console.log('⏳ Duplicate request detected, reusing pending request:', requestKey);
+        logInfo('⏳ Duplicate request detected, reusing pending request:', requestKey);
         return pendingRequests.get(requestKey)!;
     }
     
@@ -607,7 +613,7 @@ const authApi = async (body: any): Promise<any> => {
                         
                         // Include hint if available (for development/debugging)
                         if (errorData.hint && process.env.NODE_ENV !== 'production') {
-                            console.info('💡 Server hint:', errorData.hint);
+                            logInfo('💡 Server hint:', errorData.hint);
                         }
                     }
                 } catch (parseError) {

@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import { useEffect, useRef } from 'react';
 import { getSupabaseClient } from '../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -77,7 +78,7 @@ export function useSupabaseRealtime({
           },
           (payload) => {
             if (process.env.NODE_ENV === 'development') {
-              console.log(`[Realtime] ${table} ${payload.eventType}:`, payload);
+              logInfo(`[Realtime] ${table} ${payload.eventType}:`, payload);
             }
             
             try {
@@ -106,7 +107,7 @@ export function useSupabaseRealtime({
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
             if (process.env.NODE_ENV === 'development') {
-              console.log(`✅ Subscribed to ${table} real-time updates`);
+              logInfo(`✅ Subscribed to ${table} real-time updates`);
             }
           } else if (status === 'CHANNEL_ERROR') {
             console.error(`❌ Error subscribing to ${table} real-time updates`);
@@ -114,7 +115,7 @@ export function useSupabaseRealtime({
             console.warn(`⏱️ Timeout subscribing to ${table} real-time updates`);
           } else if (status === 'CLOSED') {
             if (process.env.NODE_ENV === 'development') {
-              console.log(`🔌 Closed connection to ${table} real-time updates`);
+              logInfo(`🔌 Closed connection to ${table} real-time updates`);
             }
           }
         });
@@ -131,7 +132,7 @@ export function useSupabaseRealtime({
           const supabase = getSupabaseClient();
           supabase.removeChannel(channelRef.current);
           if (process.env.NODE_ENV === 'development') {
-            console.log(`🔌 Unsubscribed from ${table} real-time updates`);
+            logInfo(`🔌 Unsubscribed from ${table} real-time updates`);
           }
         } catch (_e) {
           // Supabase may not be configured; ignore

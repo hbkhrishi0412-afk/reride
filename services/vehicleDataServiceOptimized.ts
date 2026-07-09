@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import type { VehicleData } from '../types.js';
 import { VEHICLE_DATA_LIGHT, loadFullVehicleData } from '../components/vehicleDataLight.js';
 
@@ -64,5 +65,5 @@ export const saveVehicleData = async (data: VehicleData): Promise<void> => {
   // For now, we'll just update the cache
   vehicleDataService['cachedData'] = data;
   vehicleDataService['isFullDataLoaded'] = true;
-  console.log('Vehicle data saved:', data);
+  logInfo('Vehicle data saved:', data);
 };

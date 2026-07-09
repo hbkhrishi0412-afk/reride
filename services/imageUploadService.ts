@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 /**
  * Image Upload Service
  * Handles uploading images to Supabase Storage
@@ -257,11 +258,11 @@ async function resolveSupabaseAuthUser(
  */
 async function uploadToSupabaseStorage(file: File, folder: string, _userEmail?: string): Promise<UploadResult> {
   try {
-    console.log(`📤 Uploading image to Supabase Storage: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+    logInfo(`📤 Uploading image to Supabase Storage: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
 
     if (shouldPreferServerUploadApi()) {
       if (process.env.NODE_ENV === 'development') {
-        console.info('📤 Upload via /api/upload-image (mobile/hybrid auth — skipping Supabase JS client).');
+        logInfo('📤 Upload via /api/upload-image (mobile/hybrid auth — skipping Supabase JS client).');
       }
       return await uploadViaApi(file, folder);
     }
@@ -287,15 +288,15 @@ async function uploadToSupabaseStorage(file: File, folder: string, _userEmail?: 
         error: 'You must be logged in to upload images. Please log in and try again.',
       };
     }
-    console.log(`✅ User authenticated: ${user.email}`);
+    logInfo(`✅ User authenticated: ${user.email}`);
 
-    console.log('🔄 Resizing image to fit standard dimensions...');
+    logInfo('🔄 Resizing image to fit standard dimensions...');
     const resizedFile = await withTimeout(
       resizeImage(file, 1200, 800, 0.85),
       RESIZE_TIMEOUT_MS,
       'Image processing timed out. Try a smaller photo or save as JPEG/PNG.',
     );
-    console.log(`✅ Image resized: ${(resizedFile.size / 1024).toFixed(2)} KB (original: ${(file.size / 1024).toFixed(2)} KB)`);
+    logInfo(`✅ Image resized: ${(resizedFile.size / 1024).toFixed(2)} KB (original: ${(file.size / 1024).toFixed(2)} KB)`);
     
     // Generate unique file name
     const timestamp = Date.now();
@@ -305,7 +306,7 @@ async function uploadToSupabaseStorage(file: File, folder: string, _userEmail?: 
     const filePath = `${folder}/${fileName}`;
     
     // Upload to Supabase Storage
-    console.log(`💾 Uploading to Supabase Storage: ${filePath}`);
+    logInfo(`💾 Uploading to Supabase Storage: ${filePath}`);
     const { error } = await supabase.storage
       .from('Images') // Bucket name - must match exact case in Supabase (Images with capital I)
       .upload(filePath, resizedFile, {
@@ -358,7 +359,7 @@ async function uploadToSupabaseStorage(file: File, folder: string, _userEmail?: 
       .getPublicUrl(filePath);
     
     const publicUrl = urlData.publicUrl;
-    console.log(`✅ Image uploaded successfully: ${publicUrl}`);
+    logInfo(`✅ Image uploaded successfully: ${publicUrl}`);
     
     return {
       success: true,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, memo } from 'react';
+import { ModalBackdrop } from './primitives/Pressable';
 
 interface KeyboardShortcutsHelpProps {
   isOpen: boolean;
@@ -50,10 +51,9 @@ const KeyboardShortcutsHelp: React.FC<KeyboardShortcutsHelpProps> = memo(({ isOp
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[1300] flex items-center justify-center p-4" onClick={onClose}>
+    <ModalBackdrop onClose={onClose} className="fixed inset-0 z-[1300] flex items-center justify-center p-4" backdropClassName="absolute inset-0 bg-black/70 backdrop-blur-sm">
       <div 
         className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
-        onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
@@ -120,7 +120,7 @@ const KeyboardShortcutsHelp: React.FC<KeyboardShortcutsHelpProps> = memo(({ isOp
           </div>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 });
 

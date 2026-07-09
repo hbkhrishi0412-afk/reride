@@ -27,6 +27,7 @@ import {
   useHttpOnlyRefreshCookie,
   clearSessionStoredAccessToken,
 } from './authStorage.js';
+import { setWebMemoryAccessToken } from './webTokenStorage.js';
 
 interface FetchOptions extends RequestInit {
   skipAuth?: boolean; // Skip authentication for public endpoints
@@ -214,17 +215,21 @@ const refreshToken = async (): Promise<string | null> => {
             /* ignore */
           }
         } else if (useHttpOnlyRefreshCookie()) {
+          setWebMemoryAccessToken(result.accessToken);
           try {
-            sessionStorage.setItem('reRideAccessToken', result.accessToken);
+            sessionStorage.removeItem('reRideAccessToken');
             localStorage.removeItem('reRideAccessToken');
             localStorage.removeItem('reRideRefreshToken');
           } catch {
             /* ignore */
           }
-        } else {
-          localStorage.setItem('reRideAccessToken', result.accessToken);
-          if (result.refreshToken) {
-            localStorage.setItem('reRideRefreshToken', result.refreshToken);
+        } else if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('reRideAccessToken', result.accessToken);
+          try {
+            localStorage.removeItem('reRideAccessToken');
+            localStorage.removeItem('reRideRefreshToken');
+          } catch {
+            /* ignore */
           }
         }
         // Reset invalid flag on successful refresh

@@ -3,6 +3,8 @@
  * Set RESEND_API_KEY in production; in development without a key we log the link to server logs.
  */
 
+import { logInfo } from '../../utils/logger.js';
+
 export function getPublicAppOriginForPasswordReset(): string {
   const explicit =
     process.env.VITE_APP_URL?.trim() ||
@@ -59,8 +61,7 @@ export async function sendPasswordResetEmail(
 
   const isDev = process.env.NODE_ENV !== 'production' || process.env.VERCEL_ENV === 'development';
   if (isDev) {
-    // eslint-disable-next-line no-console
-    console.log(`[ReRide] password reset link (set RESEND_API_KEY to email):`, resetUrl);
+    logInfo(`[ReRide] password reset link (set RESEND_API_KEY to email):`, resetUrl);
     return { sent: true, devLogged: true };
   }
 

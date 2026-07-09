@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ModalBackdrop } from './primitives/Pressable';
 
 interface TestDriveModalProps {
   onClose: () => void;
@@ -26,8 +27,12 @@ const TestDriveModal: React.FC<TestDriveModalProps> = ({ onClose, onSubmit }) =>
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[1300] p-4 animate-fade-in" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+    <ModalBackdrop
+      onClose={onClose}
+      className="fixed inset-0 flex items-center justify-center z-[1300] p-4 animate-fade-in"
+      backdropClassName="absolute inset-0 bg-black/70"
+    >
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
         <form onSubmit={handleSubmit}>
           <div className="p-6">
             <div className="flex justify-between items-center mb-4">
@@ -74,7 +79,7 @@ const TestDriveModal: React.FC<TestDriveModalProps> = ({ onClose, onSubmit }) =>
           </div>
         </form>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 };
 

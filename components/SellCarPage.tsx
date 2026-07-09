@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View as ViewEnum } from '../types';
 import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianStates, getDistrictsByState, getCarYears, getOwnershipOptions, ScrapedCarData, CarMake } from '../utils/rerideScraper';
@@ -344,7 +345,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
     }
     
     autoFetchTimeoutRef.current = setTimeout(async () => {
-      console.log('🚗 SellCar: Auto-fetching specs for:', { make, model, year });
+      logInfo('🚗 SellCar: Auto-fetching specs for:', { make, model, year });
       lastFetchedKey.current = vehicleKey;
       
       try {
@@ -358,7 +359,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
             setSelectedTransmission(specs.transmission);
             setCarDetails(prev => ({ ...prev, transmission: specs.transmission || '' }));
           }
-          console.log('✅ SellCar: Auto-filled fuel/transmission:', specs.fuelType, specs.transmission);
+          logInfo('✅ SellCar: Auto-filled fuel/transmission:', specs.fuelType, specs.transmission);
         } else {
           const suggestions = await getAiVehicleSuggestions({ make, model, year: parseInt(year, 10) });
           if (suggestions.structuredSpecs) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { User } from '../types.js';
 import { useApp } from './AppProvider';
 import { isRerideStaffPick } from '../utils/staffPick.js';
+import { ModalBackdrop } from './primitives/Pressable';
 
 interface EditUserModalProps {
     user: User;
@@ -109,14 +110,18 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
     if (!user) return null;
 
     return (
-        <div
-            className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 md:p-8 lg:p-12 animate-fade-in"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="edit-user-modal-title"
+        <ModalBackdrop
+            onClose={onClose}
+            className="fixed inset-0 flex items-center justify-center z-50 p-4 md:p-8 lg:p-12 animate-fade-in"
+            backdropClassName="absolute inset-0 bg-black/60"
+            aria-label="Close edit user dialog"
         >
-            <div className="absolute inset-0" onClick={onClose} aria-hidden="true"></div>
-            <div className="relative bg-white rounded-[24px] shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-hidden transform transition-transform animate-scale-in mx-4 sm:mx-0">
+            <div
+                className="relative bg-white rounded-[24px] shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-hidden transform transition-transform animate-scale-in mx-4 sm:mx-0"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="edit-user-modal-title"
+            >
                 <header className="bg-gradient-to-r from-orange-500 via-orange-400 to-orange-300 text-white px-4 sm:px-8 py-5 sm:py-6 flex items-center justify-between">
                     <div>
                         <p className="text-xs uppercase tracking-[0.3em] font-semibold opacity-80">Edit User</p>
@@ -574,7 +579,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                     </div>
                 </form>
             </div>
-        </div>
+        </ModalBackdrop>
     );
 };
 

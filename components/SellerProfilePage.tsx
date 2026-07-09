@@ -10,6 +10,7 @@ import { useApp } from './AppProvider.js';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import { followSeller, unfollowSeller, isFollowingSeller, getFollowersCount, getFollowingCount, getFollowersOfSeller, getFollowedSellers } from '../services/buyerEngagementService.js';
 import { useTranslatedText, useTranslatedFields } from '../hooks/useTranslatedText';
+import { ModalBackdrop } from './primitives/Pressable';
 
 /* ============================================================
    Scoped premium styles for the Seller Profile page.
@@ -399,14 +400,16 @@ const SP_STYLES = `
   @keyframes sp-rise { to { opacity: 1; transform: translateY(0); } }
 
   /* ===== Modals ===== */
-  .sp-modal-backdrop {
+  .sp-modal-backdrop-shell {
     position: fixed; inset: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: center; padding: 1rem;
+    animation: sp-fade-in .25s ease both;
+  }
+  .sp-modal-backdrop-fill {
     background: radial-gradient(circle at 30% 20%, rgba(99,102,241,.35), transparent 60%),
                 radial-gradient(circle at 70% 80%, rgba(236,72,153,.3), transparent 60%),
                 rgba(15,23,42,.55);
     backdrop-filter: blur(6px);
-    display: flex; align-items: center; justify-content: center; padding: 1rem;
-    animation: sp-fade-in .25s ease both;
   }
   @keyframes sp-fade-in { from { opacity: 0; } to { opacity: 1; } }
   .sp-modal {
@@ -942,8 +945,13 @@ const SellerProfilePageContent: React.FC<SellerProfilePageProps & { seller: User
 
             {/* Owner-only Modals */}
             {isOwnerSeller && showFollowers && (
-                <div className="sp-modal-backdrop" onClick={() => setShowFollowers(false)}>
-                    <div className="sp-modal" onClick={(e) => e.stopPropagation()}>
+                <ModalBackdrop
+                    onClose={() => setShowFollowers(false)}
+                    className="sp-modal-backdrop-shell"
+                    backdropClassName="absolute inset-0 sp-modal-backdrop-fill"
+                    aria-label="Close followers dialog"
+                >
+                    <div className="sp-modal">
                         <div className="sp-modal-head relative flex items-center justify-between">
                             <div className="relative z-10">
                                 <div className="text-[10.5px] font-black uppercase tracking-widest text-white/70">Community</div>
@@ -982,12 +990,17 @@ const SellerProfilePageContent: React.FC<SellerProfilePageProps & { seller: User
                             )}
                         </ul>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {isOwnerSeller && showFollowing && (
-                <div className="sp-modal-backdrop" onClick={() => setShowFollowing(false)}>
-                    <div className="sp-modal" onClick={(e) => e.stopPropagation()}>
+                <ModalBackdrop
+                    onClose={() => setShowFollowing(false)}
+                    className="sp-modal-backdrop-shell"
+                    backdropClassName="absolute inset-0 sp-modal-backdrop-fill"
+                    aria-label="Close following dialog"
+                >
+                    <div className="sp-modal">
                         <div className="sp-modal-head relative flex items-center justify-between">
                             <div className="relative z-10">
                                 <div className="text-[10.5px] font-black uppercase tracking-widest text-white/70">Your network</div>
@@ -1026,7 +1039,7 @@ const SellerProfilePageContent: React.FC<SellerProfilePageProps & { seller: User
                             )}
                         </ul>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

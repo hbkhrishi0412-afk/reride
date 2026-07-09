@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import React, { useState, useRef } from 'react';
 import type { User, View } from '../types';
 import { View as ViewEnum } from '../types';
@@ -195,11 +196,11 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
       // Attempt to proactively refresh token if it's likely expired
       // But don't block the request if refresh fails - let the API handle it
       if (!isTokenLikelyValid()) {
-        console.log('🔄 Token appears expired, attempting proactive refresh before password update...');
+        logInfo('🔄 Token appears expired, attempting proactive refresh before password update...');
         try {
           const newToken = await refreshAuthToken();
           if (newToken) {
-            console.log('✅ Token refreshed successfully before password update');
+            logInfo('✅ Token refreshed successfully before password update');
           } else {
             console.warn('⚠️ Proactive token refresh returned null, but continuing with request (API will handle 401)');
           }

@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 /**
  * SMS + push alerts (native FCM + PWA web push) when a buyer messages or books a test drive.
  * Email is handled separately in lib/email.ts.
@@ -135,7 +136,7 @@ async function sendNativePushAlert(
       },
     });
     if (process.env.NODE_ENV === 'development') {
-      console.log(`📲 FCM push sent to seller (${platform || 'unknown'}):`, sellerEmail);
+      logInfo(`📲 FCM push sent to seller (${platform || 'unknown'}):`, sellerEmail);
     }
   } catch (err) {
     console.warn('⚠️ FCM push to seller failed (non-fatal):', err instanceof Error ? err.message : err);
@@ -157,7 +158,7 @@ async function sendPwaWebPushAlert(
       conversationId,
     });
     if (process.env.NODE_ENV === 'development') {
-      console.log('🌐 Web push sent to seller:', sellerEmail);
+      logInfo('🌐 Web push sent to seller:', sellerEmail);
     }
   } catch (err) {
     console.warn('⚠️ Web push to seller failed (non-fatal):', err instanceof Error ? err.message : err);
@@ -184,7 +185,7 @@ async function sendSmsAlert(sellerEmail: string, smsText: string): Promise<void>
     const result = await sendMessageBotTransactionalSMS(phoneE164, smsText, mbConfig);
     if (result.success) {
       if (process.env.NODE_ENV === 'development') {
-        console.log('📱 Seller alert SMS sent via MessageBot:', sellerEmail);
+        logInfo('📱 Seller alert SMS sent via MessageBot:', sellerEmail);
       }
       return;
     }
@@ -196,7 +197,7 @@ async function sendSmsAlert(sellerEmail: string, smsText: string): Promise<void>
     const result = await sendKarixTransactionalSMS(phoneE164, smsText, karixConfig);
     if (result.success) {
       if (process.env.NODE_ENV === 'development') {
-        console.log('📱 Seller alert SMS sent via Karix:', sellerEmail);
+        logInfo('📱 Seller alert SMS sent via Karix:', sellerEmail);
       }
       return;
     }

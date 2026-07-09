@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
-import { authenticateRequest } from './auth.js';
+import { authenticateRequestDual } from './auth.js';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import { applyCors } from '../lib/api-route-cors.js';
 import { isValidServiceType } from '../constants/serviceProviderCatalog.js';
@@ -85,35 +84,13 @@ function devFallbackProviderId(req: VercelRequest): string | null {
   return headerId || 'dev-mock-provider';
 }
 
-/**
- * Same order as service-requests / getBrowserAccessTokenForApi: legacy app JWT first,
- * then Supabase session JWT. Provider routes previously only called verifyIdTokenFromHeader,
- * so users with a valid reRide access token always got "Invalid or expired token" from getUser().
- */
 async function resolveProviderId(req: VercelRequest, allowDevFallback = false): Promise<string> {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ') || authHeader.substring(7).trim() === '') {
-      throw new Error('Missing bearer token');
+    const auth = await authenticateRequestDual(req);
+    if (auth.isValid && auth.user?.userId) {
+      return auth.user.userId;
     }
-
-    const legacy = authenticateRequest(req);
-    if (legacy.isValid && legacy.user?.userId) {
-      return legacy.user.userId;
-    }
-
-    try {
-      const decoded = await verifyIdTokenFromHeader(req);
-      return decoded.uid;
-    } catch (supabaseErr) {
-      const supMsg = supabaseErr instanceof Error ? supabaseErr.message : String(supabaseErr);
-      const legMsg = legacy.error;
-      const legacyFormatMismatch = !legacy.isValid && legMsg === 'Invalid token format';
-      if (legMsg && supMsg && legMsg !== supMsg && !legacyFormatMismatch) {
-        throw new Error(`Authentication failed: ${legMsg} | ${supMsg}`);
-      }
-      throw new Error(supMsg || legMsg || 'Authentication required');
-    }
+    throw new Error(auth.error || 'Authentication required');
   } catch (err) {
     if (allowDevFallback) {
       const fallback = devFallbackProviderId(req);

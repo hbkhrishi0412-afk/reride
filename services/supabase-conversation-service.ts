@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import { resolveSupabaseClient } from '../lib/resolveSupabaseClient.js';
 import { emailToKey } from './supabase-user-service.js';
@@ -579,7 +580,7 @@ export const supabaseConversationService = {
     const normalizedSellerId = sellerId ? sellerId.toLowerCase().trim() : '';
     
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔍 findBySellerId called:', {
+      logInfo('🔍 findBySellerId called:', {
         originalSellerId: sellerId,
         normalizedSellerId,
         isServerSide
@@ -597,7 +598,7 @@ export const supabaseConversationService = {
     }
 
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔍 Supabase query result (seller variants):', {
+      logInfo('🔍 Supabase query result (seller variants):', {
         found: data?.length || 0,
         error: error?.message,
         variants,
@@ -682,7 +683,7 @@ export const supabaseConversationService = {
 
   // Add message to conversation
   async addMessage(conversationId: string, message: ChatMessage): Promise<void> {
-    console.log('💾 Supabase: Adding message to conversation:', { conversationId, messageId: message.id });
+    logInfo('💾 Supabase: Adding message to conversation:', { conversationId, messageId: message.id });
     
     const conversation = await this.findById(conversationId);
     if (!conversation) {
@@ -690,10 +691,10 @@ export const supabaseConversationService = {
       throw new Error(`Conversation not found: ${conversationId}`);
     }
     
-    console.log('📋 Supabase: Current conversation has', conversation.messages?.length || 0, 'messages');
+    logInfo('📋 Supabase: Current conversation has', conversation.messages?.length || 0, 'messages');
     
     const updatedMessages = [...(conversation.messages || []), sanitizePersistedChatMessage(message)];
-    console.log('💾 Supabase: Updating conversation with', updatedMessages.length, 'messages');
+    logInfo('💾 Supabase: Updating conversation with', updatedMessages.length, 'messages');
 
     const readPatch: Partial<Conversation> = {};
     if (message.sender === 'seller') {
@@ -711,7 +712,7 @@ export const supabaseConversationService = {
         lastMessage: message.text,
         ...readPatch,
       });
-      console.log('✅ Supabase: Message added successfully');
+      logInfo('✅ Supabase: Message added successfully');
     } catch (error) {
       console.error('❌ Supabase: Error updating conversation:', {
         conversationId,

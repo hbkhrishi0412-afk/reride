@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 /**
  * Mobile Features Utilities
  * Provides hooks and utilities for native mobile features
@@ -680,7 +681,7 @@ export async function queueOfflineAction(
       });
       return;
     } catch (error) {
-      console.log('Online request failed, queuing for offline sync:', error);
+      logInfo('Online request failed, queuing for offline sync:', error);
     }
   }
 

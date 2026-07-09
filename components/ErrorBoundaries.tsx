@@ -216,4 +216,53 @@ export const PaymentErrorBoundary: React.FC<{ children: ReactNode }> = ({ childr
   </ErrorBoundary>
 );
 
+export const HomeErrorBoundary: React.FC<{ children: ReactNode }> = ({ children }) => (
+  <ErrorBoundary context="Home" onError={(error) => console.error('Home Error:', error)}>
+    {children}
+  </ErrorBoundary>
+);
+
+export const VehicleDetailErrorBoundary: React.FC<{ children: ReactNode }> = ({ children }) => (
+  <ErrorBoundary
+    context="Vehicle Detail"
+    onError={(error) => console.error('Vehicle Detail Error:', error)}
+    fallback={
+      <div className="min-h-[50vh] flex items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Could not load this listing</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
+            Try going back and opening the vehicle again.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-4 btn-brand-primary px-4 py-2 rounded-md text-sm"
+          >
+            Reload
+          </button>
+        </div>
+      </div>
+    }
+  >
+    {children}
+  </ErrorBoundary>
+);
+
+export const ServiceCartErrorBoundary: React.FC<{ children: ReactNode }> = ({ children }) => (
+  <ErrorBoundary
+    context="Service Cart"
+    onError={(error) => console.error('Service Cart Error:', error)}
+    fallback={
+      <div className="p-6 bg-orange-50 border border-orange-200 rounded-xl dark:bg-orange-950/30 dark:border-orange-900">
+        <h3 className="text-sm font-medium text-orange-900 dark:text-orange-200">Service booking unavailable</h3>
+        <p className="text-sm text-orange-800 dark:text-orange-300 mt-1">
+          Refresh the page or try again in a moment.
+        </p>
+      </div>
+    }
+  >
+    {children}
+  </ErrorBoundary>
+);
+
 export default ErrorBoundary;

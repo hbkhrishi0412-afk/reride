@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import React, { useState, useEffect, useMemo } from 'react';
 import { VehicleData, VehicleCategory } from '../types.js';
 import { useApp } from './AppProvider';
@@ -118,18 +119,18 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
 
 
   const handleUpdateData = (updater: (draft: VehicleData) => void) => {
-    console.log('🔄 Updating vehicle data...');
+    logInfo('🔄 Updating vehicle data...');
     const newData = { ...vehicleData };
     updater(newData);
-    console.log('📝 New vehicle data:', newData);
+    logInfo('📝 New vehicle data:', newData);
     
     // Update localStorage immediately
     localStorage.setItem('reRideVehicleData', JSON.stringify(newData));
-    console.log('💾 Vehicle data saved to localStorage');
+    logInfo('💾 Vehicle data saved to localStorage');
     
     // Update parent component
     onUpdate(newData);
-    console.log('✅ Vehicle data update sent to parent');
+    logInfo('✅ Vehicle data update sent to parent');
   };
 
   const handleEdit = (type: EditingState['type'], path: string[], value: string) => {
@@ -238,7 +239,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
   };
 
   const handleAddNew = (type: string, path: string[]) => {
-    console.log('🔄 Add New button clicked:', { type, path });
+    logInfo('🔄 Add New button clicked:', { type, path });
     setAdding({ type, path });
     setNewItemValue('');
   };
@@ -250,7 +251,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
     }
 
     const newValue = newItemValue.trim();
-    console.log('🔄 Saving new item:', { type: adding.type, value: newValue, path: adding.path });
+    logInfo('🔄 Saving new item:', { type: adding.type, value: newValue, path: adding.path });
 
     handleUpdateData(draft => {
       if (adding.type === 'category') {
@@ -286,7 +287,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
       }
     });
 
-    console.log('✅ New item saved successfully');
+    logInfo('✅ New item saved successfully');
     setAdding(null);
     setNewItemValue('');
   };

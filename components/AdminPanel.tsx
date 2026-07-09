@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -5,6 +6,7 @@ import type { Vehicle, User, Conversation, PlatformSettings, AuditLogEntry, Vehi
 import { View } from '../types';
 import { useApp } from './AppProvider';
 import ConfirmDialog from './ConfirmDialog';
+import { ModalBackdrop } from './primitives/Pressable';
 // Removed blocking import - will lazy load PLAN_DETAILS when needed
 import { planService } from '../services/planService';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
@@ -645,8 +647,8 @@ const AddNewPlanModal: React.FC<{
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <ModalBackdrop onClose={onClose} className="fixed inset-0 flex items-center justify-center z-50 p-4" backdropClassName="absolute inset-0 bg-black/60">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit} className="p-6">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-2xl font-bold text-reride-text-dark dark:text-white">Create New Plan</h2>
@@ -826,7 +828,7 @@ const AddNewPlanModal: React.FC<{
                     </div>
                 </form>
             </div>
-        </div>
+        </ModalBackdrop>
     );
 };
 
@@ -908,8 +910,8 @@ const PlanEditModal: React.FC<{
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <ModalBackdrop onClose={onClose} className="fixed inset-0 flex items-center justify-center z-50 p-4" backdropClassName="absolute inset-0 bg-black/60">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                 <form onSubmit={handleSubmit} className="p-6">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-2xl font-bold text-reride-text-dark dark:text-white">Edit Plan</h2>
@@ -1089,7 +1091,7 @@ const PlanEditModal: React.FC<{
                     </div>
                 </form>
             </div>
-        </div>
+        </ModalBackdrop>
     );
 };
 
@@ -1217,14 +1219,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             !isRefreshing
         ) {
             hasFetchedUsersRef.current = true;
-            console.log('📊 AdminPanel: Users array is empty, fetching users...');
+            logInfo('📊 AdminPanel: Users array is empty, fetching users...');
             
             const fetchUsers = async () => {
                 try {
                     const { dataService } = await import('../services/dataService');
                     // CRITICAL FIX: Force refresh to bypass cache and get fresh data from database
                     const usersData = await dataService.getUsers(true); // forceRefresh = true
-                    console.log(`✅ AdminPanel: Fetched ${usersData.length} users (forced refresh)`);
+                    logInfo(`✅ AdminPanel: Fetched ${usersData.length} users (forced refresh)`);
                     
                     // Clear any configuration errors on success
                     if (usersData.length > 0) {
@@ -1267,7 +1269,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             new CustomEvent('usersCacheUpdated', { detail: { users: usersData } })
                         );
                     }
-                    console.log('✅ AdminPanel: User list synced from database (no reload)');
+                    logInfo('✅ AdminPanel: User list synced from database (no reload)');
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : String(error);
                     const errorAny = error as any;
@@ -1321,7 +1323,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         try {
             const { dataService } = await import('../services/dataService');
             const usersData = await dataService.getUsers(true);
-            console.log(`🔄 Refresh: Loaded ${usersData.length} users from database`);
+            logInfo(`🔄 Refresh: Loaded ${usersData.length} users from database`);
 
             if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
                 localStorage.setItem('reRideUsers_prod', JSON.stringify(usersData));
@@ -2900,7 +2902,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
-                                                                console.log('🔄 Toggle flagged vehicle status button clicked for vehicle:', vehicle.id);
+                                                                logInfo('🔄 Toggle flagged vehicle status button clicked for vehicle:', vehicle.id);
                                                                 onToggleVehicleStatus(vehicle.id);
                                                             }}
                                                             className="text-yellow-600 hover:text-yellow-800 font-medium cursor-pointer"
@@ -2992,7 +2994,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                                 onClick={(e) => {
                                                                     e.preventDefault();
                                                                     e.stopPropagation();
-                                                                    console.log('🔄 Resolve conversation flag button clicked for conversation:', conversation.id);
+                                                                    logInfo('🔄 Resolve conversation flag button clicked for conversation:', conversation.id);
                                                                     handleResolveFlag('conversation', conversation.id);
                                                                 }}
                                                                 className="text-green-600 hover:text-green-800 font-medium cursor-pointer"
@@ -4173,7 +4175,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                     ? `Expiry date set to ${new Date(expiryDate).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`
                                     : 'Expiry date removed successfully';
                                 
-                                console.log('✅', successMsg);
+                                logInfo('✅', successMsg);
                                 
                             } catch (error: any) {
                                 console.error('Failed to update expiry date:', error);
@@ -4262,8 +4264,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         };
 
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-                <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <ModalBackdrop onClose={onClose} className="fixed inset-0 flex items-center justify-center z-50" backdropClassName="absolute inset-0 bg-black/50">
+                <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
                     <form onSubmit={handleSubmit}>
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-4">
@@ -4363,7 +4365,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         </div>
                     </form>
                 </div>
-            </div>
+            </ModalBackdrop>
         );
     };
 
@@ -4393,8 +4395,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         };
 
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-                <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <ModalBackdrop onClose={onClose} className="fixed inset-0 flex items-center justify-center z-50" backdropClassName="absolute inset-0 bg-black/50">
+                <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
                     <form onSubmit={handleSubmit}>
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-4">
@@ -4519,7 +4521,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         </div>
                     </form>
                 </div>
-            </div>
+            </ModalBackdrop>
         );
     };
 

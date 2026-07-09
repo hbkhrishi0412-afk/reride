@@ -1620,7 +1620,18 @@ const ServiceCart: React.FC<Props> = ({
                     <div className="text-sm text-gray-600 dark:text-gray-300">Login to see your request progress.</div>
                 )}
                 {isLoggedIn && requestsLoading && (
-                    <div className="text-sm text-gray-600 dark:text-gray-300">Loading requests...</div>
+                    <div className="space-y-3" aria-busy="true" aria-label="Loading service requests">
+                        {[1, 2, 3].map((i) => (
+                            <div
+                                key={i}
+                                className="animate-pulse rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3"
+                            >
+                                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+                                <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-2/3" />
+                                <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
+                            </div>
+                        ))}
+                    </div>
                 )}
                 {isLoggedIn && requestsError && (
                     <div className="text-sm text-red-600">{requestsError}</div>

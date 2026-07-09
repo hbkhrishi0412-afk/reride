@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 import type { Vehicle, User, VehicleData, StorefrontDiscoveryAggregates } from '../types.js';
 import { queueRequest } from '../utils/requestQueue.js';
 import {
@@ -118,7 +119,7 @@ class DataService {
           if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
             // Return cached data immediately to avoid redundant API calls
             if (process.env.NODE_ENV === 'development') {
-              console.log(`✅ Using cached data for ${endpoint}`);
+              logInfo(`✅ Using cached data for ${endpoint}`);
             }
             return cached.data;
           }
@@ -341,7 +342,7 @@ class DataService {
         (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('accessToken') : null);
       if (accessToken) {
         if (process.env.NODE_ENV === 'development') {
-          console.log('📊 getAuthHeaders: Access token found, length:', accessToken.length);
+          logInfo('📊 getAuthHeaders: Access token found, length:', accessToken.length);
         }
         return { Authorization: `Bearer ${accessToken}` };
       }
@@ -420,7 +421,7 @@ class DataService {
       >('/users?role=seller', {}, 7);
       const sellers = this.extractUsersFromApiResponse(raw);
       if (sellers.length > 0) {
-        console.log(
+        logInfo(
           `✅ Loaded ${sellers.length} public sellers for listing contact (GET /users?role=seller)`
         );
       }
@@ -525,7 +526,7 @@ class DataService {
     if (hasMore && page > maxPages) {
       console.warn(`⚠️ Vehicle pagination stopped at ${maxPages} pages (safety cap). Loaded ${merged.length} vehicles.`);
     } else if (merged.length > vehicles.length) {
-      console.log(`✅ Expanded paginated vehicle listing: ${merged.length} total (was ${vehicles.length} on first page)`);
+      logInfo(`✅ Expanded paginated vehicle listing: ${merged.length} total (was ${vehicles.length} on first page)`);
     }
     return merged;
   }
@@ -707,7 +708,7 @@ class DataService {
             if (Array.isArray(vehicles) && vehicles.length >= 0) {
               const normalized = this.finalizeVehicleList(vehicles);
               this.setLocalStorageData(cacheKey, normalized);
-              console.log(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
+              logInfo(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
               if (typeof window !== 'undefined' && window.dispatchEvent) {
                 window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles } }));
               }
@@ -722,7 +723,7 @@ class DataService {
           console.warn('Background vehicle refresh failed (using cache):', error);
         });
 
-      console.log(`✅ Returning ${cachedVehicles.length} cached vehicles instantly`);
+      logInfo(`✅ Returning ${cachedVehicles.length} cached vehicles instantly`);
       return this.finalizeVehicleList(cachedVehicles);
     }
 
@@ -736,7 +737,7 @@ class DataService {
       if (!forceRefresh && !includeAllStatuses && !isNativeWebView) {
         response = await this.tryConsumeEarlyVehiclesPrefetch();
         if (response) {
-          console.log('✅ Used early vehicle prefetch from boot script');
+          logInfo('✅ Used early vehicle prefetch from boot script');
         }
       }
       if (!response) {
@@ -781,7 +782,7 @@ class DataService {
         throw new Error('Invalid response format: expected array');
       }
 
-      console.log(
+      logInfo(
         `✅ Loaded ${vehicles.length} vehicles from production API (response type: ${Array.isArray(response) ? 'array' : 'paginated'}${forceRefresh ? ', forced refresh' : ''})`
       );
 
@@ -802,7 +803,7 @@ class DataService {
           },
           {} as Record<string, number>
         );
-        console.log(`📊 Vehicle status breakdown:`, statusCounts);
+        logInfo(`📊 Vehicle status breakdown:`, statusCounts);
       }
 
       const normalized = this.finalizeVehicleList(vehicles);
@@ -922,7 +923,7 @@ class DataService {
         vehicles = await MOCK_VEHICLES();
         this.setLocalStorageData('reRideVehicles', vehicles);
       } catch (error) {
-        console.log('⚠️ Could not load mock vehicles, using fallback:', error);
+        logInfo('⚠️ Could not load mock vehicles, using fallback:', error);
         vehicles = fallbackVehicles;
         this.setLocalStorageData('reRideVehicles', vehicles);
       }
@@ -956,7 +957,7 @@ class DataService {
         this.setLocalStorageData('reRideVehicles_prod', cachedVehicles);
       }
       
-      console.log('✅ Vehicle added successfully via API:', vehicle.id);
+      logInfo('✅ Vehicle added successfully via API:', vehicle.id);
       return vehicle;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1079,7 +1080,7 @@ class DataService {
         this.setLocalStorageData('reRideVehicles_prod', updatedVehicles);
       }
       
-      console.log('✅ Vehicle updated successfully via API:', vehicle.id);
+      logInfo('✅ Vehicle updated successfully via API:', vehicle.id);
       return vehicle;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1128,7 +1129,7 @@ class DataService {
         this.setLocalStorageData('reRideVehicles_prod', filteredVehicles);
       }
       
-      console.log('✅ Vehicle deleted successfully via API:', vehicleId);
+      logInfo('✅ Vehicle deleted successfully via API:', vehicleId);
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1177,7 +1178,7 @@ class DataService {
 
           if (Array.isArray(users) && users.length >= 0) {
             this.setLocalStorageData(cacheKey, users);
-            console.log(`✅ Background refresh: Updated cache with ${users.length} users`);
+            logInfo(`✅ Background refresh: Updated cache with ${users.length} users`);
             // Notify UI so user data stays in sync (e.g. after Supabase/API updates)
             if (typeof window !== 'undefined' && window.dispatchEvent) {
               window.dispatchEvent(new CustomEvent('usersCacheUpdated', { detail: { users } }));
@@ -1189,7 +1190,7 @@ class DataService {
         });
       
       // Return cached data immediately
-      console.log(`✅ Returning ${cachedUsers.length} cached users instantly`);
+      logInfo(`✅ Returning ${cachedUsers.length} cached users instantly`);
       return cachedUsers;
     }
 
@@ -1207,7 +1208,7 @@ class DataService {
           const refreshResult = await refreshAccessToken();
           if (refreshResult.success && refreshResult.accessToken) {
             accessToken = refreshResult.accessToken;
-            console.log('✅ getUsers: Refreshed missing access token successfully');
+            logInfo('✅ getUsers: Refreshed missing access token successfully');
           }
         } catch (refreshError) {
           console.warn('⚠️ getUsers: Token refresh failed when token was missing:', refreshError);
@@ -1218,7 +1219,7 @@ class DataService {
         }
       }
 
-      console.log('📊 getUsers: Making API request to /api/users...');
+      logInfo('📊 getUsers: Making API request to /api/users...');
       const rawResponse = await this.makeApiRequest<User[] | { users?: User[]; data?: User[]; success?: boolean; reason?: string; diagnostic?: string }>('/users');
       
       // Check if response indicates an error (503 or other error format)
@@ -1270,7 +1271,7 @@ class DataService {
         localStorage.removeItem('reRideUsers_error');
       }
       
-      console.log(`✅ getUsers: Successfully fetched ${users.length} users from API${forceRefresh ? ' (forced refresh)' : ''}`);
+      logInfo(`✅ getUsers: Successfully fetched ${users.length} users from API${forceRefresh ? ' (forced refresh)' : ''}`);
       
       if (users.length === 0) {
         console.warn('⚠️ getUsers: API returned 0 users. This might indicate:');
@@ -1366,10 +1367,10 @@ class DataService {
         if (mockUsers.default && mockUsers.default.length > 0) {
           users = mockUsers.default as User[];
           this.setLocalStorageData('reRideUsers', users);
-          console.log('✅ Loaded mock users data:', users.length, 'users');
+          logInfo('✅ Loaded mock users data:', users.length, 'users');
         }
       } catch (error) {
-        console.log('⚠️ Could not load mock users:', error);
+        logInfo('⚠️ Could not load mock users:', error);
       }
     }
 

@@ -625,7 +625,8 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   // Track a view when the detail page is opened (only once per vehicle)
   useEffect(() => {
     const vehicleId = vehicle?.id;
-    if (!vehicleId) return;
+    const viewToken = vehicle?.viewTrackToken;
+    if (!vehicleId || !viewToken) return;
     
     // Check if we've already tracked this vehicle's view
     if (trackedViewRef.current.has(vehicleId)) {
@@ -643,8 +644,10 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
           body: JSON.stringify({
             vehicleId,
             ...(vehicle?.databaseId ? { databaseId: vehicle.databaseId } : {}),
+            ...(vehicle?.viewTrackToken ? { viewToken: vehicle.viewTrackToken } : {}),
           }),
         });
+        if (!res.ok) return;
         const data = await res.json().catch((error) => {
           logWarn('Failed to parse view count response:', error);
           return {};

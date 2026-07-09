@@ -1,3 +1,4 @@
+import { logInfo } from '../utils/logger.js';
 /**
  * Vehicle Specifications Auto-Fetch Service
  * Uses free APIs to automatically populate vehicle specs when Vehicle Overview is filled
@@ -111,7 +112,7 @@ const loadCacheFromStorage = (): void => {
       }
     });
     
-    console.log(`📦 Loaded ${specsCache.size} cached vehicle specs from storage`);
+    logInfo(`📦 Loaded ${specsCache.size} cached vehicle specs from storage`);
   } catch (error) {
     console.error('Failed to load specs cache:', error);
   }
@@ -192,7 +193,7 @@ export const clearVehicleSpecsCache = (): void => {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(CACHE_STORAGE_KEY);
   }
-  console.log('🗑️ Vehicle specs cache cleared');
+  logInfo('🗑️ Vehicle specs cache cleared');
 };
 
 // Get cache statistics
@@ -243,14 +244,14 @@ export const fetchVehicleSpecsFromCarQuery = async (
       model: model.trim(),
       year: String(year),
     });
-    console.log('🚗 Fetching specs via /api/vehicle-specs:', { make, model, year });
+    logInfo('🚗 Fetching specs via /api/vehicle-specs:', { make, model, year });
 
     const response = await publicApiFetch(`/api/vehicle-specs?${params.toString()}`, {
       method: 'GET',
     });
 
     if (!response.ok) {
-      console.log('Vehicle specs API returned non-OK status:', response.status);
+      logInfo('Vehicle specs API returned non-OK status:', response.status);
       return null;
     }
 
@@ -259,7 +260,7 @@ export const fetchVehicleSpecsFromCarQuery = async (
       return null;
     }
 
-    console.log('✅ Specs received from CarQuery proxy');
+    logInfo('✅ Specs received from CarQuery proxy');
     return data.specs;
   } catch (error) {
     console.error('CarQuery proxy error:', error);
@@ -505,7 +506,7 @@ export const fetchSpecsFromLocalDB = (
   // Try exact match first
   const exactKey = `${normalizedMake}_${normalizedModel}`;
   if (indianVehicleSpecs[exactKey]) {
-    console.log('📋 Found exact match in local DB:', exactKey);
+    logInfo('📋 Found exact match in local DB:', exactKey);
     return indianVehicleSpecs[exactKey];
   }
   
@@ -518,7 +519,7 @@ export const fetchSpecsFromLocalDB = (
   const compactModel = normalizedModel.replace(/\s+/g, '');
   const compactKey = `${normalizedMake}_${compactModel}`;
   if (indianVehicleSpecs[compactKey]) {
-    console.log('📋 Found compact match in local DB:', compactKey);
+    logInfo('📋 Found compact match in local DB:', compactKey);
     return indianVehicleSpecs[compactKey];
   }
   
@@ -529,7 +530,7 @@ export const fetchSpecsFromLocalDB = (
       (normalizedMake.includes(dbMake) || dbMake.includes(normalizedMake)) &&
       (normalizedModel.includes(dbModel) || dbModel.includes(normalizedModel))
     ) {
-      console.log('📋 Found partial match in local DB:', key);
+      logInfo('📋 Found partial match in local DB:', key);
       return indianVehicleSpecs[key];
     }
   }
@@ -553,16 +554,16 @@ export const fetchVehicleSpecs = async (
   // 0. Check cache first (fastest)
   const cachedSpecs = getFromCache(cacheKey);
   if (cachedSpecs) {
-    console.log('⚡ Specs found in cache (instant)');
+    logInfo('⚡ Specs found in cache (instant)');
     return cachedSpecs;
   }
   
-  console.log('🔍 Fetching vehicle specs for:', { make, model, year });
+  logInfo('🔍 Fetching vehicle specs for:', { make, model, year });
   
   // 1. Try local Indian vehicle database (fast, no API call)
   const localSpecs = fetchSpecsFromLocalDB(make, model);
   if (localSpecs) {
-    console.log('✅ Specs found in local DB');
+    logInfo('✅ Specs found in local DB');
     addToCache(cacheKey, localSpecs, 'local');
     return localSpecs;
   }
@@ -571,16 +572,16 @@ export const fetchVehicleSpecs = async (
   try {
     const apiSpecs = await fetchVehicleSpecsFromCarQuery(make, model, year);
     if (apiSpecs && apiSpecs.engine) {
-      console.log('✅ Specs found via CarQuery API');
+      logInfo('✅ Specs found via CarQuery API');
       addToCache(cacheKey, apiSpecs, 'api');
       return apiSpecs;
     }
   } catch (error) {
-    console.log('CarQuery API failed, will return null for Gemini fallback');
+    logInfo('CarQuery API failed, will return null for Gemini fallback');
   }
   
   // 3. Return null - caller should fall back to Gemini AI
-  console.log('⚠️ No specs found in local DB or CarQuery, returning null');
+  logInfo('⚠️ No specs found in local DB or CarQuery, returning null');
   return null;
 };
 
@@ -595,7 +596,7 @@ export const cacheAISpecs = (
 ): void => {
   const cacheKey = createCacheKey(make, model, year);
   addToCache(cacheKey, specs, 'ai');
-  console.log('💾 Cached AI-generated specs for:', cacheKey);
+  logInfo('💾 Cached AI-generated specs for:', cacheKey);
 };
 
 /**
@@ -613,11 +614,11 @@ export const prefetchCommonVehicleSpecs = async (): Promise<void> => {
     { make: 'Kia', model: 'Seltos', year: 2023 },
   ];
   
-  console.log('📥 Prefetching specs for common vehicles...');
+  logInfo('📥 Prefetching specs for common vehicles...');
   
   for (const vehicle of commonVehicles) {
     await fetchVehicleSpecs(vehicle.make, vehicle.model, vehicle.year);
   }
   
-  console.log('✅ Prefetch complete');
+  logInfo('✅ Prefetch complete');
 };
