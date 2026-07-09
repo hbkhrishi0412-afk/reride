@@ -110,7 +110,7 @@ async function runApiCore(
     pathname.endsWith('/health');
 
   if (!isHealthEndpoint) {
-    const securityReadiness = verifyProductionSecurityReadiness();
+    const securityReadiness = await verifyProductionSecurityReadiness();
     if (!securityReadiness.ok) {
       return res.status(503).json({
         success: false,

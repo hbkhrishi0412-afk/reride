@@ -13,6 +13,42 @@ import { userRolesEqual } from '../utils/user-role.js';
 import { currentUserForLocalSession, currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot.js';
 import { migrateVehicleListCache, normalizeVehiclesList } from '../utils/vehicleIdentity.js';
 
+function formatServiceUnavailableMessage(errorData: {
+  reason?: string;
+  issues?: string[];
+  requiredActions?: string[];
+  diagnostic?: string;
+}): string {
+  const parts: string[] = [];
+  if (errorData.reason) parts.push(errorData.reason);
+  if (Array.isArray(errorData.issues) && errorData.issues.length > 0) {
+    parts.push(errorData.issues.join(' '));
+  }
+  if (Array.isArray(errorData.requiredActions) && errorData.requiredActions.length > 0) {
+    parts.push(errorData.requiredActions[0]);
+  }
+  if (errorData.diagnostic) parts.push(errorData.diagnostic);
+  return parts.join(' ') || 'Service temporarily unavailable. Please try again later.';
+}
+
+function logServiceUnavailableDetails(errorData: {
+  reason?: string;
+  issues?: string[];
+  requiredActions?: string[];
+  diagnostic?: string;
+}): void {
+  console.error('❌ CRITICAL: Service unavailable error when fetching users:', errorData.reason || 'Unknown error');
+  if (errorData.diagnostic) {
+    console.error('   Diagnostic:', errorData.diagnostic);
+  }
+  if (Array.isArray(errorData.issues) && errorData.issues.length > 0) {
+    console.error('   Issues:', errorData.issues.join(' | '));
+  }
+  if (Array.isArray(errorData.requiredActions) && errorData.requiredActions.length > 0) {
+    console.error('   Required actions:', errorData.requiredActions.join(' | '));
+  }
+}
+
 // Unified data service that handles both local and API data consistently
 class DataService {
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
@@ -261,7 +297,7 @@ class DataService {
             throw error;
           }
           
-          // Handle 503 Service Unavailable errors specially (e.g., missing SUPABASE_SERVICE_ROLE_KEY)
+          // Handle 503 Service Unavailable errors (configuration / security prerequisites)
           if (response.status === 503) {
             const errorText = await response.text();
             let errorMessage = 'Service temporarily unavailable. Please try again later.';
@@ -269,8 +305,7 @@ class DataService {
             
             try {
               errorData = JSON.parse(errorText);
-              // Prioritize reason field, then error field, then diagnostic
-              errorMessage = errorData.reason || errorData.error || errorData.diagnostic || errorMessage;
+              errorMessage = formatServiceUnavailableMessage(errorData);
             } catch {
               // Use default error message if JSON parsing fails
             }
@@ -1238,16 +1273,23 @@ class DataService {
         }
         
         // Check if it's a 503/configuration error
-        if (errorReason.includes('SUPABASE_SERVICE_ROLE_KEY') || errorReason.includes('Service temporarily unavailable') || errorDiagnostic.includes('Service role key')) {
-          console.error('❌ CRITICAL: Service unavailable error when fetching users:', errorReason);
-          if (errorDiagnostic) {
-            console.error('   Diagnostic:', errorDiagnostic);
-          }
-          console.error('   This usually means SUPABASE_SERVICE_ROLE_KEY is missing or misconfigured.');
-          console.error('   Check Vercel environment variables and ensure the key is set for Production environment.');
+        if (errorReason.includes('SUPABASE_SERVICE_ROLE_KEY') || errorReason.includes('Service temporarily unavailable') || errorReason.includes('Production security prerequisites') || errorDiagnostic.includes('Service role key')) {
+          logServiceUnavailableDetails({
+            reason: errorReason,
+            diagnostic: errorDiagnostic,
+            issues: (rawResponse as { issues?: string[] }).issues,
+            requiredActions: (rawResponse as { requiredActions?: string[] }).requiredActions,
+          });
           
           // Throw error with specific message so UI can display it
-          const configError: any = new Error(errorReason);
+          const configError: any = new Error(
+            formatServiceUnavailableMessage({
+              reason: errorReason,
+              diagnostic: errorDiagnostic,
+              issues: (rawResponse as { issues?: string[] }).issues,
+              requiredActions: (rawResponse as { requiredActions?: string[] }).requiredActions,
+            }),
+          );
           configError.status = 503;
           configError.code = 503;
           configError.errorData = { reason: errorReason, diagnostic: errorDiagnostic };
@@ -1288,18 +1330,18 @@ class DataService {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorAny = error as any;
       
-      // Check for 503 Service Unavailable errors (e.g., missing SUPABASE_SERVICE_ROLE_KEY)
-      if (errorAny?.status === 503 || errorAny?.code === 503 || errorMessage.includes('503') || errorMessage.includes('Service temporarily unavailable')) {
+      // Check for 503 Service Unavailable errors (configuration / security prerequisites)
+      if (errorAny?.status === 503 || errorAny?.code === 503 || errorMessage.includes('503') || errorMessage.includes('Service temporarily unavailable') || errorMessage.includes('Production security prerequisites')) {
         const detailedError = errorAny?.errorData || {};
         const reason = detailedError.reason || errorMessage;
         const diagnostic = detailedError.diagnostic || '';
         
-        console.error('❌ CRITICAL: Service unavailable error when fetching users:', reason);
-        if (diagnostic) {
-          console.error('   Diagnostic:', diagnostic);
-        }
-        console.error('   This usually means SUPABASE_SERVICE_ROLE_KEY is missing or misconfigured.');
-        console.error('   Check Vercel environment variables and ensure the key is set for Production environment.');
+        logServiceUnavailableDetails({
+          reason,
+          diagnostic,
+          issues: detailedError.issues,
+          requiredActions: detailedError.requiredActions,
+        });
         
         // Store error so AdminPanel can show the configuration banner (getUsers returns [] so fetchUsers doesn't catch)
         const errorInfo = { reason, diagnostic, timestamp: Date.now() };

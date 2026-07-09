@@ -21,7 +21,7 @@ ReRide — Vercel "Needs Attention" quick fix
    - ALLOWED_ORIGINS            (e.g. https://www.reride.co.in,https://reride.co.in)
    - UPSTASH_REDIS_REST_URL     (distributed rate limiting + token revocation in production)
    - UPSTASH_REDIS_REST_TOKEN
-   - SUPABASE_RLS_PRODUCTION_VERIFIED=true  (set only after SQL rollout + policy verification)
+   - SUPABASE_RLS_PRODUCTION_VERIFIED=true  (optional after RLS SQL rollout; API auto-probes RLS if unset)
    - VITE_SENTRY_DSN            (client error tracking; add https://*.ingest.sentry.io to CSP — already in vercel.json)
 
 4) Google Sign-In is configured in Supabase Auth → Providers → Google and Google Cloud

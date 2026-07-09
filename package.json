@@ -38,6 +38,7 @@
     "perf:analyze": "node performance-optimize.js --analyze",
     "fetch-vehicle-images": "node scripts/fetch-vehicle-images.js",
     "vercel:env-checklist": "node scripts/print-vercel-env-checklist.cjs",
+    "verify:production-security": "node scripts/verify-production-security-readiness.cjs",
     "verify-deployment": "node scripts/verify-deployment.js",
     "verify-deployment:local": "node scripts/verify-deployment.js http://localhost:5173",
     "verify:car-service:prod": "node scripts/verify-car-service-production.js",
