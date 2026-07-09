@@ -37,8 +37,6 @@ export const PRICING = {
     multi_city_7d: { price: 299, duration: 7 },
   },
   inspections: {
-    ai_inspection: { price: 0, description: 'Free AI Photo Analysis' },
-    ai_inspection_premium: { price: 199, description: 'Enhanced AI Inspection with detailed report' },
     physical_doorstep: { price: 999, description: 'Doorstep Physical Inspection' },
     physical_center: { price: 799, description: 'Inspection at our center' },
   },
@@ -224,11 +222,6 @@ export async function processInspectionPurchase(options: {
   
   if (!inspectionPricing) {
     return { success: false, error: 'Invalid inspection type' };
-  }
-  
-  // Free AI inspection
-  if (inspectionPricing.price === 0) {
-    return await requestAIInspection(vehicleId, sellerEmail);
   }
   
   // Paid inspection
@@ -462,18 +455,6 @@ async function verifyAndApplyBoost(params: {
   
   const result = await handleApiResponse(response);
   return { success: result.success, error: result.reason };
-}
-
-async function requestAIInspection(
-  _vehicleId: number,
-  _sellerEmail: string
-): Promise<{ success: boolean; inspectionId?: string; error?: string }> {
-  // AI inspection requires imageUrls + vehicleDetails (see /api/ai-inspection).
-  // Use listingEnhancementService / generateAIInspection from the seller dashboard instead.
-  return {
-    success: false,
-    error: 'AI inspection is run when saving a listing with photos. Open your listing in the dashboard to generate a report.',
-  };
 }
 
 async function verifyInspectionPayment(_params: {

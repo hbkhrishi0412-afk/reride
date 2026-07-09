@@ -18,7 +18,7 @@ import { setHardwareBackHandler } from '../utils/hardwareBackRegistry';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 import DealTimelinePanel from './DealTimelinePanel';
 import { DealStageChip } from './DealStageChip';
-import { getDealLead } from '../services/dealService';
+import { resolveDealLeadForConversation } from '../services/dealService';
 import { useApp } from './AppProvider';
 
 interface MobileInboxProps {
@@ -388,7 +388,9 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
     setDealLead(null);
     if (!selectedConv?.id) return;
     let cancelled = false;
-    void getDealLead({ conversationId: selectedConv.id })
+    void resolveDealLeadForConversation(selectedConv, {
+      retryCount: selectedConv.hasDeal ? 6 : 2,
+    })
       .then((lead) => {
         if (!cancelled) setDealLead(lead);
       })
@@ -398,7 +400,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [selectedConv?.id]);
+  }, [selectedConv?.id, selectedConv?.vehicleId, selectedConv?.hasDeal]);
 
   useEffect(() => {
     if (!selectedConv) return;

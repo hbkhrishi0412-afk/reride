@@ -5,8 +5,7 @@ import { View as ViewEnum } from '../types';
 import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianStates, getDistrictsByState, getCarYears, getOwnershipOptions, ScrapedCarData } from '../utils/rerideScraper';
 import { sellCarAPI } from '../services/sellCarService';
 import { useCamera } from '../hooks/useMobileFeatures';
-import { fetchVehicleSpecs, cacheAISpecs } from '../services/vehicleSpecsService';
-import { getAiVehicleSuggestions } from '../services/geminiService';
+import { fetchVehicleSpecs } from '../services/vehicleSpecsService';
 import AutoT from './AutoT';
 
 interface MobileSellCarPageProps {
@@ -504,16 +503,6 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
             transmission: prev.transmission || specs.transmission || '',
           }));
           logInfo('✅ Mobile: Auto-filled fuel/transmission:', specs.fuelType, specs.transmission);
-        } else {
-          const suggestions = await getAiVehicleSuggestions({ make, model, year: parseInt(year, 10) });
-          if (suggestions.structuredSpecs) {
-            setCarDetails(prev => ({
-              ...prev,
-              fuelType: prev.fuelType || suggestions.structuredSpecs?.fuelType || '',
-              transmission: prev.transmission || suggestions.structuredSpecs?.transmission || '',
-            }));
-            cacheAISpecs(make, model, parseInt(year, 10), suggestions.structuredSpecs as Record<string, string>);
-          }
         }
       } catch (error) {
         console.error('Failed to auto-fetch specs:', error);

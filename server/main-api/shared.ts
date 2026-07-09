@@ -106,7 +106,11 @@ async function resolveVehicleForMutation(body: Record<string, unknown>): Promise
       id: parsed.numericId,
       databaseId: parsed.databaseId,
     });
-    if (parsed.numericId !== undefined && resolved.vehicle.id !== parsed.numericId) {
+    if (
+      !parsed.databaseId &&
+      parsed.numericId !== undefined &&
+      resolved.vehicle.id !== parsed.numericId
+    ) {
       return { ok: false, status: 400, reason: 'Vehicle id does not match listing.' };
     }
     return { ok: true, vehicle: resolved.vehicle, primaryKey: resolved.primaryKey };

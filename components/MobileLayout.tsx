@@ -133,6 +133,8 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
           onToggleMenu={() => setShowMenu(!showMenu)}
           unreadNotificationCount={unreadNotificationCount}
           compareCount={compareCount}
+          wishlistCount={wishlistCount}
+          inboxCount={inboxCount}
           serviceProvider={serviceProvider}
           showTitleBar={showHeader}
         />

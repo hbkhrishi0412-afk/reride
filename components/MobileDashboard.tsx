@@ -1,10 +1,9 @@
 import React, { useState, memo, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { logInfo } from '../utils/logger.js';
-import type { User, Vehicle, Conversation, Notification } from '../types';
+import type { User, Vehicle, Conversation, Notification, SellerCommandCenter } from '../types';
 import { View as ViewEnum, VehicleCategory } from '../types';
 import { planService } from '../services/planService';
-import AiAssistant from './AiAssistant';
 import BulkUploadModal from './BulkUploadModal';
 import PricingGuidance from './PricingGuidance';
 import BoostListingModal from './BoostListingModal';
@@ -40,6 +39,10 @@ import {
 import { verifyVahanRegistration, applyVahanVerifyToVehicleFields } from '../services/vehicleTrustService';
 import MarkSoldDealModal from './MarkSoldDealModal';
 import { isListingLimitReached } from '../utils/listingPlanRules';
+import {
+  fetchSellerCommandCenter,
+  invalidateSellerCommandCenterCache,
+} from '../services/dealService.js';
 
 // ---------- Premium inline SVG icon set (kept local to avoid new deps) ----------
 type IconProps = { className?: string; size?: number; stroke?: number };
@@ -73,7 +76,6 @@ const IconCar = (p: IconProps) => (<Icon {...p}><path d="M5 17h14M6 17v2a1 1 0 0
 const IconEye = (p: IconProps) => (<Icon {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></Icon>);
 const IconChat = (p: IconProps) => (<Icon {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></Icon>);
 const IconCheck = (p: IconProps) => (<Icon {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" /></Icon>);
-const IconSparkle = (p: IconProps) => (<Icon {...p}><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" /></Icon>);
 const IconCrown = (p: IconProps) => (<Icon {...p}><path d="M3 18h18M3 7l4 4 5-7 5 7 4-4-2 11H5z" /></Icon>);
 const IconUpload = (p: IconProps) => (<Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" /></Icon>);
 const IconList = (p: IconProps) => (<Icon {...p}><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></Icon>);
@@ -88,6 +90,7 @@ const IconUser = (p: IconProps) => (<Icon {...p}><path d="M20 21v-2a4 4 0 0 0-4-
 const IconFlag = (p: IconProps) => (<Icon {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></Icon>);
 const IconDollar = (p: IconProps) => (<Icon {...p}><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></Icon>);
 const IconTrendUp = (p: IconProps) => (<Icon {...p}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></Icon>);
+const IconFlame = (p: IconProps) => (<Icon {...p}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" /></Icon>);
 
 interface MobileDashboardProps {
   currentUser: User;
@@ -140,6 +143,7 @@ interface MobileDashboardProps {
 
 type DashboardTab =
   | 'overview'
+  | 'hotLeads'
   | 'listings'
   | 'messages'
   | 'analytics'
@@ -400,6 +404,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   );
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [commandCenter, setCommandCenter] = useState<SellerCommandCenter | null>(null);
+  const [commandCenterLoading, setCommandCenterLoading] = useState(false);
+  const [commandCenterError, setCommandCenterError] = useState<string | null>(null);
   const [messagesHubFilter, setMessagesHubFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editFormData, setEditFormData] = useState<Vehicle | null>(null);
@@ -572,6 +579,54 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     };
   }, [isSeller, currentUser.subscriptionPlan, t]);
 
+  const refreshDealCommandStats = useCallback((force = false) => {
+    if (!isSeller || !currentUser.email) {
+      setCommandCenter(null);
+      setCommandCenterLoading(false);
+      setCommandCenterError(null);
+      return Promise.resolve();
+    }
+    setCommandCenterLoading(true);
+    if (force) invalidateSellerCommandCenterCache();
+    return fetchSellerCommandCenter(force)
+      .then((center) => {
+        setCommandCenter(center);
+        setCommandCenterError(null);
+      })
+      .catch((err) => {
+        setCommandCenterError(err instanceof Error ? err.message : 'Could not load hot leads');
+      })
+      .finally(() => {
+        setCommandCenterLoading(false);
+      });
+  }, [isSeller, currentUser.email]);
+
+  useEffect(() => {
+    if (!isSeller) return;
+    let cancelled = false;
+    const load = async () => {
+      const { rehydrateApiCredentials } = await import('../utils/validatePersistedSession.js');
+      await rehydrateApiCredentials();
+      if (!cancelled) void refreshDealCommandStats();
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSeller, refreshDealCommandStats]);
+
+  useEffect(() => {
+    if (activeTab !== 'hotLeads') {
+      setSelectedDealId(null);
+    }
+  }, [activeTab]);
+
+  const hotLeadsBadgeCount = useMemo(() => {
+    const taskCount = commandCenter?.tasks?.length ?? 0;
+    const pendingAccept = commandCenter?.stats?.pendingInterestCount ?? 0;
+    return taskCount > 0 ? taskCount : pendingAccept > 0 ? pendingAccept : 0;
+  }, [commandCenter]);
+
   // Keep bank checkboxes in sync with server when `partnerBanks` actually changes.
   // Do NOT depend on the whole `currentUser` object — it gets a new reference often and
   // was resetting local selections on every re-render, so toggles looked "broken".
@@ -697,8 +752,18 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const tabs = useMemo(() => {
     const row: { id: DashboardTab; label: string; icon: React.ReactNode; count: number | null }[] = [
       { id: 'overview', label: t('sellerDashboard.mobile.tab.overview'), icon: <IconChart size={15} stroke={2} />, count: null },
-      { id: 'listings', label: t('sellerDashboard.mobile.tab.listings'), icon: <IconCar size={15} stroke={2} />, count: totalListings },
     ];
+    if (isSeller) {
+      row.push({
+        id: 'hotLeads',
+        label: t('sellerDashboard.mobile.tab.hotLeads', 'Hot leads'),
+        icon: <IconFlame size={15} stroke={2} />,
+        count: hotLeadsBadgeCount > 0 ? hotLeadsBadgeCount : null,
+      });
+    }
+    row.push(
+      { id: 'listings', label: t('sellerDashboard.mobile.tab.listings'), icon: <IconCar size={15} stroke={2} />, count: totalListings },
+    );
     if (isSeller) {
       row.push({
         id: 'messages',
@@ -715,10 +780,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       { id: 'profile', label: t('sellerDashboard.mobile.tab.profile'), icon: <IconUser size={15} stroke={2} />, count: null }
     );
     return row;
-  }, [t, totalListings, soldListings, reportedCount, isSeller, unreadSellerThreads]);
+  }, [t, totalListings, soldListings, reportedCount, isSeller, unreadSellerThreads, hotLeadsBadgeCount]);
 
-  const renderOverview = () => {
-    if (isSeller && selectedDealId) {
+  const renderHotLeads = () => {
+    if (selectedDealId) {
       return (
         <div className="pb-4">
           <DealDetailPage
@@ -737,6 +802,33 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       );
     }
 
+    return (
+      <div className="pb-4">
+        <SellerCommandHome
+          seller={currentUser}
+          conversations={safeConversations}
+          compact
+          commandCenter={commandCenter}
+          commandCenterLoading={commandCenterLoading}
+          commandCenterError={commandCenterError}
+          onRefreshCommandCenter={(force) => refreshDealCommandStats(force)}
+          onOpenDeal={(leadId) => setSelectedDealId(leadId)}
+          onOpenConversation={(conv) => {
+            onSellerOpenChat?.(conv);
+            setActiveTab('messages');
+          }}
+          onNavigateToMessages={() => setActiveTab('messages')}
+          onNavigateToListings={() => setActiveTab('listings')}
+          onNotify={(message, type) => {
+            addToast?.(message, type ?? 'info');
+            void refreshDealCommandStats(true);
+          }}
+        />
+      </div>
+    );
+  };
+
+  const renderOverview = () => {
     const conversionRate = totalListings > 0 ? Math.round((soldListings / totalListings) * 100) : 0;
 
     return (
@@ -847,22 +939,43 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         </div>
 
         {isSeller && (
-          <SellerCommandHome
-            seller={currentUser}
-            conversations={safeConversations}
-            compact
-            onOpenDeal={(leadId) => setSelectedDealId(leadId)}
-            onOpenConversation={(conv) => {
-              onSellerOpenChat?.(conv);
-              setActiveTab('messages');
+          <button
+            type="button"
+            onClick={() => setActiveTab('hotLeads')}
+            className="w-full text-left rounded-3xl p-4 active:scale-[0.98] transition-all"
+            style={{
+              background: '#FFFFFF',
+              border: '1px solid rgba(15,23,42,0.06)',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
             }}
-            onNavigateToMessages={() => setActiveTab('messages')}
-            onNavigateToListings={() => setActiveTab('listings')}
-            onNotify={(message, type) => addToast?.(message, type ?? 'info')}
-          />
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  className="w-10 h-10 rounded-xl grid place-items-center shrink-0"
+                  style={{ background: 'rgba(255,107,53,0.10)', color: '#FF6B35' }}
+                >
+                  <IconFlame size={18} stroke={2} />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-reride-orange">
+                    {t('sellerDashboard.hotLeads.title', 'Hot leads')}
+                  </p>
+                  <p className="text-[14px] font-semibold text-slate-900 truncate">
+                    {hotLeadsBadgeCount > 0
+                      ? `${hotLeadsBadgeCount} need${hotLeadsBadgeCount === 1 ? 's' : ''} your attention`
+                      : 'Review buyer interest and active deals'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-slate-300 shrink-0">
+                <IconChevronRight size={18} stroke={2} />
+              </span>
+            </div>
+          </button>
         )}
 
-        {/* -- Premium Stats Grid (2x2) — buyers/admins only; sellers use Command Center above -- */}
+        {/* -- Premium Stats Grid (2x2) — buyers/admins only; sellers use Hot leads tab -- */}
         {!isSeller && (
         <div className="grid grid-cols-2 gap-3">
           {[
@@ -963,61 +1076,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             );
           })}
         </div>
-        )}
-
-        {/* -- AI Sales Assistant -- */}
-        {isSeller && (
-          <div
-            className="relative overflow-hidden rounded-3xl p-5"
-            style={{
-              background: '#FFFFFF',
-              border: '1px solid rgba(15,23,42,0.06)',
-              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)'
-            }}
-          >
-            <div
-              aria-hidden
-              className="absolute -right-10 -top-10 w-40 h-40 rounded-full opacity-60"
-              style={{ background: 'radial-gradient(closest-side, rgba(139,92,246,0.10), transparent 70%)' }}
-            />
-            <div className="relative flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <span
-                  className="w-9 h-9 rounded-xl grid place-items-center text-white"
-                  style={{
-                    background: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
-                    boxShadow: '0 8px 20px -10px rgba(139,92,246,0.55)'
-                  }}
-                >
-                  <IconSparkle size={16} stroke={2} />
-                </span>
-                <div className="leading-tight">
-                  <h3 className="font-semibold text-slate-900 text-[15px] tracking-tight" style={{ letterSpacing: '-0.01em' }}>
-                    AI Sales Assistant
-                  </h3>
-                  <p className="text-[11.5px] text-slate-500 font-medium">Smart suggestions based on your listings</p>
-                </div>
-              </div>
-              <span
-                className="text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-1 rounded-full"
-                style={{ background: 'rgba(139,92,246,0.10)', color: '#7C3AED' }}
-              >
-                Beta
-              </span>
-            </div>
-            <AiAssistant
-              vehicles={safeUserVehicles}
-              conversations={safeConversations}
-              onNavigateToVehicle={(vehicleId) => {
-                const vehicle = safeUserVehicles.find(v => v.id === vehicleId);
-                if (vehicle && onViewVehicle) onViewVehicle(vehicle);
-              }}
-              onNavigateToInquiry={(conversationId) => {
-                const conv = safeConversations.find((c) => c && c.id === conversationId);
-                if (conv && onSellerOpenChat) onSellerOpenChat(conv);
-              }}
-            />
-          </div>
         )}
 
         {/* -- Premium Quick Actions -- */}
@@ -1278,12 +1336,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     </p>
                     <div className="mt-1.5 flex items-center gap-3 text-[11px] text-slate-500 font-medium">
                       {vehicle.mileage ? <span>{vehicle.mileage.toLocaleString('en-IN')} km</span> : null}
-                      {vehicle.views ? (
-                        <span className="inline-flex items-center gap-1">
-                          <IconEye size={11} stroke={2} />
-                          {t('sellerListing.views', { count: vehicle.views })}
-                        </span>
-                      ) : null}
+                      <span className="inline-flex items-center gap-1">
+                        <IconEye size={11} stroke={2} />
+                        {t('sellerListing.views', { count: vehicle.views ?? 0 })}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -2570,6 +2626,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   };
 
   const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [isUploadingEditImages, setIsUploadingEditImages] = useState(false);
 
   const handleChecklistChange = (checklist: NonNullable<typeof addFormData.sellerDisclosureChecklist>) => {
     setAddFormData((prev) => {
@@ -2688,7 +2745,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     try {
       const enhancementResult = await enhanceVehicleListing(addFormData, {
         runValidation: true,
-        runAIInspection: false,
         checkPhotoQuality: true,
         calculateListingScore: true,
       });
@@ -2718,6 +2774,211 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       notify('Failed to add listing. Please check your connection and try again.', 'error');
     } finally {
       setIsAddingVehicle(false);
+    }
+  };
+
+  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    const numericFields = ['year', 'price', 'mileage', 'noOfOwners', 'registrationYear'];
+    setEditFormData(prev => {
+      if (!prev) return prev;
+      const next = {
+        ...prev,
+        [name]: numericFields.includes(name)
+          ? (() => {
+              const digits = parseIndianNumberDigits(String(value));
+              return digits === '' ? 0 : Number(digits);
+            })()
+          : value,
+      };
+      if (name === 'category') {
+        next.make = '';
+        next.model = '';
+        next.variant = '';
+      } else if (name === 'make') {
+        next.model = '';
+        next.variant = '';
+      } else if (name === 'model') {
+        next.variant = '';
+      }
+      return next;
+    });
+    if (editErrors[name]) {
+      setEditErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+  };
+
+  const validateEditForm = (formData: Vehicle): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.category) {
+      newErrors.category = t('sellerListing.error.categoryRequired', 'Please select a category.');
+    }
+    if (!formData.make || formData.make.trim() === '') {
+      newErrors.make = t('sellerListing.error.makeRequired');
+    }
+    if (!formData.model || formData.model.trim() === '') {
+      newErrors.model = t('sellerListing.error.modelRequired');
+    }
+    if (!formData.year || formData.year < 1900 || formData.year > new Date().getFullYear() + 1) {
+      newErrors.year = t('sellerListing.error.year');
+    }
+    if (!formData.price || formData.price <= 0) {
+      newErrors.price = t('sellerListing.error.price');
+    }
+    if (formData.mileage < 0) {
+      newErrors.mileage = t('sellerListing.error.mileage');
+    }
+
+    setEditErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleEditChecklistChange = (checklist: NonNullable<Vehicle['sellerDisclosureChecklist']>) => {
+    setEditFormData((prev) => {
+      if (!prev) return prev;
+      const checklistUrls = extractChecklistGalleryUrls(checklist);
+      const extras = getExtraGalleryImages(prev.sellerDisclosureChecklist, prev.images || []);
+      return {
+        ...prev,
+        sellerDisclosureChecklist: checklist,
+        images: mergeListingImages(checklistUrls, extras),
+      };
+    });
+  };
+
+  const editChecklistGalleryUrls = useMemo(
+    () => extractChecklistGalleryUrls(editFormData?.sellerDisclosureChecklist),
+    [editFormData?.sellerDisclosureChecklist],
+  );
+  const editExtraGalleryImages = useMemo(
+    () => getExtraGalleryImages(editFormData?.sellerDisclosureChecklist, editFormData?.images || []),
+    [editFormData?.sellerDisclosureChecklist, editFormData?.images],
+  );
+
+  const handleEditImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0 || !editFormData) return;
+
+    const files = Array.from(e.target.files);
+    const input = e.target;
+
+    setIsUploadingEditImages(true);
+    try {
+      const { uploadImages, validateImageFile } = await import('../services/imageUploadService');
+
+      for (const file of files) {
+        const validation = validateImageFile(file);
+        if (!validation.valid) {
+          notify(validation.error || 'Invalid image file', 'error');
+          if (input) input.value = '';
+          setIsUploadingEditImages(false);
+          return;
+        }
+      }
+
+      const uploadResults = await uploadImages(files, 'vehicles', currentUser.email);
+
+      const failed = uploadResults.filter((r) => !r.success);
+      if (failed.length > 0) {
+        notify(
+          failed[0]?.error ||
+            `${failed.length} photo(s) failed to upload. Please try again.`,
+          'error',
+        );
+      }
+
+      const successfulUrls = uploadResults
+        .filter(r => r.success && r.url)
+        .map(r => r.url!);
+
+      if (successfulUrls.length > 0) {
+        const currentImages = editFormData.images || [];
+        const maxImages = 10;
+        const remainingSlots = maxImages - currentImages.length;
+
+        if (remainingSlots <= 0) {
+          notify(`Maximum ${maxImages} images allowed. Please remove some images first.`, 'info');
+        } else {
+          const imagesToAdd = successfulUrls.slice(0, remainingSlots);
+          setEditFormData(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              images: [...(prev.images || []), ...imagesToAdd],
+            };
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      notify('Failed to upload images. Please try again.', 'error');
+    } finally {
+      setIsUploadingEditImages(false);
+      if (input) input.value = '';
+    }
+  };
+
+  const handleRemoveEditImage = (urlToRemove: string) => {
+    setEditFormData((prev) => {
+      if (!prev) return prev;
+      const clearedChecklist = clearChecklistPhotoByUrl(prev.sellerDisclosureChecklist, urlToRemove);
+      const checklistUrls = extractChecklistGalleryUrls(clearedChecklist);
+      const extras = getExtraGalleryImages(
+        clearedChecklist,
+        (prev.images || []).filter((url) => url !== urlToRemove),
+      );
+      return {
+        ...prev,
+        sellerDisclosureChecklist: clearedChecklist,
+        images: mergeListingImages(checklistUrls, extras),
+      };
+    });
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const formData = editFormData || editingVehicle;
+    if (!formData || !validateEditForm(formData)) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const enhancementResult = await enhanceVehicleListing(formData, {
+        runValidation: true,
+        checkPhotoQuality: true,
+        calculateListingScore: true,
+      });
+
+      if (!enhancementResult.success) {
+        const newErrors: Record<string, string> = {};
+        enhancementResult.validation.errors.forEach((err) => {
+          newErrors[err.field] = err.message;
+        });
+        setEditErrors(newErrors);
+        notify(
+          enhancementResult.validation.errors.map((e) => e.message).join(' ') ||
+            'Please fix validation errors before saving.',
+          'error',
+        );
+        return;
+      }
+
+      if (onUpdateVehicle) {
+        await onUpdateVehicle(enhancementResult.vehicle);
+        setEditingVehicle(null);
+        setActiveTab('listings');
+      }
+    } catch (error) {
+      console.error('Failed to update vehicle:', error);
+      notify('Failed to update listing. Please check your connection and try again.', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -3240,116 +3501,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       );
     }
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-      const { name, value } = e.target;
-      const numericFields = ['year', 'price', 'mileage', 'noOfOwners', 'registrationYear'];
-      setEditFormData(prev => {
-        if (!prev) return prev;
-        const next = {
-          ...prev,
-          [name]: numericFields.includes(name)
-            ? (() => {
-                const digits = parseIndianNumberDigits(String(value));
-                return digits === '' ? 0 : Number(digits);
-              })()
-            : value,
-        };
-        if (name === 'category') {
-          next.make = '';
-          next.model = '';
-          next.variant = '';
-        } else if (name === 'make') {
-          next.model = '';
-          next.variant = '';
-        } else if (name === 'model') {
-          next.variant = '';
-        }
-        return next;
-      });
-      // Clear error when user starts typing
-      if (editErrors[name]) {
-        setEditErrors(prev => {
-          const newErrors = { ...prev };
-          delete newErrors[name];
-          return newErrors;
-        });
-      }
-    };
-
-    const validateForm = (): boolean => {
-      const newErrors: Record<string, string> = {};
-      
-      if (!formData.category) {
-        newErrors.category = t('sellerListing.error.categoryRequired', 'Please select a category.');
-      }
-      if (!formData.make || formData.make.trim() === '') {
-        newErrors.make = t('sellerListing.error.makeRequired');
-      }
-      if (!formData.model || formData.model.trim() === '') {
-        newErrors.model = t('sellerListing.error.modelRequired');
-      }
-      if (!formData.year || formData.year < 1900 || formData.year > new Date().getFullYear() + 1) {
-        newErrors.year = t('sellerListing.error.year');
-      }
-      if (!formData.price || formData.price <= 0) {
-        newErrors.price = t('sellerListing.error.price');
-      }
-      if (formData.mileage < 0) {
-        newErrors.mileage = t('sellerListing.error.mileage');
-      }
-
-      setEditErrors(newErrors);
-      return Object.keys(newErrors).length === 0;
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      
-      if (!formData || !validateForm()) {
-        return;
-      }
-
-      setIsSubmitting(true);
-      try {
-        const enhancementResult = await enhanceVehicleListing(formData, {
-          runValidation: true,
-          runAIInspection: false,
-          checkPhotoQuality: true,
-          calculateListingScore: true,
-        });
-
-        if (!enhancementResult.success) {
-          const newErrors: Record<string, string> = {};
-          enhancementResult.validation.errors.forEach((err) => {
-            newErrors[err.field] = err.message;
-          });
-          setEditErrors(newErrors);
-          return;
-        }
-
-        if (onUpdateVehicle) {
-          await onUpdateVehicle(enhancementResult.vehicle);
-          setEditingVehicle(null);
-          setActiveTab('listings');
-        }
-      } catch (error) {
-        console.error('Failed to update vehicle:', error);
-        if (onUpdateVehicle) {
-          await onUpdateVehicle(formData);
-          setEditingVehicle(null);
-          setActiveTab('listings');
-        }
-      } finally {
-        setIsSubmitting(false);
-      }
-    };
-
     return (
-    <div className="space-y-4 pb-4">
-      {editHeader}
+      <div className="space-y-4 pb-4">
+        {editHeader}
 
         <form
-          onSubmit={handleSubmit}
+          onSubmit={handleEditSubmit}
           className="rounded-3xl p-5 space-y-6"
           style={{
             background: '#FFFFFF',
@@ -3359,7 +3516,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         >
           {/* Basic Information */}
           <div className="space-y-4">
-            <h4 className="font-semibold text-gray-900 border-b pb-2">{t('sellerListing.section.basic')}</h4>
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.basic')}</h4>
 
             <VehicleIdentityFields
               category={formData.category || ''}
@@ -3371,76 +3528,85 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               models={editAvailableModels}
               variants={editAvailableVariants}
               errors={editErrors}
-              onChange={handleChange}
-              selectClassName="w-full px-3 py-2 border rounded-lg border-gray-300 bg-white"
+              onChange={handleEditFormChange}
               t={identityT}
             />
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   {t('sellerListing.label.year')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
                   name="year"
                   value={formData.year}
-                  onChange={handleChange}
-                  className={`w-full px-3 py-2 border rounded-lg ${editErrors.year ? 'border-red-500' : 'border-gray-300'}`}
+                  onChange={handleEditFormChange}
+                  placeholder={t('sellerListing.placeholder.year')}
+                  min="1900"
+                  max={new Date().getFullYear() + 1}
+                  className={`native-input ${editErrors.year ? 'bg-red-50' : ''}`}
                   required
                 />
-                {editErrors.year && <p className="text-red-500 text-xs mt-1">{editErrors.year}</p>}
+                {editErrors.year && <p className="text-red-600 text-xs mt-1.5 font-medium">{editErrors.year}</p>}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   {t('sellerListing.label.price')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   inputMode="numeric"
                   name="price"
-                  value={formatIndianNumberInput(formData.price)}
-                  onChange={handleChange}
-                  className={`w-full px-3 py-2 border rounded-lg ${editErrors.price ? 'border-red-500' : 'border-gray-300'}`}
+                  value={formatIndianNumberInput(formData.price || '')}
+                  onChange={handleEditFormChange}
+                  placeholder={t('sellerListing.placeholder.price')}
+                  className={`native-input ${editErrors.price ? 'bg-red-50' : ''}`}
                   required
                 />
-                {editErrors.price && <p className="text-red-500 text-xs mt-1">{editErrors.price}</p>}
+                {editErrors.price && <p className="text-red-600 text-xs mt-1.5 font-medium">{editErrors.price}</p>}
+                {safeAllVehicles.length > 0 && (
+                  <div className="mt-2">
+                    <PricingGuidance vehicleDetails={formData} allVehicles={safeAllVehicles} />
+                  </div>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   {t('sellerListing.label.mileage')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   inputMode="numeric"
                   name="mileage"
-                  value={formatIndianNumberInput(formData.mileage)}
-                  onChange={handleChange}
-                  className={`w-full px-3 py-2 border rounded-lg ${editErrors.mileage ? 'border-red-500' : 'border-gray-300'}`}
+                  value={formatIndianNumberInput(formData.mileage || '')}
+                  onChange={handleEditFormChange}
+                  placeholder={t('sellerListing.placeholder.mileage')}
+                  className={`native-input ${editErrors.mileage ? 'bg-red-50' : ''}`}
                   required
                 />
-                {editErrors.mileage && <p className="text-red-500 text-xs mt-1">{editErrors.mileage}</p>}
+                {editErrors.mileage && <p className="text-red-600 text-xs mt-1.5 font-medium">{editErrors.mileage}</p>}
               </div>
             </div>
           </div>
 
           {/* Specifications */}
-          <div className="space-y-4 pt-4 border-t">
-            <h4 className="font-semibold text-gray-900">{t('sellerListing.section.specs')}</h4>
-            
+          <div className="space-y-4 pt-6 border-t border-gray-200">
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.specs')}</h4>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 {t('sellerListing.label.fuelType')}
               </label>
               <select
                 name="fuelType"
                 value={formData.fuelType}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                onChange={handleEditFormChange}
+                className="native-input bg-white"
               >
                 <option value="Petrol">{t('sellerListing.fuel.petrol')}</option>
                 <option value="Diesel">{t('sellerListing.fuel.diesel')}</option>
@@ -3451,14 +3617,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 {t('sellerListing.label.transmission')}
               </label>
               <select
                 name="transmission"
                 value={formData.transmission}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                onChange={handleEditFormChange}
+                className="native-input bg-white"
               >
                 <option value="Manual">{t('sellerListing.transmission.manual')}</option>
                 <option value="Automatic">{t('sellerListing.transmission.automatic')}</option>
@@ -3469,28 +3635,29 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   {t('sellerListing.label.color')}
                 </label>
                 <input
                   type="text"
                   name="color"
                   value={formData.color || ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  onChange={handleEditFormChange}
+                  placeholder={t('sellerListing.placeholder.color')}
+                  className="native-input"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   {t('sellerListing.label.owners')}
                 </label>
                 <input
                   type="number"
                   name="noOfOwners"
                   value={formData.noOfOwners || 1}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  onChange={handleEditFormChange}
+                  className="native-input"
                   min="1"
                 />
               </div>
@@ -3498,60 +3665,234 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           </div>
 
           {/* Location */}
-          <div className="space-y-4 pt-4 border-t">
-            <h4 className="font-semibold text-gray-900">{t('sellerListing.section.location')}</h4>
-            
+          <div className="space-y-4 pt-6 border-t border-gray-200">
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.location')}</h4>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   {t('sellerListing.label.city')}
                 </label>
                 <input
                   type="text"
                   name="city"
                   value={formData.city || ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  onChange={handleEditFormChange}
+                  placeholder={t('sellerListing.placeholder.city')}
+                  className="native-input"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   {t('sellerListing.label.state')}
                 </label>
                 <input
                   type="text"
                   name="state"
                   value={formData.state || ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  onChange={handleEditFormChange}
+                  placeholder={t('sellerListing.placeholder.state')}
+                  className="native-input"
                 />
               </div>
             </div>
           </div>
 
-          {/* Description */}
-          <div className="space-y-4 pt-4 border-t">
-            <h4 className="font-semibold text-gray-900">{t('sellerListing.section.description')}</h4>
-            
+          <div className="pt-6 border-t border-gray-200">
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3 mb-4">
+              {t('sellerListing.section.checklist', 'Inspection & trust checklist')}
+            </h4>
+            <SellerDisclosureForm
+              compact
+              hideTitle
+              category={formData.category || VehicleCategory.FOUR_WHEELER}
+              value={formData.sellerDisclosureChecklist}
+              sellerEmail={currentUser.email}
+              registrationNumber={formData.registrationNumber}
+              vahanVerified={formData.vahanSnapshot?.source === 'surepass'}
+              vahanSnapshot={formData.vahanSnapshot}
+              onChange={handleEditChecklistChange}
+              onVerifyVahan={async (registrationNumber) => {
+                try {
+                  const result = await verifyVahanRegistration(registrationNumber);
+                  setEditFormData((prev) =>
+                    prev ? applyVahanVerifyToVehicleFields(prev, registrationNumber, result) : prev,
+                  );
+                  notify(
+                    result.verified ? 'RC verified' : result.message || 'RC saved',
+                    result.verified ? 'success' : 'warning',
+                  );
+                  return {
+                    verified: result.verified,
+                    message: result.message,
+                  };
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : 'Verification failed';
+                  notify(message, 'error');
+                  return { verified: false, message };
+                }
+              }}
+            />
+          </div>
+
+          {/* Listing presentation */}
+          <div className="space-y-4 pt-6 border-t border-gray-200">
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">
+              {t('sellerListing.section.presentation', 'Listing presentation')}
+            </h4>
+            <p className="text-xs text-gray-600">
+              {t('sellerListing.presentation.hint', 'Add a description and any extra marketing photos.')}
+            </p>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 {t('sellerListing.label.description')}
               </label>
               <textarea
                 name="description"
                 value={formData.description || ''}
-                onChange={handleChange}
+                onChange={handleEditFormChange}
                 rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 placeholder={t('sellerListing.placeholder.description')}
+                className="native-input resize-none"
               />
             </div>
           </div>
 
+          {/* Extra marketing photos */}
+          <div className="space-y-4 pt-6 border-t border-gray-200">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+              <h4 className="font-bold text-gray-900 text-base">
+                {t('sellerListing.section.extraPhotos', 'Extra marketing photos')}
+              </h4>
+              {editExtraGalleryImages.length > 0 && (
+                <span className="text-xs px-2 py-1 rounded-full font-semibold bg-orange-100 text-orange-700">
+                  {editExtraGalleryImages.length} extra
+                </span>
+              )}
+            </div>
+
+            {editChecklistGalleryUrls.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-emerald-800">
+                    {t('sellerListing.photoGuide.fromChecklist', 'From checklist')} ({editChecklistGalleryUrls.length})
+                  </p>
+                  <p className="text-[10px] text-gray-500">
+                    {t('sellerListing.photoGuide.editInChecklist', 'Edit in checklist above')}
+                  </p>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {editChecklistGalleryUrls.map((url, index) => (
+                    <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 ring-1 ring-emerald-200">
+                      <img
+                        src={url}
+                        className="w-full h-full object-cover opacity-90"
+                        alt={`Checklist ${index + 1}`}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+                        }}
+                      />
+                      {index === 0 && (
+                        <span className="absolute top-1 left-1 bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                          {t('sellerListing.cover', 'COVER')}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <label
+              htmlFor="edit-vehicle-images"
+              className={`flex items-center justify-center gap-3 p-4 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
+                isUploadingEditImages
+                  ? 'border-gray-300 bg-gray-50 cursor-wait'
+                  : 'border-blue-300 bg-blue-50 hover:border-blue-400 hover:bg-blue-100 active:scale-[0.98]'
+              }`}
+            >
+              {isUploadingEditImages ? (
+                <>
+                  <svg className="animate-spin h-5 w-5 text-blue-500" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-600">{t('sellerListing.uploading', 'Uploading...')}</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <div>
+                    <span className="text-sm font-semibold text-blue-700">{t('sellerListing.tapToUpload', 'Add Extra Photos')}</span>
+                    <p className="text-xs text-blue-600">{t('sellerListing.photoFormats', 'Optional — JPG, PNG up to 25MB each (compressed on upload)')}</p>
+                  </div>
+                </>
+              )}
+              <input
+                id="edit-vehicle-images"
+                type="file"
+                className="sr-only"
+                multiple
+                accept="image/*"
+                onChange={handleEditImageUpload}
+                disabled={isUploadingEditImages}
+              />
+            </label>
+
+            {editExtraGalleryImages.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-600">
+                  {t('sellerListing.uploadedImages', 'Extra photos')} ({editExtraGalleryImages.length})
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {editExtraGalleryImages.map((url) => (
+                    <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group">
+                      <img
+                        src={url}
+                        className="w-full h-full object-cover"
+                        alt="Extra photo"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEditImage(url)}
+                        className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {editChecklistGalleryUrls.length === 0 && editExtraGalleryImages.length === 0 && (
+              <p className="text-xs text-gray-500 text-center">
+                {t('sellerListing.photoGuide.noPhotosYet', 'No photos yet — complete the checklist above to add required shots.')}
+              </p>
+            )}
+
+            <p className="text-xs text-gray-500 flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              {t('sellerListing.photoTip', 'Tip: Listings with 6+ clear photos get 3x more views!')}
+            </p>
+          </div>
+
           {/* Listing offer */}
-          <div className="space-y-4 pt-4 border-t">
-            <h4 className="font-semibold text-gray-900">{t('sellerListing.section.offer')}</h4>
+          <div className="space-y-4 pt-6 border-t border-gray-200">
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.offer')}</h4>
             <p className="text-xs text-gray-600">{t('sellerListing.offer.hint')}</p>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -3562,83 +3903,83 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 }
                 className="h-5 w-5 rounded border-gray-300"
               />
-              <span className="text-sm font-medium text-gray-800">{t('sellerListing.offer.enable')}</span>
+              <span className="text-sm font-semibold text-gray-800">{t('sellerListing.offer.enable')}</span>
             </label>
             <div className={`space-y-3 ${formData.offerEnabled ? '' : 'opacity-50 pointer-events-none'}`}>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerTitle')}</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerTitle')}</label>
                 <input
                   type="text"
                   name="offerTitle"
                   value={formData.offerTitle ?? ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  onChange={handleEditFormChange}
+                  className="native-input"
                   placeholder={t('vehicle.detail.offer.specialOffer')}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerStartDate')}</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerStartDate')}</label>
                   <input
                     type="date"
                     name="offerStartDate"
                     value={formData.offerStartDate ?? ''}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    onChange={handleEditFormChange}
+                    className="native-input text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerEndDate')}</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerEndDate')}</label>
                   <input
                     type="date"
                     name="offerEndDate"
                     value={formData.offerEndDate ?? ''}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    onChange={handleEditFormChange}
+                    className="native-input text-sm"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerDateLabel')}</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerDateLabel')}</label>
                 <input
                   type="text"
                   name="offerDateLabel"
                   value={formData.offerDateLabel ?? ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  onChange={handleEditFormChange}
+                  className="native-input"
                   placeholder={t('sellerListing.placeholder.offerDateLabel')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerDescription')}</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerDescription')}</label>
                 <input
                   type="text"
                   name="offerDescription"
                   value={formData.offerDescription ?? ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  onChange={handleEditFormChange}
+                  className="native-input"
                   placeholder={t('vehicle.detail.offer.loanOffersOnAllCars')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerHighlight')}</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerHighlight')}</label>
                 <input
                   type="text"
                   name="offerHighlight"
                   value={formData.offerHighlight ?? ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  onChange={handleEditFormChange}
+                  className="native-input"
                   placeholder={t('vehicle.detail.offer.roiStartingAt')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerDisclaimer')}</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerDisclaimer')}</label>
                 <input
                   type="text"
                   name="offerDisclaimer"
                   value={formData.offerDisclaimer ?? ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  onChange={handleEditFormChange}
+                  className="native-input"
                   placeholder={t('sellerListing.placeholder.offerDisclaimer')}
                 />
               </div>
@@ -3646,18 +3987,18 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           </div>
 
           {/* Status */}
-          <div className="space-y-4 pt-4 border-t">
-            <h4 className="font-semibold text-gray-900">{t('sellerListing.section.listingStatus')}</h4>
-            
+          <div className="space-y-4 pt-6 border-t border-gray-200">
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.listingStatus')}</h4>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 {t('sellerListing.label.status')}
               </label>
               <select
                 name="status"
                 value={formData.status}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                onChange={handleEditFormChange}
+                className="native-input bg-white"
               >
                 <option value="published">{t('sellerListing.status.published')}</option>
                 <option value="unpublished">{t('sellerListing.status.unpublished')}</option>
@@ -3667,25 +4008,25 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t">
-          <button 
+          <div className="flex gap-3 pt-6 border-t border-gray-200">
+            <button
               type="button"
               onClick={() => setActiveTab('listings')}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
+              className="flex-1 native-button native-button-secondary"
             >
               {t('sellerListing.cancel')}
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 native-button native-button-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? t('sellerListing.saving') : t('sellerListing.saveChanges')}
-          </button>
-        </div>
+            </button>
+          </div>
         </form>
-    </div>
-  );
+      </div>
+    );
   };
 
   // Render Sales History View
@@ -4326,6 +4667,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const renderContent = () => {
     switch (activeTab) {
       case 'overview': return renderOverview();
+      case 'hotLeads': return isSeller ? renderHotLeads() : renderOverview();
       case 'listings': return renderListings();
       case 'messages': return isSeller ? renderMessagesHub() : renderOverview();
       case 'analytics': return renderAnalytics();

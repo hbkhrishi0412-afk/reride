@@ -55,6 +55,7 @@ import { logBackgroundSyncFailure, hasCachedVehicleCatalog } from '../utils/toas
 import {
   buildVehicleMutationBody,
   findVehicleByRouteSegment,
+  findVehicleByIdentity,
   getVehicleRouteId,
   migrateVehicleListCache,
   normalizeVehicleIdentity,
@@ -68,6 +69,7 @@ import { randomAlphanumeric, randomIntBelow } from '../utils/secureRandom.js';
 import { clearRememberMeState } from '../utils/rememberMe';
 import { deduplicateRequest } from '../utils/requestDeduplication';
 import { enrichVehicleWithSellerInfo } from '../utils/vehicleEnrichment';
+import { filterVehiclesBySellerEmail } from '../utils/sellerVehicleFilter';
 import * as buyerService from '../services/buyerService';
 import { createSafetyReport } from '../services/trustSafetyService';
 import { addLocalRecentId } from '../utils/recentlyViewed';
@@ -249,6 +251,7 @@ function scheduleCapacitorPostLoginUi(fn: () => void): void {
 interface VehicleUpdateOptions {
   successMessage?: string;
   skipToast?: boolean;
+  databaseId?: string;
 }
 
 interface UserUpdateOptions {
@@ -342,6 +345,10 @@ interface AppContextType {
   isLoading: boolean;
   /** False until the first vehicle catalog hydration attempt finishes (cache and/or API). Avoids showing a false "Unable to load vehicles" on mobile while the network request is still in flight. */
   vehiclesCatalogReady: boolean;
+  /** Seller's full inventory (published, unpublished, sold) for dashboard views. */
+  sellerInventory: Vehicle[];
+  /** False until the first seller inventory fetch finishes for the logged-in seller. */
+  sellerInventoryReady: boolean;
   currentUser: User | null;
   comparisonList: number[];
   /** Normalized category for vehicles currently in the compare list (null when empty). */
@@ -377,6 +384,7 @@ interface AppContextType {
   setPreviousView: (view: View) => void;
   setSelectedVehicle: (vehicle: Vehicle | null) => void;
   setVehicles: (vehicles: Vehicle[] | ((prev: Vehicle[]) => Vehicle[])) => void;
+  setSellerInventory: (vehicles: Vehicle[] | ((prev: Vehicle[]) => Vehicle[])) => void;
   setIsLoading: (loading: boolean) => void;
   setCurrentUser: (user: User | null) => void;
   setComparisonList: (list: number[] | ((prev: number[]) => number[])) => void;
@@ -421,6 +429,7 @@ interface AppContextType {
   ) => void;
   goBack: (fallbackView?: View) => void;
   refreshVehicles: (options?: { userInitiated?: boolean }) => Promise<void>;
+  refreshSellerInventory: (options?: { userInitiated?: boolean }) => Promise<void>;
   
   // Admin functions
   onCreateUser: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
@@ -474,6 +483,7 @@ interface AppContextType {
   updateUser: (email: string, updates: Partial<User>, options?: UserUpdateOptions) => Promise<void>;
   deleteUser: (email: string) => Promise<void>;
   updateVehicle: (id: number, updates: Partial<Vehicle>, options?: VehicleUpdateOptions) => Promise<void>;
+  syncVehicleFromServer: (vehicle: Vehicle) => void;
   deleteVehicle: (id: number) => void;
   selectVehicle: (vehicle: Vehicle) => void;
   toggleWishlist: (vehicleId: number) => void;
@@ -577,6 +587,10 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const profileRestoreFromSupabaseInFlightRef = useRef(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const currentUserRef = useRef<User | null>(null);
+  const [sellerInventory, setSellerInventory] = useState<Vehicle[]>([]);
+  const [sellerInventoryReady, setSellerInventoryReady] = useState(false);
+  const sellerInventoryRef = useRef<Vehicle[]>([]);
+  sellerInventoryRef.current = sellerInventory;
   currentUserRef.current = currentUser;
 
   // Restore or reject persisted sessions (no optimistic auth UI before token validation).
@@ -2113,20 +2127,68 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     }
   }, [currentUser?.role, setVehicles, addToast, t]);
 
+  const refreshSellerInventory = useCallback(async (options?: { userInitiated?: boolean }) => {
+    const userInitiated = Boolean(options?.userInitiated);
+    const sellerEmail = currentUser?.email?.toLowerCase().trim();
+    if (currentUser?.role !== 'seller' || !sellerEmail) {
+      setSellerInventory([]);
+      setSellerInventoryReady(true);
+      return;
+    }
+    try {
+      const list = await dataService.getSellerVehicles(sellerEmail);
+      setSellerInventory(filterVehiclesBySellerEmail(list, sellerEmail));
+      setSellerInventoryReady(true);
+    } catch (err) {
+      setSellerInventory([]);
+      setSellerInventoryReady(true);
+      logWarn('Refresh seller inventory failed:', err);
+      if (!userInitiated) {
+        logBackgroundSyncFailure(
+          'Seller inventory refresh',
+          err instanceof Error ? err.message : String(err),
+        );
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      const toastMsg = msg && msg.length < 120 ? msg : t('toast.vehiclesLoadFailedShort');
+      addToast(toastMsg, 'error');
+    }
+  }, [currentUser?.role, currentUser?.email, addToast, t]);
+
+  useEffect(() => {
+    if (currentUser?.role === 'seller' && currentUser.email) {
+      setSellerInventory([]);
+      setSellerInventoryReady(false);
+      void refreshSellerInventory();
+      return;
+    }
+    setSellerInventory([]);
+    setSellerInventoryReady(true);
+  }, [currentUser?.role, currentUser?.email, refreshSellerInventory]);
+
+  useEffect(() => {
+    if (currentView !== View.SELLER_DASHBOARD) return;
+    if (currentUser?.role !== 'seller' || !currentUser.email) return;
+    void refreshSellerInventory();
+  }, [currentView, currentUser?.role, currentUser?.email, refreshSellerInventory]);
+
   const sellerIdentityHealRef = useRef(false);
   useEffect(() => {
     if (sellerIdentityHealRef.current) return;
     if (!currentUser?.email) return;
     if (currentUser.role !== 'seller') return;
     const email = currentUser.email.toLowerCase().trim();
-    const mine = vehicles.filter(
-      (v) => v?.sellerEmail && v.sellerEmail.toLowerCase().trim() === email,
-    );
+    const mine = sellerInventory.length > 0
+      ? sellerInventory
+      : vehicles.filter(
+          (v) => v?.sellerEmail && v.sellerEmail.toLowerCase().trim() === email,
+        );
     if (mine.length === 0) return;
     if (!mine.some(vehicleMissingCanonicalId)) return;
     sellerIdentityHealRef.current = true;
-    void refreshVehicles();
-  }, [currentUser?.email, currentUser?.role, vehicles, refreshVehicles]);
+    void refreshSellerInventory();
+  }, [currentUser?.email, currentUser?.role, vehicles, sellerInventory, refreshSellerInventory]);
 
   // Auto-navigate to appropriate dashboard after login/registration
   // This ensures the view is set correctly even if state updates are async
@@ -3262,18 +3324,15 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
           }
         }
         
-        // Load vehicles and users in PARALLEL for faster loading (no sequential delays)
-        // CRITICAL FIX: For admin users, force refresh to bypass cache and get fresh data
-        // Use deduplicateRequest so overlapping initial-load requests are reused, not duplicated
+        // Load vehicles and users in PARALLEL — cache-first; dataService SWR refreshes in background.
         const [vehiclesResult, usersResult] = await Promise.allSettled([
           deduplicateRequest(
-            `vehicles-${isAdmin ? 'admin' : 'user'}-sync-fr${isAdmin ? '1' : '0'}`,
-            () => dataService.getVehicles(isAdmin, isAdmin)
+            `vehicles-${isAdmin ? 'admin' : 'user'}-sync-fr0`,
+            () => dataService.getVehicles(isAdmin, false)
           ),
-          deduplicateRequest(
-            'users',
-            () => dataService.getUsers(isAdmin)
-          )
+          isAdmin
+            ? deduplicateRequest('users', () => dataService.getUsers(false))
+            : Promise.resolve(null),
         ]);
 
         if (!isSubscribed) {
@@ -3306,7 +3365,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         }
 
         // Update users if fetch succeeded
-        if (usersResult.status === 'fulfilled' && Array.isArray(usersResult.value)) {
+        if (usersResult.status === 'fulfilled' && Array.isArray(usersResult.value) && isAdmin) {
           logInfo(`✅ AppProvider: Setting ${usersResult.value.length} users in state`);
           setUsers(usersResult.value);
           // For admin users, log if we got 0 users (might indicate an issue)
@@ -4670,7 +4729,33 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const updateVehicleHandler = useCallback(async (id: number, updates: Partial<Vehicle>, options: VehicleUpdateOptions = {}) => {
     // Prevent duplicate updates for the same vehicle
     if (updatingVehiclesRef.current.has(id)) {
-      addToast('Please wait while we save your changes.', 'info');
+      if (!options.skipToast) {
+        addToast('Please wait while we save your changes.', 'info');
+      }
+      return;
+    }
+
+    const viewCountOnly =
+      Object.keys(updates).length === 1 &&
+      Object.prototype.hasOwnProperty.call(updates, 'views') &&
+      typeof updates.views === 'number';
+
+    if (viewCountOnly) {
+      const applyViewCount = (vehicle: Vehicle | undefined) =>
+        vehicle && vehicle.id === id ? { ...vehicle, views: updates.views as number } : vehicle;
+
+      setVehicles((prev) =>
+        Array.isArray(prev) ? prev.map((vehicle) => applyViewCount(vehicle) ?? vehicle) : [],
+      );
+      setSellerInventory((prev) =>
+        filterVehiclesBySellerEmail(
+          Array.isArray(prev) ? prev.map((vehicle) => applyViewCount(vehicle) ?? vehicle) : [],
+          currentUser?.email,
+        ),
+      );
+      syncVehicleCachesById(id, (existing) =>
+        existing ? { ...existing, views: updates.views as number } : existing,
+      );
       return;
     }
 
@@ -4678,7 +4763,9 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       // Mark vehicle as being updated
       updatingVehiclesRef.current.add(id);
 
-      let vehicleToUpdate = Array.isArray(vehicles) ? vehicles.find(v => v.id === id) : undefined;
+      let vehicleToUpdate =
+        findVehicleByIdentity(vehicles, id, options.databaseId) ||
+        findVehicleByIdentity(sellerInventoryRef.current, id, options.databaseId);
       if (!vehicleToUpdate) {
         updatingVehiclesRef.current.delete(id);
         addToast(t('toast.vehicleNotFound'), 'error');
@@ -4686,14 +4773,27 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       }
 
       vehicleToUpdate = normalizeVehicleIdentity(vehicleToUpdate);
+      const hintDatabaseId = options.databaseId?.trim() || vehicleToUpdate.databaseId?.trim();
       if (!vehicleToUpdate.databaseId?.trim()) {
-        const recovered = await resolveVehicleFromApi(id);
+        const recovered = await resolveVehicleFromApi(id, hintDatabaseId);
         if (recovered) {
           vehicleToUpdate = recovered;
           setVehicles((prev) =>
             Array.isArray(prev)
-              ? prev.map((v) => (v && v.id === id ? { ...v, ...recovered } : v))
+              ? prev.map((v) =>
+                  findVehicleByIdentity([v], id, recovered.databaseId) ? { ...v, ...recovered } : v,
+                )
               : [recovered],
+          );
+          setSellerInventory((prev) =>
+            filterVehiclesBySellerEmail(
+              Array.isArray(prev)
+                ? prev.map((v) =>
+                    findVehicleByIdentity([v], id, recovered.databaseId) ? { ...v, ...recovered } : v,
+                  )
+                : [],
+              currentUser?.email,
+            ),
           );
         }
       }
@@ -4707,7 +4807,19 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       const result = normalizeVehicleIdentity(await updateVehicleApi(mergedForApi));
 
       setVehicles(prev =>
-        Array.isArray(prev) ? prev.map(vehicle => (vehicle && vehicle.id === id ? result : vehicle)) : []
+        Array.isArray(prev) ? prev.map(vehicle =>
+          vehicle && findVehicleByIdentity([vehicle], id, result.databaseId) ? result : vehicle,
+        ) : []
+      );
+      setSellerInventory((prev) =>
+        filterVehiclesBySellerEmail(
+          Array.isArray(prev)
+            ? prev.map((vehicle) =>
+                vehicle && findVehicleByIdentity([vehicle], id, result.databaseId) ? result : vehicle,
+              )
+            : [],
+          currentUser?.email,
+        ),
       );
       syncVehicleCachesById(id, () => result);
 
@@ -4750,6 +4862,24 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     // But including them is harmless and makes the intent clear
   }, [vehicles, addToast, currentUser, t, syncVehicleCachesById]);
 
+  const syncVehicleFromServer = useCallback((vehicle: Vehicle) => {
+    const result = normalizeVehicleIdentity(vehicle);
+    setVehicles((prev) =>
+      Array.isArray(prev)
+        ? prev.map((v) => (v && findVehicleByIdentity([v], result.id, result.databaseId) ? result : v))
+        : [result],
+    );
+    setSellerInventory((prev) =>
+      filterVehiclesBySellerEmail(
+        Array.isArray(prev)
+          ? prev.map((v) => (v && findVehicleByIdentity([v], result.id, result.databaseId) ? result : v))
+          : [],
+        currentUser?.email,
+      ),
+    );
+    syncVehicleCachesById(result.id, () => result);
+  }, [currentUser?.email, syncVehicleCachesById]);
+
   const contextValue: AppContextType = useMemo(() => {
     const inboxMarkRead: { fn?: AppContextType['markAsRead'] } = {};
     return {
@@ -4760,6 +4890,8 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     vehicles,
     isLoading,
     vehiclesCatalogReady,
+    sellerInventory,
+    sellerInventoryReady,
     currentUser,
     comparisonList,
     comparisonCategory,
@@ -4793,6 +4925,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     setPreviousView,
     setSelectedVehicle,
     setVehicles: setVehicles as (vehicles: Vehicle[] | ((prev: Vehicle[]) => Vehicle[])) => void,
+    setSellerInventory: setSellerInventory as (vehicles: Vehicle[] | ((prev: Vehicle[]) => Vehicle[])) => void,
     setIsLoading,
     setCurrentUser,
     setComparisonList: setComparisonList as (list: number[] | ((prev: number[]) => number[])) => void,
@@ -4830,6 +4963,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     navigate,
     goBack,
     refreshVehicles,
+    refreshSellerInventory,
 
     // Admin functions
       onAdminUpdateUser: async (email: string, details: Partial<User>) => {
@@ -6680,9 +6814,12 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     updateVehicle: async (id: number, updates: Partial<Vehicle>, options?: VehicleUpdateOptions) => {
       await updateVehicleHandler(id, updates, options);
     },
+    syncVehicleFromServer,
     deleteVehicle: async (id: number) => {
       try {
-        const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v.id === id) : undefined;
+        const vehicle =
+          (Array.isArray(vehicles) ? vehicles.find((v) => v.id === id) : undefined) ||
+          sellerInventoryRef.current.find((v) => v.id === id);
         
         // Call API to delete vehicle
         const { deleteVehicle: deleteVehicleApi } = await import('../services/vehicleService');
@@ -6697,6 +6834,9 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
           
           // Update local state
           setVehicles(prev => Array.isArray(prev) ? prev.filter(vehicle => vehicle && vehicle.id !== id) : []);
+          setSellerInventory((prev) =>
+            Array.isArray(prev) ? prev.filter((vehicle) => vehicle && vehicle.id !== id) : [],
+          );
           syncVehicleCachesById(id, () => null);
           addToast(t('toast.vehicleDeletedSuccess'), 'success');
           logInfo('✅ Vehicle deleted via API:', result);
@@ -6823,20 +6963,21 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     },
   };
   }, [
-    currentView, previousView, selectedVehicle, vehicles, isLoading, vehiclesCatalogReady, currentUser,
+    currentView, previousView, selectedVehicle, vehicles, isLoading, vehiclesCatalogReady,
+    sellerInventory, sellerInventoryReady, currentUser,
     comparisonList, comparisonCategory, ratings, sellerRatings, wishlist, conversations, toasts,
     forgotPasswordRole, typingStatus, chatPeerOnlineByConversationId, selectedCategory, publicSellerProfile,
     activeChat, isAnnouncementVisible, recommendations, initialSearchQuery,
     isCommandPaletteOpen, userLocation, selectedCity, users, platformSettings,
     auditLog, vehicleData, faqItems, supportTickets, notifications,
-    setCurrentView, setPreviousView, setSelectedVehicle, setVehicles, setIsLoading,
+    setCurrentView, setPreviousView, setSelectedVehicle, setVehicles, setSellerInventory, setIsLoading,
     setCurrentUser, setComparisonList, setWishlist, setConversations, setToasts,
     setForgotPasswordRole, setTypingStatus, setSelectedCategory, setPublicSellerProfile,
     setActiveChat, setIsAnnouncementVisible, setInitialSearchQuery,
     setIsCommandPaletteOpen, updateUserLocation, updateSelectedCity, setUsers,
     setPlatformSettings, setAuditLog, setVehicleData, setFaqItems, setSupportTickets,
-    setNotifications, addToast, removeToast, askConfirm, runIfConfirmed, navigate, goBack, refreshVehicles, handleLogin, handleRegister, handleLogout,
-    updateVehicleHandler, syncUserCachesByEmail, syncAllUserCaches, syncVehicleCachesById,
+    setNotifications, addToast, removeToast, askConfirm, runIfConfirmed, navigate, goBack, refreshVehicles, refreshSellerInventory, handleLogin, handleRegister, handleLogout,
+    updateVehicleHandler, syncVehicleFromServer, syncUserCachesByEmail, syncAllUserCaches, syncVehicleCachesById,
     t,
   ]);
 

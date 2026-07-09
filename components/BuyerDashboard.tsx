@@ -50,9 +50,10 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   );
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
 
-  // Load recently viewed in useEffect to avoid infinite re-renders (async getRecentlyViewed)
+  // Load recently viewed only when overview or activity tab is shown
   useEffect(() => {
     if (!currentUser?.email) return;
+    if (activeTab !== 'overview' && activeTab !== 'activity') return;
     const fetchRecentlyViewed = async () => {
       try {
         const ids = await buyerService.getRecentlyViewed(currentUser.email);
@@ -62,36 +63,43 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
       }
     };
     fetchRecentlyViewed();
-  }, [currentUser?.email]);
+  }, [currentUser?.email, activeTab]);
+
+  const publishedVehicles = useMemo(
+    () => (vehicles || []).filter((v) => v && v.status === 'published'),
+    [vehicles],
+  );
 
   // Get recently viewed vehicles from loaded IDs
   const recentlyViewed = useMemo(() => {
-    if (!vehicles || !Array.isArray(vehicles)) return [];
+    if (!publishedVehicles.length) return [];
     const viewedIds = recentlyViewedIds.slice(0, 6);
-    return vehicles.filter(v => v && viewedIds.includes(v.id));
-  }, [recentlyViewedIds, vehicles]);
+    return publishedVehicles.filter(v => v && viewedIds.includes(v.id));
+  }, [recentlyViewedIds, publishedVehicles]);
 
   // Get wishlist vehicles
   const wishlistVehicles = useMemo(
     () => {
-      if (!vehicles || !Array.isArray(vehicles)) return [];
-      return vehicles.filter(v => v && wishlist.includes(v.id)).slice(0, 6);
+      if (!publishedVehicles.length) return [];
+      return publishedVehicles.filter(v => v && wishlist.includes(v.id)).slice(0, 6);
     },
-    [vehicles, wishlist]
+    [publishedVehicles, wishlist]
   );
 
-  // Check for price drops
+  // Check for price drops — only when alerts tab or banner is relevant
   const priceDrops = useMemo(() => {
     if (!currentUser?.email) return [];
-    return buyerService.checkPriceDrops(currentUser.email, wishlist, vehicles);
-  }, [currentUser?.email, wishlist, vehicles]);
+    if (activeTab !== 'alerts' && activeTab !== 'overview') return [];
+    return buyerService.checkPriceDrops(currentUser.email, wishlist, publishedVehicles);
+  }, [currentUser?.email, wishlist, publishedVehicles, activeTab]);
 
   // Find new matches for saved searches
   const newMatches = useMemo(() => {
     if (!currentUser?.email) return [];
-    return buyerService.findNewMatches(currentUser.email, vehicles)
+    if (activeTab !== 'alerts' && activeTab !== 'overview' && activeTab !== 'searches') return [];
+    return buyerService.findNewMatches(currentUser.email, publishedVehicles)
       .filter(result => result.matches.length > 0);
-  }, [currentUser?.email, vehicles]);
+  }, [currentUser?.email, publishedVehicles, activeTab]);
 
   const handleDeleteSearch = useCallback((searchId: string) => {
     buyerService.deleteSavedSearch(currentUser.email, searchId);
@@ -251,7 +259,9 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           </p>
         </div>
 
-        <PendingDealsBanner vehicles={vehicles} />
+        {activeTab === 'deals' && (
+          <PendingDealsBanner vehicles={publishedVehicles} />
+        )}
 
         {/* Stats Cards — shared primitives for consistency across roles */}
         <StatCardGrid cols={4} className="mb-6">
@@ -334,7 +344,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                     })}
                   </p>
                   <MyDealsList
-                    vehicles={vehicles}
+                    vehicles={publishedVehicles}
                     onSelectVehicle={onSelectVehicle}
                     onBrowseVehicles={() => onNavigate(View.USED_CARS)}
                     onOpenDeal={(leadId, vehicle) => {
@@ -442,7 +452,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 ) : (
                   <div className="space-y-4">
                     {savedSearches.map(search => {
-                      const matches = buyerService.matchVehiclesToSearch(vehicles, search);
+                      const matches = buyerService.matchVehiclesToSearch(publishedVehicles, search);
                       return (
                         <div
                           key={search.id}
@@ -582,7 +592,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                         </h4>
                         <div className="space-y-3">
                           {priceDrops.map(drop => {
-                            const vehicle = vehicles.find(v => v.id === drop.vehicleId);
+                            const vehicle = publishedVehicles.find(v => v.id === drop.vehicleId);
                             if (!vehicle) return null;
                             return (
                               <button

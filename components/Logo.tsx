@@ -57,13 +57,9 @@ const Logo: React.FC<LogoProps> = ({
 
       {showText && (
         <span
-          className={`font-extrabold ${
+          className={`font-brand font-extrabold ${
             isOnDark ? 'text-white drop-shadow-sm' : 'text-slate-900 dark:text-white'
           } ${config.text}`}
-          style={{
-            fontFamily: 'Nunito Sans, sans-serif',
-            fontWeight: '800',
-          }}
         >
           RERIDE
         </span>

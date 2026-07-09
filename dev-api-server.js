@@ -526,7 +526,6 @@ const mockPlans = [
       'Unlimited Active Listings',
       '5 Featured Credits/month',
       '3 Free Certified Inspections/month',
-      'AI Listing Assistant',
       'Advanced Analytics',
       'Dedicated Support',
     ],
@@ -3274,50 +3273,8 @@ app.post('/api/payments', async (req, res) => {
 });
 
 // Gemini AI API endpoint (mock handler for development)
-app.post('/api/gemini', (req, res) => {
-  const { payload } = req.body;
-  
-  if (!payload) {
-    return res.status(400).json({ 
-      success: false, 
-      reason: 'Payload is required' 
-    });
-  }
-  
-  // Mock AI response for development
-  const mockResponse = {
-    text: 'This is a mock AI response. In production, this would call the Gemini API. Make sure GEMINI_API_KEY is set in your environment variables.',
-    model: payload.model || 'gemini-2.5-flash',
-    timestamp: new Date().toISOString()
-  };
-  
-  // If there's a prompt, try to provide a basic response
-  if (payload.contents || payload.prompt) {
-    const prompt = typeof payload.contents === 'string' 
-      ? payload.contents 
-      : (payload.prompt || '');
-    
-    if (prompt.toLowerCase().includes('vehicle') || prompt.toLowerCase().includes('car')) {
-      mockResponse.text = 'Based on your vehicle description, here are some suggested features and specifications. This is a mock response for development purposes.';
-    }
-  }
-  
-  console.log('🤖 POST /api/gemini - Returning mock AI response');
-  
-  // Return response in the format expected by the Gemini service
-  res.json({
-    success: true,
-    text: mockResponse.text,
-    data: {
-      candidates: [{
-        content: {
-          parts: [{
-            text: mockResponse.text
-          }]
-        }
-      }]
-    }
-  });
+app.post('/api/gemini', (_req, res) => {
+  res.status(410).json({ success: false, reason: 'AI features have been removed from this platform.' });
 });
 
 // CarQuery vehicle specs proxy (avoids browser CORS on carqueryapi.com)
@@ -3453,80 +3410,8 @@ app.all('/api/complaints', async (req, res) => {
   }
 });
 
-// AI vehicle photo inspection (dev mock — mirrors api/main.ts response shape)
-app.post('/api/ai-inspection', (req, res) => {
-  const { imageUrls, vehicleDetails } = req.body || {};
-
-  if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
-    return res.status(400).json({
-      success: false,
-      reason: 'At least one image URL is required for inspection',
-    });
-  }
-
-  const make = vehicleDetails?.make || 'Vehicle';
-  const model = vehicleDetails?.model || '';
-  const year = vehicleDetails?.year || new Date().getFullYear();
-  const imageCount = imageUrls.length;
-
-  const mockInspection = {
-    overallScore: 78,
-    confidenceScore: 62,
-    exterior: {
-      score: 80,
-      paintCondition: 'good',
-      bodyCondition: 'good',
-      summary: `Exterior of ${year} ${make} ${model} looks well maintained (dev mock).`,
-      findings: [],
-    },
-    interior: {
-      score: 76,
-      seatCondition: 'good',
-      dashboardCondition: 'good',
-      cleanlinessLevel: 'clean',
-      summary: 'Interior appears clean with normal wear for age (dev mock).',
-      findings: [],
-    },
-    tyres: {
-      score: 74,
-      estimatedTreadDepth: 'good',
-      mismatchedTyres: false,
-      brandVisible: null,
-      summary: 'Tyre tread appears adequate from photos (dev mock).',
-    },
-    photoQuality: {
-      overallScore: Math.min(90, 55 + imageCount * 5),
-      issues: imageCount < 6 ? ['too_far'] : [],
-      missingViews: imageCount < 6 ? ['interior_front', 'tyres'] : [],
-      recommendations: imageCount < 6
-        ? ['Add more angles: interior, engine bay, and tyre close-ups']
-        : ['Photo set is adequate for listing'],
-    },
-    highlights: [
-      `${imageCount} photo(s) analyzed`,
-      'Development mock — set GEMINI_API_KEY for real AI inspection in production',
-    ],
-    concerns: [],
-    buyerAdvisory: [
-      'This report was generated in local dev mode.',
-      'Always inspect the vehicle in person before purchase.',
-    ],
-    imageAnalysis: imageUrls.slice(0, 10).map((url, idx) => ({
-      imageIndex: idx,
-      detectedElements: ['vehicle body'],
-      issuesFound: 0,
-    })),
-  };
-
-  console.log(`🔍 POST /api/ai-inspection - Returning dev mock (${imageCount} image(s))`);
-
-  res.json({
-    success: true,
-    response: JSON.stringify(mockInspection),
-    result: JSON.stringify(mockInspection),
-    imagesProcessed: imageCount,
-    timestamp: new Date().toISOString(),
-  });
+app.post('/api/ai-inspection', (_req, res) => {
+  res.status(410).json({ success: false, reason: 'AI features have been removed from this platform.' });
 });
 
 // Support chat API (Supabase-backed — replaces legacy MongoDB api/chat.js)

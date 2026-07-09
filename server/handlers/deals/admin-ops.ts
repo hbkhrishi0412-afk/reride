@@ -5,6 +5,7 @@ import type {
   DealLead,
   DealLeadMetadata,
   DealRevenueDashboard,
+  DealSellerNote,
   FraudDashboard,
   FraudSignal,
   RcQueueItem,
@@ -16,11 +17,13 @@ import {
   assistancePackageNeedsRc,
   deriveKanbanStatus,
 } from '../../../types.js';
+import { parseSellerNotes, serializeSellerNotes, normalizeSellerNotes } from '../../../lib/dealSellerNotes.js';
 import type { DealActionHandler } from './context.js';
 import {
   backfillAllKanbanStatuses,
   buildCalendarEvents,
   buildSellerTasks,
+  canActAsSellerOnLead,
   enrichLead,
   enrichLeadsBatch,
   ensureConversationForDeal,
@@ -213,9 +216,9 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const sellerEmail = normalizeEmail(String(row.seller_email));
     const buyerEmail = normalizeEmail(String(row.buyer_email));
-    if (auth.email !== sellerEmail && auth.email !== buyerEmail && auth.role !== 'admin') {
+    const isSeller = await canActAsSellerOnLead(supabase, auth, row);
+    if (!isSeller && auth.email !== buyerEmail && auth.role !== 'admin') {
       res.status(403).json({ success: false, reason: 'Not authorized' });
       return true;
     }
@@ -350,8 +353,15 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
     const leadId = String(body.leadId || '');
-    const sellerNotes = body.sellerNotes != null ? String(body.sellerNotes) : undefined;
     const internalNotes = body.internalNotes != null ? String(body.internalNotes) : undefined;
+    let sellerNotesList: ReturnType<typeof normalizeSellerNotes> | undefined;
+    if (body.sellerNotesList !== undefined) {
+      sellerNotesList = normalizeSellerNotes(
+        Array.isArray(body.sellerNotesList) ? (body.sellerNotesList as DealSellerNote[]) : [],
+      );
+    } else if (body.sellerNotes != null) {
+      sellerNotesList = normalizeSellerNotes(parseSellerNotes(String(body.sellerNotes)));
+    }
 
     if (!leadId) {
       res.status(400).json({ success: false, reason: 'leadId is required' });
@@ -365,12 +375,16 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const sellerEmail = normalizeEmail(String(row.seller_email));
     const isAdmin = auth.role === 'admin';
-    const isSeller = auth.email === sellerEmail;
+    const isSeller = await canActAsSellerOnLead(supabase, auth, row);
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (sellerNotes !== undefined && (isSeller || isAdmin)) updates.seller_notes = sellerNotes;
+    if (sellerNotesList !== undefined && (isSeller || isAdmin)) {
+      updates.seller_notes = serializeSellerNotes(sellerNotesList);
+      if (isSeller && !normalizeEmail(String(row.seller_email || ''))) {
+        updates.seller_email = auth.email;
+      }
+    }
     if (internalNotes !== undefined && isAdmin) updates.internal_notes = internalNotes;
 
     if (Object.keys(updates).length <= 1) {
@@ -378,7 +392,11 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    await supabase.from('deal_leads').update(updates).eq('id', leadId);
+    const { error: updateError } = await supabase.from('deal_leads').update(updates).eq('id', leadId);
+    if (updateError) {
+      res.status(500).json({ success: false, reason: updateError.message || 'Could not save notes' });
+      return true;
+    }
 
     let lead = await fetchLeadWithTimeline(leadId);
     if (lead) lead = await enrichLead(lead);
@@ -671,11 +689,12 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
     const funnelStages = [
       'lead_created',
       'chat_accepted',
-      'test_drive_completed',
-      'inspection_completed',
       'offer_accepted',
+      'inspection_completed',
+      'test_drive_completed',
       'token_confirmed',
       'delivery_completed',
+      'documents_completed',
       'rc_completed',
       'deal_completed',
     ];

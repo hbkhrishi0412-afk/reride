@@ -309,17 +309,20 @@ const AppContent: React.FC = () => {
         conversations,
         setConversations,
         setActiveChat,
+        openChat: false,
       });
       if (!conversation) {
         addToast('Unable to start chat. The seller may no longer be available.', 'error');
         return;
       }
+      let hasDeal = false;
       try {
         const { lead, existing } = await createDealLead({
           vehicleId: vehicle.id,
           conversationId: conversation.id,
           buyerName: currentUser.name,
         });
+        hasDeal = true;
         if (existing) {
           addToast(`You're already interested. Lead ${lead.id}`, 'info');
         } else {
@@ -328,7 +331,17 @@ const AppContent: React.FC = () => {
         invalidateMyDealLeadsCache();
       } catch (err) {
         logWarn('Deal lead creation failed (chat still opened):', err);
-        addToast('Chat opened, but deal tracking could not start. Try again from your inbox.', 'warning');
+        addToast('Chat opened, but deal tracking could not start. Use Open Deal Room in chat to retry.', 'warning');
+      }
+      const chatConversation = hasDeal ? { ...conversation, hasDeal: true } : conversation;
+      setActiveChat(chatConversation);
+      try {
+        localStorage.setItem(
+          'reRideActiveChat',
+          JSON.stringify({ id: chatConversation.id, updatedAt: Date.now() }),
+        );
+      } catch {
+        /* ignore */
       }
     },
     [currentUser, conversations, setConversations, setActiveChat, addToast, navigate, savePostLoginDetailContext],

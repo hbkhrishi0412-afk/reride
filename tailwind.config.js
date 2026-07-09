@@ -95,7 +95,8 @@ export default {
         'brand-lg': '12px',
       },
       fontFamily: {
-        sans: ['Nunito Sans', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Poppins', 'PoppinsFallback', 'system-ui', 'sans-serif'],
+        brand: ['Nunito Sans', 'Poppins', 'system-ui', 'sans-serif'],
       },
     },
   },

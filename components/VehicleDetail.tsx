@@ -1,11 +1,10 @@
 import React, { useState, useMemo, memo, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, ProsAndCons, User, CertifiedInspection, VehicleDocument, DealLead } from '../types';
+import type { Vehicle, User, CertifiedInspection, VehicleDocument, DealLead } from '../types';
 import { useTranslatedText, useTranslatedArray, useTranslatedFields } from '../hooks/useTranslatedText';
-import { generateProsAndCons } from '../services/geminiService';
 import { getFirstValidImage, getValidImages, getSafeImageSrc, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, VEHICLE_THUMB_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder, isPlaceholderService } from '../utils/imageUtils';
-import { stringifyVehicleForSession } from '../utils/vehicleSessionCache';
 import StarRating from './StarRating';
+import { useTrackVehicleView } from '../hooks/useTrackVehicleView';
 import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
 import VerificationBadge from './VerificationBadge';
@@ -14,7 +13,6 @@ import VehicleHistory from './VehicleHistory';
 import { getFollowersCount } from '../services/buyerEngagementService';
 import { useApp } from './AppProvider';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
-import { logWarn, logDebug } from '../utils/logger';
 import { scrollAppToTop } from '../utils/scrollAppToTop';
 import { getVehicleListingUrl } from '../utils/whatsappShare.js';
 import { buildSellerWhatsAppUrl, getSellerCallPhone } from '../utils/sellerContact.js';
@@ -341,29 +339,24 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const [activeTab, setActiveTab] = useState<'overview' | 'report' | 'features' | 'vahan' | 'price'>('overview');
   const detailTabsRef = useRef<HTMLDivElement>(null);
   const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
-  const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
-  const [isGeneratingProsCons, setIsGeneratingProsCons] = useState<boolean>(false);
   const [showEMICalculator, setShowEMICalculator] = useState<boolean>(false);
   const [vehicleDealLead, setVehicleDealLead] = useState<DealLead | null>(null);
   const ratingSuccessTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emiCalculatorRef = useRef<HTMLDivElement>(null);
   const scrollToEmiOnShowRef = useRef(false);
-  const trackedViewRef = useRef<Set<number>>(new Set());
 
   // ✅ FIX: Optimize useEffect dependency - only depend on vehicle.id and videoUrl
   useEffect(() => {
     setCurrentIndex(0);
-    setProsAndCons(null);
-    setIsGeneratingProsCons(false);
     setShowEMICalculator(false);
     scrollToEmiOnShowRef.current = false;
     setVehicleDealLead(null);
     setActiveMediaTab(vehicle.videoUrl ? 'video' : 'images');
     scrollAppToTop();
     requestAnimationFrame(() => scrollAppToTop());
-    // Reset tracked views when vehicle changes
-    trackedViewRef.current.clear();
   }, [vehicle.id, vehicle.videoUrl]);
+
+  useTrackVehicleView(vehicle, { currentUser, updateVehicle });
 
   const refreshVehicleDealLead = useCallback(async () => {
     if (!currentUser?.email || safeVehicle.id == null) {
@@ -414,26 +407,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     e.stopPropagation();
     if (validImages.length > 0) {
       setCurrentIndex((prevIndex) => (prevIndex + 1) % validImages.length);
-    }
-  };
-
-  const handleGenerateProsCons = async () => {
-    setIsGeneratingProsCons(true);
-    try {
-      const result = await generateProsAndCons(safeVehicle);
-      setProsAndCons(result);
-    } catch (error) {
-      console.error('Failed to generate pros/cons:', error);
-      setProsAndCons({
-        pros: [],
-        cons: [
-          error instanceof Error
-            ? error.message
-            : 'Could not generate suggestions. Please try again later.',
-        ],
-      });
-    } finally {
-      setIsGeneratingProsCons(false);
     }
   };
 
@@ -621,73 +594,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     setActiveTab('price');
     detailTabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  
-  // Track a view when the detail page is opened (only once per vehicle)
-  useEffect(() => {
-    const vehicleId = vehicle?.id;
-    const viewToken = vehicle?.viewTrackToken;
-    if (!vehicleId || !viewToken) return;
-    
-    // Check if we've already tracked this vehicle's view
-    if (trackedViewRef.current.has(vehicleId)) {
-      return;
-    }
-    
-    // Mark as tracked immediately to prevent duplicate requests
-    trackedViewRef.current.add(vehicleId);
-    
-    const trackView = async () => {
-      try {
-        const { publicApiFetch } = await import('../utils/apiFetch');
-        const res = await publicApiFetch('/api/vehicles?action=track-view', {
-          method: 'POST',
-          body: JSON.stringify({
-            vehicleId,
-            ...(vehicle?.databaseId ? { databaseId: vehicle.databaseId } : {}),
-            ...(vehicle?.viewTrackToken ? { viewToken: vehicle.viewTrackToken } : {}),
-          }),
-        });
-        if (!res.ok) return;
-        const data = await res.json().catch((error) => {
-          logWarn('Failed to parse view count response:', error);
-          return {};
-        });
-        // Optimistically update local state if API responded
-        if (data && typeof data.views === 'number') {
-          try {
-            // Update selectedVehicle persisted copy
-            const stored = sessionStorage.getItem('selectedVehicle');
-            if (stored) {
-              const parsed = JSON.parse(stored);
-              if (parsed?.id === vehicleId) {
-                parsed.views = data.views;
-                sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(parsed as Vehicle));
-              }
-            }
-          } catch (error) {
-            logDebug('Failed to update selectedVehicle in sessionStorage (non-critical):', error);
-          }
-          // Update global vehicles state via context so dashboards reflect the change
-          try {
-          // Skip toast notification for view count updates (silent background update)
-            if (updateVehicle) {
-              updateVehicle(vehicleId, { views: data.views }, { skipToast: true }).catch((error) => {
-                logWarn('Failed to update vehicle views:', error);
-              });
-            }
-          } catch (error) {
-            logWarn('Failed to update vehicle views:', error);
-          }
-        }
-      } catch (_err) {
-        // On error, remove from tracked set so it can be retried if needed
-        trackedViewRef.current.delete(vehicleId);
-      }
-    };
-    
-    trackView();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vehicle?.id]); // Only depend on the actual vehicle ID, not safeVehicle or updateVehicle
 
   // Format currency helper
   const formatCurrency = (value: number) => {
@@ -1154,38 +1060,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                     ))}
                                   </div>
                                 ) : <p className="text-reride-text">{t('vehicle.detail.noFeaturesListed')}</p>}
-                              </div>
-                              <div>
-                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
-                                  {t('vehicle.detail.aiExpertAnalysis')}
-                                </h4>
-                                {isGeneratingProsCons ? (
-                                  <div className="flex items-center gap-2 text-reride-text">
-                                    <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin" style={{ borderColor: '#FF6B35' }}></div>
-                                    {t('vehicle.detail.ai.generating')}
-                                  </div>
-                                ) : prosAndCons ? (
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <h5 className="font-semibold text-reride-orange mb-2">{t('vehicle.detail.ai.pros')}</h5>
-                                      <ul className="list-disc list-inside space-y-1 text-sm">{prosAndCons.pros.map((p, i) => <li key={i}>{p}</li>)}</ul>
-                                    </div>
-                                    <div>
-                                      <h5 className="font-semibold text-reride-orange mb-2">{t('vehicle.detail.ai.cons')}</h5>
-                                      <ul className="list-disc list-inside space-y-1 text-sm">{prosAndCons.cons.map((c, i) => <li key={i}>{c}</li>)}</ul>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={handleGenerateProsCons}
-                                    className="text-sm font-bold hover:underline transition-colors"
-                                    style={{ color: '#FF6B35' }}
-                                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--reride-blue)')}
-                                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--reride-orange)')}
-                                  >
-                                    {t('vehicle.detail.ai.generateProsConsDesktop')}
-                                  </button>
-                                )}
                               </div>
                             </div>
                           </div>

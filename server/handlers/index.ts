@@ -13,13 +13,6 @@ export { handleContent } from './content.js';
 export { handleSellCar } from './sell-car.js';
 export { handleVehiclePricing } from './vehicle-pricing.js';
 export { handleSupportChat } from './support-chat.js';
-export {
-  scheduleAutoAIInspection,
-  scheduleBackfillAIInspectionOnView,
-  runAutoAIInspection,
-  shouldRegenerateAIInspection,
-  shouldBackfillAIInspectionOnView,
-} from './vehicle-ai-inspection.js';
 export { handleVehicleTrust } from './vehicle-trust.js';
 export { handleDeals } from './deals.js';
 export { handleComplaints } from './complaints.js';

@@ -10,7 +10,7 @@ import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { filterMessagesForViewer } from '../utils/conversationView';
 import { isOfferChatMessage } from '../utils/isOfferChatMessage';
 import DealTimelinePanel from './DealTimelinePanel';
-import { getDealLead } from '../services/dealService';
+import { resolveDealLeadForConversation } from '../services/dealService';
 import {
   scrollContainerToBottom,
   scrollContainerToShowElement,
@@ -252,10 +252,20 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
 
   useEffect(() => {
     if (!conversation.id) return;
-    getDealLead({ conversationId: conversation.id })
-      .then(setDealLead)
-      .catch(() => setDealLead((prev) => prev || null));
-  }, [conversation.id]);
+    let cancelled = false;
+    void resolveDealLeadForConversation(conversation, {
+      retryCount: conversation.hasDeal ? 6 : 2,
+    })
+      .then((lead) => {
+        if (!cancelled) setDealLead(lead);
+      })
+      .catch(() => {
+        if (!cancelled) setDealLead((prev) => prev || null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversation.id, conversation.vehicleId, conversation.hasDeal]);
 
   return (
     <div className={`bg-white rounded-lg shadow-md border border-gray-200 flex flex-col ${className}`} style={{ height }}>

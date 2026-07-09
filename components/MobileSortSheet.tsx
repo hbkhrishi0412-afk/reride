@@ -87,7 +87,7 @@ export const MobileSortSheet: React.FC<MobileSortSheetProps> = ({
                     onClose();
                   }}
                   className={`w-full text-left px-4 py-3.5 rounded-xl text-base font-medium transition-colors ${
-                    selected ? 'bg-orange-50 text-orange-600' : 'text-gray-900 active:bg-gray-50'
+                    selected ? 'bg-slate-100 text-slate-900 ring-1 ring-slate-200' : 'text-gray-900 active:bg-gray-50'
                   }`}
                 >
                   {label}

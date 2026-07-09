@@ -103,7 +103,7 @@ export const handleStageHandlers: DealActionHandler = async (ctx) => {
             o.id === metadata.currentOfferId ? { ...o, status: 'accepted' } : o,
           );
         }
-        label = `Offer Accepted: ₹${amount.toLocaleString('en-IN')}`;
+        label = `Price agreed: ₹${amount.toLocaleString('en-IN')}`;
         break;
       }
       case 'inspection_requested':
@@ -295,7 +295,7 @@ export const handleStageHandlers: DealActionHandler = async (ctx) => {
         stage: 'offer_accepted',
         eventType: 'offer_accepted',
         actorEmail: auth.email,
-        label: `Offer Accepted: ₹${currentOffer.amount.toLocaleString('en-IN')}`,
+        label: `Price agreed: ₹${currentOffer.amount.toLocaleString('en-IN')}`,
       });
     } else if (response === 'rejected') {
       currentOffer.status = 'rejected';

@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
-import Logo from './Logo.js';
 
 interface MobileHeaderProps {
   onNavigate: (view: ViewEnum) => void;
@@ -19,6 +18,8 @@ interface MobileHeaderProps {
   unreadNotificationCount?: number;
   /** Vehicles queued for side-by-side comparison. */
   compareCount?: number;
+  wishlistCount?: number;
+  inboxCount?: number;
   /**
    * Logged-in service provider (separate identity from `currentUser`). When
    * present, the menu shows the provider's identity and a shortcut to the
@@ -28,6 +29,15 @@ interface MobileHeaderProps {
   /** When false, only the slide-out menu renders (no fixed title bar). */
   showTitleBar?: boolean;
 }
+
+type MenuItemConfig = {
+  icon: React.ReactNode;
+  label: string;
+  view: ViewEnum;
+  badge?: number;
+  tint?: string;
+  hidden?: boolean;
+};
 
 /**
  * Mobile App Header - Compact design for installed PWA
@@ -46,21 +56,123 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
   onToggleMenu,
   unreadNotificationCount = 0,
   compareCount = 0,
+  wishlistCount = 0,
+  inboxCount = 0,
   serviceProvider = null,
   showTitleBar = true,
 }) => {
   const { t } = useTranslation();
   const [internalShowMenu, setInternalShowMenu] = useState(false);
   const showMenu = showMenuProp !== undefined ? showMenuProp : internalShowMenu;
-  const setShowMenu = onToggleMenu || setInternalShowMenu;
+  const closeMenu = () => {
+    if (onToggleMenu) {
+      if (showMenu) onToggleMenu();
+    } else {
+      setInternalShowMenu(false);
+    }
+  };
+  const toggleMenu = () => {
+    if (onToggleMenu) onToggleMenu();
+    else setInternalShowMenu((prev) => !prev);
+  };
   const isAuthed = Boolean(currentUser) || Boolean(serviceProvider);
   const displayName =
     currentUser?.name || serviceProvider?.name || (isAuthed ? 'Account' : 'Guest');
   const displaySubtitle =
     currentUser?.email ||
     serviceProvider?.email ||
-    (serviceProvider ? 'Service provider' : 'Not logged in');
-  
+    (serviceProvider ? 'Service provider' : t('nav.loginRegister'));
+  const userInitials = useMemo(() => {
+    const parts = displayName.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return displayName.slice(0, 2).toUpperCase();
+  }, [displayName]);
+  const roleLabel =
+    currentUser?.role === 'seller'
+      ? t('nav.roleSeller')
+      : currentUser?.role === 'customer'
+        ? t('nav.roleCustomer')
+        : serviceProvider
+          ? 'Provider'
+          : null;
+
+  const navigateAndClose = (view: ViewEnum) => {
+    onNavigate(view);
+    closeMenu();
+  };
+
+  const exploreItems: MenuItemConfig[] = useMemo(
+    () => [
+      { icon: <HomeIcon />, label: t('nav.home'), view: ViewEnum.HOME, tint: '#334155' },
+      { icon: <CarIcon />, label: t('nav.buyCar'), view: ViewEnum.USED_CARS, tint: '#334155' },
+      {
+        icon: <SellCarIcon />,
+        label: t('nav.sellCar'),
+        view: currentUser?.role === 'seller' ? ViewEnum.SELL_CAR : ViewEnum.SELLER_LOGIN,
+        tint: '#334155',
+      },
+      { icon: <DealerIcon />, label: t('nav.dealers'), view: ViewEnum.DEALER_PROFILES, tint: '#475569' },
+      { icon: <ServiceIcon />, label: t('nav.carServices'), view: ViewEnum.CAR_SERVICES, tint: '#475569' },
+      {
+        icon: <CompareIcon />,
+        label: t('nav.compareCount', { count: compareCount }),
+        view: ViewEnum.COMPARISON,
+        badge: compareCount > 0 ? compareCount : undefined,
+        tint: '#334155',
+      },
+    ],
+    [t, currentUser?.role, compareCount],
+  );
+
+  const accountItems: MenuItemConfig[] = useMemo(() => {
+    if (!currentUser) return [];
+    const items: MenuItemConfig[] = [];
+    if (currentUser.role === 'seller') {
+      items.push({
+        icon: <DashboardIcon />,
+        label: t('nav.sellerDashboard'),
+        view: ViewEnum.SELLER_DASHBOARD,
+        tint: '#1E293B',
+      });
+    }
+    if (currentUser.role === 'customer') {
+      items.push({
+        icon: <DashboardIcon />,
+        label: t('nav.myDashboard'),
+        view: ViewEnum.BUYER_DASHBOARD,
+        tint: '#1E293B',
+      });
+    }
+    items.push(
+      {
+        icon: <HeartIcon />,
+        label: t('nav.myWishlist'),
+        view: ViewEnum.WISHLIST,
+        badge: wishlistCount > 0 ? wishlistCount : undefined,
+        tint: '#475569',
+      },
+      {
+        icon: <MessageIcon />,
+        label: t('nav.messages'),
+        view: ViewEnum.INBOX,
+        badge: inboxCount > 0 ? inboxCount : undefined,
+        tint: '#475569',
+      },
+      { icon: <UserIcon />, label: t('nav.myProfile'), view: ViewEnum.PROFILE, tint: '#64748B' },
+    );
+    return items;
+  }, [currentUser, t, wishlistCount, inboxCount]);
+
+  const helpItems: MenuItemConfig[] = useMemo(
+    () => [
+      { icon: <InfoIcon />, label: t('nav.support'), view: ViewEnum.SUPPORT, tint: '#64748B' },
+      { icon: <ShieldIcon />, label: t('footer.safety'), view: ViewEnum.SAFETY_CENTER, tint: '#64748B' },
+      { icon: <AboutIcon />, label: t('nav.aboutUs'), view: ViewEnum.ABOUT_US, tint: '#64748B' },
+      { icon: <QuestionIcon />, label: t('footer.faq'), view: ViewEnum.FAQ, tint: '#64748B' },
+    ],
+    [t],
+  );
+
   // Check if current view should have transparent header
   const isGradientView = currentView && (
     currentView === ViewEnum.HOME ||
@@ -109,24 +221,24 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
               </button>
             ) : (
               <button
-                onClick={() => setShowMenu(!showMenu)}
+                onClick={toggleMenu}
                 className="p-2 -ml-2 rounded-full active:scale-95 native-transition"
                 aria-label="Toggle menu"
-                style={{ 
-                  minWidth: '44px', 
+                style={{
+                  minWidth: '44px',
                   minHeight: '44px',
                   background: 'rgba(0, 0, 0, 0.04)',
                   transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)'
                 }}
                 data-testid="mobile-menu-button"
               >
-                <svg 
-                  className="w-6 h-6" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  viewBox="0 0 24 24" 
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                   strokeWidth={2.5}
-                  style={{ 
+                  style={{
                     color: isGradientView ? '#FFFFFF' : '#1A1A1A'
                   }}
                 >
@@ -134,11 +246,11 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                 </svg>
               </button>
             )}
-            
+
             {/* Center Title - Premium Typography */}
-            <h1 
-              className="text-base font-bold absolute left-1/2 transform -translate-x-1/2 max-w-[240px] sm:max-w-[280px] truncate tracking-tight" 
-              style={{ 
+            <h1
+              className="text-base font-bold absolute left-1/2 transform -translate-x-1/2 max-w-[240px] sm:max-w-[280px] truncate tracking-tight"
+              style={{
                 letterSpacing: '-0.01em',
                 color: isGradientView ? '#FFFFFF' : '#1A1A1A'
               }}
@@ -153,11 +265,6 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
               rightAction
             ) : showDefaultHeaderActions ? (
               <>
-                {/* Search Icon — shortcut to Browse Cars for screens that
-                    don't have their own search bar. Hidden on USED_CARS /
-                    RENTAL because the page already renders a full-width
-                    search input in the body, so showing a second glass icon
-                    in the header is confusing ("why two search options?"). */}
                 {currentView !== ViewEnum.COMPARISON && (
                   <button
                     type="button"
@@ -227,7 +334,6 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                   </button>
                 )}
 
-                {/* Notifications Icon */}
                 {isAuthed && (
                   <button
                     type="button"
@@ -246,7 +352,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                     </svg>
                     {unreadNotificationCount > 0 && (
-                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-orange-500 rounded-full" aria-hidden />
+                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-slate-900 rounded-full" aria-hidden />
                     )}
                   </button>
                 )}
@@ -262,169 +368,156 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
         <>
           <button
             type="button"
-            className="fixed inset-0 z-[100] animate-fade-in cursor-default border-0 bg-black/50 p-0"
+            className="fixed inset-0 z-[100] animate-fade-in cursor-default border-0 bg-slate-900/40 p-0 backdrop-blur-[2px]"
             aria-label="Close menu"
-            onClick={() => setShowMenu(false)}
+            onClick={closeMenu}
           />
-          <div 
-            className="fixed top-0 left-0 bottom-0 w-72 bg-white z-[110] shadow-xl animate-slide-in-left" 
+          <div
+            className="fixed top-0 left-0 bottom-0 z-[110] flex w-[min(20rem,88vw)] flex-col border-r border-slate-200/80 bg-slate-50 shadow-2xl animate-slide-in-left"
             data-testid="mobile-drawer"
+            style={{
+              paddingTop: 'env(safe-area-inset-top, 0px)',
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            }}
           >
-            <div className="h-full flex flex-col">
-              {/* Menu Header */}
-              <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-orange-500 to-orange-600">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Logo size="sm" showText variant="onDark" />
-                    <div>
-                      <p className="text-white font-semibold text-sm">{displayName}</p>
-                      <p className="text-orange-100 text-xs">{displaySubtitle}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowMenu(false)}
-                    className="p-1 hover:bg-orange-400 rounded-full transition-colors"
-                    data-testid="mobile-drawer-close"
-                  >
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {/* Menu Items */}
-              <nav className="flex-1 overflow-y-auto py-2">
-                <MenuItem
-                  icon={<HomeIcon />}
-                  label={t('nav.home')}
-                  onClick={() => { onNavigate(ViewEnum.HOME); setShowMenu(false); }}
-                />
-                <MenuItem
-                  icon={<CarIcon />}
-                  label={t('nav.buyCar')}
-                  onClick={() => { onNavigate(ViewEnum.USED_CARS); setShowMenu(false); }}
-                />
-                <MenuItem
-                  icon={<SellCarIcon />}
-                  label={t('nav.sellCar')}
-                  onClick={() => { 
-                    if (currentUser?.role === 'seller') {
-                      onNavigate(ViewEnum.SELLER_DASHBOARD);
-                    } else {
-                      onNavigate(ViewEnum.SELLER_LOGIN);
-                    }
-                    setShowMenu(false); 
+            {/* Profile header */}
+            <div className="relative overflow-hidden border-b border-slate-700/30 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4 pb-4 pt-3">
+              <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/[0.04]" aria-hidden />
+              <div className="absolute -bottom-12 -left-6 h-28 w-28 rounded-full bg-white/[0.03]" aria-hidden />
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" aria-hidden />
+              <div className="relative flex items-start justify-between gap-3">
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  onClick={() => {
+                    if (currentUser) navigateAndClose(ViewEnum.PROFILE);
+                    else if (!isAuthed) navigateAndClose(ViewEnum.LOGIN_PORTAL);
                   }}
-                />
-                <MenuItem
-                  icon={<DealerIcon />}
-                  label={t('nav.dealers')}
-                  onClick={() => { onNavigate(ViewEnum.DEALER_PROFILES); setShowMenu(false); }}
-                />
-                <MenuItem
-                  icon={<ServiceIcon />}
-                  label={t('nav.carServices')}
-                  onClick={() => { onNavigate(ViewEnum.CAR_SERVICES); setShowMenu(false); }}
-                />
-                <MenuItem
-                  icon={<CompareIcon />}
-                  label={t('nav.compareCount', { count: compareCount })}
-                  onClick={() => { onNavigate(ViewEnum.COMPARISON); setShowMenu(false); }}
-                />
-                
-                <div className="border-t border-gray-200 my-2"></div>
-                
-                {currentUser && (
-                  <>
-                    <MenuItem
-                      icon={<HeartIcon />}
-                      label={t('nav.myWishlist')}
-                      onClick={() => { onNavigate(ViewEnum.WISHLIST); setShowMenu(false); }}
-                    />
-                    <MenuItem
-                      icon={<MessageIcon />}
-                      label={t('nav.messages')}
-                      onClick={() => { onNavigate(ViewEnum.INBOX); setShowMenu(false); }}
-                    />
-                    {currentUser.role === 'seller' && (
-                      <MenuItem
-                        icon={<DashboardIcon />}
-                        label={t('nav.sellerDashboard')}
-                        onClick={() => { onNavigate(ViewEnum.SELLER_DASHBOARD); setShowMenu(false); }}
-                      />
+                >
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-sm font-semibold text-white ring-1 ring-white/20">
+                    {isAuthed ? (
+                      userInitials
+                    ) : (
+                      <svg className="h-6 w-6 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
                     )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px] font-semibold tracking-tight text-white">{displayName}</p>
+                    <p className="truncate text-xs text-slate-300">{displaySubtitle}</p>
+                    {roleLabel ? (
+                      <span className="mt-1.5 inline-flex rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest text-slate-200">
+                        {roleLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={closeMenu}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 active:bg-white/15"
+                  data-testid="mobile-drawer-close"
+                  aria-label="Close menu"
+                >
+                  <svg className="h-5 w-5 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {currentUser ? (
+                <p className="relative mt-3 text-[11px] font-medium tracking-wide text-slate-400">
+                  {t('nav.viewProfile')}
+                </p>
+              ) : null}
+            </div>
+
+            <nav className="flex-1 overflow-y-auto overscroll-contain px-3 py-2">
+              <MenuSection title={t('nav.menuExplore')}>
+                {exploreItems
+                  .filter((item) => !item.hidden)
+                  .map((item) => (
                     <MenuItem
-                      icon={<UserIcon />}
-                      label={t('nav.myProfile')}
-                      onClick={() => { onNavigate(ViewEnum.PROFILE); setShowMenu(false); }}
+                      key={`${item.view}-${item.label}`}
+                      icon={item.icon}
+                      label={item.label}
+                      tint={item.tint}
+                      badge={item.badge}
+                      active={currentView === item.view}
+                      onClick={() => navigateAndClose(item.view)}
                     />
-                    {currentUser.role === 'customer' && (
-                      <MenuItem
-                        icon={<DashboardIcon />}
-                        label={t('nav.myDashboard')}
-                        onClick={() => { onNavigate(ViewEnum.BUYER_DASHBOARD); setShowMenu(false); }}
-                      />
-                    )}
-                  </>
-                )}
-                {serviceProvider && (
+                  ))}
+              </MenuSection>
+
+              {accountItems.length > 0 ? (
+                <MenuSection title={t('nav.menuAccount')}>
+                  {accountItems.map((item) => (
+                    <MenuItem
+                      key={`${item.view}-${item.label}`}
+                      icon={item.icon}
+                      label={item.label}
+                      tint={item.tint}
+                      badge={item.badge}
+                      active={currentView === item.view}
+                      onClick={() => navigateAndClose(item.view)}
+                    />
+                  ))}
+                </MenuSection>
+              ) : null}
+
+              {serviceProvider && !currentUser ? (
+                <MenuSection title={t('nav.menuAccount')}>
                   <MenuItem
                     icon={<DashboardIcon />}
                     label="Service Provider Dashboard"
-                    onClick={() => {
-                      onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
-                      setShowMenu(false);
-                    }}
+                    tint="#475569"
+                    active={currentView === ViewEnum.CAR_SERVICE_DASHBOARD}
+                    onClick={() => navigateAndClose(ViewEnum.CAR_SERVICE_DASHBOARD)}
                   />
-                )}
-                
-                <div className="border-t border-gray-200 my-2"></div>
+                </MenuSection>
+              ) : null}
+
+              <MenuSection title={t('nav.menuHelp')}>
+                {helpItems.map((item) => (
+                  <MenuItem
+                    key={item.view}
+                    icon={item.icon}
+                    label={item.label}
+                    tint={item.tint}
+                    active={currentView === item.view}
+                    onClick={() => navigateAndClose(item.view)}
+                  />
+                ))}
+              </MenuSection>
+            </nav>
+
+            {/* Footer actions */}
+            <div className="border-t border-slate-200/80 bg-white px-3 py-3">
+              {isAuthed ? (
                 <MenuItem
-                  icon={<InfoIcon />}
-                  label={t('nav.support')}
-                  onClick={() => { onNavigate(ViewEnum.SUPPORT); setShowMenu(false); }}
+                  icon={<LogoutIcon />}
+                  label={t('nav.logout')}
+                  variant="danger"
+                  onClick={() => {
+                    onLogout();
+                    closeMenu();
+                  }}
                 />
-                <MenuItem
-                  icon={<ShieldIcon />}
-                  label={t('footer.safety')}
-                  onClick={() => { onNavigate(ViewEnum.SAFETY_CENTER); setShowMenu(false); }}
-                />
-                <MenuItem
-                  icon={<AboutIcon />}
-                  label={t('nav.aboutUs')}
-                  onClick={() => { onNavigate(ViewEnum.ABOUT_US); setShowMenu(false); }}
-                />
-                <MenuItem
-                  icon={<QuestionIcon />}
-                  label={t('footer.faq')}
-                  onClick={() => { onNavigate(ViewEnum.FAQ); setShowMenu(false); }}
-                />
-                
-                {/* Logout Option */}
-                {isAuthed && (
-                  <>
-                    <div className="border-t border-gray-200 my-2"></div>
-                    <MenuItem
-                      icon={<LogoutIcon />}
-                      label={t('nav.logout')}
-                      onClick={() => { onLogout(); setShowMenu(false); }}
-                    />
-                  </>
-                )}
-                
-                {/* Login Option for Guests */}
-                {!isAuthed && (
-                  <>
-                    <div className="border-t border-gray-200 my-2"></div>
-                    <MenuItem
-                      icon={<LoginIcon />}
-                      label={t('nav.login')}
-                      onClick={() => { onNavigate(ViewEnum.LOGIN_PORTAL); setShowMenu(false); }}
-                    />
-                  </>
-                )}
-              </nav>
+              ) : (
+                <div className="space-y-2">
+                  <p className="px-2 text-xs leading-relaxed text-slate-500">
+                    {t('nav.menuGuestPrompt')}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigateAndClose(ViewEnum.LOGIN_PORTAL)}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm active:bg-slate-800"
+                  >
+                    <LoginIcon />
+                    {t('nav.loginRegister')}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </>
@@ -433,22 +526,60 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
   );
 };
 
-// Menu Item Component
-const MenuItem: React.FC<{ icon: React.ReactNode; label: string; onClick: () => void }> = ({
-  icon,
-  label,
-  onClick
-}) => (
+const MenuSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <div className="mb-1">
+    <p className="px-2 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+      {title}
+    </p>
+    <div className="space-y-1">{children}</div>
+  </div>
+);
+
+const MenuItem: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  badge?: number;
+  tint?: string;
+  variant?: 'default' | 'danger';
+}> = ({ icon, label, onClick, active = false, badge, tint = '#475569', variant = 'default' }) => (
   <button
+    type="button"
     onClick={onClick}
-    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+    className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-all active:scale-[0.99] ${
+      variant === 'danger'
+        ? 'text-red-600 hover:bg-red-50'
+        : active
+          ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80'
+          : 'text-slate-700 hover:bg-white/80'
+    }`}
+    style={{ minHeight: '48px' }}
   >
-    <div className="w-5 h-5 text-gray-600">{icon}</div>
-    <span className="text-gray-800 text-sm font-medium">{label}</span>
+    <div
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+      style={{
+        background: variant === 'danger' ? 'rgba(220,38,38,0.08)' : active ? '#F1F5F9' : '#FFFFFF',
+        color: variant === 'danger' ? '#DC2626' : tint,
+        boxShadow: variant === 'danger' ? 'none' : '0 1px 2px rgba(15,23,42,0.04)',
+      }}
+    >
+      <div className="h-[18px] w-[18px]">{icon}</div>
+    </div>
+    <span className="min-w-0 flex-1 truncate text-[14px] font-medium tracking-tight">{label}</span>
+    {badge != null && badge > 0 ? (
+      <span className="min-w-[20px] rounded-full bg-slate-900 px-1.5 py-0.5 text-center text-[10px] font-semibold text-white">
+        {badge > 99 ? '99+' : badge}
+      </span>
+    ) : null}
+    {variant !== 'danger' ? (
+      <svg className="h-4 w-4 shrink-0 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    ) : null}
   </button>
 );
 
-// Small Icon Components
 const HomeIcon = () => (
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -457,7 +588,7 @@ const HomeIcon = () => (
 
 const CarIcon = () => (
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 17h.01M16 17h.01M5 11l1.5-4.5A2 2 0 018.44 5h7.12a2 2 0 011.94 1.5L19 11M5 11v6a1 1 0 001 1h1m12-7v6a1 1 0 01-1 1h-1M5 11h14" />
   </svg>
 );
 
@@ -546,10 +677,9 @@ const LogoutIcon = () => (
 );
 
 const LoginIcon = () => (
-  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
   </svg>
 );
 
 export default MobileHeader;
-

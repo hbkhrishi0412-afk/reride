@@ -26,9 +26,9 @@ test.describe('Deal pipeline (buyer)', () => {
 });
 
 test.describe('Deal pipeline (seller)', () => {
-  test('seller dashboard shows deal command entry point', async ({ page, baseURL }) => {
+  test('seller dashboard shows hot leads entry point', async ({ page, baseURL }) => {
     await loginAsSeller(page, baseURL);
-    await expect(page.getByText(/deal command|active deal/i).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/hot leads|active deal/i).first()).toBeVisible({ timeout: 30_000 });
   });
 });
 

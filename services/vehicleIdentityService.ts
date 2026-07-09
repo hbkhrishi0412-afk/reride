@@ -13,9 +13,17 @@ export async function resolveVehicleFromApi(
   databaseId?: string,
 ): Promise<Vehicle | null> {
   const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
-  const params = new URLSearchParams({ action: 'resolve', vehicleId: String(vehicleId) });
-  if (databaseId?.trim()) {
-    params.set('databaseId', databaseId.trim());
+  const params = new URLSearchParams({ action: 'resolve' });
+  const pk = databaseId?.trim();
+  if (pk) {
+    params.set('databaseId', pk);
+    if (Number.isSafeInteger(vehicleId) && vehicleId > 0) {
+      params.set('vehicleId', String(vehicleId));
+    }
+  } else if (Number.isSafeInteger(vehicleId) && vehicleId > 0) {
+    params.set('vehicleId', String(vehicleId));
+  } else {
+    return null;
   }
 
   const response = await authenticatedFetch(`/api/vehicles?${params.toString()}`, {

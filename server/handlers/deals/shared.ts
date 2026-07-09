@@ -2,6 +2,7 @@
  * Shared deal-pipeline utilities (mappers, auth, batch fetch, assistance helpers).
  */
 import { randomUUID } from 'crypto';
+import { parseSellerNotes } from '../../../lib/dealSellerNotes.js';
 import type { VercelRequest } from '@vercel/node';
 import {
   supabaseUserService,
@@ -465,8 +466,9 @@ export function mapLeadRow(row: Record<string, unknown>, timeline?: DealTimeline
     timeline,
     kanbanStatus: row.kanban_status ? (String(row.kanban_status) as DealKanbanStatus) : undefined,
     assignedAdminEmail: row.assigned_admin_email ? String(row.assigned_admin_email) : undefined,
-    sellerNotes: row.seller_notes ? String(row.seller_notes) : undefined,
-    internalNotes: row.internal_notes ? String(row.internal_notes) : undefined,
+    sellerNotesList: parseSellerNotes(row.seller_notes),
+    sellerNotes: parseSellerNotes(row.seller_notes).map((n) => n.text).join('\n') || undefined,
+    internalNotes: row.internal_notes != null ? String(row.internal_notes) : undefined,
   };
   if (!lead.kanbanStatus) {
     lead.kanbanStatus = deriveKanbanStatus(lead);
@@ -588,6 +590,14 @@ export async function backfillAllKanbanStatuses(): Promise<{
   return { total: list.length, updated, unchanged };
 }
 
+/** Calendar grid keys use local YYYY-MM-DD (not UTC ISO slice). */
+export function toCalendarDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export function calendarDateStatus(eventDate: Date, today: Date): DealCalendarEventStatus {
   const d = new Date(eventDate);
   d.setHours(0, 0, 0, 0);
@@ -638,7 +648,7 @@ export function buildCalendarEvents(leads: DealLead[]): DealCalendarEvent[] {
         type: 'delivery',
         title: 'Delivery follow-up',
         subtitle: `${buyer} · ${vehicle}`,
-        date: eventDate.toISOString().slice(0, 10),
+        date: toCalendarDateKey(eventDate),
         status: calendarDateStatus(eventDate, today),
       });
     }
@@ -659,7 +669,7 @@ export function buildCalendarEvents(leads: DealLead[]): DealCalendarEvent[] {
         type: 'rc_deadline',
         title: 'RC transfer target',
         subtitle: vehicle,
-        date: deadline.toISOString().slice(0, 10),
+        date: toCalendarDateKey(deadline),
         status: calendarDateStatus(deadline, today),
       });
     }
@@ -707,6 +717,35 @@ export function mapInspectionBookingRow(row: Record<string, unknown>): DealInspe
   };
 }
 
+export async function canActAsSellerOnLead(
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  auth: { email: string; role?: string },
+  row: Record<string, unknown>,
+): Promise<boolean> {
+  if (auth.role === 'admin') return true;
+
+  const sellerEmail = normalizeEmail(String(row.seller_email || ''));
+  if (sellerEmail && auth.email === sellerEmail) return true;
+
+  const vehicleId = String(row.vehicle_id || '');
+  if (!vehicleId) return false;
+
+  const numericId = Number(vehicleId);
+  if (Number.isFinite(numericId) && numericId > 0) {
+    const { data: vehicle } = await supabase
+      .from('vehicles')
+      .select('seller_email')
+      .eq('id', numericId)
+      .maybeSingle();
+    if (vehicle && normalizeEmail(String(vehicle.seller_email || '')) === auth.email) {
+      return true;
+    }
+  }
+
+  const resolved = await resolveVehicleId(vehicleId);
+  return normalizeEmail(resolved?.vehicle?.sellerEmail || '') === auth.email;
+}
+
 export async function assertDealParticipant(
   leadId: string,
   auth: { email: string; role?: string },
@@ -716,7 +755,8 @@ export async function assertDealParticipant(
   if (!row) return null;
   const sellerEmail = normalizeEmail(String(row.seller_email));
   const buyerEmail = normalizeEmail(String(row.buyer_email));
-  if (auth.email !== sellerEmail && auth.email !== buyerEmail && auth.role !== 'admin') {
+  const isSeller = await canActAsSellerOnLead(supabase, auth, row);
+  if (!isSeller && auth.email !== buyerEmail && auth.role !== 'admin') {
     return null;
   }
   return { row };

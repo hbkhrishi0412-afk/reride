@@ -105,6 +105,21 @@ export function normalizeVehiclesList<T extends Pick<Vehicle, 'id' | 'databaseId
   return vehicles.map((v) => normalizeVehicleIdentity(v));
 }
 
+/** Find a listing in client state by canonical primary key or numeric id (handles unsafe integers). */
+export function findVehicleByIdentity<T extends Pick<Vehicle, 'id' | 'databaseId'>>(
+  vehicles: ReadonlyArray<T> | null | undefined,
+  id: number,
+  databaseId?: string,
+): T | undefined {
+  if (!Array.isArray(vehicles)) return undefined;
+  const pk = databaseId?.trim();
+  if (pk) {
+    const byPk = vehicles.find((v) => v && getCanonicalPrimaryKey(v) === pk);
+    if (byPk) return byPk;
+  }
+  return vehicles.find((v) => v && vehicleIdsEqual(v.id, id));
+}
+
 export function getCanonicalPrimaryKey(vehicle: Pick<Vehicle, 'id' | 'databaseId'>): string | null {
   const normalized = normalizeVehicleIdentity(vehicle);
   const pk = normalized.databaseId?.trim();
@@ -139,7 +154,8 @@ export function buildVehicleMutationBody(
   vehicles: ReadonlyArray<Pick<Vehicle, 'id' | 'databaseId'>>,
   extra: Record<string, unknown> = {},
 ): Record<string, unknown> {
-  const vehicle = vehicles.find((v) => v && v.id === vehicleId);
+  const vehicle = vehicles.find((v) => v && vehicleIdsEqual(v.id, vehicleId))
+    ?? findVehicleByIdentity(vehicles, vehicleId);
   if (!vehicle) {
     throw new VehicleMutationIdentityError('Listing not found in your session. Refresh and try again.');
   }

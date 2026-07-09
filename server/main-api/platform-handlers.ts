@@ -1,396 +1,11 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as core from './shared.js';
 
 async function handleAI(req: VercelRequest, res: VercelResponse, _options: core.HandlerOptions) {
-  const url = new URL(req.url || '', `http://${req.headers.host}`);
-  const pathname = url.pathname;
-
-  if (pathname.includes('/ai-inspection') || pathname.endsWith('/ai-inspection')) {
-    return await handleAIInspection(req, res);
-  } else if (pathname.includes('/gemini') || pathname.endsWith('/gemini')) {
-    return await handleGemini(req, res);
-  } else {
-    return res.status(404).json({ success: false, reason: 'AI endpoint not found' });
-  }
-}
-
-// AI Vehicle Photo Inspection handler
-async function handleAIInspection(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, reason: 'Method not allowed' });
-  }
-
-  const auth = await core.requireAuth(req, res, 'AI Inspection API');
-  if (!auth) {
-    return;
-  }
-
-  try {
-    const { model, imageUrls, documentUrls, prompt, vehicleDetails, config } = req.body;
-
-    if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
-      return res.status(400).json({
-        success: false,
-        reason: 'At least one image URL is required for inspection'
-      });
-    }
-
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({
-        success: false,
-        reason: 'GEMINI_API_KEY environment variable is not configured'
-      });
-    }
-
-    // Use vision-capable model
-    const modelName = model || 'gemini-2.0-flash';
-    
-    // Build content parts with images
-    const parts: any[] = [];
-    
-    // Add images (limit to 10 for performance)
-    const limitedImageUrls = imageUrls.slice(0, 10);
-    for (let i = 0; i < limitedImageUrls.length; i++) {
-      const imageUrl = limitedImageUrls[i];
-      
-      // Skip invalid URLs
-      if (!imageUrl || typeof imageUrl !== 'string') continue;
-      
-      try {
-        // Fetch image and convert to base64
-        const imageResponse = await fetch(imageUrl, {
-          headers: { 'Accept': 'image/*' },
-          signal: AbortSignal.timeout(10000) // 10s timeout per image
-        });
-        
-        if (!imageResponse.ok) {
-          console.warn(`Failed to fetch image ${i + 1}: ${imageResponse.statusText}`);
-          continue;
-        }
-        
-        const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
-        const arrayBuffer = await imageResponse.arrayBuffer();
-        const base64Data = Buffer.from(arrayBuffer).toString('base64');
-        
-        parts.push({
-          inlineData: {
-            mimeType: contentType,
-            data: base64Data
-          }
-        });
-      } catch (imgError) {
-        console.warn(`Error fetching image ${i + 1}:`, imgError instanceof Error ? imgError.message : imgError);
-        // Continue with other images
-      }
-    }
-    
-    // Add document images if provided
-    if (documentUrls && Array.isArray(documentUrls)) {
-      for (const docUrl of documentUrls.slice(0, 3)) {
-        if (!docUrl || typeof docUrl !== 'string') continue;
-        
-        try {
-          const docResponse = await fetch(docUrl, {
-            headers: { 'Accept': 'image/*' },
-            signal: AbortSignal.timeout(10000)
-          });
-          
-          if (docResponse.ok) {
-            const contentType = docResponse.headers.get('content-type') || 'image/jpeg';
-            const arrayBuffer = await docResponse.arrayBuffer();
-            const base64Data = Buffer.from(arrayBuffer).toString('base64');
-            
-            parts.push({
-              inlineData: {
-                mimeType: contentType,
-                data: base64Data
-              }
-            });
-          }
-        } catch (docError) {
-          console.warn('Error fetching document image:', docError);
-        }
-      }
-    }
-
-    if (parts.length === 0) {
-      return res.status(400).json({
-        success: false,
-        reason: 'Could not process any of the provided images. Please ensure URLs are accessible.'
-      });
-    }
-
-    // Add the text prompt
-    const inspectionPrompt = prompt || buildDefaultInspectionPrompt(vehicleDetails);
-    parts.push({ text: inspectionPrompt });
-
-    // Build the request body
-    const requestBody: any = {
-      contents: [{ parts }]
-    };
-
-    // Add generation config
-    if (config?.responseMimeType) {
-      requestBody.generationConfig = {
-        responseMimeType: config.responseMimeType
-      };
-    }
-
-    if (config?.responseSchema) {
-      if (!requestBody.generationConfig) {
-        requestBody.generationConfig = {};
-      }
-      requestBody.generationConfig.responseSchema = config.responseSchema;
-    }
-
-    // Call Gemini API
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(60000) // 60s timeout for vision processing
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      let errorMessage = `Gemini API error: ${response.statusText}`;
-      try {
-        const errorJson = JSON.parse(errorBody);
-        errorMessage = errorJson.error?.message || errorJson.error || errorMessage;
-      } catch {
-        errorMessage = errorBody || errorMessage;
-      }
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
-    
-    // Extract response text
-    let generatedText = '';
-    if (data.candidates && data.candidates[0]) {
-      const candidate = data.candidates[0];
-      if (candidate.content && candidate.content.parts) {
-        generatedText = candidate.content.parts[0]?.text || '';
-      }
-    }
-
-    if (!generatedText) {
-      generatedText = JSON.stringify(data);
-    }
-
-    return res.status(200).json({
-      success: true,
-      response: generatedText,
-      result: generatedText,
-      imagesProcessed: parts.length - 1, // Exclude text part
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    console.error('AI Inspection Error:', error);
-    
-    return res.status(500).json({
-      success: false,
-      reason: 'AI Inspection failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    });
-  }
-}
-
-// Build default inspection prompt if none provided
-function buildDefaultInspectionPrompt(vehicleDetails?: any): string {
-  const details = vehicleDetails || {};
-  
-  return `You are an expert vehicle inspector analyzing photos of a used vehicle for an Indian marketplace.
-
-VEHICLE DETAILS:
-- Make: ${details.make || 'Unknown'}
-- Model: ${details.model || 'Unknown'}
-- Year: ${details.year || 'Unknown'}
-- Claimed Mileage: ${details.mileage ? `${details.mileage.toLocaleString()} km` : 'Not provided'}
-- Fuel Type: ${details.fuelType || 'Not specified'}
-- Color: ${details.color || 'Not specified'}
-
-INSPECTION TASK:
-Analyze all provided vehicle images thoroughly. Provide a comprehensive inspection report including:
-
-1. OVERALL ASSESSMENT:
-   - Overall condition score (0-100)
-   - Overall confidence in assessment (0-100)
-
-2. EXTERIOR CONDITION:
-   - Score (0-100)
-   - Paint condition: excellent/good/fair/poor
-   - Body condition: excellent/good/fair/poor
-   - List any findings (scratches, dents, rust, paint damage, cracks)
-   - Summary
-
-3. INTERIOR CONDITION:
-   - Score (0-100)
-   - Seat condition: excellent/good/fair/poor
-   - Dashboard condition: excellent/good/fair/poor
-   - Cleanliness: spotless/clean/average/needs_cleaning
-   - List any findings (wear, tear, stains)
-   - Summary
-
-4. TYRE CONDITION:
-   - Score (0-100)
-   - Estimated tread depth: new/good/fair/replace_soon/unsafe
-   - Mismatched tyres: true/false
-   - Brand visible (if any)
-   - Summary
-
-5. PHOTO QUALITY:
-   - Overall score (0-100)
-   - Issues: blur/low_light/obstructed/reflection/too_far/wrong_angle
-   - Missing views: front/rear/left_side/right_side/interior_front/interior_rear/engine_bay/boot/odometer/tyres
-   - Recommendations for better photos
-
-6. HIGHLIGHTS (positive points about the vehicle)
-
-7. CONCERNS (issues to be aware of)
-
-8. BUYER ADVISORY (recommendations for potential buyers)
-
-GRADING:
-- A (90-100): Excellent - Like new
-- B (75-89): Good - Minor wear, well maintained
-- C (60-74): Fair - Visible wear, some issues
-- D (40-59): Poor - Significant issues
-- F (0-39): Very Poor - Major damage
-
-Be realistic and fair. Indian used car market context applies.
-
-Respond ONLY with a valid JSON object matching the requested schema.`;
-}
-
-// Gemini handler
-async function handleGemini(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, reason: 'Method not allowed' });
-  }
-
-  const geminiAuth = await core.requireAuth(req, res, 'Gemini API');
-  if (!geminiAuth) {
-    return;
-  }
-
-  try {
-    const { payload } = req.body;
-    
-    if (!payload) {
-      return res.status(400).json({ 
-        success: false, 
-        reason: 'Payload is required' 
-      });
-    }
-
-    // Validate API key presence
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({
-        success: false,
-        reason: 'GEMINI_API_KEY environment variable is not configured'
-      });
-    }
-
-    // Extract model, contents, and generation options from payload
-    const model = payload.model || 'gemini-2.5-flash';
-    const contents = payload.contents || payload.prompt || '';
-    const generationOptions = payload.config || {};
-
-    // Build the request body for Gemini API
-    const requestBody: any = {
-      contents: typeof contents === 'string' 
-        ? [{ parts: [{ text: contents }] }]
-        : contents
-    };
-
-    // Add generation config if provided
-    if (generationOptions.responseMimeType) {
-      requestBody.generationConfig = {
-        responseMimeType: generationOptions.responseMimeType
-      };
-    }
-
-    // Add response schema if provided
-    if (generationOptions.responseSchema) {
-      if (!requestBody.generationConfig) {
-        requestBody.generationConfig = {};
-      }
-      requestBody.generationConfig.responseSchema = generationOptions.responseSchema;
-    }
-
-    // Add thinking core.config if provided
-    if (generationOptions.thinkingConfig) {
-      requestBody.generationConfig = requestBody.generationConfig || {};
-      requestBody.generationConfig.thinkingConfig = generationOptions.thinkingConfig;
-    }
-
-    // Use the new Gemini API endpoint format
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      let errorMessage = `API error: ${response.statusText}`;
-      try {
-        const errorJson = JSON.parse(errorBody);
-        errorMessage = errorJson.error?.message || errorJson.error || errorBody || errorMessage;
-      } catch {
-        errorMessage = errorBody || errorMessage;
-      }
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
-    
-    // Extract response text - handle both text and JSON responses
-    let generatedText = '';
-    if (data.candidates && data.candidates[0]) {
-      const candidate = data.candidates[0];
-      if (candidate.content && candidate.content.parts) {
-        // For JSON responses, the text might be in parts[0].text
-        generatedText = candidate.content.parts[0]?.text || '';
-      }
-    }
-
-    // If no text found, try alternative paths
-    if (!generatedText && data.text) {
-      generatedText = data.text;
-    }
-
-    // If still no text, return the full response for debugging
-    if (!generatedText) {
-      generatedText = JSON.stringify(data);
-    }
-
-    return res.status(200).json({
-      success: true,
-      response: generatedText,
-      result: generatedText, // Alias for compatibility
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    console.error('Gemini API Error:', error);
-    
-    return res.status(500).json({
-      success: false,
-      reason: 'Gemini API call failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    });
-  }
+  return res.status(410).json({
+    success: false,
+    reason: 'AI features have been removed from this platform.',
+  });
 }
 
 // Content handler - consolidates content.ts
@@ -403,7 +18,7 @@ async function handleContent(req: VercelRequest, res: VercelResponse, _options: 
       if (type === 'faqs') {
         return res.status(200).json([]);
       }
-      // Support tickets client expects { success, tickets, count } — returning a
+      // Support tickets client expects { success, tickets, count } â€” returning a
       // bare [] makes data.tickets undefined on the client and shows 0 tickets.
       if (type === 'support-tickets') {
         return res.status(200).json({ success: true, tickets: [], count: 0 });
@@ -624,7 +239,7 @@ async function handleSupportTickets(req: VercelRequest, res: VercelResponse) {
   // panel showed 0 tickets because the legacy-only auth rejected Supabase tokens).
   const auth = await core.authenticateRequestDual(req);
   if (!auth.isValid) {
-    core.logWarn('⚠️ Support tickets - Authentication failed:', auth.error);
+    core.logWarn('âš ï¸ Support tickets - Authentication failed:', auth.error);
     res.status(401).json({
       success: false,
       reason: auth.error || 'Authentication required.',
@@ -746,11 +361,11 @@ async function handleCreateSupportTicket(
 
     // Fan out a notification to every admin so the admin panel shows a real-time
     // alert when a new support ticket arrives. Failures here must not block the
-    // ticket response — admins will still see the ticket in the list.
+    // ticket response â€” admins will still see the ticket in the list.
     try {
       await notifyAdminsOfSupportTicket(ticket);
     } catch (notifyErr) {
-      core.logWarn('⚠️ Failed to notify admins of new support ticket (non-fatal):', notifyErr);
+      core.logWarn('âš ï¸ Failed to notify admins of new support ticket (non-fatal):', notifyErr);
     }
 
     return res.status(201).json({
@@ -796,7 +411,7 @@ async function notifyAdminsOfSupportTicket(ticket: Record<string, unknown>): Pro
     const ticketId = String(ticket.id || '');
     const now = new Date().toISOString();
 
-    // notifications.id column is TEXT — store string form of a numeric-looking
+    // notifications.id column is TEXT â€” store string form of a numeric-looking
     // id so downstream clients that treat it as a number can still parse it.
     const baseId = Date.now();
     const rows = adminEmails.map((email: string, idx: number) => ({
@@ -926,7 +541,7 @@ async function handleDeleteSupportTicket(
 }
 
 // ============================================================================
-// Platform Settings handler — reads/writes the single `platform_settings` row
+// Platform Settings handler â€” reads/writes the single `platform_settings` row
 // (table created by scripts/add-platform-settings-and-audit-log.sql).
 // ============================================================================
 const PLATFORM_SETTINGS_ID = 'singleton';
@@ -1055,7 +670,7 @@ async function handlePlatformSettings(
 }
 
 // ============================================================================
-// Audit Log handler — admin-only append-and-list over `audit_log` table
+// Audit Log handler â€” admin-only append-and-list over `audit_log` table
 // (table created by scripts/add-platform-settings-and-audit-log.sql).
 // ============================================================================
 async function handleAuditLog(
@@ -1437,7 +1052,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
         // signature we can safely activate the plan right here.
         //
         // IMPORTANT: Do NOT upgrade the user's subscription when the plan is actually a boost
-        // package – boosts use the same create-order endpoint but a different confirmation path
+        // package â€“ boosts use the same create-order endpoint but a different confirmation path
         // (/api/vehicles?action=boost). If we ever receive one here, just record the payment.
         let updatedUser: Record<string, unknown> | null = null;
         const planLowerCandidate = planStr.toLowerCase();
@@ -1453,7 +1068,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
             : null;
           if (existingUser) {
             const planLower = normalizedPlanCandidate;
-            // Resolve plan duration – default to 30 days. Callers can override with `durationDays`.
+            // Resolve plan duration â€“ default to 30 days. Callers can override with `durationDays`.
             const requestedDays = Number((b as Record<string, unknown>).durationDays);
             const planDurationDays = Number.isFinite(requestedDays) && requestedDays > 0
               ? Math.min(365, Math.floor(requestedDays))
@@ -1763,11 +1378,11 @@ async function insertConversationMessageNotification(params: {
     if (inserted.error) {
       const retry = await supabase.from('notifications').insert(record).select('id').single();
       if (retry.error) {
-        console.warn('⚠️ API: Failed to create message notification (non-fatal):', retry.error.message);
+        console.warn('âš ï¸ API: Failed to create message notification (non-fatal):', retry.error.message);
       }
     }
   } catch (notifErr) {
-    console.warn('⚠️ API: Failed to create message notification (non-fatal):', notifErr);
+    console.warn('âš ï¸ API: Failed to create message notification (non-fatal):', notifErr);
   }
 }
 
@@ -1797,7 +1412,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
     } else {
       auth = await core.authenticateRequestDual(req);
       if (!auth.isValid || !auth.user) {
-        core.logWarn('⚠️ Conversations - Authentication failed:', auth.error);
+        core.logWarn('âš ï¸ Conversations - Authentication failed:', auth.error);
         return res.status(401).json({
           success: false,
           reason: auth.error || 'Authentication required.',
@@ -1864,7 +1479,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         
         // Log for debugging in development
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔍 API: Fetching conversations for seller', {
+          console.log('ðŸ” API: Fetching conversations for seller', {
             originalSellerId: String(sellerId),
             normalizedSellerId,
             foundCount: conversations?.length || 0
@@ -1890,7 +1505,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         const { enrichConversationsWithDealFlags } = await import('../handlers/conversation-lifecycle.js');
         conversations = await enrichConversationsWithDealFlags(conversations);
       } catch (enrichErr) {
-        core.logWarn('⚠️ Failed to enrich conversations with deal flags (non-fatal):', enrichErr);
+        core.logWarn('âš ï¸ Failed to enrich conversations with deal flags (non-fatal):', enrichErr);
       }
       
       return res.status(200).json({ success: true, data: conversations });
@@ -1939,7 +1554,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
               });
             }
           } catch (inquiryError) {
-            core.logWarn('⚠️ Failed to increment inquiry count (non-fatal):', inquiryError);
+            core.logWarn('âš ï¸ Failed to increment inquiry count (non-fatal):', inquiryError);
           }
         }
 
@@ -1980,12 +1595,12 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       }
 
       try {
-        console.log('💾 API: Adding message to conversation:', { conversationId, messageId: message?.id });
+        console.log('ðŸ’¾ API: Adding message to conversation:', { conversationId, messageId: message?.id });
         await core.conversationService.addMessage(String(conversationId), message);
         const updatedConversation = await core.conversationService.findById(String(conversationId));
         
         if (!updatedConversation) {
-          console.error('❌ API: Conversation not found after adding message:', conversationId);
+          console.error('âŒ API: Conversation not found after adding message:', conversationId);
           return res.status(500).json({ success: false, reason: 'Failed to retrieve updated conversation' });
         }
         
@@ -2016,14 +1631,14 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
             actingAsCustomer && sellerRecipientEmail && recipientEmail.toLowerCase().trim() === sellerRecipientEmail;
           if (isSellerRecipient && sellerRecipientEmail) {
             const vehicleTitle = String(conversation.vehicleName || 'your listing');
-            const preview = messageText.length > 140 ? messageText.substring(0, 140) + '…' : messageText;
+            const preview = messageText.length > 140 ? messageText.substring(0, 140) + 'â€¦' : messageText;
             void core.sendInquiryNotificationToSeller(
               sellerRecipientEmail,
               senderName || 'A buyer',
               vehicleTitle,
               preview || '(new message)',
             ).catch((mailErr) => {
-              console.warn('⚠️ API: inquiry email failed (non-fatal):', mailErr);
+              console.warn('âš ï¸ API: inquiry email failed (non-fatal):', mailErr);
             });
 
             const msgType = typeof message.type === 'string' ? message.type : 'text';
@@ -2040,13 +1655,13 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
             });
           }
         } catch (mailErr) {
-          console.warn('⚠️ API: seller inquiry alerts failed (non-fatal):', mailErr);
+          console.warn('âš ï¸ API: seller inquiry alerts failed (non-fatal):', mailErr);
         }
 
-        console.log('✅ API: Message added successfully:', { conversationId, messageId: message?.id, messageCount: updatedConversation.messages?.length });
+        console.log('âœ… API: Message added successfully:', { conversationId, messageId: message?.id, messageCount: updatedConversation.messages?.length });
         return res.status(200).json({ success: true, data: updatedConversation });
       } catch (error) {
-        console.error('❌ API: Error adding message:', {
+        console.error('âŒ API: Error adding message:', {
           conversationId,
           messageId: message?.id,
           error: error instanceof Error ? error.message : 'Unknown error',
@@ -2059,7 +1674,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       }
     }
 
-    // PATCH — mark messages read and/or clear message history (participants only)
+    // PATCH â€” mark messages read and/or clear message history (participants only)
     if (req.method === 'PATCH') {
       let body = req.body as
         | {
@@ -2161,7 +1776,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         }
         return res.status(200).json({ success: true, data: updatedConversation });
       } catch (error) {
-        console.error('❌ API: PATCH conversation error:', error);
+        console.error('âŒ API: PATCH conversation error:', error);
         return res.status(500).json({
           success: false,
           reason: error instanceof Error ? error.message : 'Failed to update conversation',
@@ -2338,7 +1953,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         .select('*');
       
       if (fetchError) {
-        core.logError('❌ Failed to fetch notifications:', fetchError);
+        core.logError('âŒ Failed to fetch notifications:', fetchError);
         return res.status(500).json({ success: false, reason: 'Failed to fetch notifications' });
       }
       
@@ -2431,7 +2046,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         .single();
       
       if (createError) {
-        core.logError('❌ Failed to create notification:', createError);
+        core.logError('âŒ Failed to create notification:', createError);
         return res.status(500).json({ success: false, reason: 'Failed to create notification' });
       }
       
@@ -2481,7 +2096,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         .single();
       
       if (updateError) {
-        core.logError('❌ Failed to update notification:', updateError);
+        core.logError('âŒ Failed to update notification:', updateError);
         return res.status(500).json({ success: false, reason: 'Failed to update notification' });
       }
       
@@ -2519,7 +2134,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         .eq('id', String(notificationId));
       
       if (deleteError) {
-        core.logError('❌ Failed to delete notification:', deleteError);
+        core.logError('âŒ Failed to delete notification:', deleteError);
         return res.status(500).json({ success: false, reason: 'Failed to delete notification' });
       }
       

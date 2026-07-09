@@ -10,6 +10,7 @@ import {
   vehicleMissingCanonicalId,
   isUuidPrimaryKey,
   isHashedClientId,
+  findVehicleByIdentity,
   VehicleMutationIdentityError,
   migrateVehicleListCache,
   VEHICLE_LIST_CACHE_VERSION_KEY,
@@ -139,6 +140,17 @@ describe('vehicleIdentity', () => {
     it('recognizes UUIDs', () => {
       expect(isUuidPrimaryKey('a1b2c3d4-e5f6-7890-abcd-ef1234567890')).toBe(true);
       expect(isUuidPrimaryKey('17473928401234')).toBe(false);
+    });
+  });
+
+  describe('findVehicleByIdentity', () => {
+    it('finds by databaseId when numeric id lost precision', () => {
+      const unsafePk = '17772276006460884';
+      const corruptedId = Number(unsafePk);
+      const list = [{ id: corruptedId, databaseId: unsafePk, make: 'Bajaj' } as any];
+      const found = findVehicleByIdentity(list, corruptedId, unsafePk);
+      expect(found?.make).toBe('Bajaj');
+      expect(getCanonicalPrimaryKey(found!)).toBe(unsafePk);
     });
   });
 });

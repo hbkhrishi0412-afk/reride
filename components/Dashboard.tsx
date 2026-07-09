@@ -10,9 +10,6 @@ import { formatSalesValue } from '../utils/numberUtils';
 import { formatIndianNumberInput, parseIndianNumberDigits } from '../utils/indianNumberInput.js';
 import { findUserByParticipantId } from '../utils/chatContact';
 import VehicleCard from './VehicleCard';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController } from 'chart.js';
-import { Bar } from 'react-chartjs-2';
-import AiAssistant from './AiAssistant';
 // FIX: ChatWidget is a named export, not a default. Corrected the import syntax.
 import { ChatWidget } from './ChatWidget';
 // Removed blocking import - will lazy load location data when needed
@@ -23,8 +20,8 @@ import ListingTrustProgress from './ListingTrustProgress';
 import MarkSoldDealModal from './MarkSoldDealModal';
 import SellerCommandHome from './command-center/SellerCommandHome';
 import DealDetailPage from './command-center/DealDetailPage';
-import { fetchSellerCommandCenter } from '../services/dealService';
-import type { DealLead } from '../types';
+import { fetchSellerCommandCenter, invalidateSellerCommandCenterCache } from '../services/dealService';
+import type { DealLead, SellerCommandCenter } from '../types';
 import {
   clearChecklistPhotoByUrl,
   extractChecklistGalleryUrls,
@@ -33,6 +30,7 @@ import {
   syncDocumentsFromChecklist,
 } from '../lib/universalChecklist/mediaSync';
 import { verifyVahanRegistration, applyVahanVerifyToVehicleFields } from '../services/vehicleTrustService';
+import { findVehicleByIdentity } from '../utils/vehicleIdentity';
 
 export type DashboardNotifyFn = (
   message: string,
@@ -78,38 +76,7 @@ import { getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
 // Firebase status utilities removed - using Supabase
 
-// Safely register Chart.js components - wrap in try-catch to prevent crashes if Chart.js fails to load
-try {
-  ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController);
-} catch (error) {
-  console.error('❌ Failed to register Chart.js components:', error);
-  // Don't throw - allow component to render without charts
-}
-
-// Stable chart options — hoisted so Chart.js doesn't re-init on every render
-const ANALYTICS_CHART_OPTIONS = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { position: 'top' as const },
-    title: { display: true, text: 'Views vs. Inquiries per Vehicle' },
-  },
-  scales: {
-    y: {
-      type: 'linear' as const,
-      display: true,
-      position: 'left' as const,
-      title: { display: true, text: 'Views' },
-    },
-    y1: {
-      type: 'linear' as const,
-      display: true,
-      position: 'right' as const,
-      title: { display: true, text: 'Inquiries' },
-      grid: { drawOnChartArea: false },
-    },
-  },
-} as const;
+const AnalyticsChart = React.lazy(() => import('./dashboard/AnalyticsChart'));
 
 
 interface DashboardProps {
@@ -1564,7 +1531,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 editingVehicle ? { ...editingVehicle, ...base } : base,
                 {
                     runValidation: true,
-                    runAIInspection: false,
                     checkPhotoQuality: true,
                     calculateListingScore: true,
                 },
@@ -2502,29 +2468,35 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   const [pendingDealCount, setPendingDealCount] = useState(0);
   const [pendingAcceptCount, setPendingAcceptCount] = useState(0);
   const [sellerActiveDeals, setSellerActiveDeals] = useState<DealLead[]>([]);
+  const [commandCenter, setCommandCenter] = useState<SellerCommandCenter | null>(null);
+  const [commandCenterLoading, setCommandCenterLoading] = useState(true);
   const [dealStatsError, setDealStatsError] = useState<string | null>(null);
 
-  const refreshDealCommandStats = useCallback(() => {
+  const refreshDealCommandStats = useCallback((force = false) => {
     if (seller?.role !== 'seller' || !seller.email) {
       setPendingDealCount(0);
       setPendingAcceptCount(0);
       setSellerActiveDeals([]);
+      setCommandCenter(null);
+      setCommandCenterLoading(false);
       setDealStatsError(null);
-      return;
+      return Promise.resolve();
     }
-    void fetchSellerCommandCenter()
+    setCommandCenterLoading(true);
+    if (force) invalidateSellerCommandCenterCache();
+    return fetchSellerCommandCenter(force)
       .then((center) => {
+        setCommandCenter(center);
         setPendingDealCount(center.stats.activeDealCount ?? 0);
         setPendingAcceptCount(center.stats.pendingInterestCount ?? 0);
         setSellerActiveDeals(center.activeDeals ?? []);
         setDealStatsError(null);
       })
       .catch((err) => {
-        const message = err instanceof Error ? err.message : 'Could not load deal leads';
-        setDealStatsError(message);
-        setPendingDealCount(0);
-        setPendingAcceptCount(0);
-        setSellerActiveDeals([]);
+        setDealStatsError(err instanceof Error ? err.message : 'Could not load deal stats');
+      })
+      .finally(() => {
+        setCommandCenterLoading(false);
       });
   }, [seller?.role, seller?.email]);
 
@@ -2550,7 +2522,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     return () => {
       cancelled = true;
     };
-  }, [refreshDealCommandStats, activeView, seller?.email]);
+  }, [refreshDealCommandStats, seller?.email]);
 
   useEffect(() => {
     try {
@@ -2599,10 +2571,11 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   /** Include canonical Supabase `databaseId` so API mutations work for UUID primary keys. */
   const buildVehicleActionBody = useCallback(
     (vehicleId: number, extra: Record<string, unknown> = {}) => {
-      const vehicle = safeSellerVehicles.find((v) => v && v.id === vehicleId);
+      const vehicle = findVehicleByIdentity(safeSellerVehicles, vehicleId);
+      const databaseId = vehicle?.databaseId?.trim();
       return {
         vehicleId,
-        ...(vehicle?.databaseId ? { databaseId: vehicle.databaseId } : {}),
+        ...(databaseId ? { databaseId } : {}),
         ...extra,
       };
     },
@@ -2653,9 +2626,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       return;
     }
     
-    let isMounted = true; // Track if component is still mounted
-    let refreshTimeout: NodeJS.Timeout | null = null;
-    
+    let isMounted = true;
+
     const refreshUserData = async () => {
       // Prevent refresh if component is unmounted
       if (!isMounted) {
@@ -2797,17 +2769,21 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     // Refresh user data when component mounts and every 60 seconds (increased from 30 to reduce load)
     // FIXED: Only refresh on mount, not on every dependency change to prevent loops
     refreshUserData();
-    refreshTimeout = setInterval(() => {
-      if (isMounted) {
-        refreshUserData();
+    const onUserDataEvent = () => {
+      if (isMounted) void refreshUserData();
+    };
+    window.addEventListener('userDataUpdated', onUserDataEvent);
+    const onVisibility = () => {
+      if (isMounted && document.visibilityState === 'visible') {
+        void refreshUserData();
       }
-    }, 60000); // Refresh every 60 seconds (reduced frequency)
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     
     return () => {
-      isMounted = false; // Mark as unmounted
-      if (refreshTimeout) {
-        clearInterval(refreshTimeout);
-      }
+      isMounted = false;
+      window.removeEventListener('userDataUpdated', onUserDataEvent);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [seller?.email, seller?.planExpiryDate, seller?.planActivatedDate, seller?.subscriptionPlan]); // FIXED: Include all plan-related fields to prevent stale closures
   
@@ -3559,7 +3535,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               : `${pendingAcceptCount} buyers are waiting for you to accept chat`}
           </p>
           <p className="text-xs text-amber-800 mt-0.5">
-            Open Deal Command to review leads and accept chats.
+            {t('sellerDashboard.hotLeads.openBanner')}
           </p>
         </div>
         <button
@@ -3567,7 +3543,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           onClick={() => handleNavigate('overview')}
           className="shrink-0 px-4 py-2 text-sm font-bold rounded-lg bg-amber-600 text-white hover:bg-amber-700"
         >
-          Open Deal Command
+          {t('sellerDashboard.hotLeads.openButton')}
         </button>
       </div>
     );
@@ -3598,6 +3574,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           <div className="space-y-6">
             <SellerCommandHome
               seller={seller}
+              commandCenter={commandCenter}
+              commandCenterLoading={commandCenterLoading}
+              commandCenterError={dealStatsError}
+              onRefreshCommandCenter={(force) => refreshDealCommandStats(force)}
               conversations={safeConversations.filter((c) =>
                 c && seller?.email ? conversationBelongsToSeller(c, seller.email, seller.id) : false,
               )}
@@ -3729,22 +3709,16 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                               );
                             }
                             
-                            // Check if Chart.js is available
-                            if (typeof ChartJS === 'undefined' || typeof Bar === 'undefined') {
-                              return (
-                                <div className="text-center py-16 px-6">
-                                  <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">Chart Library Not Loaded</h3>
-                                  <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">
-                                    Please refresh the page to load the chart library.
-                                  </p>
-                                </div>
-                              );
-                            }
-                            
                             return (
-                              <div className="h-80 sm:h-96">
-                                <Bar data={analyticsData.chartData} options={ANALYTICS_CHART_OPTIONS as any} />
-                              </div>
+                              <React.Suspense
+                                fallback={
+                                  <div className="h-80 sm:h-96 flex items-center justify-center">
+                                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-reride-orange border-t-transparent" />
+                                  </div>
+                                }
+                              >
+                                <AnalyticsChart data={analyticsData.chartData} />
+                              </React.Suspense>
                             );
                           } catch (chartError) {
                             // Log error but don't crash the dashboard
@@ -3793,6 +3767,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Views</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
@@ -3816,6 +3791,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                       >
                         <td className="px-6 py-4 font-medium">{v.year} {v.make} {v.model} {v.variant || ''}</td>
                         <td className="px-6 py-4">₹{v.price.toLocaleString('en-IN')}</td>
+                        <td className="px-6 py-4 text-gray-700 tabular-nums">
+                          {(typeof v.views === 'number' ? v.views : 0).toLocaleString('en-IN')}
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
                             <ListingLifecycleIndicator vehicle={v} seller={seller} compact={true} onRefresh={() => handleRefreshVehicle(v.id)} onRenew={() => handleRenewVehicle(v.id)} />

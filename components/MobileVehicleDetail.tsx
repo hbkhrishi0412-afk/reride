@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, ProsAndCons, User, RatingEligibility, DealLead, CertifiedInspection } from '../types';
+import type { Vehicle, User, RatingEligibility, DealLead, CertifiedInspection } from '../types';
 import { useTranslatedText, useTranslatedArray, useTranslatedFields } from '../hooks/useTranslatedText';
-import { generateProsAndCons } from '../services/geminiService';
+import { useTrackVehicleView } from '../hooks/useTrackVehicleView';
 import { getFirstValidImage, getValidImages, swapToPlaceholderOnError } from '../utils/imageUtils';
 import { MobileImageGallery } from './MobileImageGallery';
 import { MobileShareSheet } from './MobileShareSheet';
@@ -47,6 +47,7 @@ interface MobileVehicleDetailProps {
   onRequestLogin: () => void;
   recommendations: Vehicle[];
   onSelectVehicle: (vehicle: Vehicle) => void;
+  updateVehicle?: (id: number, updates: Partial<Vehicle>, options?: { skipToast?: boolean }) => Promise<void>;
 }
 
 const MobileCertifiedInspectionReport: React.FC<{ report: CertifiedInspection }> = ({ report }) => {
@@ -116,10 +117,11 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   onStartChat,
   onRequestLogin,
   recommendations = [],
-  onSelectVehicle
+  onSelectVehicle,
+  updateVehicle,
 }) => {
   const { t } = useTranslation();
-  const { vehicles: contextVehicles, comparisonCategory, addToast, runIfConfirmed } = useApp();
+  const { vehicles: contextVehicles, comparisonCategory, addToast, runIfConfirmed, updateVehicle: updateVehicleFromContext } = useApp();
   const ratingSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
@@ -130,11 +132,9 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   const detailTabButtonRefs = useRef<
     Partial<Record<'overview' | 'features' | 'vahan' | 'price', HTMLButtonElement | null>>
   >({});
-  const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
-  const [isGeneratingProsCons, setIsGeneratingProsCons] = useState(false);
+  const [vehicleDealLead, setVehicleDealLead] = useState<DealLead | null>(null);
   const [ratingEligibility, setRatingEligibility] = useState<RatingEligibility | null>(null);
   const [ratingDealId, setRatingDealId] = useState<string | undefined>();
-  const [vehicleDealLead, setVehicleDealLead] = useState<DealLead | null>(null);
 
   const safeVehicle = useMemo(() => {
     const sellerEmail = resolveVehicleSellerEmail(vehicle, contextVehicles);
@@ -169,6 +169,11 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     inquiriesCount: enriched.inquiriesCount || 0
   };
   }, [vehicle, contextVehicles, users]);
+
+  useTrackVehicleView(vehicle, {
+    currentUser,
+    updateVehicle: updateVehicle ?? updateVehicleFromContext,
+  });
 
   const translatedDescription = useTranslatedText(safeVehicle.description);
   const translatedFeatures = useTranslatedArray(safeVehicle.features as string[]);
@@ -279,26 +284,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     }).format(value);
   };
 
-  const handleGenerateProsCons = async () => {
-    setIsGeneratingProsCons(true);
-    try {
-      const result = await generateProsAndCons(safeVehicle);
-      setProsAndCons(result);
-    } catch (error) {
-      console.error('Failed to generate pros/cons:', error);
-      setProsAndCons({
-        pros: [],
-        cons: [
-          error instanceof Error
-            ? error.message
-            : 'Could not generate suggestions. Please try again later.',
-        ],
-      });
-    } finally {
-      setIsGeneratingProsCons(false);
-    }
-  };
-
   const handleChat = async () => {
     await Promise.resolve(onStartChat(safeVehicle));
     if (currentUser?.email) {
@@ -359,8 +344,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     setShowGallery(false);
     setShowShareSheet(false);
     setShowEMICalculator(false);
-    setProsAndCons(null);
-    setIsGeneratingProsCons(false);
     setVehicleDealLead(null);
     scrollAppToTop();
     requestAnimationFrame(() => scrollAppToTop());
@@ -781,54 +764,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                   </div>
                 )}
 
-                {!prosAndCons && !isGeneratingProsCons && (
-                  <button
-                    onClick={handleGenerateProsCons}
-                    className="w-full py-3 bg-orange-50 text-orange-600 rounded-xl font-semibold"
-                  >
-                    {t('vehicle.detail.ai.generateProsConsMobile')}
-                  </button>
-                )}
-                
-                {isGeneratingProsCons && (
-                  <div className="text-center py-8">
-                    <div className="inline-block w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-                    <p className="mt-2 text-sm text-gray-600">
-                      {t('vehicle.detail.ai.generatingInsights')}
-                    </p>
-                  </div>
-                )}
-
-                {prosAndCons && (
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-green-600 mb-2">
-                        ✓ {t('vehicle.detail.ai.pros')}
-                      </h3>
-                      <ul className="space-y-1">
-                        {(Array.isArray(prosAndCons.pros) ? prosAndCons.pros : []).map((pro, idx) => (
-                          <li key={idx} className="text-gray-700 flex items-start gap-2">
-                            <span className="text-green-500 mt-1">•</span>
-                            <span>{pro}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-red-600 mb-2">
-                        ✗ {t('vehicle.detail.ai.cons')}
-                      </h3>
-                      <ul className="space-y-1">
-                        {(Array.isArray(prosAndCons.cons) ? prosAndCons.cons : []).map((con, idx) => (
-                          <li key={idx} className="text-gray-700 flex items-start gap-2">
-                            <span className="text-red-500 mt-1">•</span>
-                            <span>{con}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 

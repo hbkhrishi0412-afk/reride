@@ -247,8 +247,8 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
 
       <div className="flex items-center justify-between mb-2">
         <div>
-          <p className="text-xs font-semibold text-reride-orange uppercase tracking-wide">Deal Pipeline</p>
-          <p className="text-sm font-bold text-reride-text-dark dark:text-white">{lead.id}</p>
+          <p className="text-xs font-semibold text-reride-orange uppercase tracking-wide">Deal Room</p>
+          <p className="text-[11px] text-slate-500">Pipeline · {lead.id}</p>
         </div>
         {lead.chatStatus === 'pending' && isSeller && (
           <button
@@ -285,35 +285,7 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
       {/* Action buttons based on stage */}
       {lead.chatStatus === 'accepted' && (
         <div className="flex flex-wrap gap-2">
-          {!isStageDone(effectiveStageIndex, 'test_drive_completed') && isBuyer && (
-            <button
-              disabled={loading}
-              onClick={async () => {
-                await handleAdvance('test_drive_completed');
-                onSendPipelineMessage?.('Test drive marked as completed.');
-              }}
-              className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-lg font-medium hover:bg-blue-200"
-            >
-              Test Drive Completed
-            </button>
-          )}
-
-          {isStageDone(effectiveStageIndex, 'test_drive_completed') && !isStageDone(effectiveStageIndex, 'inspection_completed') && isBuyer && (
-            <>
-              {!lead.metadata.inspection?.requestedAt && (
-                <button onClick={() => handleAdvance('inspection_requested')} disabled={loading} className="px-2 py-1 text-xs bg-teal-100 text-teal-800 rounded-lg font-medium">
-                  Need Inspection
-                </button>
-              )}
-              {lead.metadata.inspection?.requestedAt && !lead.metadata.inspection?.completedAt && (
-                <button onClick={() => triggerUpload('inspection')} disabled={loading} className="px-2 py-1 text-xs bg-teal-100 text-teal-800 rounded-lg font-medium">
-                  Upload Inspection Report
-                </button>
-              )}
-            </>
-          )}
-
-          {isStageDone(effectiveStageIndex, 'inspection_completed') && !isStageDone(effectiveStageIndex, 'offer_accepted') && (
+          {!isStageDone(effectiveStageIndex, 'offer_accepted') && (
             <>
               {isBuyer && !pendingOffer && (
                 <div className="flex gap-1 items-center">
@@ -357,7 +329,35 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
             </>
           )}
 
-          {isStageDone(effectiveStageIndex, 'offer_accepted') && !isStageDone(effectiveStageIndex, 'token_confirmed') && (
+          {isStageDone(effectiveStageIndex, 'offer_accepted') && !isStageDone(effectiveStageIndex, 'inspection_completed') && isBuyer && (
+            <>
+              {!lead.metadata.inspection?.requestedAt && (
+                <button onClick={() => handleAdvance('inspection_requested')} disabled={loading} className="px-2 py-1 text-xs bg-teal-100 text-teal-800 rounded-lg font-medium">
+                  Need Inspection
+                </button>
+              )}
+              {lead.metadata.inspection?.requestedAt && !lead.metadata.inspection?.completedAt && (
+                <button onClick={() => triggerUpload('inspection')} disabled={loading} className="px-2 py-1 text-xs bg-teal-100 text-teal-800 rounded-lg font-medium">
+                  Upload Inspection Report
+                </button>
+              )}
+            </>
+          )}
+
+          {isStageDone(effectiveStageIndex, 'inspection_completed') && !isStageDone(effectiveStageIndex, 'test_drive_completed') && isBuyer && (
+            <button
+              disabled={loading}
+              onClick={async () => {
+                await handleAdvance('test_drive_completed');
+                onSendPipelineMessage?.('Test drive marked as completed.');
+              }}
+              className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-lg font-medium hover:bg-blue-200"
+            >
+              Test Drive Completed
+            </button>
+          )}
+
+          {isStageDone(effectiveStageIndex, 'test_drive_completed') && !isStageDone(effectiveStageIndex, 'token_confirmed') && (
             <>
               {isBuyer && !lead.metadata.token?.receiptUrl && (
                 <div className="flex gap-1 items-center">

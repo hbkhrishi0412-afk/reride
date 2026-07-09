@@ -3,8 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View as ViewEnum } from '../types';
 import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianStates, getDistrictsByState, getCarYears, getOwnershipOptions, ScrapedCarData, CarMake } from '../utils/rerideScraper';
 import { sellCarAPI } from '../services/sellCarService';
-import { fetchVehicleSpecs, cacheAISpecs } from '../services/vehicleSpecsService';
-import { getAiVehicleSuggestions } from '../services/geminiService';
+import { fetchVehicleSpecs } from '../services/vehicleSpecsService';
 import AutoT from './AutoT';
 import { useAutoT } from '../hooks/useAutoT';
 import { useApp } from './AppProvider';
@@ -360,19 +359,6 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
             setCarDetails(prev => ({ ...prev, transmission: specs.transmission || '' }));
           }
           logInfo('✅ SellCar: Auto-filled fuel/transmission:', specs.fuelType, specs.transmission);
-        } else {
-          const suggestions = await getAiVehicleSuggestions({ make, model, year: parseInt(year, 10) });
-          if (suggestions.structuredSpecs) {
-            if (suggestions.structuredSpecs.fuelType && !selectedFuelType) {
-              setSelectedFuelType(suggestions.structuredSpecs.fuelType);
-              setCarDetails(prev => ({ ...prev, fuelType: suggestions.structuredSpecs!.fuelType || '' }));
-            }
-            if (suggestions.structuredSpecs.transmission && !selectedTransmission) {
-              setSelectedTransmission(suggestions.structuredSpecs.transmission);
-              setCarDetails(prev => ({ ...prev, transmission: suggestions.structuredSpecs!.transmission || '' }));
-            }
-            cacheAISpecs(make, model, parseInt(year, 10), suggestions.structuredSpecs as Record<string, string>);
-          }
         }
       } catch (error) {
         console.error('Failed to auto-fetch specs:', error);

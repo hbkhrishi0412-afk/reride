@@ -3030,6 +3030,42 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         return res.status(200).json(nearbyVehicles);
       }
 
+      // SELLER ENDPOINT: Return all of the authenticated seller's vehicles (any status)
+      if (action === 'seller-mine') {
+        const sellerAuth = await core.authenticateRequestDual(req);
+        if (!sellerAuth.isValid || !sellerAuth.user?.email) {
+          return res.status(401).json({ success: false, reason: sellerAuth.error || 'Authentication required' });
+        }
+        const sellerRole = core.normalizeUserRoleString(sellerAuth.user.role);
+        if (sellerRole !== 'seller' && sellerRole !== 'admin') {
+          return res.status(403).json({
+            success: false,
+            reason: 'Forbidden. Seller access required to view your inventory.',
+          });
+        }
+        const sellerEmail = sellerAuth.user.email.toLowerCase().trim();
+        try {
+          const sellerVehicles = await core.vehicleService.findBySellerEmail(sellerEmail);
+          const ownedOnly = sellerVehicles.filter(
+            (v) => (v.sellerEmail || '').toLowerCase().trim() === sellerEmail,
+          );
+          const sortedVehicles = ownedOnly.sort((a, b) => {
+            const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return bTime - aTime;
+          });
+          core.logInfo(`📊 SELLER: Returning ${sortedVehicles.length} vehicles for ${sellerEmail}`);
+          return res.status(200).json(sortedVehicles);
+        } catch (error) {
+          console.error('❌ Error fetching seller inventory:', error);
+          return res.status(500).json({
+            success: false,
+            reason: 'Failed to fetch seller inventory',
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
       // ADMIN ENDPOINT: Return all vehicles including unpublished/sold (requires admin auth)
       if (action === 'admin-all') {
         const adminAuth = await core.authenticateRequestDual(req);
@@ -3653,9 +3689,25 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           return res.status(403).json({ success: false, reason: 'Invalid or expired view token' });
         }
 
+        const optionalAuth = await core.authenticateRequestDual(req);
+        if (optionalAuth.isValid && optionalAuth.user?.email) {
+          const viewerEmail = optionalAuth.user.email.toLowerCase().trim();
+          const sellerEmail = (mutation.vehicle.sellerEmail || '').toLowerCase().trim();
+          if (sellerEmail && viewerEmail === sellerEmail) {
+            const currentViews = typeof mutation.vehicle.views === 'number' ? mutation.vehicle.views : 0;
+            return res.status(200).json({ success: true, views: currentViews, skipped: true });
+          }
+        }
+
         const currentViews = typeof mutation.vehicle.views === 'number' ? mutation.vehicle.views : 0;
+        const currentViews7 =
+          typeof mutation.vehicle.viewsLast7Days === 'number' ? mutation.vehicle.viewsLast7Days : 0;
+        const currentViews30 =
+          typeof mutation.vehicle.viewsLast30Days === 'number' ? mutation.vehicle.viewsLast30Days : 0;
         const updated = await core.vehicleService.update(mutation.primaryKey, {
           views: currentViews + 1,
+          viewsLast7Days: currentViews7 + 1,
+          viewsLast30Days: currentViews30 + 1,
         });
 
         return res.status(200).json({ success: true, views: updated.views });
@@ -4161,6 +4213,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           const updatedVehicle = await core.vehicleService.update(mutation.primaryKey, {
             status: 'published',
             listingStatus: 'active',
+            soldAt: '',
           });
 
           return res.status(200).json({ success: true, vehicle: updatedVehicle });
@@ -4421,7 +4474,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         'tags', 'title', 'engine', 'engineCc', 'fuelEfficiency',
         'kmDriven', 'variant', 'listingType', 'negotiable',
         'rto', 'displacement', 'groundClearance', 'bootSpace', 'documents',
-        'images', 'status',
+        'images', 'status', 'listingStatus', 'soldAt',
         // Moderation / metadata (stored in vehicles.metadata via supabase-vehicle-service)
         'isFlagged', 'flagReason', 'flaggedAt',
       ] as const;

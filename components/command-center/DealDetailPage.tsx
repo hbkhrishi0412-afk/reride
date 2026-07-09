@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import type { Conversation, DealDetail, User } from '../../types.js';
+import type { Conversation, DealDetail, DealSellerNote, User } from '../../types.js';
 import {
   DEAL_KANBAN_COLUMNS,
   dealKanbanLabel,
   dealStageLabel,
   deriveKanbanStatus,
 } from '../../types.js';
-import { DealTimelinePanel } from '../DealTimelinePanel.js';
+import { parseSellerNotes } from '../../lib/dealSellerNotes.js';
 import {
   acceptDealChat,
   fetchDealDetail,
@@ -22,6 +22,7 @@ import {
 } from '../../types.js';
 import MechanicBookingModal from './MechanicBookingModal.js';
 import DealComplaintModal from './DealComplaintModal.js';
+import DealSellerNotesList from './DealSellerNotesList.js';
 import type { DealInspectionBooking } from '../../types.js';
 
 export interface DealDetailPageProps {
@@ -46,8 +47,10 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
   const [deal, setDeal] = useState<DealDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notesDraft, setNotesDraft] = useState('');
+  const [sellerNotesList, setSellerNotesList] = useState<DealSellerNote[]>([]);
   const [internalNotesDraft, setInternalNotesDraft] = useState('');
+  const [savingSellerNotes, setSavingSellerNotes] = useState(false);
+  const [sellerNotesError, setSellerNotesError] = useState<string | null>(null);
   const [savingNotes, setSavingNotes] = useState(false);
   const [acceptingChat, setAcceptingChat] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
@@ -68,7 +71,7 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
       ]);
       setDeal(detail);
       setBookings(inspectionBookings);
-      setNotesDraft(detail.sellerNotes || '');
+      setSellerNotesList(detail.sellerNotesList ?? parseSellerNotes(detail.sellerNotes));
       setInternalNotesDraft(detail.internalNotes || '');
       setAssistanceNotes(detail.metadata.assistanceFulfillment?.notes || '');
     } catch (err) {
@@ -109,23 +112,50 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
     }
   }, [deal, onNotify]);
 
-  const handleSaveNotes = useCallback(async () => {
-    if (!deal) return;
+  const persistSellerNotes = useCallback(
+    async (nextNotes: DealSellerNote[]) => {
+      if (!deal) return;
+      const previous = sellerNotesList;
+      setSellerNotesList(nextNotes);
+      setSavingSellerNotes(true);
+      setSellerNotesError(null);
+      try {
+        const updated = await updateDealNotes({
+          leadId: deal.id,
+          sellerNotesList: nextNotes,
+        });
+        const saved = updated.sellerNotesList ?? parseSellerNotes(updated.sellerNotes);
+        setSellerNotesList(saved);
+        setDeal((prev) => (prev ? { ...prev, ...updated, sellerNotesList: saved } : prev));
+      } catch (err) {
+        setSellerNotesList(previous);
+        const message = err instanceof Error ? err.message : 'Could not save note';
+        setSellerNotesError(message);
+        onNotify?.(message, 'error');
+      } finally {
+        setSavingSellerNotes(false);
+      }
+    },
+    [deal, onNotify, sellerNotesList],
+  );
+
+  const handleSaveInternalNotes = useCallback(async () => {
+    if (!deal || role !== 'admin') return;
     setSavingNotes(true);
     try {
       const updated = await updateDealNotes({
         leadId: deal.id,
-        sellerNotes: role === 'seller' || role === 'admin' ? notesDraft : undefined,
-        internalNotes: role === 'admin' ? internalNotesDraft : undefined,
+        internalNotes: internalNotesDraft,
       });
       setDeal((prev) => (prev ? { ...prev, ...updated } : prev));
-      onNotify?.('Notes saved.', 'success');
+      setInternalNotesDraft(updated.internalNotes ?? internalNotesDraft);
+      onNotify?.('Internal notes saved.', 'success');
     } catch (err) {
       onNotify?.(err instanceof Error ? err.message : 'Could not save notes', 'error');
     } finally {
       setSavingNotes(false);
     }
-  }, [deal, internalNotesDraft, notesDraft, onNotify, role]);
+  }, [deal, internalNotesDraft, onNotify, role]);
 
   const handleRequestReturn = useCallback(async () => {
     if (!deal) return;
@@ -190,13 +220,12 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
   const derivedKanbanStatus = deriveKanbanStatus(deal);
   const kanbanColor = DEAL_KANBAN_COLUMNS.find((c) => c.status === derivedKanbanStatus)?.color
     || 'bg-slate-100 text-slate-700';
-  const timelineRole = role === 'admin' ? 'seller' : role;
   const showSellerNotes = role === 'seller' || role === 'admin';
   const showInternalNotes = role === 'admin';
   const canBookInspection =
     deal.status === 'active' &&
     (
-      (['test_drive_completed', 'inspection_requested', 'inspection_completed'].includes(deal.currentStage)
+      (['offer_accepted', 'inspection_requested', 'inspection_completed'].includes(deal.currentStage)
         && !deal.metadata.inspection?.completedAt)
       || (role === 'admin'
         && deal.metadata.assistanceFulfillment?.needsInspectionBooking
@@ -355,17 +384,6 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
             </div>
           )}
 
-          <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 mb-4">Deal pipeline</h3>
-            <DealTimelinePanel
-              lead={deal}
-              currentUser={currentUser}
-              currentUserRole={timelineRole}
-              onLeadUpdated={(updated) => setDeal((prev) => (prev ? { ...prev, ...updated } : prev))}
-              conversationId={deal.conversationId}
-            />
-          </div>
-
           {timelineForDisplay.length > 0 && (
             <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-5 shadow-sm">
               <h3 className="text-sm font-bold text-slate-900 mb-3">Activity log</h3>
@@ -467,13 +485,15 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
 
           {showSellerNotes && (
             <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-900 mb-2">Seller notes</h3>
-              <textarea
-                value={notesDraft}
-                onChange={(e) => setNotesDraft(e.target.value)}
-                rows={4}
-                placeholder="Private notes about this deal…"
-                className="w-full text-sm border border-slate-200 rounded-lg p-2 resize-none dark:bg-gray-50 dark:border-gray-200"
+              <h3 className="text-sm font-bold text-slate-900 mb-1">Seller notes</h3>
+              <p className="text-[11px] text-slate-500 mb-3">Add notes one at a time. Each saves automatically.</p>
+              {sellerNotesError && (
+                <p className="mb-2 text-xs font-medium text-red-600">{sellerNotesError}</p>
+              )}
+              <DealSellerNotesList
+                notes={sellerNotesList}
+                saving={savingSellerNotes}
+                onChange={(next) => void persistSellerNotes(next)}
               />
             </div>
           )}
@@ -584,7 +604,7 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
                   }}
                   className="px-3 py-1.5 text-xs font-bold rounded-lg border border-orange-300 text-orange-800 disabled:opacity-50"
                 >
-                  Save notes
+                  Save fulfillment notes
                 </button>
                 {deal.metadata.assistanceFulfillment?.needsInspectionBooking && !deal.metadata.inspection?.bookingId && (
                   <button
@@ -609,18 +629,15 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
                 placeholder="Ops notes — not visible to seller/buyer…"
                 className="w-full text-sm border border-amber-200 rounded-lg p-2 resize-none bg-white"
               />
+              <button
+                type="button"
+                disabled={savingNotes}
+                onClick={() => void handleSaveInternalNotes()}
+                className="mt-3 w-full py-2 text-sm font-bold rounded-xl bg-amber-900 text-white disabled:opacity-50"
+              >
+                {savingNotes ? 'Saving…' : 'Save internal notes'}
+              </button>
             </div>
-          )}
-
-          {(showSellerNotes || showInternalNotes) && (
-            <button
-              type="button"
-              disabled={savingNotes}
-              onClick={() => void handleSaveNotes()}
-              className="w-full py-2 text-sm font-bold rounded-xl bg-slate-900 text-white disabled:opacity-50"
-            >
-              {savingNotes ? 'Saving…' : 'Save notes'}
-            </button>
           )}
         </aside>
       </div>

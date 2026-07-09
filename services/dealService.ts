@@ -7,6 +7,7 @@ import type {
   DealDetail,
   DealKanbanStatus,
   DealLead,
+  DealSellerNote,
   DealStage,
   FraudDashboard,
   RcQueueItem,
@@ -103,6 +104,33 @@ export async function getDealLead(params: {
   return data.lead;
 }
 
+/** Resolve deal lead for a chat thread (conversation id, then vehicle fallback, with optional retries). */
+export async function resolveDealLeadForConversation(
+  conversation: { id: string; vehicleId?: number },
+  options?: { retryCount?: number; retryMs?: number },
+): Promise<DealLead | null> {
+  const load = async (): Promise<DealLead | null> => {
+    const byConversation = await getDealLead({ conversationId: conversation.id });
+    if (byConversation) return byConversation;
+    if (conversation.vehicleId != null) {
+      return getDealLead({ vehicleId: conversation.vehicleId });
+    }
+    return null;
+  };
+
+  let lead = await load().catch(() => null);
+  if (lead) return lead;
+
+  const retryCount = options?.retryCount ?? 4;
+  const retryMs = options?.retryMs ?? 400;
+  for (let attempt = 0; attempt < retryCount; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, retryMs));
+    lead = await load().catch(() => null);
+    if (lead) return lead;
+  }
+  return null;
+}
+
 export async function fetchMyDealLeads(): Promise<DealLead[]> {
   const response = await authenticatedFetch(`${BASE}?action=my-leads`);
   const data = await parseJson<{ success: boolean; leads: DealLead[] }>(response);
@@ -170,21 +198,54 @@ async function ensureDealApiAuth(): Promise<void> {
   }
 }
 
-export async function fetchSellerCommandCenter(): Promise<SellerCommandCenter> {
-  await ensureDealApiAuth();
+const SELLER_COMMAND_CENTER_TTL_MS = 30_000;
+let sellerCommandCenterCache: { data: SellerCommandCenter; ts: number } | null = null;
+let sellerCommandCenterInflight: Promise<SellerCommandCenter> | null = null;
 
-  const fetchOnce = async () => {
-    const response = await authenticatedFetch(`${BASE}?action=seller-command-center`);
-    return parseJson<{ success: boolean; commandCenter: SellerCommandCenter }>(response);
-  };
+export function invalidateSellerCommandCenterCache(): void {
+  sellerCommandCenterCache = null;
+}
 
-  try {
-    const data = await fetchOnce();
-    return data.commandCenter;
-  } catch {
+export async function fetchSellerCommandCenter(forceRefresh = false): Promise<SellerCommandCenter> {
+  const now = Date.now();
+  if (
+    !forceRefresh &&
+    sellerCommandCenterCache &&
+    now - sellerCommandCenterCache.ts < SELLER_COMMAND_CENTER_TTL_MS
+  ) {
+    return sellerCommandCenterCache.data;
+  }
+  if (!forceRefresh && sellerCommandCenterInflight) {
+    return sellerCommandCenterInflight;
+  }
+
+  const run = (async () => {
     await ensureDealApiAuth();
-    const data = await fetchOnce();
-    return data.commandCenter;
+
+    const fetchOnce = async () => {
+      const response = await authenticatedFetch(`${BASE}?action=seller-command-center`);
+      return parseJson<{ success: boolean; commandCenter: SellerCommandCenter }>(response);
+    };
+
+    try {
+      const data = await fetchOnce();
+      return data.commandCenter;
+    } catch {
+      await ensureDealApiAuth();
+      const data = await fetchOnce();
+      return data.commandCenter;
+    }
+  })();
+
+  sellerCommandCenterInflight = run;
+  try {
+    const center = await run;
+    sellerCommandCenterCache = { data: center, ts: Date.now() };
+    return center;
+  } finally {
+    if (sellerCommandCenterInflight === run) {
+      sellerCommandCenterInflight = null;
+    }
   }
 }
 
@@ -216,6 +277,7 @@ export async function updateDealKanbanStatus(
 
 export async function updateDealNotes(params: {
   leadId: string;
+  sellerNotesList?: DealSellerNote[];
   sellerNotes?: string;
   internalNotes?: string;
 }): Promise<DealLead> {

@@ -6,6 +6,8 @@ import { useApp } from '../AppProvider';
 import useIsMobileApp from '../../hooks/useIsMobileApp';
 import useIsLgUp from '../../hooks/useIsLgUp';
 import { enrichVehiclesWithSellerInfo } from '../../utils/vehicleEnrichment';
+import { filterVehiclesBySellerEmail } from '../../utils/sellerVehicleFilter';
+import { findVehicleByIdentity } from '../../utils/vehicleIdentity';
 import { matchesLocation } from '../../utils/cityMapping';
 import { buildVehicleMutationBody } from '../../utils/vehicleIdentity';
 import { addSellerListing, addSellerListingsBulk, assertSellerCanPublishListing } from '../../utils/sellerAddListing.js';
@@ -195,6 +197,8 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     vehicles,
     users,
     currentUser,
+    sellerInventory,
+    sellerInventoryReady,
     comparisonList,
     comparisonCategory,
     wishlist,
@@ -225,6 +229,7 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     setWishlist,
     setPublicSellerProfile: setPublicProfile,
     setVehicles,
+    setSellerInventory,
     setUsers,
     setCurrentUser,
     setSupportTickets,
@@ -234,6 +239,7 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     updateUser,
     deleteUser,
     updateVehicle,
+    syncVehicleFromServer,
     deleteVehicle,
     toggleWishlist,
     toggleCompare,
@@ -592,6 +598,7 @@ switch (currentView) {
           onStartChat={handleStartVehicleChat}
           recommendations={recommendations}
           onSelectVehicle={selectVehicle}
+          updateVehicle={updateVehicle}
         />
         </VehicleDetailErrorBoundary>
       );
@@ -748,24 +755,15 @@ switch (currentView) {
     }
     
     logInfo('âœ… Seller dashboard validation passed, rendering dashboard');
-    
-    // Safety check: Ensure vehicleData is defined
-    if (!vehicleData) {
-      logError('âŒ vehicleData is undefined, cannot render dashboard');
-      return (
-        <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-600 mb-4">Loading Dashboard...</h2>
-            <p className="text-gray-500">Please wait while we load the dashboard data.</p>
-          </div>
-        </div>
-      );
-    }
-    
-    const sellerVehiclesFiltered = (vehicles || []).filter(v => {
-      if (!v || !v.sellerEmail || !currentUser?.email) return false;
-      return v.sellerEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-    });
+
+    const sellerEmailNorm = currentUser.email.toLowerCase().trim();
+    // Never fall back to the public storefront catalog — only show verified seller inventory.
+    const sellerVehiclesFiltered = filterVehiclesBySellerEmail(
+      sellerInventoryReady ? sellerInventory : [],
+      sellerEmailNorm,
+    );
+    const findSellerVehicle = (vehicleId: number, databaseId?: string) =>
+      findVehicleByIdentity(sellerVehiclesFiltered, vehicleId, databaseId);
 
     // Use MobileDashboard for mobile / compact viewports, Dashboard for large desktop
     if (preferCompactDashboard) {
@@ -797,13 +795,19 @@ switch (currentView) {
                 await deleteVehicle(vehicleId);
               }}
               onMarkAsSold={async (vehicleId) => {
-                const vehicle = vehicles.find(v => v.id === vehicleId);
-                if (vehicle) {
-                  await updateVehicle(vehicleId, { status: 'sold', soldAt: new Date().toISOString(), listingStatus: 'sold' });
+                const vehicle = findSellerVehicle(vehicleId);
+                if (!vehicle) return;
+                try {
+                  const { markVehicleAsSold } = await import('../../services/vehicleService');
+                  const updated = await markVehicleAsSold(vehicleId, vehicles);
+                  syncVehicleFromServer(updated);
+                  addToast('Vehicle marked as sold.', 'success');
+                } catch (err) {
+                  addToast(err instanceof Error ? err.message : 'Failed to mark vehicle as sold.', 'error');
                 }
               }}
               onMarkAsUnsold={async (vehicleId) => {
-                const vehicle = vehicles.find((v) => v.id === vehicleId);
+                const vehicle = findSellerVehicle(vehicleId);
                 if (!vehicle) return;
                 const canPublish = await assertSellerCanPublishListing({
                   currentUser,
@@ -812,7 +816,14 @@ switch (currentView) {
                   addToast,
                 });
                 if (!canPublish) return;
-                await updateVehicle(vehicleId, { status: 'published', soldAt: undefined, listingStatus: 'active' });
+                try {
+                  const { markVehicleAsUnsold } = await import('../../services/vehicleService');
+                  const updated = await markVehicleAsUnsold(vehicleId, vehicles);
+                  syncVehicleFromServer(updated);
+                  addToast('Listing is active again.', 'success');
+                } catch (err) {
+                  addToast(err instanceof Error ? err.message : 'Failed to update vehicle. Please try again.', 'error');
+                }
               }}
               onAddMultipleVehicles={async (vehiclesData) => {
                 if (currentUser.planExpiryDate) {
@@ -828,6 +839,7 @@ switch (currentView) {
                   vehiclesData,
                   listingExpiresAt,
                   setVehicles,
+                  setSellerInventory,
                   nextNumericId: () => Date.now() + randomIntBelow(1000),
                   addToast,
                   logError,
@@ -836,7 +848,7 @@ switch (currentView) {
               }}
               onRequestCertification={async (vehicleId) => {
                 try {
-                  const vehicle = vehicles.find(v => v.id === vehicleId);
+                  const vehicle = findSellerVehicle(vehicleId);
                   const sellerEmail = vehicle?.sellerEmail || currentUser?.email;
                   const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
                   const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
@@ -1006,6 +1018,7 @@ switch (currentView) {
                   isFeaturing,
                   listingExpiresAt: computeListingExpiresAtForSeller(currentUser),
                   setVehicles,
+                  setSellerInventory,
                   nextNumericId: () => Date.now() + randomIntBelow(1000),
                   successMessage: 'Vehicle added successfully!',
                   addToast,
@@ -1068,6 +1081,7 @@ switch (currentView) {
               isFeaturing,
               listingExpiresAt: computeListingExpiresAtForSeller(currentUser),
               setVehicles,
+              setSellerInventory,
               nextNumericId: () => Date.now() + randomIntBelow(1000),
               successMessage: 'Vehicle added successfully',
               addToast,
@@ -1090,6 +1104,7 @@ switch (currentView) {
               vehiclesData,
               listingExpiresAt,
               setVehicles,
+              setSellerInventory,
               nextNumericId: () => Date.now() + randomIntBelow(1000),
               addToast,
               logError,
@@ -1103,13 +1118,19 @@ switch (currentView) {
             await deleteVehicle(vehicleId);
           }}
           onMarkAsSold={async (vehicleId) => {
-            const vehicle = vehicles.find(v => v.id === vehicleId);
-            if (vehicle) {
-              await updateVehicle(vehicleId, { status: 'sold', soldAt: new Date().toISOString(), listingStatus: 'sold' });
+            const vehicle = findSellerVehicle(vehicleId);
+            if (!vehicle) return;
+            try {
+              const { markVehicleAsSold } = await import('../../services/vehicleService');
+              const updated = await markVehicleAsSold(vehicleId, vehicles);
+              syncVehicleFromServer(updated);
+              addToast('Vehicle marked as sold.', 'success');
+            } catch (err) {
+              addToast(err instanceof Error ? err.message : 'Failed to mark vehicle as sold.', 'error');
             }
           }}
           onMarkAsUnsold={async (vehicleId) => {
-            const vehicle = vehicles.find((v) => v.id === vehicleId);
+            const vehicle = findSellerVehicle(vehicleId);
             if (!vehicle) return;
             const canPublish = await assertSellerCanPublishListing({
               currentUser,
@@ -1118,7 +1139,14 @@ switch (currentView) {
               addToast,
             });
             if (!canPublish) return;
-            await updateVehicle(vehicleId, { status: 'published', soldAt: undefined, listingStatus: 'active' });
+            try {
+              const { markVehicleAsUnsold } = await import('../../services/vehicleService');
+              const updated = await markVehicleAsUnsold(vehicleId, vehicles);
+              syncVehicleFromServer(updated);
+              addToast('Listing is active again.', 'success');
+            } catch (err) {
+              addToast(err instanceof Error ? err.message : 'Failed to update vehicle. Please try again.', 'error');
+            }
           }}
           conversations={(conversations || []).filter(
                 (c) =>
@@ -1219,7 +1247,7 @@ switch (currentView) {
           }}
           onRequestCertification={async (vehicleId) => {
             try {
-              const vehicle = vehicles.find(v => v.id === vehicleId);
+              const vehicle = findSellerVehicle(vehicleId);
               const sellerEmail = vehicle?.sellerEmail || currentUser?.email;
               // Normalize emails for comparison (critical for production)
               const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
@@ -1362,10 +1390,12 @@ switch (currentView) {
         />
       );
     }
+    const buyerPublishedVehicles = (vehicles || []).filter((v) => v && v.status === 'published');
+
     return currentUser?.role === 'customer' ? (
       <BuyerDashboard
         currentUser={currentUser}
-        vehicles={vehicles}
+        vehicles={buyerPublishedVehicles}
         wishlist={wishlist}
         conversations={(conversations || []).filter(c => {
           if (!c || !c.customerId || !currentUser?.email) return false;

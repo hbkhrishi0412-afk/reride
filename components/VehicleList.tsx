@@ -13,7 +13,6 @@ import type { MobileFilterCategoryId } from './mobileFilterTypes.js';
 import useIsMobileApp from '../hooks/useIsMobileApp.js';
 import type { Vehicle, VehicleCategory, SavedSearch, SearchFilters } from '../types.js';
 import { VehicleCategory as CategoryEnum } from '../types.js';
-import { parseSearchQuery, getSearchSuggestions } from '../services/geminiService.js';
 import VehicleTile from './VehicleTile.js';
 import VehicleTileSkeleton from './VehicleTileSkeleton.js';
 import VirtualizedTileResults from './VehicleList/VirtualizedTileResults.js';
@@ -259,7 +258,7 @@ interface VehicleListFilterSnapshot {
   yearBounds: { min: number | null; max: number | null };
 }
 
-function matchesVehicleFilters(vehicle: Vehicle, snap: VehicleListFilterSnapshot, aiSearchQuery: string): boolean {
+function matchesVehicleFilters(vehicle: Vehicle, snap: VehicleListFilterSnapshot, searchQuery: string): boolean {
   if (snap.categoryFilter !== 'ALL' && snap.categoryFilter) {
     if (!vehicle.category) return false;
     const vehicleCategory = String(vehicle.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
@@ -316,7 +315,7 @@ function matchesVehicleFilters(vehicle: Vehicle, snap: VehicleListFilterSnapshot
     if (snap.ownershipFilter === '3plus' && n < 3) return false;
   }
   if (snap.trustFilter && !vehicleMatchesTrustFilter(vehicle, snap.trustFilter)) return false;
-  if (!vehicleMatchesSearchText(vehicle, aiSearchQuery)) return false;
+  if (!vehicleMatchesSearchText(vehicle, searchQuery)) return false;
   return true;
 }
 
@@ -346,10 +345,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   onRetryLoadVehicles,
   onBrowseAll,
 }) => {
-  const [aiSearchQuery, setAiSearchQuery] = useState(initialSearchQuery);
-  const [isAiSearching, setIsAiSearching] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   
   // Vehicle data for filters
   const [vehicleData, setVehicleData] = useState<VehicleData | null>(null);
@@ -459,7 +455,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [currentPage, setCurrentPage] = useState(1);
   const [isDesktopFilterVisible, setIsDesktopFilterVisible] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'tile'>('grid');
-  const [isAiSearchCollapsed, setIsAiSearchCollapsed] = useState(true); // Start collapsed on mobile for better UX
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isBackgroundHydratingVehicles, setIsBackgroundHydratingVehicles] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -505,9 +500,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     }),
     [t]
   );
-
-  const aiSearchRef = useRef<HTMLDivElement>(null);
-  const suggestionDebounceRef = useRef<number | null>(null);
 
   useEffect(() => {
     const handleHydrationStatus = (event: Event) => {
@@ -890,117 +882,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     return [...new Set(filteredVehicles.map((v) => v.transmission).filter(Boolean))].sort();
   }, [vehicles, tempFilters.categoryFilter, tempFilters.makeFilter, tempFilters.modelFilter]);
 
-  const handleAiSearch = async (queryOverride?: string) => {
-    const query = typeof queryOverride === 'string' ? queryOverride : aiSearchQuery;
-    if (!query.trim()) return;
-
-    setShowSuggestions(false);
-    setIsAiSearching(true);
-    const parsedFilters = await parseSearchQuery(query);
-
-    let nextCat: VehicleCategory | 'ALL' = categoryFilter;
-    let nextMake = makeFilter;
-    let nextModel = modelFilter;
-
-    if (parsedFilters.category) {
-      const rc = resolveCategoryFromParse(parsedFilters.category, uniqueCategories as string[]);
-      if (rc) {
-        nextCat = rc;
-        nextMake = '';
-        nextModel = '';
-        setCategoryFilter(rc);
-        setMakeFilter('');
-        setModelFilter('');
-      }
-    }
-
-    const resolvedMake = resolveMakeFromList(parsedFilters.make, uniqueMakes);
-    if (resolvedMake) {
-      nextMake = resolvedMake;
-      setMakeFilter(resolvedMake);
-      const resolvedModel = resolveModelFromVehicles(parsedFilters.model, resolvedMake, vehicles || []);
-      nextModel = resolvedModel ?? '';
-      setModelFilter(resolvedModel ?? '');
-    } else if (parsedFilters.model && nextMake) {
-      const resolvedModel = resolveModelFromVehicles(parsedFilters.model, nextMake, vehicles || []);
-      if (resolvedModel) {
-        nextModel = resolvedModel;
-        setModelFilter(resolvedModel);
-      }
-    }
-
-    const { fuels, transmissions } = fuelsAndTransmissionsForScope(vehicles || [], nextCat, nextMake, nextModel);
-    if (parsedFilters.fuelType) {
-      const f = resolveStringFromList(parsedFilters.fuelType, fuels);
-      if (f) setFuelTypeFilter(f);
-    }
-    if (parsedFilters.transmission) {
-      const tr = resolveStringFromList(parsedFilters.transmission, transmissions);
-      if (tr) setTransmissionFilter(tr);
-    }
-
-    const ownStr = String(parsedFilters.ownership ?? '').trim();
-    const own =
-      ownStr && ['1', '2', '3plus'].includes(ownStr)
-        ? (ownStr as OwnershipFilterValue)
-        : normalizeParsedOwnership(ownStr || undefined);
-    if (own) setOwnershipFilter(own);
-
-    if (parsedFilters.minMileage != null || parsedFilters.maxMileage != null) {
-      setMileageRange({
-        min: parsedFilters.minMileage != null ? parsedFilters.minMileage : MIN_MILEAGE,
-        max: parsedFilters.maxMileage != null ? parsedFilters.maxMileage : MAX_MILEAGE,
-      });
-    }
-
-    if (parsedFilters.minPrice != null || parsedFilters.maxPrice != null) {
-      setSelectedPriceBuckets([]);
-      setPriceRange({
-        min: parsedFilters.minPrice != null ? parsedFilters.minPrice : MIN_PRICE,
-        max: parsedFilters.maxPrice != null ? parsedFilters.maxPrice : MAX_PRICE,
-      });
-    }
-
-    if (parsedFilters.year != null && Number.isFinite(parsedFilters.year)) {
-      setYearFilter(String(Math.round(parsedFilters.year)));
-      setYearBounds({ min: null, max: null });
-    } else if (parsedFilters.minYear != null || parsedFilters.maxYear != null) {
-      setYearFilter('0');
-      setYearBounds({
-        min:
-          parsedFilters.minYear != null && Number.isFinite(parsedFilters.minYear)
-            ? Math.round(parsedFilters.minYear)
-            : null,
-        max:
-          parsedFilters.maxYear != null && Number.isFinite(parsedFilters.maxYear)
-            ? Math.round(parsedFilters.maxYear)
-            : null,
-      });
-    }
-
-    if (parsedFilters.location?.trim() && indianStates.length > 0) {
-      const loc = parsedFilters.location.trim().toLowerCase();
-      const st = indianStates.find(
-        (s) =>
-          s.name.toLowerCase() === loc ||
-          s.code.toLowerCase() === loc ||
-          s.name.toLowerCase().includes(loc) ||
-          loc.includes(s.name.toLowerCase())
-      );
-      if (st) {
-        setStateFilter(st.code);
-        setIsStateFilterUserSet(true);
-      }
-    }
-
-    setIsAiSearching(false);
-  };
-
   useEffect(() => {
     if (!initialSearchQuery?.trim()) return;
-    setAiSearchQuery(initialSearchQuery);
-    void handleAiSearch(initialSearchQuery);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setSearchQuery(initialSearchQuery);
   }, [initialSearchQuery]);
 
   // Deep-linked structured filters: apply directly via setters so chip
@@ -1228,18 +1112,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   }, [stateFilter, isStateFilterUserSet, selectedCity, onCityChange]);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-        if (aiSearchRef.current && !aiSearchRef.current.contains(event.target as Node)) setShowSuggestions(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-        if (suggestionDebounceRef.current) clearTimeout(suggestionDebounceRef.current);
-    };
-  }, []);
-
-  
-  useEffect(() => {
     const body = document.body;
     if (!body) return;
     if (isFilterModalOpen) {
@@ -1400,35 +1272,12 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       setInitialIsStateFilterUserSet(false);
   };
 
-  const handleAiQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const query = e.target.value;
-      setAiSearchQuery(query);
-
-      if (suggestionDebounceRef.current) clearTimeout(suggestionDebounceRef.current);
-
-      if (!query.trim()) {
-          setSuggestions([]);
-          setShowSuggestions(false);
-          return;
-      }
-
-      suggestionDebounceRef.current = window.setTimeout(async () => {
-          const vehicleContext = (vehicles || []).map(v => ({ make: v.make, model: v.model, features: v.features }));
-          const fetchedSuggestions = await getSearchSuggestions(query, vehicleContext);
-          setSuggestions(fetchedSuggestions);
-          setShowSuggestions(fetchedSuggestions.length > 0);
-      }, 300);
-  };
-
-  const handleSuggestionClick = (suggestion: string) => {
-      setAiSearchQuery(suggestion);
-      setSuggestions([]);
-      setShowSuggestions(false);
-      handleAiSearch(suggestion);
+  const handleSearchQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setSearchQuery(e.target.value);
   };
   
   const handleResetFilters = () => {
-    setAiSearchQuery(''); 
+    setSearchQuery(''); 
     setCategoryFilter(initialCategory || 'ALL'); // Reset to initial category, not always 'ALL'
     setMakeFilter(''); 
     setModelFilter('');
@@ -1509,7 +1358,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, trustFilter, selectedPriceBuckets, yearFilter, yearBounds, stateFilter, sortOrder, aiSearchQuery]);
+  }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, trustFilter, selectedPriceBuckets, yearFilter, yearBounds, stateFilter, sortOrder, searchQuery]);
 
 
   const processedVehicles = useMemo(() => {
@@ -1535,7 +1384,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       yearBounds,
     };
 
-    const filtered = sourceVehicles.filter((vehicle) => matchesVehicleFilters(vehicle, snap, aiSearchQuery));
+    const filtered = sourceVehicles.filter((vehicle) => matchesVehicleFilters(vehicle, snap, searchQuery));
 
     if (process.env.NODE_ENV === 'development') {
       logInfo('Filter Results:', {
@@ -1596,7 +1445,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             default: return b.year - a.year;
         }
     });
-  }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, selectedPriceBuckets, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, trustFilter, yearFilter, yearBounds, sortOrder, isWishlistMode, wishlist, stateFilter, isStateFilterUserSet, selectedCity, aiSearchQuery]);
+  }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, selectedPriceBuckets, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, trustFilter, yearFilter, yearBounds, sortOrder, isWishlistMode, wishlist, stateFilter, isStateFilterUserSet, selectedCity, searchQuery]);
   
   const committedFilterCategoryMap = useMemo(
     () =>
@@ -1708,7 +1557,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       trustFilter,
       yearBounds: { min: tempFilters.yearMin ?? null, max: tempFilters.yearMax ?? null },
     };
-    return sourceVehicles.filter((v) => matchesVehicleFilters(v, snap, aiSearchQuery)).length;
+    return sourceVehicles.filter((v) => matchesVehicleFilters(v, snap, searchQuery)).length;
   }, [
     vehicles,
     isWishlistMode,
@@ -1718,7 +1567,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     stateFilter,
     isStateFilterUserSet,
     selectedCity,
-    aiSearchQuery,
+    searchQuery,
   ]);
 
   // Pagination with infinite scroll - show 12 vehicles per page
@@ -1793,7 +1642,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       cancelAnimationFrame(raf2);
       observer?.disconnect();
     };
-  }, [hasMore, currentPage, processedVehicles.length, isLoading, isAiSearching]);
+  }, [hasMore, currentPage, processedVehicles.length, isLoading]);
 
   const toggleTempPriceBucket = (id: string) => {
     setTempFilters((prev) => {
@@ -2454,10 +2303,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
               <input
                 type="text"
                 placeholder="Search by brand, model, budget…"
-                value={aiSearchQuery}
-                onChange={handleAiQueryChange}
-                onFocus={() => setShowSuggestions(suggestions.length > 0)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAiSearch(); }}
+                value={searchQuery}
+                onChange={handleSearchQueryChange}
                 className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[15px] leading-none text-gray-900 placeholder:text-gray-400 py-2.5"
                 style={{ fontSize: '16px' }}
                 aria-label="Search vehicles"
@@ -2465,13 +2312,10 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 enterKeyHint="search"
               />
 
-              {aiSearchQuery && (
+              {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => {
-                    handleAiQueryChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
-                    setShowSuggestions(false);
-                  }}
+                  onClick={() => setSearchQuery('')}
                   className="flex-shrink-0 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 active:scale-95 transition-all"
                   aria-label="Clear search"
                 >
@@ -2480,57 +2324,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                   </svg>
                 </button>
               )}
-
-              <button
-                type="button"
-                onClick={() => handleAiSearch()}
-                disabled={isAiSearching}
-                className="flex-shrink-0 flex items-center justify-center gap-1.5 h-10 px-4 rounded-full font-semibold text-[13px] text-white transition-all disabled:opacity-60 active:scale-95"
-                style={{
-                  background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
-                  boxShadow: '0 6px 14px rgba(255, 107, 53, 0.35)'
-                }}
-                aria-label={isAiSearching ? 'Searching' : 'Search'}
-              >
-                {isAiSearching ? (
-                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                  </svg>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <span className="leading-none">Search</span>
-                  </>
-                )}
-              </button>
             </div>
-
-            {showSuggestions && suggestions.length > 0 && (
-              <div
-                className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl border border-gray-100 overflow-hidden z-20"
-                style={{ boxShadow: '0 12px 32px rgba(15, 23, 42, 0.12)' }}
-              >
-                <ul className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
-                  {suggestions.map((suggestion, index) => (
-                    <li key={index}>
-                      <button
-                        type="button"
-                        onClick={() => handleSuggestionClick(suggestion)}
-                        className="w-full text-left px-4 py-3 text-gray-800 hover:bg-gray-50 active:bg-gray-100 transition-colors font-medium flex items-center gap-3"
-                      >
-                        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                        <span className="truncate">{suggestion}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         </div>
 
@@ -2608,7 +2402,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         {/* Vehicle List - with proper spacing to prevent overlap with sticky filter bar */}
         <div className="vehicle-list-container px-4 pb-24">
           <div className="flex flex-col gap-4" data-testid="vehicle-results">
-            {isLoading || isAiSearching ? (
+            {isLoading ? (
               Array.from({ length: 6 }).map((_, index) => (
                 <div
                   key={`skeleton-${index}`}
@@ -2832,36 +2626,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
               <p className="text-sm text-gray-600">{t('listings.subtitle')}</p>
             </div>
             <ListingTrustFilterBar value={trustFilter} onChange={setTrustFilter} className="px-1 lg:px-0" />
-            {/* Mobile-optimized search - collapsible on mobile */}
-            <div className="intelligent-search bg-white/80 backdrop-blur-xl rounded-xl lg:rounded-2xl shadow-xl border border-white/20 p-2.5 lg:p-4 -mt-12">
-              <div className="flex items-center gap-2 mb-1.5 lg:mb-1.5">
-                <label htmlFor="ai-search" className="text-xs lg:text-sm font-semibold text-reride-text-dark dark:text-reride-text-dark flex-shrink-0">✨ Intelligent Search</label>
-                <p className={`hidden lg:block text-xs text-reride-text dark:text-reride-text flex-1 truncate`}>
-                  Describe what you&apos;re looking for, e.g., &quot;a white Tata Nexon under ₹15 lakhs with a sunroof&quot;
-                </p>
-                <button 
-                  onClick={() => setIsAiSearchCollapsed(prev => !prev)}
-                  className="lg:hidden p-1 text-gray-500 hover:text-gray-700 flex-shrink-0"
-                  aria-label="Toggle search"
-                >
-                  <svg className={`w-5 h-5 transition-transform ${isAiSearchCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-              <p className={`lg:hidden text-xs text-reride-text dark:text-reride-text mb-1.5 ${isAiSearchCollapsed ? 'hidden' : ''}`}>
-                Describe what you&apos;re looking for, e.g., &quot;a white Tata Nexon under ₹15 lakhs with a sunroof&quot;
-              </p>
-              <div className={`relative ${isAiSearchCollapsed ? 'hidden lg:block' : ''}`} ref={aiSearchRef}>
-                  <div className="flex gap-2">
-                      <input type="search" id="ai-search" placeholder="Let our AI find your perfect vehicle..." aria-label="AI vehicle search" value={aiSearchQuery} onChange={handleAiQueryChange} onFocus={() => setShowSuggestions(suggestions.length > 0)} onKeyDown={(e) => { if (e.key === 'Enter') handleAiSearch(); }} autoComplete="off" className={`${formElementClass} text-sm py-2`} style={{ fontSize: '14px' }} />
-                      <button onClick={() => handleAiSearch()} disabled={isAiSearching} className="btn-brand-primary text-white font-bold py-2 px-3 lg:px-4 rounded-lg transition-colors disabled:bg-brand-gray-400 disabled:cursor-wait text-xs lg:text-sm whitespace-nowrap flex-shrink-0">{isAiSearching ? '...' : 'Search'}</button>
-                  </div>
-                  {showSuggestions && suggestions.length > 0 && (
-                      <div className="absolute top-full mt-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-soft-xl border border-gray-200 dark:border-gray-300 z-10 overflow-hidden"><ul className="divide-y divide-brand-gray-100 dark:divide-brand-gray-600">{suggestions.map((suggestion, index) => ( <li key={index}><button onClick={() => handleSuggestionClick(suggestion)} className="w-full text-left px-4 py-2 text-reride-text-dark dark:text-brand-gray-200 hover:bg-reride-off-white dark:hover:bg-brand-gray-600 transition-colors">{suggestion}</button></li>))}</ul></div>
-                  )}
-              </div>
-          </div>
 
           {/* Mobile-optimized filters and sort bar - sticky on mobile */}
           <div 
@@ -2921,7 +2685,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             data-testid="vehicle-results"
             style={isMobileApp ? { paddingTop: '0.5rem' } : {}}
           >
-            {isLoading || isAiSearching ? (
+            {isLoading ? (
               Array.from({ length: 8 }).map((_, index) => 
                 isMobileApp ? <VehicleCardSkeleton key={index} /> :
                 viewMode === 'grid' ? <VehicleCardSkeleton key={index} /> : <VehicleTileSkeleton key={index} />

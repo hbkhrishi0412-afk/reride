@@ -75,7 +75,7 @@ function buildValueFactors(vehicle: Vehicle): ValueFactor[] {
     });
   }
 
-  if (vehicle.aiInspectionReport || vehicle.certifiedInspection) {
+  if (vehicle.certifiedInspection) {
     factors.push({
       label: 'Photo Check Available',
       impact: 'positive',

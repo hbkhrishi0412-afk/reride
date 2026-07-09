@@ -1199,6 +1199,12 @@ export interface DealDocumentRecord {
   createdAt: string;
 }
 
+export interface DealSellerNote {
+  id: string;
+  text: string;
+  createdAt: string;
+}
+
 export interface DealLead {
   id: string;
   vehicleId: string;
@@ -1227,7 +1233,9 @@ export interface DealLead {
   sellerDisplayName?: string;
   kanbanStatus?: DealKanbanStatus;
   assignedAdminEmail?: string;
+  /** @deprecated Use sellerNotesList — plain text mirror for legacy callers */
   sellerNotes?: string;
+  sellerNotesList?: DealSellerNote[];
   internalNotes?: string;
   offers?: DealOfferRecord[];
   documents?: DealDocumentRecord[];
@@ -1458,12 +1466,12 @@ export function assistancePackageNeedsRc(packageId: string): boolean {
 export const DEAL_PIPELINE_STAGES: readonly DealStage[] = [
   'lead_created',
   'chat_accepted',
-  'test_drive_scheduled',
-  'test_drive_completed',
-  'inspection_requested',
-  'inspection_completed',
   'offer_made',
   'offer_accepted',
+  'inspection_requested',
+  'inspection_completed',
+  'test_drive_scheduled',
+  'test_drive_completed',
   'token_uploaded',
   'token_confirmed',
   'delivery_pending',
@@ -1488,10 +1496,10 @@ export function pipelineStageProgressPercent(stage: DealStage | string): number 
 export const DEAL_TIMELINE_STAGES: { stage: DealStage; label: string }[] = [
   { stage: 'lead_created', label: 'Lead Created' },
   { stage: 'chat_accepted', label: 'Chat Started' },
+  { stage: 'offer_accepted', label: 'Negotiation' },
+  { stage: 'inspection_completed', label: 'Inspection Completed' },
   { stage: 'test_drive_scheduled', label: 'Test Drive Scheduled' },
   { stage: 'test_drive_completed', label: 'Test Drive Completed' },
-  { stage: 'inspection_completed', label: 'Inspection Completed' },
-  { stage: 'offer_accepted', label: 'Offer Accepted' },
   { stage: 'token_confirmed', label: 'Token Confirmed' },
   { stage: 'delivery_completed', label: 'Delivery Completed' },
   { stage: 'documents_completed', label: 'Documents Completed' },
@@ -1551,21 +1559,20 @@ export function deriveKanbanStatus(lead: Pick<DealLead, 'status' | 'currentStage
     return 'payment_pending';
   }
   if (['inspection_requested', 'inspection_completed'].includes(lead.currentStage)) return 'inspection';
+  if (['test_drive_scheduled', 'test_drive_completed'].includes(lead.currentStage)) return 'inspection';
 
   const currentOffer = lead.metadata.offers?.find((o) => o.id === lead.metadata.currentOfferId);
-  if (lead.currentStage === 'offer_accepted') return 'payment_pending';
-  // Keep "Negotiation" only when the current active offer is actively countered.
-  // Historical countered offers should not keep the lead stuck in Negotiation.
-  if (currentOffer?.status === 'countered') {
-    return 'negotiation';
-  }
+  if (lead.currentStage === 'offer_accepted') return 'inspection';
   if (
     lead.currentStage === 'offer_made' ||
-    (currentOffer?.status === 'pending' && currentOffer.offeredBy === 'buyer')
+    currentOffer?.status === 'pending' ||
+    currentOffer?.status === 'countered'
   ) {
-    return 'offer_sent';
+    return currentOffer?.status === 'countered' || currentOffer?.offeredBy === 'seller'
+      ? 'negotiation'
+      : 'offer_sent';
   }
-  if (['test_drive_scheduled', 'test_drive_completed', 'chat_accepted'].includes(lead.currentStage)) {
+  if (lead.currentStage === 'chat_accepted') {
     return 'chat_started';
   }
   if (lead.chatStatus === 'pending') return 'buyer_contacted';

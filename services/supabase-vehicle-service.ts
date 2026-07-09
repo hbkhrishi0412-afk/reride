@@ -121,9 +121,12 @@ function supabaseRowToVehicle(row: any): Vehicle {
     (legacyQualitySummary && legacyQualitySummary.trim()) ||
     '';
 
+  const canonicalDatabaseId =
+    typeof rawId === 'string' && rawId.trim() !== '' ? rawId.trim() : String(rawId ?? '');
+
   return {
     id: vehicleId,
-    databaseId: typeof rawId === 'string' && rawId.trim() !== '' ? rawId.trim() : String(rawId ?? ''),
+    databaseId: canonicalDatabaseId,
     category: validateCategory(row.category),
     make: row.make || '',
     model: row.model || '',
@@ -143,8 +146,6 @@ function supabaseRowToVehicle(row: any): Vehicle {
     color: row.color || '',
     status: (row.status || 'published') as 'published' | 'unpublished' | 'sold' | 'archived',
     isFeatured: row.is_featured || false,
-    views: row.views || 0,
-    inquiriesCount: row.inquiries_count || 0,
     registrationYear: row.registration_year || undefined,
     insuranceValidity: row.insurance_validity || undefined,
     insuranceType: row.insurance_type || undefined,
@@ -166,6 +167,16 @@ function supabaseRowToVehicle(row: any): Vehicle {
     listingStatus: row.listing_status || meta?.listingStatus || 'active',
     listingCycle: row.listing_cycle != null ? Number(row.listing_cycle) : (meta?.listingCycle ?? 1),
     archivedAt: row.archived_at || meta?.archivedAt || undefined,
+    views: row.views || 0,
+    viewsLast7Days: row.views_last_7_days ?? meta.viewsLast7Days ?? 0,
+    viewsLast30Days: row.views_last_30_days ?? meta.viewsLast30Days ?? 0,
+    uniqueViewers: row.unique_viewers ?? meta.uniqueViewers ?? 0,
+    phoneViews: row.phone_views ?? meta.phoneViews ?? 0,
+    inquiriesCount: row.inquiries_count || 0,
+    // Pin canonical identity after metadata spread.
+    id: vehicleId,
+    databaseId: canonicalDatabaseId,
+    sellerEmail: row.seller_email || '',
   };
 }
 
@@ -199,7 +210,6 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, options?: { partial?: b
     'preferredContactMethod', 'listingLastRefreshed',
     'listingAutoRenew', 'listingRenewalCount', 'daysActive',
     'isPremiumListing', 'isUrgentSale', 'isBestPrice', 'boostExpiresAt',
-    'viewsLast7Days', 'viewsLast30Days', 'uniqueViewers', 'phoneViews',
     'shareCount', 'keywords', 'nearbyLandmarks', 'exactLocation',
     'distanceFromUser', 'photoQuality', 'hasMinimumPhotos',
     'descriptionQuality', 'activeBoosts', 'hideExactLocation',
@@ -255,6 +265,10 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, options?: { partial?: b
   setColumn('status', 'status', vehicle.status || 'published');
   setColumn('isFeatured', 'is_featured', vehicle.isFeatured || false);
   setColumn('views', 'views', vehicle.views ?? 0);
+  setColumn('viewsLast7Days', 'views_last_7_days', vehicle.viewsLast7Days ?? 0);
+  setColumn('viewsLast30Days', 'views_last_30_days', vehicle.viewsLast30Days ?? 0);
+  setColumn('uniqueViewers', 'unique_viewers', vehicle.uniqueViewers ?? 0);
+  setColumn('phoneViews', 'phone_views', vehicle.phoneViews ?? 0);
   setColumn('inquiriesCount', 'inquiries_count', vehicle.inquiriesCount ?? 0);
   setColumn('registrationYear', 'registration_year', vehicle.registrationYear ?? null);
   setColumn('insuranceValidity', 'insurance_validity', vehicle.insuranceValidity ?? null);

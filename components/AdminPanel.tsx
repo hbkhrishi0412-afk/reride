@@ -1206,11 +1206,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
     // Fetch users when AdminPanel mounts if they're empty (for admin users)
     useEffect(() => {
-        // Only fetch if:
-        // 1. Current user is admin
-        // 2. Users array is empty
-        // 3. We haven't already tried to fetch
-        // 4. Not currently loading
         if (
             currentUser?.role === 'admin' &&
             (!users || users.length === 0) &&
@@ -1224,8 +1219,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             const fetchUsers = async () => {
                 try {
                     const { dataService } = await import('../services/dataService');
-                    // CRITICAL FIX: Force refresh to bypass cache and get fresh data from database
-                    const usersData = await dataService.getUsers(true); // forceRefresh = true
+                    const usersData = await dataService.getUsers(false);
                     logInfo(`✅ AdminPanel: Fetched ${usersData.length} users (forced refresh)`);
                     
                     // Clear any configuration errors on success
@@ -1343,7 +1337,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     };
 
     const analytics = useMemo(() => {
-        // Add null/undefined checks to prevent length errors
         const safeUsers = users || [];
         const safeVehicles = vehicles || [];
         const safeConversations = conversations || [];
@@ -1352,17 +1345,24 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         const totalVehicles = safeVehicles.length;
         const activeListings = safeVehicles.filter(v => v.status === 'published').length;
         const soldListings = safeVehicles.filter(v => v.status === 'sold');
-        // FIX: Added Number() to ensure v.price is treated as a number, preventing arithmetic errors on potentially mixed types.
         const totalSales = soldListings.reduce((sum: number, v) => sum + (Number(v.price) || 0), 0);
         const flaggedVehiclesCount = safeVehicles.reduce((sum: number, v) => v.isFlagged ? sum + 1 : sum, 0);
         const flaggedConversationsCount = safeConversations.reduce((sum: number, c) => c.isFlagged ? sum + 1 : sum, 0);
         const flaggedContent = flaggedVehiclesCount + flaggedConversationsCount;
         const certificationRequests = safeVehicles.filter(v => v.certificationStatus === 'requested').length;
-        
-        const listingsByMake = safeVehicles.reduce((acc, v) => {
-            acc[v.make] = (acc[v.make] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>);
+
+        const listingsByMake =
+            activeView === 'analytics'
+                ? Object.entries(
+                      safeVehicles.reduce((acc, v) => {
+                          acc[v.make] = (acc[v.make] || 0) + 1;
+                          return acc;
+                      }, {} as Record<string, number>),
+                  )
+                      .sort(([, a], [, b]) => b - a)
+                      .slice(0, 10)
+                      .map(([make, count]) => ({ label: make, value: count }))
+                : [];
 
         return {
             totalUsers,
@@ -1371,12 +1371,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             totalSales,
             flaggedContent,
             certificationRequests,
-            listingsByMake: Object.entries(listingsByMake)
-                .sort(([, a], [, b]) => b - a)
-                .slice(0, 10)
-                .map(([make, count]) => ({ label: make, value: count }))
+            listingsByMake,
         };
-    }, [users, vehicles, conversations]);
+    }, [users, vehicles, conversations, activeView]);
 
     const openSupportCount = useMemo(
         () => (supportTickets || []).filter((t) => t.status === 'Open').length,

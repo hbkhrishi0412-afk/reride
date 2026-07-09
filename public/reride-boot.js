@@ -74,7 +74,7 @@
     }
   } catch (e2) {}
 
-  // Capacitor / packaged WebView: skip remote fonts.
+// Packaged Capacitor / WebView: use bundled fonts (same Poppins + Nunito Sans as website).
   try {
     var host = location.hostname;
     var protocol = location.protocol;
@@ -137,11 +137,12 @@
   // Fonts and DNS hints.
   try {
     if (window.__RERIDE_SKIP_REMOTE_FONTS__) {
-      var fallbackStyle = document.createElement('style');
-      fallbackStyle.id = 'reride-font-fallback';
-      fallbackStyle.textContent =
-        'html,body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}';
-      document.head.appendChild(fallbackStyle);
+      // Packaged Capacitor / WebView: load bundled Poppins + Nunito Sans (same as website).
+      var bundledFonts = document.createElement('link');
+      bundledFonts.id = 'reride-bundled-fonts';
+      bundledFonts.rel = 'stylesheet';
+      bundledFonts.href = './fonts/reride-fonts.css';
+      document.head.appendChild(bundledFonts);
     } else {
       var p1 = document.createElement('link');
       p1.rel = 'preconnect';

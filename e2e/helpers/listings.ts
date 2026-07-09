@@ -3,7 +3,7 @@ import { expect } from '@playwright/test';
 
 export const VEHICLE_SEARCH_INPUT = 'input[aria-label="Search vehicles"]';
 export const VEHICLE_SEARCH_INPUT_ANY =
-  'input[aria-label="Search vehicles"], input[placeholder*="brand" i], input#ai-search';
+  'input[aria-label="Search vehicles"], input[placeholder*="brand" i]';
 
 /** Wait for used-cars listing cards, retrying once if the catalog fetch failed. */
 export async function waitForVehicleListing(page: Page): Promise<void> {

@@ -357,3 +357,32 @@ export const deleteVehicle = async (
   }
   return await deleteVehicleLocal(vehicleId);
 };
+
+type VehicleActionResponse = { success?: boolean; vehicle?: Vehicle; reason?: string; error?: string };
+
+async function postVehicleAction(action: 'sold' | 'unsold', vehicleId: number, vehicles: Vehicle[]): Promise<Vehicle> {
+  const { buildVehicleMutationBody } = await import('../utils/vehicleIdentity.js');
+  const { authenticatedFetch } = await import('../utils/authenticatedFetch.js');
+  const response = await authenticatedFetch(`/api/vehicles?action=${action}`, {
+    method: 'POST',
+    body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles)),
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  let result: VehicleActionResponse = {};
+  if (contentType.includes('application/json')) {
+    result = (await response.json()) as VehicleActionResponse;
+  }
+
+  if (!response.ok || !result.success || !result.vehicle) {
+    throw new Error(result.reason || result.error || `Failed to mark vehicle as ${action}`);
+  }
+
+  return result.vehicle;
+}
+
+export const markVehicleAsSold = async (vehicleId: number, vehicles: Vehicle[]): Promise<Vehicle> =>
+  postVehicleAction('sold', vehicleId, vehicles);
+
+export const markVehicleAsUnsold = async (vehicleId: number, vehicles: Vehicle[]): Promise<Vehicle> =>
+  postVehicleAction('unsold', vehicleId, vehicles);

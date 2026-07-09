@@ -102,7 +102,7 @@ export function normalizeParsedOwnership(raw: string | undefined): OwnershipFilt
 export function matchesVehicleFilters(
   vehicle: Vehicle,
   snap: VehicleListFilterSnapshot,
-  aiSearchQuery: string,
+  searchQuery: string,
 ): boolean {
   if (snap.categoryFilter !== 'ALL' && vehicle.category !== snap.categoryFilter) return false;
   if (snap.makeFilter && vehicle.make !== snap.makeFilter) return false;
@@ -132,7 +132,7 @@ export function matchesVehicleFilters(
     if (!snap.selectedFeatures.every((f) => feats.has(f.toLowerCase()))) return false;
   }
 
-  if (!vehicleMatchesSearchText(vehicle, aiSearchQuery)) return false;
+  if (!vehicleMatchesSearchText(vehicle, searchQuery)) return false;
   return true;
 }
 

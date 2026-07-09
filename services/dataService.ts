@@ -12,6 +12,7 @@ import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
 import { userRolesEqual } from '../utils/user-role.js';
 import { currentUserForLocalSession, currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot.js';
 import { migrateVehicleListCache, normalizeVehiclesList } from '../utils/vehicleIdentity.js';
+import { filterVehiclesBySellerEmail } from '../utils/sellerVehicleFilter.js';
 
 function formatServiceUnavailableMessage(errorData: {
   reason?: string;
@@ -148,9 +149,16 @@ class DataService {
           credentials: credentialsMode
         };
 
-        // Check cache for GET requests
-        const cacheKey = `${endpoint}_${JSON.stringify(options)}`;
-        if (method === 'GET') {
+        // Check cache for GET requests (never cache per-user authenticated inventory)
+        const isUserScopedGet =
+          endpoint.includes('action=seller-mine') || endpoint.includes('action=admin-all');
+        const authFingerprint = isUserScopedGet
+          ? (this.getAuthHeaders().Authorization || 'anon')
+          : '';
+        const cacheKey = isUserScopedGet
+          ? `${endpoint}_${authFingerprint}_${JSON.stringify(options)}`
+          : `${endpoint}_${JSON.stringify(options)}`;
+        if (method === 'GET' && !isUserScopedGet) {
           const cached = this.cache.get(cacheKey);
           if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
             // Return cached data immediately to avoid redundant API calls
@@ -348,8 +356,8 @@ class DataService {
 
         const data = await response.json();
         
-        // Cache GET requests
-        if (method === 'GET') {
+        // Cache GET requests (public catalog only — never cache per-user inventory)
+        if (method === 'GET' && !isUserScopedGet) {
           this.cache.set(cacheKey, { data, timestamp: Date.now() });
         }
         
@@ -690,6 +698,30 @@ class DataService {
       }
     });
     return run;
+  }
+
+  /** Seller dashboard inventory — all statuses for the authenticated seller. */
+  async getSellerVehicles(sellerEmail?: string): Promise<Vehicle[]> {
+    const normalizedEmail = (sellerEmail || this.getCurrentUser()?.email || '')
+      .toLowerCase()
+      .trim();
+    if (!normalizedEmail) return [];
+
+    const useApiInDev =
+      this.isDevelopment &&
+      typeof import.meta !== 'undefined' &&
+      (import.meta as any).env?.VITE_SUPABASE_URL;
+
+    if (this.isDevelopment && !useApiInDev) {
+      const all = await this.getVehiclesLocal();
+      return this.finalizeVehicleList(filterVehiclesBySellerEmail(all, normalizedEmail));
+    }
+
+    const vehicles = await this.makeApiRequest<Vehicle[]>('/vehicles?action=seller-mine', { method: 'GET' });
+    if (!Array.isArray(vehicles)) {
+      throw new Error('Invalid response format: expected array');
+    }
+    return this.finalizeVehicleList(filterVehiclesBySellerEmail(vehicles, normalizedEmail));
   }
 
   private ensureVehicleCacheMigrated(): void {
@@ -1685,6 +1717,7 @@ export const dataService = new DataService();
 
 // Export individual methods for backward compatibility
 export const getVehicles = () => dataService.getVehicles();
+export const getSellerVehicles = () => dataService.getSellerVehicles();
 export const addVehicle = (vehicleData: Vehicle) => dataService.addVehicle(vehicleData);
 export const updateVehicle = (vehicleData: Vehicle) => dataService.updateVehicle(vehicleData);
 export const deleteVehicle = (vehicleId: number, databaseId?: string) =>

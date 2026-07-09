@@ -131,7 +131,7 @@ export const staticPageEn = {
   'sellCar.dealer.title': 'Sell as Dealer',
   'sellCar.dealer.desc': 'Log in to your dealer account and manage inventory.',
   'sellCar.dealer.tag1': 'Bulk listing',
-  'sellCar.dealer.tag2': 'Deal command',
+  'sellCar.dealer.tag2': 'Hot leads',
   'sellCar.dealer.tag3': 'Lead inbox',
   'sellCar.step0.help':
     'Need help? Call 727-727-7275 or chat with us — we answer in under 60 seconds.',

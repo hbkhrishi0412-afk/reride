@@ -19,7 +19,7 @@ import {
 } from '../utils/scrollWithinContainer.js';
 import DealTimelinePanel from './DealTimelinePanel';
 import DealStageChip from './DealStageChip';
-import { getDealLead } from '../services/dealService';
+import { createDealLead, resolveDealLeadForConversation } from '../services/dealService';
 import { useApp } from './AppProvider';
 
 interface ChatWidgetProps {
@@ -107,6 +107,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [dealLead, setDealLead] = useState<DealLead | null>(null);
+  const [dealLeadLoading, setDealLeadLoading] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const voiceRecorder = useVoiceRecorder();
 
@@ -124,11 +125,38 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
 
   useEffect(() => {
     if (!conversation.id) return;
-    getDealLead({ conversationId: conversation.id })
-      .then(setDealLead)
-      .catch(() => setDealLead(null));
+    let cancelled = false;
     setMoreMenuOpen(false);
-  }, [conversation.id]);
+    void resolveDealLeadForConversation(conversation, {
+      retryCount: conversation.hasDeal ? 6 : 2,
+    })
+      .then((lead) => {
+        if (!cancelled) setDealLead(lead);
+      })
+      .catch(() => {
+        if (!cancelled) setDealLead(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversation.id, conversation.vehicleId, conversation.hasDeal]);
+
+  const handleStartDealRoom = async () => {
+    if (!conversation.vehicleId || dealLeadLoading) return;
+    setDealLeadLoading(true);
+    try {
+      const { lead } = await createDealLead({
+        vehicleId: conversation.vehicleId,
+        conversationId: conversation.id,
+        buyerName: conversation.customerName,
+      });
+      setDealLead(lead);
+    } catch {
+      setAttachError('Could not open Deal Room. Please try again.');
+    } finally {
+      setDealLeadLoading(false);
+    }
+  };
 
   const visibleMessages = useMemo(
     () => filterMessagesForViewer(conversation, currentUserRole),
@@ -850,9 +878,19 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                   </svg>
                   <p className="text-gray-600 mb-2">No messages yet. Start the conversation!</p>
                 </div>
-                {currentUserRole === 'customer' && !chatBlockedByDeal && (
-                  <p className="text-gray-600 text-sm">Use Deal Room pipeline to make or counter offers.</p>
-                )}
+                {currentUserRole === 'customer' && !chatBlockedByDeal && !dealLead && conversation.vehicleId ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleStartDealRoom()}
+                    disabled={dealLeadLoading}
+                    className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-60"
+                  >
+                    {dealLeadLoading ? 'Opening Deal Room…' : 'Open Deal Room'}
+                  </button>
+                ) : null}
+                {dealLead && currentUserRole === 'customer' && !chatBlockedByDeal ? (
+                  <p className="text-gray-600 text-sm">Use the Deal Room above to make or counter offers.</p>
+                ) : null}
               </div>
             ) : (
               <>

@@ -194,8 +194,8 @@ export const getFallbackFAQs = (): FAQItem[] => [
     },
     { 
         id: 2,
-        question: "What is AI Price Suggestion?", 
-        answer: "Our AI Price Suggestion tool analyzes your vehicle's details (make, model, year, mileage, condition, location) and compares them with current market listings to recommend a fair and competitive price. This helps you price your vehicle competitively and sell faster.", 
+        question: "How should I price my vehicle?", 
+        answer: "Check similar listings on ReRide for your make, model, year, and mileage. Price within the local market range and mention service history or extras in your description to attract serious buyers.", 
         category: "Selling" 
     },
     {

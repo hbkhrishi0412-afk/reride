@@ -13,6 +13,7 @@ type AddListingDeps = {
   isFeaturing?: boolean;
   listingExpiresAt: string | null | undefined;
   setVehicles: Dispatch<SetStateAction<Vehicle[]>>;
+  setSellerInventory?: Dispatch<SetStateAction<Vehicle[]>>;
   nextNumericId: () => number;
   successMessage: string;
   addToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
@@ -43,6 +44,7 @@ export async function addSellerListing(deps: AddListingDeps): Promise<boolean> {
     isFeaturing = false,
     listingExpiresAt,
     setVehicles,
+    setSellerInventory,
     nextNumericId,
     successMessage,
     addToast,
@@ -75,6 +77,7 @@ export async function addSellerListing(deps: AddListingDeps): Promise<boolean> {
 
     const newVehicle = normalizeVehicleIdentity(await addVehicle(vehicleToAdd));
     setVehicles((prev) => [...prev, newVehicle]);
+    setSellerInventory?.((prev) => [...prev, newVehicle]);
 
     try {
       const refreshedVehicles = await getVehicles();
@@ -121,6 +124,7 @@ export async function addSellerListingsBulk(deps: AddMultipleListingDeps): Promi
     vehiclesData,
     listingExpiresAt,
     setVehicles,
+    setSellerInventory,
     nextNumericId,
     addToast,
     logError,
@@ -164,6 +168,8 @@ export async function addSellerListingsBulk(deps: AddMultipleListingDeps): Promi
     for (const vehicle of newVehicles) {
       results.push(normalizeVehicleIdentity(await addVehicle(vehicle)));
     }
+
+    setSellerInventory?.((prev) => [...prev, ...results]);
 
     try {
       const refreshedVehicles = await getVehicles();

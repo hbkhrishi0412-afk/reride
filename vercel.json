@@ -146,8 +146,6 @@
     { "source": "/api/ai/(.*)", "destination": "/api/platform.ts" },
     { "source": "/api/gemini", "destination": "/api/platform.ts" },
     { "source": "/api/gemini/(.*)", "destination": "/api/platform.ts" },
-    { "source": "/api/ai-inspection", "destination": "/api/platform.ts" },
-    { "source": "/api/ai-inspection/(.*)", "destination": "/api/platform.ts" },
     { "source": "/api/faqs", "destination": "/api/platform.ts" },
     { "source": "/api/faqs/(.*)", "destination": "/api/platform.ts" },
     { "source": "/api/support-tickets", "destination": "/api/platform.ts" },
