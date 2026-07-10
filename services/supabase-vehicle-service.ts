@@ -125,8 +125,6 @@ function supabaseRowToVehicle(row: any): Vehicle {
     typeof rawId === 'string' && rawId.trim() !== '' ? rawId.trim() : String(rawId ?? '');
 
   return {
-    id: vehicleId,
-    databaseId: canonicalDatabaseId,
     category: validateCategory(row.category),
     make: row.make || '',
     model: row.model || '',
@@ -137,7 +135,6 @@ function supabaseRowToVehicle(row: any): Vehicle {
     images: processedImages, // Use processed images with public URLs
     features: row.features || [],
     description: mergedDescription,
-    sellerEmail: row.seller_email || '',
     sellerName: row.seller_name || undefined,
     engine: row.engine || '',
     transmission: row.transmission || '',

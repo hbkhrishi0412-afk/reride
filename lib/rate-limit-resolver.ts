@@ -11,6 +11,20 @@ export interface RateLimitConfig {
   windowMs: number;
 }
 
+/** Accepts camelCase or SECURITY_CONFIG-style keys from ENDPOINT_RATE_LIMITS. */
+export type RateLimitConfigInput = Partial<RateLimitConfig> & {
+  MAX_REQUESTS?: number;
+  WINDOW_MS?: number;
+};
+
+function normalizeRateLimitConfig(config?: RateLimitConfigInput): Partial<RateLimitConfig> {
+  if (!config) return {};
+  return {
+    maxRequests: config.maxRequests ?? config.MAX_REQUESTS,
+    windowMs: config.windowMs ?? config.WINDOW_MS,
+  };
+}
+
 const upstashLimiters = new Map<string, Ratelimit>();
 
 interface MemoryEntry {
@@ -94,12 +108,13 @@ async function checkMemoryRateLimit(
 export async function resolveRateLimit(
   bucket: string,
   identifier: string,
-  config?: Partial<RateLimitConfig>,
+  config?: RateLimitConfigInput,
 ): Promise<{ allowed: boolean; remaining: number; configured: boolean }> {
+  const normalized = normalizeRateLimitConfig(config);
   const defaults = getSecurityConfig().RATE_LIMIT;
   const resolved: RateLimitConfig = {
-    maxRequests: config?.maxRequests ?? defaults.MAX_REQUESTS,
-    windowMs: config?.windowMs ?? defaults.WINDOW_MS,
+    maxRequests: normalized.maxRequests ?? defaults.MAX_REQUESTS,
+    windowMs: normalized.windowMs ?? defaults.WINDOW_MS,
   };
 
   const cacheKey = `${bucket}:${identifier}`;
