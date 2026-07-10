@@ -1575,6 +1575,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 truncate mt-0.5 font-medium">{conv.vehicleName}</p>
+                        {conv.hasDeal ? (
+                          <p className="text-[10px] font-semibold text-purple-700 mt-0.5">Deal room active</p>
+                        ) : null}
                         <p className={`text-[12.5px] truncate mt-1 ${isUnread ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>{line}</p>
                       </div>
                       <span className="text-slate-300 mt-1 shrink-0">

@@ -10,7 +10,7 @@ import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { filterMessagesForViewer } from '../utils/conversationView';
 import { isOfferChatMessage } from '../utils/isOfferChatMessage';
 import DealTimelinePanel from './DealTimelinePanel';
-import { resolveDealLeadForConversation } from '../services/dealService';
+import { resolveDealLeadForConversation, createDealLead } from '../services/dealService';
 import {
   scrollContainerToBottom,
   scrollContainerToShowElement,
@@ -77,6 +77,8 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
 }) => {
   const { runIfConfirmed } = useApp();
   const [dealLead, setDealLead] = useState<DealLead | null>(initialDealLead);
+  const [dealLeadLoading, setDealLeadLoading] = useState(false);
+  const [dealPanelOpen, setDealPanelOpen] = useState(true);
   const [inputText, setInputText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -267,6 +269,33 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
     };
   }, [conversation.id, conversation.vehicleId, conversation.hasDeal]);
 
+  const focusDealRoom = () => {
+    setDealPanelOpen(true);
+    requestAnimationFrame(() => {
+      const room = document.getElementById(`deal-room-${conversation.id}`);
+      room?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const handleStartDealRoom = async () => {
+    if (!conversation.vehicleId || dealLeadLoading) return;
+    setDealLeadLoading(true);
+    setAttachError(null);
+    try {
+      const { lead } = await createDealLead({
+        vehicleId: conversation.vehicleId,
+        conversationId: conversation.id,
+        buyerName: conversation.customerName,
+      });
+      setDealLead(lead);
+      setDealPanelOpen(true);
+    } catch {
+      setAttachError('Could not open Deal Room. Please try again.');
+    } finally {
+      setDealLeadLoading(false);
+    }
+  };
+
   return (
     <div className={`bg-white rounded-lg shadow-md border border-gray-200 flex flex-col ${className}`} style={{ height }}>
       {/* Header */}
@@ -343,8 +372,29 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
         </div>
         </div>
         {dealLead ? <DealStageChip lead={dealLead} /> : null}
+        {!dealLead && currentUserRole === 'customer' && conversation.vehicleId ? (
+          <button
+            type="button"
+            onClick={() => void handleStartDealRoom()}
+            disabled={dealLeadLoading}
+            className="mt-2 w-full px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-60"
+            data-testid="open-deal-room"
+          >
+            {dealLeadLoading ? 'Opening Deal Room…' : 'Open Deal Room'}
+          </button>
+        ) : null}
         {dealLead && !chatBlockedByDeal && currentUserRole === 'customer' && (
           <p className="text-xs text-slate-500 pt-1">Use Deal Room pipeline to make or counter offers.</p>
+        )}
+        {dealLead && currentUserRole === 'seller' && dealLead.chatStatus === 'pending' && (
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-1">
+            A buyer started a tracked deal. Accept chat in the Deal Room below to unlock messaging.
+          </p>
+        )}
+        {dealLead && currentUserRole === 'seller' && dealLead.chatStatus !== 'pending' && (
+          <p className="text-xs text-slate-500 pt-1">
+            Use the Deal Room below to manage offers, milestones, and RC transfer.
+          </p>
         )}
         {chatBlockedByDeal ? (
           <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
@@ -359,22 +409,39 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
         className={`flex-grow p-4 overflow-y-auto bg-gray-50 space-y-4 ${height}`}
       >
         {dealLead && currentUserEmail ? (
-          <DealTimelinePanel
-            lead={dealLead}
-            currentUser={{
-              email: currentUserEmail,
-              name: '',
-              role: currentUserRole === 'seller' ? 'seller' : 'customer',
-              mobile: '',
-              location: '',
-              status: 'active',
-              createdAt: '',
-            }}
-            currentUserRole={currentUserRole}
-            conversationId={conversation.id}
-            onLeadUpdated={setDealLead}
-            onSendPipelineMessage={(messageText, type, payload) => onSendMessage(messageText, type, payload)}
-          />
+          <div id={`deal-room-${conversation.id}`} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-100">
+              <span className="text-xs font-semibold text-reride-orange uppercase tracking-wide">Deal Room</span>
+              <button
+                type="button"
+                onClick={() => setDealPanelOpen((o) => !o)}
+                className="text-xs font-semibold text-reride-orange"
+                aria-expanded={dealPanelOpen}
+              >
+                {dealPanelOpen ? 'Hide deal' : 'Show deal'}
+              </button>
+            </div>
+            {dealPanelOpen ? (
+              <div className="p-2 max-h-80 overflow-y-auto">
+                <DealTimelinePanel
+                  lead={dealLead}
+                  currentUser={{
+                    email: currentUserEmail,
+                    name: '',
+                    role: currentUserRole === 'seller' ? 'seller' : 'customer',
+                    mobile: '',
+                    location: '',
+                    status: 'active',
+                    createdAt: '',
+                  }}
+                  currentUserRole={currentUserRole}
+                  conversationId={conversation.id}
+                  onLeadUpdated={setDealLead}
+                  onSendPipelineMessage={(messageText, type, payload) => onSendMessage(messageText, type, payload)}
+                />
+              </div>
+            ) : null}
+          </div>
         ) : null}
         {visibleMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-500">
@@ -383,6 +450,9 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
               <p>No messages yet. Start the conversation!</p>
+              {dealLead && currentUserRole === 'customer' && !chatBlockedByDeal ? (
+                <p className="text-sm text-gray-600 mt-3">Use the Deal Room above to make or counter offers.</p>
+              ) : null}
             </div>
           </div>
         ) : (
@@ -404,7 +474,8 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
                         <OfferMessage 
                           msg={msg} 
                           currentUserRole={currentUserRole} 
-                          listingPrice={conversation.vehiclePrice} 
+                          listingPrice={conversation.vehiclePrice}
+                          onOpenDealRoom={dealLead ? focusDealRoom : undefined}
                         />
                       ) : msg.type === 'image' && msg.payload?.imageUrl ? (
                         <div className="space-y-2">

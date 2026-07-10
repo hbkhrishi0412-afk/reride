@@ -108,6 +108,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   const [attachError, setAttachError] = useState<string | null>(null);
   const [dealLead, setDealLead] = useState<DealLead | null>(null);
   const [dealLeadLoading, setDealLeadLoading] = useState(false);
+  const [dealPanelOpen, setDealPanelOpen] = useState(true);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const voiceRecorder = useVoiceRecorder();
 
@@ -119,8 +120,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
 
   const chatBlockedByDeal = dealLead?.chatStatus === 'pending' && currentUserRole === 'customer';
   const focusDealRoom = () => {
-    const room = document.getElementById(`deal-room-${conversation.id}`);
-    room?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setDealPanelOpen(true);
+    requestAnimationFrame(() => {
+      const room = document.getElementById(`deal-room-${conversation.id}`);
+      room?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   useEffect(() => {
@@ -845,14 +849,45 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
           </a>
         )}
 
-        {/* Messages - compact list */}
-        <div
-          ref={messagesContainerRef}
-          className="flex-grow p-3 overflow-y-auto bg-gray-50 space-y-3 relative"
-          style={{ backgroundColor: '#F7F7F9' }}
-        >
-            {dealLead && currentUserEmail && (
-              <div id={`deal-room-${conversation.id}`}>
+        {!dealLead && currentUserRole === 'customer' && conversation.vehicleId && currentUserEmail ? (
+          <div className="shrink-0 border-b border-gray-200 bg-white px-3 py-2.5">
+            <button
+              type="button"
+              onClick={() => void handleStartDealRoom()}
+              disabled={dealLeadLoading}
+              className="w-full px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-60"
+              data-testid="open-deal-room"
+            >
+              {dealLeadLoading ? 'Opening Deal Room…' : 'Open Deal Room'}
+            </button>
+          </div>
+        ) : null}
+
+        {dealLead && currentUserEmail ? (
+          <div id={`deal-room-${conversation.id}`} className="shrink-0 border-b border-gray-200 bg-white">
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <DealStageChip lead={dealLead} />
+              <button
+                type="button"
+                onClick={() => setDealPanelOpen((o) => !o)}
+                className="text-xs font-semibold text-purple-600"
+                aria-expanded={dealPanelOpen}
+              >
+                {dealPanelOpen ? 'Hide deal' : 'Show deal'}
+              </button>
+            </div>
+            {currentUserRole === 'customer' && dealLead.chatStatus === 'pending' ? (
+              <p className="mx-3 mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                Your tracked deal is active. The seller must accept chat before you can message — track progress below.
+              </p>
+            ) : null}
+            {currentUserRole === 'seller' && dealLead.chatStatus === 'pending' ? (
+              <p className="mx-3 mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                A buyer started a tracked deal. Accept chat below to unlock messaging.
+              </p>
+            ) : null}
+            {dealPanelOpen ? (
+              <div className="px-2 pb-2 max-h-[min(36vh,280px)] overflow-y-auto">
                 <DealTimelinePanel
                   lead={dealLead}
                   currentUser={{ email: currentUserEmail, name: '', role: currentUserRole === 'seller' ? 'seller' : 'customer', mobile: '', location: '', status: 'active', createdAt: '' }}
@@ -864,7 +899,16 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                   }
                 />
               </div>
-            )}
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Messages - compact list */}
+        <div
+          ref={messagesContainerRef}
+          className="flex-grow p-3 overflow-y-auto bg-gray-50 space-y-3 relative"
+          style={{ backgroundColor: '#F7F7F9' }}
+        >
             {chatBlockedByDeal && (
               <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-center text-sm text-amber-800">
                 Waiting for seller to accept chat.

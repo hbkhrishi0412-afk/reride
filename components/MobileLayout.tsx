@@ -18,7 +18,7 @@ interface MobileLayoutProps {
   currentView: ViewEnum;
   onNavigate: (view: ViewEnum) => void;
   currentUser: User | null;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
   wishlistCount?: number;
   inboxCount?: number;
   compareCount?: number;

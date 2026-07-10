@@ -18,6 +18,7 @@ import { sellerMatchesHeaderRegion } from '../utils/dealerRegionFilter';
 import { isRerideStaffPick } from '../utils/staffPick';
 import { getPublicDealerRating } from '../utils/dealerRatingDisplay';
 import { copyTextToClipboard } from '../utils/copyToClipboard';
+import { useIsMobileApp } from '../hooks/useIsMobileApp';
 
 // Fix for default marker icons in Leaflet (when map is used)
 if (typeof L !== 'undefined' && L.Icon?.Default?.prototype) {
@@ -142,10 +143,14 @@ const MDP_STYLES = `
     width: 100%;
   }
   .mdp-seg-btn {
-    flex: 1; padding: .55rem .55rem; font-size: 12.5px; font-weight: 700;
+    flex: 1; padding: .5rem .35rem; font-size: 11.5px; font-weight: 700;
     color: #475569; border-radius: 10px; background: transparent;
     transition: all .25s ease;
     min-height: 40px;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
+    word-break: break-word;
   }
   .mdp-seg-btn:active { color: #0f172a; }
   .mdp-seg-active {
@@ -200,7 +205,8 @@ const MDP_STYLES = `
   .mdp-type-service  { --c1:#60a5fa; --c2:#4f46e5; }
   .mdp-logo-ring img { display: block; width: 60px; height: 60px; border-radius: 12px; object-fit: cover; background: #fff; }
 
-  .mdp-name { font-weight: 900; color: #0f172a; font-size: 15px; line-height: 1.2; }
+  .mdp-name { font-weight: 900; color: #0f172a; font-size: 15px; line-height: 1.25; }
+  .mdp-map-shell { height: clamp(180px, 32vh, 240px); }
   .mdp-pin-btn {
     display: inline-flex; align-items: center; justify-content: center;
     width: 18px; height: 18px; border-radius: 6px;
@@ -478,11 +484,11 @@ const MobileDealerCard: React.FC<{
           <div className="flex-1 min-w-0">
             {/* Name */}
             <h3
-              className="mdp-name truncate mb-1 inline-flex items-center gap-1.5"
+              className="mdp-name mb-1 flex items-start gap-1.5"
               onClick={handleDealerNameClick}
               title={coords ? 'Show on map' : undefined}
             >
-              <span className="truncate">{seller.dealershipName || seller.name}</span>
+              <span className="min-w-0 flex-1 break-words">{seller.dealershipName || seller.name}</span>
               {coords && (
                 <span className="mdp-pin-btn" aria-hidden>
                   <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -604,6 +610,11 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
   onRequireLogin,
   userLocation,
 }) => {
+  const { isMobileApp } = useIsMobileApp();
+  const bottomPad = isMobileApp
+    ? 'calc(56px + env(safe-area-inset-bottom, 0px) + 0.75rem)'
+    : '1.5rem';
+
   const [searchQuery, setSearchQuery] = useState('');
   const [mapSearchQuery, setMapSearchQuery] = useState('');
   const [companyTypeFilter, setCompanyTypeFilter] = useState<CompanyType>('all');
@@ -755,11 +766,11 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
   const serviceCount = filteredSellers.filter(s => s.role === 'service_provider').length;
 
   return (
-    <div className="mdp-root min-h-screen bg-slate-50 pb-24 flex flex-col">
+    <div className="mdp-root w-full bg-slate-50" style={{ paddingBottom: bottomPad }}>
       <style>{MDP_STYLES}</style>
 
       {/* ===== Aurora top strip ===== */}
-      <header className="mdp-hero relative shrink-0">
+      <header className="mdp-hero relative">
         <span className="mdp-orb mdp-orb-a" />
         <span className="mdp-orb mdp-orb-b" />
         <div className="relative z-10 px-4 pt-4 pb-4">
@@ -797,45 +808,43 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
       </header>
 
       {/* ===== Map ===== */}
-      <div className="shrink-0 w-full bg-slate-200 relative" style={{ minHeight: 280, height: 280 }}>
-        <div className="absolute inset-0 flex flex-col z-0">
-          <div className="flex-1 min-h-0 relative" style={{ minHeight: 220 }}>
-            {!hasMapDealers && !isLoadingSellers ? (
-              <div className="absolute inset-0 z-[500] flex items-center justify-center bg-slate-100/70 backdrop-blur-[2px] px-4">
-                <div className="mdp-empty-map">
-                  <div className="mdp-empty-ic">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                  <p className="text-slate-800 font-bold text-sm">No dealer locations on map</p>
-                  <p className="text-[11px] text-slate-500 mt-1">Locations appear when dealers add address data</p>
-                </div>
+      <div className="mdp-map-shell relative w-full overflow-hidden bg-slate-200 isolate">
+        <div className="absolute inset-0 z-0">
+          <DealerMap
+            center={mapCenter}
+            zoom={5}
+            bounds={mapBounds}
+            selectedCenter={selectedDealerCenter}
+            filteredSellersWithCoords={filteredSellersWithCoords}
+            selectedDealerEmail={selectedDealerEmail}
+            onDealerSelect={handleDealerSelect}
+          />
+        </div>
+        {!hasMapDealers && !isLoadingSellers ? (
+          <div className="absolute inset-0 z-[500] flex items-center justify-center bg-slate-100/70 backdrop-blur-[2px] px-4">
+            <div className="mdp-empty-map">
+              <div className="mdp-empty-ic">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
               </div>
-            ) : null}
-            <DealerMap
-              center={mapCenter}
-              zoom={5}
-              bounds={mapBounds}
-              selectedCenter={selectedDealerCenter}
-              filteredSellersWithCoords={filteredSellersWithCoords}
-              selectedDealerEmail={selectedDealerEmail}
-              onDealerSelect={handleDealerSelect}
-            />
-            {/* Glass legend */}
-            <div className="absolute bottom-3 left-3 z-[1000]">
-              <span className="mdp-legend">
-                <span className="mdp-legend-item"><span className="mdp-legend-pin" style={{ background: '#2563eb' }} /> {ENTITY_LABEL_SERVICE_PROVIDER}</span>
-                <span className="mdp-legend-item"><span className="mdp-legend-pin" style={{ background: '#16a34a' }} /> {ENTITY_LABEL_SELLER}</span>
-              </span>
+              <p className="text-slate-800 font-bold text-sm">No dealer locations on map</p>
+              <p className="text-[11px] text-slate-500 mt-1">Locations appear when dealers add address data</p>
             </div>
           </div>
+        ) : null}
+        {/* Glass legend */}
+        <div className="absolute bottom-3 left-3 z-[1000] pointer-events-none">
+          <span className="mdp-legend">
+            <span className="mdp-legend-item"><span className="mdp-legend-pin" style={{ background: '#2563eb' }} /> {ENTITY_LABEL_SERVICE_PROVIDER}</span>
+            <span className="mdp-legend-item"><span className="mdp-legend-pin" style={{ background: '#16a34a' }} /> {ENTITY_LABEL_SELLER}</span>
+          </span>
         </div>
       </div>
 
       {/* ===== Search + filters (glass panel) ===== */}
-      <div className="bg-white border-b border-slate-200 px-4 py-3 shrink-0 space-y-2.5">
+      <div className="bg-white border-b border-slate-200 px-4 py-3 space-y-2.5">
         {/* Search by name */}
         <div className="mdp-search">
           <svg className="mdp-search-ic w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
@@ -919,8 +928,8 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
         </p>
       </div>
 
-      {/* ===== Dealer list ===== */}
-      <div className="flex-1 overflow-y-auto px-3 py-3">
+      {/* ===== Dealer list — scroll via MobileLayout / page root, not a nested pane ===== */}
+      <div className="px-3 py-3">
         {isLoadingSellers ? (
           <div className="flex flex-col items-center justify-center py-10">
             <div className="mdp-loader mb-3" />

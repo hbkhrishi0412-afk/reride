@@ -18,7 +18,7 @@ import { setHardwareBackHandler } from '../utils/hardwareBackRegistry';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 import DealTimelinePanel from './DealTimelinePanel';
 import { DealStageChip } from './DealStageChip';
-import { resolveDealLeadForConversation } from '../services/dealService';
+import { resolveDealLeadForConversation, createDealLead } from '../services/dealService';
 import { useApp } from './AppProvider';
 
 interface MobileInboxProps {
@@ -118,6 +118,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [dealLead, setDealLead] = useState<DealLead | null>(null);
+  const [dealLeadLoading, setDealLeadLoading] = useState(false);
   const [dealPanelOpen, setDealPanelOpen] = useState(true);
   const voiceRecorder = useVoiceRecorder();
   const keyboardInset = useVisualViewportBottomInset();
@@ -402,6 +403,34 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
     };
   }, [selectedConv?.id, selectedConv?.vehicleId, selectedConv?.hasDeal]);
 
+  const focusDealRoom = useCallback(() => {
+    if (!selectedConv) return;
+    setDealPanelOpen(true);
+    requestAnimationFrame(() => {
+      const room = document.getElementById(`deal-room-${selectedConv.id}`);
+      room?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [selectedConv?.id]);
+
+  const handleStartDealRoom = useCallback(async () => {
+    if (!selectedConv?.vehicleId || dealLeadLoading) return;
+    setDealLeadLoading(true);
+    setAttachError(null);
+    try {
+      const { lead } = await createDealLead({
+        vehicleId: selectedConv.vehicleId,
+        conversationId: selectedConv.id,
+        buyerName: selectedConv.customerName,
+      });
+      setDealLead(lead);
+      setDealPanelOpen(true);
+    } catch {
+      setAttachError('Could not open Deal Room. Please try again.');
+    } finally {
+      setDealLeadLoading(false);
+    }
+  }, [selectedConv, dealLeadLoading]);
+
   useEffect(() => {
     if (!selectedConv) return;
     const still = conversations.some((c) => c && String(c.id) === String(selectedConv.id));
@@ -632,8 +661,29 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
           );
         })()}
 
+        {!dealLead && inboxRole === 'customer' && selectedConv.vehicleId && currentUser ? (
+          <div className="shrink-0 border-b border-black/[0.06] bg-white px-3 py-2.5">
+            <button
+              type="button"
+              onClick={() => void handleStartDealRoom()}
+              disabled={dealLeadLoading}
+              className="w-full px-4 py-2.5 rounded-lg bg-purple-600 text-white text-[15px] font-semibold active:bg-purple-700 disabled:opacity-60"
+              data-testid="open-deal-room"
+            >
+              {dealLeadLoading
+                ? t('deal.openingDealRoom', { defaultValue: 'Opening Deal Room…' })
+                : t('deal.openDealRoom', { defaultValue: 'Open Deal Room' })}
+            </button>
+            <p className="text-xs text-gray-500 mt-1.5 text-center">
+              {t('deal.roomHint', {
+                defaultValue: 'Track offers, inspection, and RC transfer in one place.',
+              })}
+            </p>
+          </div>
+        ) : null}
+
         {dealLead && currentUser ? (
-          <div className="shrink-0 border-b border-black/[0.06] bg-white">
+          <div id={`deal-room-${selectedConv.id}`} className="shrink-0 border-b border-black/[0.06] bg-white">
             <div className="flex items-center justify-between gap-2 px-3 py-2">
               <DealStageChip lead={dealLead} />
               <button
@@ -655,8 +705,23 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                 })}
               </p>
             ) : null}
+            {inboxRole === 'seller' && dealLead.chatStatus === 'pending' ? (
+              <p className="mx-3 mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                {t('deal.sellerAcceptChat', {
+                  defaultValue:
+                    'A buyer started a tracked deal. Accept chat in the Deal Room below to unlock messaging.',
+                })}
+              </p>
+            ) : null}
+            {inboxRole === 'seller' && dealLead.chatStatus !== 'pending' ? (
+              <p className="mx-3 mb-2 text-xs text-slate-600">
+                {t('deal.sellerUseDealRoom', {
+                  defaultValue: 'Use the Deal Room below to manage offers, milestones, and RC transfer.',
+                })}
+              </p>
+            ) : null}
             {dealPanelOpen ? (
-              <div className="px-2 pb-2 max-h-64 overflow-y-auto">
+              <div className="px-2 pb-2 max-h-[min(42vh,360px)] overflow-y-auto">
                 <DealTimelinePanel
                   lead={dealLead}
                   currentUser={currentUser}
@@ -679,7 +744,14 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
               typingStatus.conversationId === selectedConv.id &&
               typingStatus.userRole === otherPartyRole) && (
             <div className="flex flex-col items-center justify-center py-16 px-4 text-center text-gray-500 text-[15px]">
-              No messages yet. Say hello!
+              <p>No messages yet. Say hello!</p>
+              {dealLead && inboxRole === 'customer' && !chatBlockedByDeal ? (
+                <p className="text-sm text-gray-600 mt-3">
+                  {t('deal.useDealRoomAbove', {
+                    defaultValue: 'Use the Deal Room above to make or counter offers.',
+                  })}
+                </p>
+              ) : null}
             </div>
           )}
           {visibleThreadMessages.map((msg, idx) => {
@@ -721,6 +793,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                         msg={msg}
                         currentUserRole={viewerRole}
                         listingPrice={selectedConv.vehiclePrice}
+                        onOpenDealRoom={dealLead ? focusDealRoom : undefined}
                       />
                     </div>
                   )}
@@ -959,9 +1032,6 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                 t('mobileInbox.emptySubtitle')
               )}
             </p>
-            {openThreadInFloatingChat && inboxRole === 'seller' && conversations.length > 0 && (
-              <p className="text-[10.5px] text-white/40 mt-1 font-medium">{t('mobileInbox.sellerTapForFloatingChat')}</p>
-            )}
           </div>
           {unreadCount > 0 && (
             <span

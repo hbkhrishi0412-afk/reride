@@ -783,7 +783,7 @@ export const DealerMap: React.FC<{
     }
   }, [filteredSellersWithCoords, selectedDealerEmail, iconDefault, iconSelected, iconShowroomDefault, iconShowroomSelected, onDealerSelect]);
 
-  return <div ref={containerRef} className="h-full w-full" style={{ minHeight: 300 }} />;
+  return <div ref={containerRef} className="h-full w-full min-h-[200px]" />;
 };
 
 const CompanyCard: React.FC<{

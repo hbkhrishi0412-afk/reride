@@ -6,7 +6,7 @@ import { View as ViewEnum } from '../types.js';
 interface MobileHeaderProps {
   onNavigate: (view: ViewEnum) => void;
   currentUser: User | null;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
   title: string;
   showBack?: boolean;
   onBack?: () => void;
@@ -499,8 +499,8 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                   label={t('nav.logout')}
                   variant="danger"
                   onClick={() => {
-                    onLogout();
                     closeMenu();
+                    void Promise.resolve(onLogout());
                   }}
                 />
               ) : (

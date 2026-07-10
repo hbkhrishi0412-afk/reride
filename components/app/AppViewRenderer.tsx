@@ -1657,11 +1657,6 @@ switch (currentView) {
         <MobileInbox
           {...inboxSharedProps}
           inboxRole={inboxViewerRole}
-          openThreadInFloatingChat={
-            inboxRoleNorm === 'seller' && (isMobileApp || isCapacitorNativeApp())
-              ? handleSellerOpenChatFromDashboard
-              : undefined
-          }
           onTypingActivity={(conversationId, isTyping) => toggleTyping(conversationId, isTyping)}
           onMarkAllAsRead={markAllVisibleAsRead}
           onTestDriveResponse={handleTestDriveResponse}

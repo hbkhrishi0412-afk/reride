@@ -136,15 +136,15 @@ export const establishSessionFromBackendAuth = (payload: {
   }
 };
 
-const clearTokens = () => {
+const clearTokens = async () => {
   if (typeof window === 'undefined') {
     return;
   }
   try {
     if (useHttpOnlyRefreshCookie()) {
-      void postLogoutClearCookies();
+      await postLogoutClearCookies();
     }
-    void clearNativeTokens();
+    await clearNativeTokens();
     clearSessionStoredAccessToken();
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('reRideAccessToken');
@@ -256,7 +256,7 @@ const handleResponse = async (response: Response): Promise<any> => {
                     // Don't retry if we get rate limited or service unavailable
                     if (refreshResponse.status === 429 || refreshResponse.status === 503) {
                         console.warn('⚠️ Token refresh rate limited or service unavailable. Clearing tokens.');
-                        clearTokens();
+                        void clearTokens();
                         throw new Error('Service temporarily unavailable. Please log in again.');
                     }
                     
@@ -281,7 +281,7 @@ const handleResponse = async (response: Response): Promise<any> => {
             
             // Token refresh failed or no refresh token - clear tokens and redirect
             console.warn('Token refresh failed or no refresh token, clearing tokens');
-            clearTokens();
+            void clearTokens();
             
             const error = await response.json().catch(() => ({ error: 'Authentication expired. Please log in again and try again.' }));
             const errorMessage = error.error || error.reason || 'Authentication expired. Please log in again and try again.';
@@ -942,8 +942,8 @@ export const register = async (credentials: { email?: string; password?: string;
   return out;
 };
 
-export const logout = (): void => {
-  clearTokens();
+export const logout = async (): Promise<void> => {
+  await clearTokens();
 };
 
 // Token refresh function with rate limiting protection

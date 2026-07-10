@@ -37,12 +37,12 @@ describe('userService.logout', () => {
     jest.clearAllMocks();
   });
 
-  it('clears native secure tokens and Supabase auth storage', () => {
+  it('clears native secure tokens and Supabase auth storage', async () => {
     localStorage.setItem('reRideCurrentUser', '{"email":"a@b.com"}');
     localStorage.setItem('reRideAccessToken', 'legacy-access');
     localStorage.setItem('reRideRefreshToken', 'legacy-refresh');
 
-    logout();
+    await logout();
 
     expect(clearNativeTokens).toHaveBeenCalledTimes(1);
     expect(clearSupabaseAuthStorage).toHaveBeenCalledTimes(1);

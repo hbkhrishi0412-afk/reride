@@ -645,9 +645,9 @@ const AppContent: React.FC = () => {
   // localStorage entry) intact and the mobile menu would still appear logged
   // in. Using this wrapper from layout/header logout actions keeps both
   // identities in sync.
-  const handleLogoutAll = React.useCallback(() => {
+  const handleLogoutAll = React.useCallback(async () => {
     setServiceProvider(null);
-    handleLogout();
+    await handleLogout();
   }, [handleLogout, setServiceProvider]);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
 
@@ -910,19 +910,11 @@ const AppContent: React.FC = () => {
     [conversations, markAsRead, currentUser],
   );
 
-  /** Seller dashboard message rows: open reply UI. On native/mobile app, use global ChatWidget; elsewhere deep-link inbox. */
+  /** Seller dashboard message rows: open full inbox thread with deal room (mobile + web). */
   const handleSellerOpenChatFromDashboard = useCallback(
     (conv: Conversation) => {
       if (!conv?.id) return;
       const id = String(conv.id);
-      const latest = conversations.find((c) => c && String(c.id) === id) ?? conv;
-
-      const useFloatingSellerChat = isMobileApp || isCapacitorNativeApp();
-      if (useFloatingSellerChat && currentUser?.role === 'seller') {
-        setActiveChat(latest);
-        void markAsRead(id, { readerRole: 'seller', forceReadState: true });
-        return;
-      }
 
       setInboxConversationIdToOpen(id);
       if (currentView !== ViewEnum.INBOX) {
@@ -930,7 +922,7 @@ const AppContent: React.FC = () => {
       }
       void markAsRead(id, { readerRole: 'seller', forceReadState: true });
     },
-    [conversations, currentView, currentUser?.role, isMobileApp, markAsRead, navigate, setActiveChat]
+    [currentView, markAsRead, navigate, setInboxConversationIdToOpen],
   );
 
   /** Dealers & seller profiles are public to view; calling, follow, save, compare require an account. */

@@ -585,6 +585,8 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const handleRegisterRef = useRef<(user: User) => void>(() => {});
   /** Mutex for session-restore sync (auth events can fire in bursts) */
   const profileRestoreFromSupabaseInFlightRef = useRef(false);
+  /** Blocks Supabase session-restore / OAuth handlers from re-logging in during sign-out */
+  const logoutInProgressRef = useRef(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const currentUserRef = useRef<User | null>(null);
   const [sellerInventory, setSellerInventory] = useState<Vehicle[]>([]);
@@ -810,6 +812,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }, [addToast, vehicles.length, t]); // Add vehicles.length dependency
 
   const handleLogout = useCallback(async () => {
+    logoutInProgressRef.current = true;
     try {
       // Local sign-out only: default global signOut() revokes on Supabase (logout?scope=global)
       // and returns 403 when the access token is already expired, which blocks logout.
@@ -835,7 +838,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       // Clear tokens via logout service (includes Keychain / Keystore JWT pair on Capacitor)
       try {
         const { logout: logoutService } = await import('../services/userService');
-        logoutService();
+        await logoutService();
       } catch (logoutError) {
         logWarn('Logout service error:', logoutError);
       }
@@ -843,15 +846,14 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       // Clear user state
       setCurrentUser(null);
       clearUserContext();
+      clearPersistedUserSession();
       
       // Clear storage
-      sessionStorage.removeItem('currentUser');
       sessionStorage.removeItem('reride_oauth_role');
       sessionStorage.removeItem('reride_oauth_mode');
       sessionStorage.removeItem('reride_last_role');
       googleOAuthSyncDoneRef.current = false;
       oauthGoogleProfileSyncInFlightUidRef.current = null;
-      localStorage.removeItem('reRideCurrentUser');
       localStorage.removeItem('reRideAccessToken');
       localStorage.removeItem('reRideRefreshToken');
       try {
@@ -863,6 +865,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       }
       localStorage.removeItem('reRideServiceProvider');
       clearRememberMeState();
+      resetAuthFetchStateAfterLogout();
 
       // Clear user-specific data
       setActiveChat(null);
@@ -900,19 +903,18 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       }
       try {
         const { logout: logoutService } = await import('../services/userService');
-        logoutService();
+        await logoutService();
       } catch {
         /* ignore */
       }
       // Even if there's an error, clear local state
       setCurrentUser(null);
-      sessionStorage.removeItem('currentUser');
+      clearPersistedUserSession();
       sessionStorage.removeItem('reride_oauth_role');
       sessionStorage.removeItem('reride_oauth_mode');
       sessionStorage.removeItem('reride_last_role');
       googleOAuthSyncDoneRef.current = false;
       oauthGoogleProfileSyncInFlightUidRef.current = null;
-      localStorage.removeItem('reRideCurrentUser');
       localStorage.removeItem('reRideAccessToken');
       localStorage.removeItem('reRideRefreshToken');
       try {
@@ -951,6 +953,10 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       setComparisonList([]);
       setWishlist([]);
       addToast(t('toast.loggedOut'), 'info');
+    } finally {
+      window.setTimeout(() => {
+        logoutInProgressRef.current = false;
+      }, 2000);
     }
   }, [addToast, setComparisonList, setWishlist, t]);
 
@@ -978,6 +984,10 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }, []);
 
   const handleLogin = useCallback((user: User) => {
+    if (logoutInProgressRef.current) {
+      logDebug('handleLogin skipped — logout in progress');
+      return;
+    }
     // CRITICAL: Validate user object before setting
     if (!user || !user.email || !user.role) {
       logError('❌ Invalid user object in handleLogin:', { 
@@ -1155,6 +1165,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     const supabase = getSupabaseClient();
 
     const tryFinishGoogleOAuth = async (session: Session | null) => {
+      if (logoutInProgressRef.current) return;
       let pendingRole = sessionStorage.getItem('reride_oauth_role') as
         | 'customer'
         | 'seller'
@@ -1310,6 +1321,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
     const restoreFromSupabaseSession = async (session: Session | null) => {
       if (cancelled || currentUserRef.current) return;
+      if (logoutInProgressRef.current) return;
       if (!session?.user?.email) return;
 
       const uid = session.user.id;
@@ -1403,7 +1415,9 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (logoutInProgressRef.current) return;
+      if (event === 'SIGNED_OUT') return;
       void restoreFromSupabaseSession(session);
     });
 
