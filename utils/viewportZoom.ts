@@ -1,14 +1,19 @@
 /**
  * Viewport Zoom Utility
- * Ensures proper zoom/viewport scaling across all pages
+ * Ensures proper zoom/viewport scaling on Capacitor native shells only.
+ * Web browsers should respect user zoom for accessibility.
  */
 
 import React from 'react';
+import { isCapacitorNativeApp } from './isCapacitorNative';
 
 /**
  * Resets browser zoom to 100% and ensures proper viewport scaling
  */
 export const resetViewportZoom = (): void => {
+  if (!isCapacitorNativeApp()) {
+    return;
+  }
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
@@ -55,9 +60,12 @@ export const resetViewportZoom = (): void => {
 };
 
 /**
- * Initializes viewport zoom fix - should be called on app mount
+ * Initializes viewport zoom fix - should be called on app mount (Capacitor only)
  */
 export const initializeViewportZoom = (): void => {
+  if (!isCapacitorNativeApp()) {
+    return;
+  }
   resetViewportZoom();
   
   // Reset zoom on window resize
@@ -80,14 +88,13 @@ export const initializeViewportZoom = (): void => {
 };
 
 /**
- * React hook to maintain proper zoom on route changes
+ * React hook to maintain proper zoom on route changes (Capacitor native only)
  */
 export const useViewportZoomFix = (): void => {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
   React.useEffect(() => {
+    if (!isCapacitorNativeApp()) {
+      return;
+    }
     // Reset zoom on mount
     resetViewportZoom();
     
@@ -126,4 +133,3 @@ export const useViewportZoomFix = (): void => {
     };
   }, []);
 };
-

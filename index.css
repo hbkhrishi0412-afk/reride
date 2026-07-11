@@ -1414,7 +1414,7 @@ code {
   --reride-orange: #FF6B35;
   --reride-orange-hover: #F97316;
   --reride-orange-light: rgba(255, 107, 53, 0.1);
-  --reride-orange-dark: #EA580C;
+  --reride-orange-dark: #C2410C;
   
   /* Trust Blue - Secondary */
   --reride-blue: #1E88E5;
@@ -1502,7 +1502,7 @@ code {
 .btn-reride-primary,
 .btn-brand-primary,
 .reride-button-primary {
-  background: var(--reride-orange);
+  background: var(--reride-orange-dark, #EA580C);
   color: white;
   padding: 14px 32px;
   border-radius: 8px;

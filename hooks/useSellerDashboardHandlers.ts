@@ -436,37 +436,37 @@ export function useSellerDashboardHandlers({ app, currentUser, locals }: UseSell
   };
 }
 
+export function getSellerDashboardAccessState(
+  currentUser: User | null,
+): 'ok' | 'login-required' | 'seller-required' | 'invalid-user' {
+  if (!currentUser) {
+    return 'login-required';
+  }
+  if (!currentUser.email || !currentUser.role) {
+    return 'invalid-user';
+  }
+  if (currentUser.role !== 'seller') {
+    return 'seller-required';
+  }
+  return 'ok';
+}
+
+/** @deprecated Prefer getSellerDashboardAccessState + AccessDenied UI */
 export function validateSellerDashboardAccess(
   currentUser: User | null,
   navigate: (view: ViewEnum) => void,
 ): currentUser is User {
-  logInfo('Seller Dashboard Access Check:', {
-    hasCurrentUser: !!currentUser,
-    userEmail: currentUser?.email,
-    userRole: currentUser?.role,
-  });
-
-  if (!currentUser) {
-    logWarn('Attempted to render seller dashboard without logged-in user');
+  const state = getSellerDashboardAccessState(currentUser);
+  if (state === 'ok') {
+    logInfo('Seller dashboard validation passed, rendering dashboard');
+    return true;
+  }
+  if (state === 'login-required' || state === 'invalid-user') {
+    logWarn('Attempted to render seller dashboard without valid logged-in user');
     navigate(ViewEnum.LOGIN_PORTAL);
     return false;
   }
-
-  if (!currentUser.email || !currentUser.role) {
-    logError('Invalid user object - missing email or role:', {
-      hasEmail: !!currentUser.email,
-      hasRole: !!currentUser.role,
-    });
-    navigate(ViewEnum.LOGIN_PORTAL);
-    return false;
-  }
-
-  if (currentUser.role !== 'seller') {
-    logWarn(`Attempted to render seller dashboard with role: ${currentUser.role} (expected seller)`);
-    navigate(ViewEnum.LOGIN_PORTAL);
-    return false;
-  }
-
-  logInfo('Seller dashboard validation passed, rendering dashboard');
-  return true;
+  logWarn(`Attempted to render seller dashboard with role: ${currentUser?.role} (expected seller)`);
+  navigate(ViewEnum.LOGIN_PORTAL);
+  return false;
 }

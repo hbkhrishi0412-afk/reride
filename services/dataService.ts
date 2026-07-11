@@ -946,40 +946,7 @@ class DataService {
   }
 
   private async getVehiclesLocal(): Promise<Vehicle[]> {
-    const fallbackVehicles: Vehicle[] = [{
-      id: 1,
-      make: "Maruti Suzuki",
-      model: "Swift",
-      year: 2022,
-      price: 650000,
-      mileage: 18000,
-      fuelType: "Petrol",
-      transmission: "Manual",
-      city: "Mumbai",
-      state: "MH",
-      location: "Mumbai, MH",
-      sellerEmail: "demo@reride.com",
-      images: ["https://picsum.photos/800/600?random=1"],
-      description: "Well maintained Swift in excellent condition",
-      status: "published",
-      isFeatured: true,
-      views: 150,
-      inquiriesCount: 8,
-      certificationStatus: "none",
-      category: "FOUR_WHEELER" as any,
-      features: [],
-      engine: "1.2L",
-      fuelEfficiency: "20 kmpl",
-      color: "White",
-      registrationYear: 2022,
-      insuranceValidity: "2025-01-01",
-      insuranceType: "Comprehensive",
-      rto: "MH-01",
-      noOfOwners: 1,
-      displacement: "1197 cc",
-      groundClearance: "170 mm",
-      bootSpace: "268 litres"
-    }];
+    const fallbackVehicles: Vehicle[] = import.meta.env.PROD ? [] : (await import('../constants/fallback.js')).FALLBACK_VEHICLES;
 
     let vehicles = this.getLocalStorageData<Vehicle[]>('reRideVehicles', []);
     

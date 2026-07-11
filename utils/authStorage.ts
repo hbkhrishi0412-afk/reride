@@ -21,6 +21,12 @@ import {
 export function useHttpOnlyRefreshCookie(): boolean {
   if (typeof window === 'undefined') return false;
   if (isCapacitorNative()) return false;
+  // Vite dev + local E2E: same-origin `/api` proxy would use memory-only JWTs + HttpOnly
+  // refresh cookies. Full page reloads (Playwright navigation, refresh) clear in-memory
+  // access tokens before cookie refresh can run — persist tokens in sessionStorage instead.
+  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+    return false;
+  }
   try {
     return !isApiRequestCrossOrigin(resolveApiUrl('/api/users'));
   } catch {

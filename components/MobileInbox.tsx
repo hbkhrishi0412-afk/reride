@@ -16,9 +16,7 @@ import ReadReceiptIcon, { OfferMessage, TestDriveMessage } from './ReadReceiptIc
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { setHardwareBackHandler } from '../utils/hardwareBackRegistry';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
-import DealTimelinePanel from './DealTimelinePanel';
-import { DealStageChip } from './DealStageChip';
-import { resolveDealLeadForConversation, createDealLead } from '../services/dealService';
+import { MobileInboxDealRoom } from './chat/MobileInboxDealRoom';
 import { useApp } from './AppProvider';
 
 interface MobileInboxProps {
@@ -118,8 +116,6 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [dealLead, setDealLead] = useState<DealLead | null>(null);
-  const [dealLeadLoading, setDealLeadLoading] = useState(false);
-  const [dealPanelOpen, setDealPanelOpen] = useState(true);
   const voiceRecorder = useVoiceRecorder();
   const keyboardInset = useVisualViewportBottomInset();
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -387,49 +383,14 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   useEffect(() => {
     setThreadMenuOpen(false);
     setDealLead(null);
-    if (!selectedConv?.id) return;
-    let cancelled = false;
-    void resolveDealLeadForConversation(selectedConv, {
-      retryCount: selectedConv.hasDeal ? 6 : 2,
-    })
-      .then((lead) => {
-        if (!cancelled) setDealLead(lead);
-      })
-      .catch(() => {
-        if (!cancelled) setDealLead(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedConv?.id, selectedConv?.vehicleId, selectedConv?.hasDeal]);
+  }, [selectedConv?.id]);
 
   const focusDealRoom = useCallback(() => {
     if (!selectedConv) return;
-    setDealPanelOpen(true);
     requestAnimationFrame(() => {
-      const room = document.getElementById(`deal-room-${selectedConv.id}`);
-      room?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById(`deal-room-${selectedConv.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }, [selectedConv?.id]);
-
-  const handleStartDealRoom = useCallback(async () => {
-    if (!selectedConv?.vehicleId || dealLeadLoading) return;
-    setDealLeadLoading(true);
-    setAttachError(null);
-    try {
-      const { lead } = await createDealLead({
-        vehicleId: selectedConv.vehicleId,
-        conversationId: selectedConv.id,
-        buyerName: selectedConv.customerName,
-      });
-      setDealLead(lead);
-      setDealPanelOpen(true);
-    } catch {
-      setAttachError('Could not open Deal Room. Please try again.');
-    } finally {
-      setDealLeadLoading(false);
-    }
-  }, [selectedConv, dealLeadLoading]);
 
   useEffect(() => {
     if (!selectedConv) return;
@@ -661,80 +622,14 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
           );
         })()}
 
-        {!dealLead && inboxRole === 'customer' && selectedConv.vehicleId && currentUser ? (
-          <div className="shrink-0 border-b border-black/[0.06] bg-white px-3 py-2.5">
-            <button
-              type="button"
-              onClick={() => void handleStartDealRoom()}
-              disabled={dealLeadLoading}
-              className="w-full px-4 py-2.5 rounded-lg bg-purple-600 text-white text-[15px] font-semibold active:bg-purple-700 disabled:opacity-60"
-              data-testid="open-deal-room"
-            >
-              {dealLeadLoading
-                ? t('deal.openingDealRoom', { defaultValue: 'Opening Deal Room…' })
-                : t('deal.openDealRoom', { defaultValue: 'Open Deal Room' })}
-            </button>
-            <p className="text-xs text-gray-500 mt-1.5 text-center">
-              {t('deal.roomHint', {
-                defaultValue: 'Track offers, inspection, and RC transfer in one place.',
-              })}
-            </p>
-          </div>
-        ) : null}
-
-        {dealLead && currentUser ? (
-          <div id={`deal-room-${selectedConv.id}`} className="shrink-0 border-b border-black/[0.06] bg-white">
-            <div className="flex items-center justify-between gap-2 px-3 py-2">
-              <DealStageChip lead={dealLead} />
-              <button
-                type="button"
-                onClick={() => setDealPanelOpen((o) => !o)}
-                className="text-xs font-semibold text-[#0084FF]"
-                aria-expanded={dealPanelOpen}
-              >
-                {dealPanelOpen
-                  ? t('deal.hideTimeline', { defaultValue: 'Hide deal' })
-                  : t('deal.showTimeline', { defaultValue: 'Show deal' })}
-              </button>
-            </div>
-            {inboxRole === 'customer' && dealLead.chatStatus === 'pending' ? (
-              <p className="mx-3 mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-                {t('deal.awaitingSellerChat', {
-                  defaultValue:
-                    'Your tracked deal is active. The seller must accept chat before you can message — track progress below.',
-                })}
-              </p>
-            ) : null}
-            {inboxRole === 'seller' && dealLead.chatStatus === 'pending' ? (
-              <p className="mx-3 mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-                {t('deal.sellerAcceptChat', {
-                  defaultValue:
-                    'A buyer started a tracked deal. Accept chat in the Deal Room below to unlock messaging.',
-                })}
-              </p>
-            ) : null}
-            {inboxRole === 'seller' && dealLead.chatStatus !== 'pending' ? (
-              <p className="mx-3 mb-2 text-xs text-slate-600">
-                {t('deal.sellerUseDealRoom', {
-                  defaultValue: 'Use the Deal Room below to manage offers, milestones, and RC transfer.',
-                })}
-              </p>
-            ) : null}
-            {dealPanelOpen ? (
-              <div className="px-2 pb-2 max-h-[min(42vh,360px)] overflow-y-auto">
-                <DealTimelinePanel
-                  lead={dealLead}
-                  currentUser={currentUser}
-                  currentUserRole={inboxRole === 'seller' ? 'seller' : 'customer'}
-                  conversationId={selectedConv.id}
-                  onLeadUpdated={setDealLead}
-                  onSendPipelineMessage={(text, type, payload) =>
-                    onSendMessage(selectedConv.id, text, type, payload)
-                  }
-                />
-              </div>
-            ) : null}
-          </div>
+        {currentUser ? (
+          <MobileInboxDealRoom
+            conversation={selectedConv}
+            currentUser={currentUser}
+            inboxRole={inboxRole}
+            onSendMessage={onSendMessage}
+            onDealLeadChange={setDealLead}
+          />
         ) : null}
 
         {/* Message thread — Messenger bubble colors */}

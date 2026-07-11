@@ -6,7 +6,7 @@
   "display": "standalone",
   "background_color": "#FFFFFF",
   "theme_color": "#FF6B35",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "scope": "/",
   "lang": "en",
   "dir": "ltr",
@@ -65,32 +65,6 @@
       "short_name": "Sell",
       "description": "List your vehicle for sale",
       "url": "/?view=SELL_CAR",
-      "icons": [
-        {
-          "src": "/icon-192.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
-    },
-    {
-      "name": "New Cars",
-      "short_name": "New",
-      "description": "Browse new car listings",
-      "url": "/?view=NEW_CARS",
-      "icons": [
-        {
-          "src": "/icon-192.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
-    },
-    {
-      "name": "Rentals",
-      "short_name": "Rent",
-      "description": "Browse rental vehicles",
-      "url": "/?view=RENTAL",
       "icons": [
         {
           "src": "/icon-192.png",

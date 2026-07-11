@@ -4181,7 +4181,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 // Show error notification
                                 const errorNotification = document.createElement('div');
                                 errorNotification.textContent = `Failed to update expiry date: ${errorMessage}`;
-                                errorNotification.className = 'fixed top-5 right-5 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-[9999] text-sm font-medium animate-slide-up';
+                                errorNotification.className = 'fixed top-5 right-5 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-toast text-sm font-medium animate-slide-up';
                                 document.body?.appendChild(errorNotification);
                                 
                                 setTimeout(() => {
@@ -4556,6 +4556,23 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             <div className="relative z-10 flex min-h-screen min-w-0 w-full flex-col lg:flex-row">
                 {/* Mobile / small tablet: jump menu grouped like the sidebar */}
                 <div className="sticky top-0 z-30 border-b border-slate-200/90 bg-white/95 px-3 py-2.5 backdrop-blur-md lg:hidden">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-slate-900">{currentUser.name}</p>
+                            <p className="truncate text-xs text-slate-500">{currentUser.email}</p>
+                        </div>
+                        {onLogout && (
+                            <button
+                                type="button"
+                                data-testid="admin-mobile-logout"
+                                onClick={onLogout}
+                                className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100 active:bg-red-200"
+                                aria-label="Log out"
+                            >
+                                Log out
+                            </button>
+                        )}
+                    </div>
                     <label htmlFor="admin-panel-view" className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                         Admin workspace
                     </label>

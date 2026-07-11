@@ -316,6 +316,7 @@ const AppContent: React.FC = () => {
         return;
       }
       let hasDeal = false;
+      let dealAlreadyTracked = false;
       try {
         const { lead, existing } = await createDealLead({
           vehicleId: vehicle.id,
@@ -323,6 +324,7 @@ const AppContent: React.FC = () => {
           buyerName: currentUser.name,
         });
         hasDeal = true;
+        dealAlreadyTracked = Boolean(existing);
         if (existing) {
           addToast(`You're already interested. Lead ${lead.id}`, 'info');
         } else {
@@ -331,20 +333,24 @@ const AppContent: React.FC = () => {
         invalidateMyDealLeadsCache();
       } catch (err) {
         logWarn('Deal lead creation failed (chat still opened):', err);
-        addToast('Chat opened, but deal tracking could not start. Use Open Deal Room in chat to retry.', 'warning');
+        addToast('Could not start deal tracking. Try again in a moment.', 'warning');
       }
       const chatConversation = hasDeal ? { ...conversation, hasDeal: true } : conversation;
-      setActiveChat(chatConversation);
-      try {
-        localStorage.setItem(
-          'reRideActiveChat',
-          JSON.stringify({ id: chatConversation.id, updatedAt: Date.now() }),
-        );
-      } catch {
-        /* ignore */
+      const stayOnDetailListing =
+        currentView === ViewEnum.DETAIL && hasDeal && !dealAlreadyTracked;
+      if (!stayOnDetailListing) {
+        setActiveChat(chatConversation);
+        try {
+          localStorage.setItem(
+            'reRideActiveChat',
+            JSON.stringify({ id: chatConversation.id, updatedAt: Date.now() }),
+          );
+        } catch {
+          /* ignore */
+        }
       }
     },
-    [currentUser, conversations, setConversations, setActiveChat, addToast, navigate, savePostLoginDetailContext],
+    [currentUser, conversations, setConversations, setActiveChat, addToast, navigate, savePostLoginDetailContext, currentView],
   );
 
   const handleBrowseAllIndia = useCallback(() => {

@@ -59,7 +59,7 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             <div className="space-y-3">
               <NavButton view={View.USED_CARS}>{t('footer.buyUsedCars')}</NavButton>
               <NavButton view={View.SELL_CAR}>{t('footer.sellYourCar')}</NavButton>
-              <NavButton view={View.ABOUT_US}>{t('footer.howDealsWork', { defaultValue: 'How deals work' })}</NavButton>
+              <NavButton view={View.SAFETY_CENTER}>{t('footer.howDealsWork', { defaultValue: 'How deals work' })}</NavButton>
               <NavButton view={View.DEALER_PROFILES}>{t('footer.dealerNetwork')}</NavButton>
               <NavButton view={View.CAR_SERVICES}>{t('nav.carServices')}</NavButton>
             </div>

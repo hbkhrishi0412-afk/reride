@@ -10,8 +10,10 @@ const daysAgo = (days: number): string => {
   return date.toISOString();
 };
 
-// Minimal fallback data for immediate loading
-export const FALLBACK_VEHICLES: Vehicle[] = [
+/** Empty in production builds — never show demo inventory to users. */
+export const FALLBACK_VEHICLES: Vehicle[] = import.meta.env.PROD
+  ? []
+  : [
   {
     id: 1,
     make: "Maruti Suzuki",
@@ -22,13 +24,13 @@ export const FALLBACK_VEHICLES: Vehicle[] = [
     fuelType: "Petrol",
     transmission: "Manual",
     location: "Mumbai",
-    sellerEmail: "demo@reride.com",
-    images: ["https://picsum.photos/800/600?random=1"],
-    description: "Well maintained Swift in excellent condition",
+    sellerEmail: "dev-local@reride.test",
+    images: ["/placeholder-car.svg"],
+    description: "Dev-only placeholder listing",
     status: "published",
-    isFeatured: true,
-    views: 150,
-    inquiriesCount: 8,
+    isFeatured: false,
+    views: 0,
+    inquiriesCount: 0,
     certificationStatus: "none",
     category: FOUR_WHEELER_CATEGORY,
     features: ["Power Steering", "Air Conditioning"],
@@ -48,18 +50,20 @@ export const FALLBACK_VEHICLES: Vehicle[] = [
   }
 ];
 
-export const FALLBACK_USERS: User[] = [
+export const FALLBACK_USERS: User[] = import.meta.env.PROD
+  ? []
+  : [
   {
-    name: 'Demo Seller',
-    email: 'demo@reride.com',
+    name: 'Dev Seller',
+    email: 'dev-local@reride.test',
     mobile: '555-123-4567',
     role: 'seller',
     location: 'Mumbai',
     status: 'active',
     createdAt: daysAgo(30),
-    dealershipName: 'Demo Motors',
-    bio: 'Your trusted vehicle partner',
-    avatarUrl: 'https://i.pravatar.cc/150?u=demo@reride.com',
+    dealershipName: 'Dev Motors',
+    bio: 'Local development placeholder',
+    avatarUrl: undefined,
     isVerified: true,
     subscriptionPlan: 'pro',
     featuredCredits: 2,
@@ -146,11 +150,13 @@ export const FALLBACK_FAQS: FAQItem[] = [
   }
 ];
 
-export const FALLBACK_SUPPORT_TICKETS: SupportTicket[] = [
+export const FALLBACK_SUPPORT_TICKETS: SupportTicket[] = import.meta.env.PROD
+  ? []
+  : [
   {
     id: 1,
-    userEmail: 'demo@reride.com',
-    userName: 'Demo User',
+    userEmail: 'dev-local@reride.test',
+    userName: 'Dev User',
     subject: 'General Inquiry',
     message: 'How can I get started?',
     status: 'Open',

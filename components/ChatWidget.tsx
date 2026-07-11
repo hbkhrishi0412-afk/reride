@@ -2,7 +2,7 @@ import { logInfo } from '../utils/logger.js';
 
 import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
-import type { Conversation, ChatMessage, DealLead } from '../types';
+import type { Conversation, ChatMessage } from '../types';
 import ReadReceiptIcon, { OfferMessage, TestDriveMessage } from './ReadReceiptIcon';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 import { uploadImage, uploadChatAudio } from '../services/imageUploadService';
@@ -17,9 +17,9 @@ import {
   scrollContainerToBottom,
   scrollContainerToShowElement,
 } from '../utils/scrollWithinContainer.js';
-import DealTimelinePanel from './DealTimelinePanel';
 import DealStageChip from './DealStageChip';
-import { createDealLead, resolveDealLeadForConversation } from '../services/dealService';
+import { DealRoomSection } from './chat/DealRoomSection';
+import { useDealRoomForConversation } from '../hooks/useDealRoomForConversation';
 import { useApp } from './AppProvider';
 
 interface ChatWidgetProps {
@@ -106,9 +106,17 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
-  const [dealLead, setDealLead] = useState<DealLead | null>(null);
-  const [dealLeadLoading, setDealLeadLoading] = useState(false);
-  const [dealPanelOpen, setDealPanelOpen] = useState(true);
+  const {
+    dealLead,
+    setDealLead,
+    dealLeadLoading,
+    dealPanelOpen,
+    setDealPanelOpen,
+    dealRoomError,
+    chatBlockedByDeal,
+    focusDealRoom,
+    handleStartDealRoom,
+  } = useDealRoomForConversation(conversation, { currentUserRole });
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const voiceRecorder = useVoiceRecorder();
 
@@ -118,49 +126,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     if (isInlineLaunch) setHasOpenedOnce(true);
   }, [isInlineLaunch, conversation.id, userManuallyClosed, isExiting]);
 
-  const chatBlockedByDeal = dealLead?.chatStatus === 'pending' && currentUserRole === 'customer';
-  const focusDealRoom = () => {
-    setDealPanelOpen(true);
-    requestAnimationFrame(() => {
-      const room = document.getElementById(`deal-room-${conversation.id}`);
-      room?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  };
-
   useEffect(() => {
-    if (!conversation.id) return;
-    let cancelled = false;
     setMoreMenuOpen(false);
-    void resolveDealLeadForConversation(conversation, {
-      retryCount: conversation.hasDeal ? 6 : 2,
-    })
-      .then((lead) => {
-        if (!cancelled) setDealLead(lead);
-      })
-      .catch(() => {
-        if (!cancelled) setDealLead(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [conversation.id, conversation.vehicleId, conversation.hasDeal]);
-
-  const handleStartDealRoom = async () => {
-    if (!conversation.vehicleId || dealLeadLoading) return;
-    setDealLeadLoading(true);
-    try {
-      const { lead } = await createDealLead({
-        vehicleId: conversation.vehicleId,
-        conversationId: conversation.id,
-        buyerName: conversation.customerName,
-      });
-      setDealLead(lead);
-    } catch {
-      setAttachError('Could not open Deal Room. Please try again.');
-    } finally {
-      setDealLeadLoading(false);
-    }
-  };
+  }, [conversation.id]);
 
   const visibleMessages = useMemo(
     () => filterMessagesForViewer(conversation, currentUserRole),
@@ -532,8 +500,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     }
   }, [portalTarget]);
 
-  // High z-index over mobile nav (z-40); avoid extreme values — some WebViews mishandle them.
-  const FLOATING_Z_INDEX = 999999;
+  // Layer above mobile nav (z-40) but below modals (z-110).
+  const FLOATING_Z_INDEX = isMinimized ? 90 : 100;
 
   // Floating chat button - ALWAYS visible
   const chatButton = (
@@ -849,58 +817,31 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
           </a>
         )}
 
-        {!dealLead && currentUserRole === 'customer' && conversation.vehicleId && currentUserEmail ? (
-          <div className="shrink-0 border-b border-gray-200 bg-white px-3 py-2.5">
-            <button
-              type="button"
-              onClick={() => void handleStartDealRoom()}
-              disabled={dealLeadLoading}
-              className="w-full px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-60"
-              data-testid="open-deal-room"
-            >
-              {dealLeadLoading ? 'Opening Deal Room…' : 'Open Deal Room'}
-            </button>
-          </div>
-        ) : null}
-
-        {dealLead && currentUserEmail ? (
-          <div id={`deal-room-${conversation.id}`} className="shrink-0 border-b border-gray-200 bg-white">
-            <div className="flex items-center justify-between gap-2 px-3 py-2">
-              <DealStageChip lead={dealLead} />
-              <button
-                type="button"
-                onClick={() => setDealPanelOpen((o) => !o)}
-                className="text-xs font-semibold text-purple-600"
-                aria-expanded={dealPanelOpen}
-              >
-                {dealPanelOpen ? 'Hide deal' : 'Show deal'}
-              </button>
-            </div>
-            {currentUserRole === 'customer' && dealLead.chatStatus === 'pending' ? (
-              <p className="mx-3 mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-                Your tracked deal is active. The seller must accept chat before you can message — track progress below.
-              </p>
-            ) : null}
-            {currentUserRole === 'seller' && dealLead.chatStatus === 'pending' ? (
-              <p className="mx-3 mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-                A buyer started a tracked deal. Accept chat below to unlock messaging.
-              </p>
-            ) : null}
-            {dealPanelOpen ? (
-              <div className="px-2 pb-2 max-h-[min(36vh,280px)] overflow-y-auto">
-                <DealTimelinePanel
-                  lead={dealLead}
-                  currentUser={{ email: currentUserEmail, name: '', role: currentUserRole === 'seller' ? 'seller' : 'customer', mobile: '', location: '', status: 'active', createdAt: '' }}
-                  currentUserRole={currentUserRole}
-                  conversationId={conversation.id}
-                  onLeadUpdated={setDealLead}
-                  onSendPipelineMessage={(messageText, type, payload) =>
-                    onSendMessage(messageText, type as ChatMessage['type'], payload)
-                  }
-                />
-              </div>
-            ) : null}
-          </div>
+        {currentUserEmail || (currentUserRole === 'customer' && conversation.vehicleId) ? (
+          <DealRoomSection
+            conversation={conversation}
+            dealLead={dealLead}
+            dealLeadLoading={dealLeadLoading}
+            dealPanelOpen={dealPanelOpen}
+            onTogglePanel={() => setDealPanelOpen((o) => !o)}
+            onDealLeadUpdated={setDealLead}
+            currentUserRole={currentUserRole}
+            currentUser={{
+              email: currentUserEmail ?? '',
+              name: '',
+              role: currentUserRole === 'seller' ? 'seller' : 'customer',
+              mobile: '',
+              location: '',
+              status: 'active',
+              createdAt: '',
+            }}
+            onSendPipelineMessage={(messageText, type, payload) =>
+              onSendMessage(messageText, type as ChatMessage['type'], payload)
+            }
+            onStartDealRoom={() => void handleStartDealRoom()}
+            panelMaxHeightClass="max-h-[min(36vh,280px)]"
+            toggleAccentClass="text-purple-600"
+          />
         ) : null}
 
         {/* Messages - compact list */}
@@ -1032,9 +973,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
               className="hidden"
               onChange={handlePhotoChange}
             />
-            {attachError && (
+            {(attachError || dealRoomError) && (
               <div className="flex items-center justify-between gap-2 mb-2 px-1" role="alert">
-                <p className="text-xs text-red-600 flex-1">{attachError}</p>
+                <p className="text-xs text-red-600 flex-1">{attachError || dealRoomError}</p>
                 <button
                   type="button"
                   className="text-xs font-semibold text-[#0084FF] shrink-0"

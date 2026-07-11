@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { TFunction } from 'i18next';
 import type { MobileFilterCategoryId } from './mobileFilterTypes.js';
+import { useFocusTrap } from '../utils/focusTrap';
+import { Z_INDEX } from '../utils/zIndex';
 
 const SIDEBAR_ITEMS: { id: MobileFilterCategoryId; labelKey: string }[] = [
   { id: 'price', labelKey: 'listings.mobileFilter.catPrice' },
@@ -40,6 +42,18 @@ export const MobileMarketplaceFilterModal: React.FC<MobileMarketplaceFilterModal
   footer,
   t,
 }) => {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, isOpen);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose]);
+
   // Ensure the portal target exists (only on the client).
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -68,26 +82,26 @@ export const MobileMarketplaceFilterModal: React.FC<MobileMarketplaceFilterModal
   const modal = (
     <div
       className="mobile-marketplace-filter-modal-root"
-      style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
+      style={{ position: 'fixed', inset: 0, zIndex: Z_INDEX.modal }}
     >
       <div
         className="fixed inset-0 bg-black/45"
-        style={{ zIndex: 9998 }}
         aria-hidden="true"
         onClick={onClose}
-        onKeyDown={(e) => e.key === 'Escape' && onClose()}
         role="presentation"
       />
       <div
-        className="fixed inset-0 flex flex-col bg-white"
+        ref={panelRef}
+        className="fixed inset-0 flex flex-col bg-white outline-none"
         style={{
-          zIndex: 9999,
+          zIndex: Z_INDEX.modal + 1,
           paddingBottom: 'env(safe-area-inset-bottom, 0)',
           paddingTop: 'env(safe-area-inset-top, 0)',
         }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="mobile-filter-dialog-title"
+        tabIndex={-1}
       >
         <div className="flex flex-1 min-h-0">
           <nav

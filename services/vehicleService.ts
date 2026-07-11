@@ -5,43 +5,10 @@ import { getBrowserAccessTokenForApi } from '../utils/authStorage.js';
 import { isVehicle, isApiResponse } from '../types.js';
 import { isDevelopmentEnvironment } from '../utils/environment.js';
 
-// Fallback mock vehicles to prevent loading issues
-const FALLBACK_VEHICLES: Vehicle[] = [
-  {
-    id: 1,
-    category: "FOUR_WHEELER" as VehicleCategory,
-    make: "Maruti Suzuki",
-    model: "Swift",
-    year: 2022,
-    price: 650000,
-    mileage: 18000,
-    fuelType: "Petrol",
-    transmission: "Manual",
-    location: "Mumbai",
-    city: "Mumbai",
-    state: "MH",
-    sellerEmail: "demo@reride.com",
-    images: ["https://picsum.photos/800/600?random=1"],
-    features: ["Air Conditioning", "Power Steering", "Music System"],
-    description: "Well maintained Swift in excellent condition",
-    engine: "1.2L Petrol",
-    fuelEfficiency: "20 kmpl",
-    color: "White",
-    status: "published",
-    isFeatured: true,
-    views: 150,
-    inquiriesCount: 8,
-    certificationStatus: "none",
-    registrationYear: 2022,
-    insuranceValidity: "2025-01-01",
-    insuranceType: "Comprehensive",
-    rto: "MH-01",
-    noOfOwners: 1,
-    displacement: "1197 cc",
-    groundClearance: "170 mm",
-    bootSpace: "268 litres"
-  }
-];
+import { FALLBACK_VEHICLES as SHARED_FALLBACK_VEHICLES } from '../constants/fallback.js';
+
+// Re-export production-safe fallback (empty in prod builds)
+const FALLBACK_VEHICLES: Vehicle[] = SHARED_FALLBACK_VEHICLES;
 
 // --- API Helpers ---
 const getAuthHeader = () => {

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { DealComplaintCategory } from '../../types.js';
 import { DEAL_COMPLAINT_CATEGORIES } from '../../types.js';
 import { createDealComplaint } from '../../services/dealService.js';
+import { ModalShell } from '../primitives/ModalShell';
 
 export interface DealComplaintModalProps {
   leadId: string;
@@ -40,7 +41,7 @@ export const DealComplaintModal: React.FC<DealComplaintModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+    <ModalShell isOpen onClose={onClose} aria-label="Close complaint dialog">
       <div className="bg-white dark:bg-white rounded-2xl shadow-xl w-full max-w-md">
         <div className="px-5 py-4 border-b border-slate-200 dark:border-gray-200">
           <h3 className="text-lg font-bold text-slate-900">Report an issue</h3>
@@ -93,7 +94,7 @@ export const DealComplaintModal: React.FC<DealComplaintModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 

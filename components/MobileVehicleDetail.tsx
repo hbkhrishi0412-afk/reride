@@ -438,7 +438,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 </button>
               </div>
             ) : null}
-            {onRequestTestDrive ? (
+            {onRequestTestDrive && listingAvailable ? (
               <div className="border-b border-gray-100 px-4 py-2">
                 {showTestDriveForm ? (
                   <form className="space-y-2" onSubmit={handleRequestTestDriveSubmit}>
@@ -566,6 +566,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
             ) : null}
             <button
               type="button"
+              data-testid="start-tracked-deal"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -580,7 +581,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 </svg>
                 {vehicleDealLead
                   ? t('vehicle.detail.openDealRoom', { defaultValue: 'Deal room' })
-                  : t('vehicle.detail.startTrackedDeal', { defaultValue: 'Start deal' })}
+                  : t('vehicle.detail.chatWithSeller')}
               </span>
               {!currentUser && (
                 <span className="text-[10px] font-medium leading-tight text-white/90">{t('vehicle.detail.loginToChatWithSeller')}</span>

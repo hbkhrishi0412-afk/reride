@@ -8,10 +8,12 @@ import { DashboardErrorBoundary } from '../ErrorBoundaries';
 import { DashboardSkeleton, MobileDashboardSkeleton } from '../app/AppViewSkeletons';
 import {
   useSellerDashboardHandlers,
-  validateSellerDashboardAccess,
+  getSellerDashboardAccessState,
   type SellerDashboardLocals,
 } from '../../hooks/useSellerDashboardHandlers';
 import { logInfo } from '../../utils/logger';
+import { AccessDenied } from '../primitives/AccessDenied';
+import { View as ViewEnum } from '../../types';
 
 const Dashboard = React.lazy(() => import('../Dashboard'));
 const MobileDashboard = React.lazy(() => import('../MobileDashboard'));
@@ -157,13 +159,35 @@ export const SellerDashboardRoute: React.FC<SellerDashboardRouteProps> = ({ loca
   const preferCompactDashboard = isMobileApp || !isLgUp;
   const { currentUser, navigate } = useApp();
 
-  if (!validateSellerDashboardAccess(currentUser, navigate)) {
-    return null;
+  const access = getSellerDashboardAccessState(currentUser);
+  if (access !== 'ok') {
+    if (access === 'login-required' || access === 'invalid-user') {
+      return (
+        <AccessDenied
+          title="Seller sign-in required"
+          message="Sign in with your seller account to manage listings, messages, and deals."
+          actionLabel="Sign in as seller"
+          onAction={() => navigate(ViewEnum.SELLER_LOGIN)}
+          secondaryLabel="Browse cars"
+          onSecondary={() => navigate(ViewEnum.HOME)}
+        />
+      );
+    }
+    return (
+      <AccessDenied
+        title="Seller account required"
+        message="This dashboard is for registered sellers. Switch to a seller account or register to list vehicles."
+        actionLabel="Become a seller"
+        onAction={() => navigate(ViewEnum.SELL_CAR)}
+        secondaryLabel="Go home"
+        onSecondary={() => navigate(ViewEnum.HOME)}
+      />
+    );
   }
 
   return (
     <SellerDashboardContent
-      currentUser={currentUser}
+      currentUser={currentUser as User}
       locals={locals}
       preferCompactDashboard={preferCompactDashboard}
     />

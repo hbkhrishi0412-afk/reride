@@ -16,4 +16,15 @@ test.describe('Admin panel', () => {
       timeout: 30_000,
     });
   });
+
+  test('mobile viewport can log out from admin header', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await expect(page.getByTestId('admin-mobile-logout')).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId('admin-mobile-logout').click();
+    await page.waitForFunction(() => !localStorage.getItem('reRideCurrentUser'), undefined, {
+      timeout: 15_000,
+    });
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('button', { name: /^Customer$/i })).toBeVisible({ timeout: 30_000 });
+  });
 });

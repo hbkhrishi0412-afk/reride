@@ -238,7 +238,9 @@ const refreshToken = async (): Promise<string | null> => {
           sessionStorage.setItem('reRideAccessToken', result.accessToken);
           try {
             localStorage.removeItem('reRideAccessToken');
-            localStorage.removeItem('reRideRefreshToken');
+            if (result.refreshToken) {
+              localStorage.setItem('reRideRefreshToken', result.refreshToken);
+            }
           } catch {
             /* ignore */
           }

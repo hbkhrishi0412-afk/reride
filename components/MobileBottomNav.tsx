@@ -27,7 +27,9 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
   onToggleMenu
 }) => {
   const { t, i18n } = useTranslation();
-  const navItems = useMemo(() => [
+  const navItems = useMemo(() => {
+    const isCustomer = currentUser?.role === 'customer';
+    const items = [
     {
       id: 'home',
       label: t('nav.home'),
@@ -72,15 +74,21 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
       isSpecial: true
     },
     {
-      id: 'messages',
-      label: t('nav.messages'),
-      view: ViewEnum.INBOX,
+      id: isCustomer ? 'deals' : 'messages',
+      label: isCustomer ? t('nav.myDeals', { defaultValue: 'Deals' }) : t('nav.messages'),
+      view: isCustomer ? ViewEnum.BUYER_DASHBOARD : ViewEnum.INBOX,
       icon: (active: boolean) => (
+        isCustomer ? (
+        <svg className="w-6 h-6" fill={active ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={active ? 0 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+        ) : (
         <svg className="w-6 h-6" fill={active ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={active ? 0 : 2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
+        )
       ),
-      badge: inboxCount
+      badge: isCustomer ? undefined : inboxCount
     },
     {
       id: 'menu',
@@ -92,7 +100,9 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
         </svg>
       )
     }
-  ], [t, i18n.language, inboxCount, wishlistCount]);
+  ];
+    return items;
+  }, [t, i18n.language, inboxCount, wishlistCount, currentUser?.role]);
 
   return (
     <>
@@ -126,6 +136,8 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
           {navItems.map((item) => {
             const messagesTabActive =
               item.id === 'messages' && currentView === ViewEnum.INBOX;
+            const dealsTabActive =
+              item.id === 'deals' && currentView === ViewEnum.BUYER_DASHBOARD;
 
             const isActive = item.id === 'sell'
               ? currentView === ViewEnum.SELLER_DASHBOARD ||
@@ -135,12 +147,22 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                 ? false
                 : item.id === 'messages'
                   ? messagesTabActive
-                  : currentView === item.view;
+                  : item.id === 'deals'
+                    ? dealsTabActive
+                    : currentView === item.view;
 
             const handleClick = () => {
               void triggerSelectionHaptic();
               if (item.id === 'menu' && onToggleMenu) {
                 onToggleMenu();
+                return;
+              }
+              if (item.id === 'deals') {
+                if (!currentUser) {
+                  onNavigate(ViewEnum.LOGIN_PORTAL);
+                  return;
+                }
+                onNavigate(ViewEnum.BUYER_DASHBOARD);
                 return;
               }
               if (item.id === 'messages' && !currentUser) {

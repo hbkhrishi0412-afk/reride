@@ -692,7 +692,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   const googleRolePickerOverlay =
     showGoogleRolePicker ? (
       <div
-        className="fixed inset-0 z-[2200] flex items-center justify-center bg-black/50 p-4"
+        className="fixed inset-0 z-command flex items-center justify-center bg-black/50 p-4"
         role="dialog"
         aria-modal="true"
         aria-labelledby="oauth-pick-role-title"

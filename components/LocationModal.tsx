@@ -528,7 +528,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
 
     return (
         <div 
-            className="fixed inset-0 bg-black/50 z-[9999]" 
+            className="fixed inset-0 bg-black/50 z-modal" 
             onClick={onClose}
             style={{ 
                 zIndex: 9999,

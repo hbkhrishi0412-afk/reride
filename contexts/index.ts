@@ -9,4 +9,5 @@ export { AuthProvider, useAuth } from './AuthContext';
 export { ToastProvider, useToast } from './ToastContext';
 export { CatalogProvider, useCatalog } from './CatalogContext';
 export { ChatProvider, useChat } from './ChatContext';
+export { NotificationProvider, NotificationContextBridge, useNotifications } from './NotificationContext';
 

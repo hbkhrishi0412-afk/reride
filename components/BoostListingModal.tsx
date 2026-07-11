@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Vehicle, BoostPackage } from '../types';
 import { useApp } from './AppProvider';
+import { useFocusTrap } from '../utils/focusTrap';
+import { Z_INDEX } from '../utils/zIndex';
 
 interface BoostListingModalProps {
   vehicle: Vehicle | null;
@@ -48,6 +50,18 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [boostPackages, setBoostPackages] = useState<BoostPackage[]>([]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const isOpen = Boolean(vehicle);
+  useFocusTrap(panelRef, isOpen);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     const loadBoostPackages = async () => {
@@ -96,14 +110,28 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[2147483002] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
-      style={{ background: 'rgba(8,8,12,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="boost-listing-title"
+      className="fixed inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
+      style={{
+        zIndex: Z_INDEX.modal,
+        background: 'rgba(8,8,12,0.55)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+      }}
+      role="presentation"
     >
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default"
+        aria-label="Close boost listing dialog"
+        onClick={onClose}
+      />
       <div
-        className="w-full sm:max-w-3xl min-h-0 max-h-[92vh] sm:max-h-[min(92vh,100dvh)] overflow-hidden flex flex-col rounded-t-3xl sm:rounded-3xl animate-slide-in-up"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="boost-listing-title"
+        tabIndex={-1}
+        className="relative w-full sm:max-w-3xl min-h-0 max-h-[92vh] sm:max-h-[min(92vh,100dvh)] overflow-hidden flex flex-col rounded-t-3xl sm:rounded-3xl animate-slide-in-up outline-none"
         style={{ background: '#FFFFFF', border: '1px solid rgba(15,23,42,0.06)', boxShadow: '0 30px 60px -20px rgba(0,0,0,0.40)' }}
       >
         {/* Premium obsidian header */}

@@ -4,6 +4,7 @@
 import React, { useMemo, useState } from 'react';
 import type { Conversation } from '../types';
 import { initiateTrustDeal } from '../services/vehicleTrustService';
+import { ModalShell } from './primitives/ModalShell';
 
 interface MarkSoldDealModalProps {
   vehicleId: number | string;
@@ -63,7 +64,7 @@ export const MarkSoldDealModal: React.FC<MarkSoldDealModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <ModalShell isOpen onClose={onClose} aria-label="Close mark as sold dialog">
       <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl">
         <h3 className="text-lg font-bold text-gray-900">Mark as sold</h3>
         <p className="text-sm text-gray-600 mt-1">
@@ -126,7 +127,7 @@ export const MarkSoldDealModal: React.FC<MarkSoldDealModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 

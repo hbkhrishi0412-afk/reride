@@ -335,7 +335,7 @@ switch (currentView) {
           allVehicles={vehicles.filter(v => v.status === 'published')}
           onNavigate={navigate}
           onSelectCity={(city) => {
-            // Pass city in navigate params â€” navigate(USED_CARS) without params clears the filter in AppProvider.
+            // Pass city in navigate params — navigate(USED_CARS) without params clears the filter in AppProvider.
             navigate(ViewEnum.USED_CARS, { city });
           }}
           userLocation={userLocation}
@@ -1141,8 +1141,8 @@ switch (currentView) {
             serviceCategories?: import('../../constants/serviceProviderCatalog').ServiceCategory[];
           } | null}
           onNavigate={navigate}
-          onLogout={() => {
-            handleLogoutAll();
+          onLogout={async () => {
+            await handleLogoutAll();
             navigate(ViewEnum.HOME);
           }}
         />
@@ -1151,8 +1151,8 @@ switch (currentView) {
     return (
       <CarServiceDashboard
         provider={serviceProvider as { name: string; email: string; phone: string; city: string }}
-        onLogout={() => {
-          handleLogoutAll();
+        onLogout={async () => {
+          await handleLogoutAll();
           navigate(ViewEnum.HOME);
         }}
       />

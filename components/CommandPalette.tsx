@@ -45,7 +45,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
       { id: 'car_services', title: 'Car Services', icon: ICONS.SERVICE, action: () => { onNavigate(View.CAR_SERVICES); onClose(); }, section: 'Navigation' },
       { id: 'safety', title: 'Trust & Safety', icon: ICONS.SHIELD, action: () => { onNavigate(View.SAFETY_CENTER); onClose(); }, section: 'Navigation' },
       { id: 'pricing', title: 'View Pricing', icon: ICONS.PRICE, action: () => { onNavigate(View.PRICING); onClose(); }, section: 'Navigation' },
-      { id: 'sell_car', title: 'Sell a Car', icon: ICONS.SELL, action: () => { onNavigate(View.SELLER_LOGIN); onClose(); }, section: 'Navigation' },
+      { id: 'sell_car', title: 'Sell a Car', icon: ICONS.SELL, action: () => { onNavigate(View.SELL_CAR); onClose(); }, section: 'Navigation' },
       // Conditional Navigation
       ...(currentUser ? [
         { id: 'profile', title: 'My Profile', icon: ICONS.USER, action: () => { onNavigate(View.PROFILE); onClose(); }, section: 'Navigation' as const },

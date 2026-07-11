@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { loginAsCustomer } from './helpers/auth';
 
 /** react-cookie-consent default: name CookieConsent, value "true" when accepted (see node_modules/react-cookie-consent). */
 async function seedCookieConsentAccepted(page: Page, baseURL: string | undefined) {
@@ -61,5 +62,20 @@ test.describe('Mobile App and PWA Functionality', () => {
   test('should open menu drawer from home using bottom-nav menu button', async ({ page }) => {
     await page.locator('[data-testid="mobile-bottom-nav"] button:has-text("Menu")').click({ force: true });
     await expect(page.locator('[data-testid="mobile-drawer"]')).toBeVisible();
+  });
+
+  test('logged-in customer can logout from mobile menu drawer', async ({ page, baseURL }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await loginAsCustomer(page, baseURL);
+    await page.locator('[data-testid="mobile-bottom-nav"] button:has-text("Menu")').click({ force: true });
+    await expect(page.locator('[data-testid="mobile-drawer"]')).toBeVisible();
+    await page.getByRole('button', { name: /^Logout$/i }).click();
+    await page.waitForFunction(() => !localStorage.getItem('reRideCurrentUser'), undefined, {
+      timeout: 15_000,
+    });
+    await page.locator('[data-testid="mobile-bottom-nav"] button:has-text("Menu")').click({ force: true });
+    await expect(page.getByRole('button', { name: 'Login / Register', exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
   });
 });

@@ -3,6 +3,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { USE_SUPABASE, type HandlerOptions } from '../handler-shared.js';
+import { errorToPublicMessage } from '../main-api/shared.js';
 import { handleDealComplaints } from './deals/deal-complaints.js';
 import { handleLeadLifecycle } from './deals/lead-lifecycle.js';
 import { handleStageHandlers } from './deals/stage-handlers.js';
@@ -35,7 +36,7 @@ export async function handleDeals(req: VercelRequest, res: VercelResponse, _opti
     console.error('deals handler error:', error);
     return res.status(500).json({
       success: false,
-      reason: error instanceof Error ? error.message : 'Internal error',
+      reason: errorToPublicMessage(error),
     });
   }
 }

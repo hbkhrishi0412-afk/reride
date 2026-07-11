@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import { useFocusTrap } from '../../utils/focusTrap';
+import { Z_INDEX } from '../../utils/zIndex';
 
 type PressableProps = {
   onPress?: (event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => void;
@@ -52,16 +54,23 @@ type ModalBackdropProps = {
   'aria-label'?: string;
 };
 
-/** Modal overlay: backdrop button + content panel. */
+/** Modal overlay: backdrop button + content panel with focus trap. */
 export function ModalBackdrop({
   onClose,
-  className = 'fixed inset-0 flex items-center justify-center z-50 p-4',
+  className = `fixed inset-0 flex items-center justify-center p-4`,
   backdropClassName = 'absolute inset-0 bg-black/60',
   children,
   'aria-label': ariaLabel = 'Close dialog',
 }: ModalBackdropProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, true);
+
   return (
-    <div className={className}>
+    <div
+      className={className}
+      style={{ zIndex: Z_INDEX.modal }}
+      role="presentation"
+    >
       <button
         type="button"
         className={backdropClassName}
@@ -69,7 +78,16 @@ export function ModalBackdrop({
         onClick={onClose}
       />
       <div className="relative z-10 max-h-full w-full flex items-center justify-center pointer-events-none">
-        <div className="pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          className="pointer-events-auto outline-none"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') onClose();
+          }}
+        >
           {children}
         </div>
       </div>

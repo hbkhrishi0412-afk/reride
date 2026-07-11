@@ -245,7 +245,7 @@ const ComboboxInput: React.FC<{
 
   return (
     <div className="relative">
-      <label htmlFor={name} className="flex items-center text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+      <label htmlFor={name} className="flex items-center text-sm font-medium text-reride-text-dark dark:text-gray-100 mb-1">
         {label}{required && <span className="text-reride-orange ml-0.5">*</span>}
         {tooltip && <HelpTooltip text={tooltip} />}
       </label>
@@ -262,7 +262,7 @@ const ComboboxInput: React.FC<{
           disabled={disabled}
           placeholder={placeholder}
           required={required}
-          className={`block w-full p-3 pr-10 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300'}`}
+          className={`block w-full p-3 pr-10 border rounded-lg focus:outline-none transition bg-white dark:text-gray-100 disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300'}`}
           style={!error ? { boxShadow: 'none' } : {}}
         />
         <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
@@ -305,7 +305,7 @@ const ComboboxInput: React.FC<{
 
 const FormInput: React.FC<{ label: string; name: keyof Vehicle | 'summary'; type?: string; value: string | number; onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void; onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; error?: string; tooltip?: string; required?: boolean; children?: React.ReactNode; disabled?: boolean; placeholder?: string; rows?: number; prefix?: React.ReactNode; suffix?: React.ReactNode; indianNumberFormat?: boolean }> =
   ({ label, name, type = 'text', value, onChange, onBlur, error, tooltip, required = false, children, disabled = false, placeholder, rows, prefix, suffix, indianNumberFormat = false }) => {
-  const baseInputClasses = `block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300 hover:border-gray-300'}`;
+  const baseInputClasses = `block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-gray-100 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300 hover:border-gray-300'}`;
   const focusOn = (e: React.FocusEvent<HTMLElement>) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.15)');
   const focusOff = (e: React.FocusEvent<HTMLElement>) => (e.currentTarget.style.boxShadow = '');
   const inputType = indianNumberFormat ? 'text' : type;
@@ -319,7 +319,7 @@ const FormInput: React.FC<{ label: string; name: keyof Vehicle | 'summary'; type
   };
   return (
   <div>
-    <label htmlFor={String(name)} className="flex items-center text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+    <label htmlFor={String(name)} className="flex items-center text-sm font-medium text-reride-text-dark dark:text-gray-100 mb-1">
         {label}{required && <span className="text-reride-orange ml-0.5">*</span>}
         {tooltip && <HelpTooltip text={tooltip} />}
     </label>
@@ -1024,7 +1024,7 @@ const SettingsView: React.FC<{
       </div>
 
       <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">
+      <h2 className="text-2xl font-bold text-reride-text-dark dark:text-gray-100 mb-6">
         {t('sellerDashboard.settingsTitle')}
       </h2>
       
@@ -1993,13 +1993,13 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                         onChange={(e) => setFormData((prev) => ({ ...prev, offerEnabled: e.target.checked }))}
                         className="h-5 w-5 rounded border-gray-300"
                     />
-                    <label htmlFor="offer-enabled" className="text-sm font-medium text-reride-text-dark dark:text-reride-text-dark cursor-pointer">
+                    <label htmlFor="offer-enabled" className="text-sm font-medium text-reride-text-dark dark:text-gray-100 cursor-pointer">
                         {t('sellerListing.offer.enable')}
                     </label>
                 </div>
                 <div className={`space-y-4 ${formData.offerEnabled ? '' : 'opacity-50 pointer-events-none'}`}>
                     <div>
-                        <label htmlFor="offer-title" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                        <label htmlFor="offer-title" className="block text-sm font-medium text-reride-text-dark dark:text-gray-100 mb-1">
                             {t('sellerListing.label.offerTitle')}
                         </label>
                         <input
@@ -2014,7 +2014,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label htmlFor="offer-start" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                            <label htmlFor="offer-start" className="block text-sm font-medium text-reride-text-dark dark:text-gray-100 mb-1">
                                 {t('sellerListing.label.offerStartDate')}
                             </label>
                             <input
@@ -2027,7 +2027,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             />
                         </div>
                         <div>
-                            <label htmlFor="offer-end" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                            <label htmlFor="offer-end" className="block text-sm font-medium text-reride-text-dark dark:text-gray-100 mb-1">
                                 {t('sellerListing.label.offerEndDate')}
                             </label>
                             <input
@@ -2041,7 +2041,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                         </div>
                     </div>
                     <div>
-                        <label htmlFor="offer-date-label" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                        <label htmlFor="offer-date-label" className="block text-sm font-medium text-reride-text-dark dark:text-gray-100 mb-1">
                             {t('sellerListing.label.offerDateLabel')}
                         </label>
                         <input
@@ -2055,7 +2055,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                         />
                     </div>
                     <div>
-                        <label htmlFor="offer-description" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                        <label htmlFor="offer-description" className="block text-sm font-medium text-reride-text-dark dark:text-gray-100 mb-1">
                             {t('sellerListing.label.offerDescription')}
                         </label>
                         <input
@@ -2069,7 +2069,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                         />
                     </div>
                     <div>
-                        <label htmlFor="offer-highlight" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                        <label htmlFor="offer-highlight" className="block text-sm font-medium text-reride-text-dark dark:text-gray-100 mb-1">
                             {t('sellerListing.label.offerHighlight')}
                         </label>
                         <input
@@ -2083,7 +2083,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                         />
                     </div>
                     <div>
-                        <label htmlFor="offer-disclaimer" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                        <label htmlFor="offer-disclaimer" className="block text-sm font-medium text-reride-text-dark dark:text-gray-100 mb-1">
                             {t('sellerListing.label.offerDisclaimer')}
                         </label>
                         <input
@@ -2314,7 +2314,7 @@ const InquiriesView: React.FC<{
 
     return (
        <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-         <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">{t('sellerDashboard.nav.messages')}</h2>
+         <h2 className="text-2xl font-bold text-reride-text-dark dark:text-gray-100 mb-6">{t('sellerDashboard.nav.messages')}</h2>
          <div className="mb-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => setFilterMode('all')} className={`px-3 py-1 rounded-full text-sm ${filterMode === 'all' ? 'bg-reride-orange text-white' : 'bg-gray-200 text-gray-700'}`}>All</button>
             <button type="button" onClick={() => setFilterMode('unread')} className={`px-3 py-1 rounded-full text-sm ${filterMode === 'unread' ? 'bg-reride-orange text-white' : 'bg-gray-200 text-gray-700'}`}>Unread</button>
@@ -2344,10 +2344,10 @@ const InquiriesView: React.FC<{
                 <div className="flex items-center gap-3">
                     {!conv.isReadBySeller && <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF6B35' }}></div>}
                     <div>
-                      <p className="font-bold text-reride-text-dark dark:text-reride-text-dark">
-                        {conv.customerName || 'Unknown'} - <span className="font-normal text-reride-text-dark dark:text-reride-text-dark">{conv.vehicleName || 'Unknown Vehicle'}</span>
+                      <p className="font-bold text-reride-text-dark dark:text-gray-100">
+                        {conv.customerName || 'Unknown'} - <span className="font-normal text-reride-text-dark dark:text-gray-100">{conv.vehicleName || 'Unknown Vehicle'}</span>
                       </p>
-                      <p className="text-sm text-reride-text-dark dark:text-reride-text-dark truncate max-w-md">
+                      <p className="text-sm text-reride-text-dark dark:text-gray-100 truncate max-w-md">
                         {lastVisible ? lastLine : snippet.text}
                       </p>
                     </div>
@@ -2366,7 +2366,7 @@ const InquiriesView: React.FC<{
                       {conv.isReadBySeller ? 'Mark unread' : 'Mark read'}
                     </button>
                   )}
-                  <span className="text-xs text-reride-text-dark dark:text-reride-text-dark">{lastMessageTime}</span>
+                  <span className="text-xs text-reride-text-dark dark:text-gray-100">{lastMessageTime}</span>
                 </div>
               </Pressable>
             );
@@ -2375,8 +2375,8 @@ const InquiriesView: React.FC<{
                     <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
-                    <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">{t('sellerDashboard.messages.emptyTitle')}</h3>
-                    <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">{t('sellerDashboard.messages.emptyBody')}</p>
+                    <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-gray-100">{t('sellerDashboard.messages.emptyTitle')}</h3>
+                    <p className="mt-1 text-sm text-reride-text-dark dark:text-gray-100">{t('sellerDashboard.messages.emptyBody')}</p>
                 </div>
             )}
          </div>
@@ -2397,15 +2397,15 @@ const ReportsView: React.FC<{
     
     return (
     <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Reported Listings</h2>
+        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-gray-100 mb-6">Reported Listings</h2>
         {safeReportedVehicles.length > 0 ? (
             <div className="space-y-4">
                 {safeReportedVehicles.map(v => (
                     <div key={v.id} className="border border-gray-200 dark:border-gray-200 bg-reride-blue-light dark:bg-reride-blue/20 p-4 rounded-lg">
-                        <h3 className="font-bold text-reride-text-dark dark:text-reride-text-dark">{v.year} {v.make} {v.model}</h3>
-                        <p className="text-sm text-reride-text-dark dark:text-reride-text-dark mt-1">Reported on: {v.flaggedAt ? new Date(v.flaggedAt).toLocaleString() : 'N/A'}</p>
-                        <p className="mt-2 text-sm italic text-reride-text-dark dark:text-reride-text-dark">Reason: "{v.flagReason || 'No reason provided.'}"</p>
-                        <p className="text-xs text-reride-text-dark dark:text-reride-text-dark mt-2">An administrator will review this report. You can edit the listing to correct any issues or delete it if it's no longer valid.</p>
+                        <h3 className="font-bold text-reride-text-dark dark:text-gray-100">{v.year} {v.make} {v.model}</h3>
+                        <p className="text-sm text-reride-text-dark dark:text-gray-100 mt-1">Reported on: {v.flaggedAt ? new Date(v.flaggedAt).toLocaleString() : 'N/A'}</p>
+                        <p className="mt-2 text-sm italic text-reride-text-dark dark:text-gray-100">Reason: "{v.flagReason || 'No reason provided.'}"</p>
+                        <p className="text-xs text-reride-text-dark dark:text-gray-100 mt-2">An administrator will review this report. You can edit the listing to correct any issues or delete it if it's no longer valid.</p>
                         <div className="mt-3 space-x-4">
                             <button 
                                 type="button"
@@ -2439,8 +2439,8 @@ const ReportsView: React.FC<{
         ) : (
              <div className="text-center py-16 px-6">
                 <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">All Clear!</h3>
-                <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">You have no reported listings at this time.</p>
+                <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-gray-100">All Clear!</h3>
+                <p className="mt-1 text-sm text-reride-text-dark dark:text-gray-100">You have no reported listings at this time.</p>
             </div>
         )}
     </div>
@@ -3561,7 +3561,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             <div className="space-y-6">
                 {/* Month Selector */}
                 <div className="bg-white p-4 rounded-lg shadow-md flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">Analytics Overview</h2>
+                    <h2 className="text-xl font-bold text-reride-text-dark dark:text-gray-100">Analytics Overview</h2>
                     <div className="flex items-center gap-3">
                         <label htmlFor="month-selector" className="text-sm font-medium text-gray-700">
                             Filter by Month:
@@ -3644,7 +3644,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 })()}
                 
                 <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-                    <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Listing Performance</h2>
+                    <h2 className="text-2xl font-bold text-reride-text-dark dark:text-gray-100 mb-6">Listing Performance</h2>
                     {filteredPublishedListings.length > 0 ? (
                         (() => {
                           try {
@@ -3652,8 +3652,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             if (!analyticsData?.chartData || !analyticsData.chartData.labels || !analyticsData.chartData.datasets) {
                               return (
                                 <div className="text-center py-16 px-6">
-                                  <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">Chart Data Unavailable</h3>
-                                  <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">
+                                  <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-gray-100">Chart Data Unavailable</h3>
+                                  <p className="mt-1 text-sm text-reride-text-dark dark:text-gray-100">
                                     Unable to load chart data. Please refresh the page.
                                   </p>
                                 </div>
@@ -3678,8 +3678,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             }
                             return (
                               <div className="text-center py-16 px-6">
-                                <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">Chart Error</h3>
-                                <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">
+                                <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-gray-100">Chart Error</h3>
+                                <p className="mt-1 text-sm text-reride-text-dark dark:text-gray-100">
                                   Unable to display chart. Please refresh the page.
                                 </p>
                               </div>
@@ -3688,8 +3688,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                         })()
                     ) : (
                         <div className="text-center py-16 px-6">
-                            <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">No Data to Display</h3>
-                            <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">
+                            <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-gray-100">No Data to Display</h3>
+                            <p className="mt-1 text-sm text-reride-text-dark dark:text-gray-100">
                                 {selectedMonth === 'all' 
                                     ? 'Add a vehicle to see performance data.' 
                                     : 'No data available for the selected month.'}
@@ -3704,7 +3704,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
             {renderPendingDealsBanner()}
             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-              <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark">Active Listings</h2>
+              <h2 className="text-2xl font-bold text-reride-text-dark dark:text-gray-100">Active Listings</h2>
               <div className="flex gap-2">
                 <button onClick={() => setIsBulkUploadOpen(true)} className="bg-reride-orange text-white font-bold py-2 px-4 rounded-lg hover:bg-reride-orange">Bulk Upload</button>
                 <button onClick={handleAddNewClick} className="btn-brand-primary text-white font-bold py-2 px-4 rounded-lg">List New Vehicle</button>
@@ -4107,8 +4107,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2-2H5a2 2 0 01-2-2z" />
                     </svg>
-                    <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">No vehicles listed yet</h3>
-                    <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">Ready to sell? Add your first vehicle to get started.</p>
+                    <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-gray-100">No vehicles listed yet</h3>
+                    <p className="mt-1 text-sm text-reride-text-dark dark:text-gray-100">Ready to sell? Add your first vehicle to get started.</p>
                     <div className="mt-6">
                         <button
                             onClick={handleAddNewClick}
@@ -4124,7 +4124,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       case 'salesHistory':
         return (
           <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-            <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Sales History</h2>
+            <h2 className="text-2xl font-bold text-reride-text-dark dark:text-gray-100 mb-6">Sales History</h2>
             {soldListings.length > 0 ? (
                 <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -4197,7 +4197,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 )}
               </div>
             ) : (
-                <p className="text-center text-reride-text-dark dark:text-reride-text-dark py-8">You have not sold any vehicles yet.</p>
+                <p className="text-center text-reride-text-dark dark:text-gray-100 py-8">You have not sold any vehicles yet.</p>
             )}
           </div>
         );
@@ -4255,7 +4255,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       default:
         return (
           <div className="text-center py-8">
-            <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
+            <h2 className="text-xl font-semibold text-reride-text-dark dark:text-gray-100 mb-4">
               {t('sellerDashboard.pageNotFound')}
             </h2>
             <p className="text-gray-600">{t('sellerDashboard.sectionNotFound')}</p>

@@ -3,6 +3,7 @@ import type { SubscriptionPlan } from '../types';
 import { createPaymentRequest } from '../services/paymentService';
 import { isRazorpayConfiguredInClient, openRazorpayPlanCheckout } from '../services/razorpayPlanPayment';
 import { logInfo } from '../utils/logger.js';
+import { ModalShell } from './primitives/ModalShell';
 
 interface PaymentRequestModalProps {
   isOpen: boolean;
@@ -93,7 +94,7 @@ const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
       sellerEmail,
       onSuccess: () => {
         setIsGatewayBusy(false);
-        notify('Payment successful. Your plan will update shortly.', 'success');
+        notify('Payment successful. Your plan has been upgraded.', 'success');
         onSuccess();
         onClose();
         resetForm();
@@ -105,10 +106,8 @@ const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
     });
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <ModalShell isOpen={isOpen} onClose={handleCancel} aria-label="Close upgrade plan dialog">
       <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
@@ -250,7 +249,7 @@ const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 

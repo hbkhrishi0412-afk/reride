@@ -14,7 +14,17 @@ interface PageTransitionProps {
 // Views that must not be wrapped in AnimatePresence (e.g. contain Leaflet map)
 /** DETAIL: avoid transform containing-block so in-DOM fixed UI behaves; framer still breaks portaled bars if nested. */
 /** SELL_CAR: motion.div has no explicit height — breaks `h-full` flex footer + pinned Continue on mobile Safari */
-const VIEWS_WITHOUT_TRANSITION = ['DEALER_PROFILES', 'DETAIL', 'ADMIN_PANEL', 'SELL_CAR'];
+const VIEWS_WITHOUT_TRANSITION = [
+  'DEALER_PROFILES',
+  'DETAIL',
+  'ADMIN_PANEL',
+  'SELL_CAR',
+  'INBOX',
+  'BUYER_DASHBOARD',
+  'SERVICE_CART',
+  'COMPARISON',
+  'PROFILE',
+];
 
 const PageTransition = ({ children, currentView }: PageTransitionProps) => {
   const { i18n } = useTranslation();

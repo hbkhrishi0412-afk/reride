@@ -372,12 +372,21 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
       setVehicleDealLead(null);
       return;
     }
-    try {
-      const lead = await getDealLead({ vehicleId: safeVehicle.id });
-      setVehicleDealLead(lead);
-    } catch {
-      setVehicleDealLead(null);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      try {
+        const lead = await getDealLead({ vehicleId: safeVehicle.id });
+        if (lead) {
+          setVehicleDealLead(lead);
+          return;
+        }
+      } catch {
+        /* retry */
+      }
+      if (attempt < 5) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
     }
+    setVehicleDealLead(null);
   }, [currentUser?.email, safeVehicle.id]);
 
   useEffect(() => {
@@ -1639,9 +1648,9 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             </svg>
                             {vehicleDealLead
                               ? t('vehicle.detail.openDealRoom', { defaultValue: 'Open deal room' })
-                              : t('vehicle.detail.startTrackedDeal', { defaultValue: 'Start tracked deal' })}
+                              : t('vehicle.detail.chatWithSeller')}
                           </button>
-                          {onRequestTestDrive ? (
+                          {onRequestTestDrive && listingAvailable ? (
                             <div className="rounded-lg border border-orange-100 bg-orange-50/60 p-3">
                               {showTestDriveForm ? (
                                 <form className="space-y-2" onSubmit={handleRequestTestDriveSubmit}>

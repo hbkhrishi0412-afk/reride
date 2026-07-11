@@ -19,9 +19,8 @@ test.describe('Deal pipeline (buyer)', () => {
     await expect(dealCta).toBeVisible({ timeout: 20_000 });
     await dealCta.click();
 
-    await expect(
-      page.getByTestId('start-tracked-deal').or(page.getByText(/open deal room|deal timeline|deal room/i)),
-    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('button', { name: /open deal room/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/awaiting accept/i)).toBeVisible({ timeout: 10_000 });
   });
 });
 

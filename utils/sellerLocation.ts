@@ -117,6 +117,57 @@ async function geocodeNominatim(params: {
  * Map pin: geocode address + PIN when possible, else city centroid + small jitter.
  * Nominatim is rate-limited; calls are spaced automatically.
  */
+
+/** City centroid + jitter without Nominatim (fast). Returns undefined if Nominatim may be needed. */
+export function tryResolveSellerCoordsFast(seller: User): CompanyLocation | null | undefined {
+  const seed = seller.email || seller.id || 'unknown';
+  const cityHint = extractCityHint(seller.location);
+  const pc = normalizeIndianPincode(seller.pincode);
+  const addr = (seller.address || '').trim();
+
+  if (addr || pc) {
+    return undefined;
+  }
+
+  let cityCoords: CompanyLocation | null = CITY_COORDINATES[cityHint] ?? null;
+  if (!cityCoords && cityHint) {
+    const cityKey = Object.keys(CITY_COORDINATES).find(
+      (key) => key.toLowerCase() === cityHint.toLowerCase(),
+    );
+    if (cityKey) cityCoords = CITY_COORDINATES[cityKey];
+  }
+  if (cityCoords) {
+    return jitterCoords(cityCoords.lat, cityCoords.lng, seed);
+  }
+  return undefined;
+}
+
+/** Resolve map pins for many sellers: fast city lookups first, then sequential Nominatim. */
+export async function getSellerMapCoordinatesBatch(
+  sellers: User[],
+): Promise<Map<string, CompanyLocation | null>> {
+  const out = new Map<string, CompanyLocation | null>();
+  const slow: User[] = [];
+
+  for (const seller of sellers) {
+    const key = seller.email || seller.id || '';
+    if (!key) continue;
+    const fast = tryResolveSellerCoordsFast(seller);
+    if (fast === undefined) {
+      slow.push(seller);
+    } else {
+      out.set(key, fast);
+    }
+  }
+
+  for (const seller of slow) {
+    const key = seller.email || seller.id || '';
+    out.set(key, await getSellerMapCoordinates(seller));
+  }
+
+  return out;
+}
+
 export async function getSellerMapCoordinates(seller: User): Promise<CompanyLocation | null> {
   const seed = seller.email || seller.id || 'unknown';
   const cityHint = extractCityHint(seller.location);

@@ -1,8 +1,10 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
 import { VehicleCategory } from '../types';
+import { useFocusTrap } from '../utils/focusTrap';
+import { Z_INDEX } from '../utils/zIndex';
 
 interface BulkUploadModalProps {
     onClose: () => void;
@@ -96,6 +98,17 @@ function parseOptionalInt(value: string | undefined, fallback?: number): number 
 
 const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipleVehicles, sellerEmail }) => {
     const { t } = useTranslation();
+    const panelRef = useRef<HTMLDivElement>(null);
+    useFocusTrap(panelRef, true);
+
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [onClose]);
+
     const [step, setStep] = useState(1);
     const [file, setFile] = useState<File | null>(null);
     const [parsedData, setParsedData] = useState<Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]>([]);
@@ -240,17 +253,29 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
 
     const modalContent = (
         <div
-            className="fixed inset-0 z-[2147483002] flex items-center justify-center p-4 animate-fade-in"
-            style={{ background: 'rgba(8,8,12,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="bulk-upload-title"
-            onClick={onClose}
+            className="fixed inset-0 flex items-center justify-center p-4 animate-fade-in"
+            style={{
+                zIndex: Z_INDEX.modal,
+                background: 'rgba(8,8,12,0.55)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+            }}
+            role="presentation"
         >
+            <button
+                type="button"
+                className="absolute inset-0 cursor-default"
+                aria-label="Close bulk upload dialog"
+                onClick={onClose}
+            />
             <div
-                className="w-full sm:max-w-2xl min-h-0 max-h-[92vh] sm:max-h-[min(92vh,100dvh)] flex flex-col overflow-hidden rounded-3xl animate-slide-in-up -translate-y-24"
+                ref={panelRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="bulk-upload-title"
+                tabIndex={-1}
+                className="relative w-full sm:max-w-2xl min-h-0 max-h-[92vh] sm:max-h-[min(92vh,100dvh)] flex flex-col overflow-hidden rounded-3xl animate-slide-in-up -translate-y-24 outline-none"
                 style={{ background: '#FFFFFF', border: '1px solid rgba(15,23,42,0.06)', boxShadow: '0 30px 60px -20px rgba(0,0,0,0.40)' }}
-                onClick={e => e.stopPropagation()}
             >
                 {/* Premium obsidian header */}
                 <div

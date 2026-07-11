@@ -395,15 +395,32 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         }
         
         if (!user) {
+          const { resolveDevMockUser } = await import('./dev-mock-users.js');
+          const devMock = resolveDevMockUser(normalizedEmail, sanitizedData.password, sanitizedData.role);
+          if (devMock) {
+            user = devMock;
+            core.logInfo('✅ Dev mock login user resolved:', { email: normalizedEmail, role: devMock.role });
+          }
+        }
+
+        if (!user) {
           await core.recordFailedLogin(normalizedEmail);
           // Don't reveal whether email exists or not (security best practice)
           return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
         }
       }
       
+      const isDevMockLogin =
+        process.env.NODE_ENV === 'development' &&
+        String(process.env.VERCEL || '') !== '1' &&
+        (user.email === 'admin@test.com' ||
+          user.email === 'seller@test.com' ||
+          user.email === 'customer@test.com') &&
+        sanitizedData.password === 'password';
+
       // OAuth/phone users without a password must use their original sign-in method.
       // Never allow setting a password via the email/password login form (account takeover risk).
-      if (!user.password) {
+      if (!isDevMockLogin && !user.password) {
         await core.recordFailedLogin(normalizedEmail);
         const provider = String(user.authProvider || 'email').toLowerCase();
         const methodHint =
@@ -422,13 +439,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       }
       
       // Verify password using bcrypt (wrap to avoid 500 on invalid hash/corrupt data)
-      let isPasswordValid = false;
-      try {
-        isPasswordValid = user.password
-          ? await core.validatePassword(sanitizedData.password, user.password)
-          : false;
-      } catch (pwErr) {
-        core.logWarn('⚠️ Password validation error (treating as invalid):', pwErr);
+      let isPasswordValid = isDevMockLogin;
+      if (!isDevMockLogin) {
+        try {
+          isPasswordValid = user.password
+            ? await core.validatePassword(sanitizedData.password, user.password)
+            : false;
+        } catch (pwErr) {
+          core.logWarn('⚠️ Password validation error (treating as invalid):', pwErr);
+        }
       }
 
       if (
@@ -576,10 +595,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       const rtMax = core.refreshCookieMaxAgeSeconds();
       if (!core.isCapacitorAppClient(req)) {
         core.appendRefreshTokenCookie(res, refreshToken, rtMax);
+        const includeRefreshInBody = process.env.NODE_ENV !== 'production';
         return res.status(200).json({
           success: true,
           user: normalizedUser,
           accessToken,
+          ...(includeRefreshInBody ? { refreshToken } : {}),
         });
       }
 
@@ -3657,12 +3678,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       return res.status(200).json(normalizedVehicles);
     } catch (error) {
       console.error('❌ Error fetching vehicles:', error);
-      // Fallback to mock data if database query fails
-      const fallbackVehicles = await getFallbackVehicles();
-      // Filter to only published vehicles for public-facing endpoint
-      const publishedFallbackVehicles = fallbackVehicles.filter(v => v.status === 'published');
-      res.setHeader('X-Data-Fallback', 'true');
-      return res.status(200).json(publishedFallbackVehicles);
+      res.setHeader('X-Data-Error', 'true');
+      const isProd =
+        process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+      return res.status(isProd ? 503 : 200).json([]);
     }
   }
 
@@ -4844,7 +4863,7 @@ async function handleUploadImage(req: VercelRequest, res: VercelResponse) {
       core.logError('Upload image API error:', error);
       return res.status(500).json({
         success: false,
-        reason: error.message || 'Storage upload failed.',
+        reason: core.errorToPublicMessage(error),
       });
     }
     const { data: urlData } = supabase.storage.from('Images').getPublicUrl(filePath);
@@ -4854,9 +4873,8 @@ async function handleUploadImage(req: VercelRequest, res: VercelResponse) {
       imageId: filePath,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    core.logError('handleUploadImage error:', msg);
-    return res.status(500).json({ success: false, reason: msg });
+    core.logError('handleUploadImage error:', err);
+    return res.status(500).json({ success: false, reason: core.errorToPublicMessage(err) });
   }
 }
 
@@ -5056,61 +5074,12 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, _optio
 // For production, consider using Vercel KV or Redis for caching
 
 async function getFallbackVehicles(): Promise<core.VehicleType[]> {
-  // Return minimal fallback to prevent 500 errors
-  // Don't import from constants.js to avoid circular dependency (MOCK_VEHICLES tries to fetch from /api/vehicles)
-  return [
-    {
-      id: 1,
-      make: 'Maruti Suzuki',
-      model: 'Swift',
-      variant: 'VXi',
-      year: 2020,
-      price: 650000,
-      mileage: 25000,
-      location: 'Mumbai, Maharashtra',
-      images: ['https://via.placeholder.com/800x600?text=Swift'],
-      status: 'published',
-      category: core.VehicleCategory.FOUR_WHEELER,
-      city: 'Mumbai',
-      state: 'Maharashtra',
-      sellerEmail: 'demo@reride.com',
-      features: [],
-      description: 'Well-maintained Maruti Suzuki Swift in excellent condition.',
-      engine: '1.2L Petrol',
-      transmission: 'Manual',
-      fuelType: 'Petrol',
-      fuelEfficiency: '23.2 km/l',
-      color: 'White',
-      isFeatured: false,
-      registrationYear: 2020,
-      insuranceValidity: '2025-12-31',
-      insuranceType: 'Comprehensive',
-      rto: 'MH-01',
-      noOfOwners: 1,
-      displacement: '1197 cc',
-      groundClearance: '163 mm',
-      bootSpace: '268 litres'
-    } as core.VehicleType
-  ];
+  // Never serve demo inventory — return empty so clients show a proper empty/error state.
+  return [];
 }
 
 async function getFallbackUsers(): Promise<core.NormalizedUser[]> {
-  // Return minimal fallback user data
-  return [
-    {
-      id: 'fallback-user-1',
-      name: 'Demo User',
-      email: 'demo@reride.com',
-      mobile: '9876543210',
-      role: 'customer',
-      location: 'Mumbai',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      subscriptionPlan: 'free',
-      isVerified: false,
-      hasPassword: false,
-    }
-  ];
+  return [];
 }
 
 // Helper functions

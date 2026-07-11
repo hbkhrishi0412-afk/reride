@@ -166,7 +166,7 @@ const Home: React.FC<HomeProps> = ({
     }, [citiesBase, publishedVehicles, storefrontAgg?.cities]);
 
     const sortedCities = [...citiesWithCounts].sort((a, b) => b.total - a.total);
-    const topCities = sortedCities.slice(0, 6);
+    const topCities = sortedCities.filter((city) => city.total > 0).slice(0, 6);
 
     const handleCityCardClick = useCallback(
         (city: { name: string; total: number }) => {
@@ -472,6 +472,7 @@ const Home: React.FC<HomeProps> = ({
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                             <input
+                                id="search-bar"
                                 type="search"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -626,6 +627,7 @@ const Home: React.FC<HomeProps> = ({
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                             <input
+                                id="search-bar"
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -1108,10 +1110,16 @@ const Home: React.FC<HomeProps> = ({
                                                 {t('common.verified')}
                                             </div>
                                             <button
+                                                type="button"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     onToggleWishlist(vehicle.id);
                                                 }}
+                                                aria-label={
+                                                    wishlist.includes(vehicle.id)
+                                                        ? t('vehicle.card.wishlistRemove')
+                                                        : t('vehicle.card.wishlistAdd')
+                                                }
                                                 className="absolute top-3 right-3 w-9 h-9 bg-white/95 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm"
                                             >
                                                 <svg 

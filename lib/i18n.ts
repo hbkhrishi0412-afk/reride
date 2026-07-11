@@ -903,7 +903,7 @@ const en = {
   'sellerListing.error.mileage': 'Mileage cannot be negative',
   'vehicle.detail.sellerFallback': 'Seller',
   'vehicle.detail.viewProfile': 'View Profile',
-  'vehicle.detail.chatWithSeller': "I'm Interested",
+  'vehicle.detail.chatWithSeller': 'Chat with Seller',
   'vehicle.detail.loginToChatWithSeller': 'Login to chat with seller',
   'vehicle.detail.loginToCallSeller': 'Login to see phone number',
   'vehicle.detail.signInToMessageSeller': 'Sign in to message the seller',

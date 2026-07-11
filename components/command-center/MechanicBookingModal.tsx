@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { DealLead } from '../../types.js';
 import { bookDealInspection } from '../../services/dealService.js';
+import { ModalShell } from '../primitives/ModalShell';
 
 export interface MechanicBookingModalProps {
   lead: DealLead;
@@ -56,7 +57,7 @@ export const MechanicBookingModal: React.FC<MechanicBookingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+    <ModalShell isOpen onClose={onClose} aria-label="Close mechanic booking dialog">
       <div className="bg-white dark:bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="px-5 py-4 border-b border-slate-200 dark:border-gray-200">
           <h3 className="text-lg font-bold text-slate-900">Book mechanic inspection</h3>
@@ -135,7 +136,7 @@ export const MechanicBookingModal: React.FC<MechanicBookingModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { submitDealSurvey } from '../services/dealService.js';
 import { DEAL_ASSISTANCE_PACKAGES } from '../types.js';
 import { useApp } from './AppProvider';
+import { ModalShell } from './primitives/ModalShell';
 
 interface DealSurveyModalProps {
   surveyId: string;
@@ -60,7 +61,7 @@ export const DealSurveyModal: React.FC<DealSurveyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
+    <ModalShell isOpen onClose={onClose} aria-label="Close deal survey dialog">
       <div className="bg-white dark:bg-brand-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6">
         {step === 'purchase' ? (
           <>
@@ -137,7 +138,7 @@ export const DealSurveyModal: React.FC<DealSurveyModalProps> = ({
         </button>
         <p className="text-xs text-slate-400 mt-2 text-center">Lead: {leadId}</p>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 

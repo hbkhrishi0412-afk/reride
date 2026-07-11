@@ -78,7 +78,7 @@ export const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({
       {/* Sheet */}
       <div
         ref={sheetRef}
-        className="mobile-sheet z-[9999] flex flex-col"
+        className="mobile-sheet z-modal flex flex-col"
         role="dialog"
         aria-modal="true"
         aria-labelledby="mobile-filter-sheet-title"

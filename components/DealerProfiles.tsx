@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import type { User, Vehicle } from '../types.js';
 import { getSellers, getServiceProviders } from '../services/userService.js';
 import {
-  getSellerMapCoordinates,
+  getSellerMapCoordinatesBatch,
   areaKeyFromSeller,
   areaDisplayLabelFromSeller,
   normalizeIndianPincode,
@@ -1192,13 +1192,14 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
 
   // Get coordinates for sellers
   useEffect(() => {
+    let cancelled = false;
     const fetchCoords = async () => {
-      const sellersWithLocations: Array<{ seller: User; coords: CompanyLocation | null }> = [];
-      for (const seller of sellers) {
-        const coords = await getSellerMapCoordinates(seller);
-        sellersWithLocations.push({ seller, coords });
-      }
-
+      const coordMap = await getSellerMapCoordinatesBatch(sellers);
+      if (cancelled) return;
+      const sellersWithLocations = sellers.map((seller) => ({
+        seller,
+        coords: coordMap.get(seller.email || seller.id || '') ?? null,
+      }));
       setSellersWithCoords(sellersWithLocations);
       
       // Update map bounds
@@ -1221,11 +1222,14 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({
     };
     
     if (sellers.length > 0) {
-      fetchCoords();
+      void fetchCoords();
     } else {
       // Reset to India center if no sellers
       setMapCenter([20.5937, 78.9629]);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [sellers]);
 
   // Filter sellers

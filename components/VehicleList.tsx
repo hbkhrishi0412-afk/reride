@@ -2601,7 +2601,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         </div>
         
         <div className="relative z-10 used-cars-page grid grid-cols-1 md:grid-cols-[auto_1fr] gap-4 md:gap-6 lg:gap-8 container mx-auto py-4 md:py-6 lg:py-8">
-          <aside className={`filters hidden md:block md:sticky top-24 self-start space-y-6 transition-all duration-300 ${isDesktopFilterVisible ? 'w-[260px] lg:w-[300px] opacity-100' : 'w-0 opacity-0 -translate-x-full'}`}>
+          <aside id="filters" className={`filters hidden md:block md:sticky top-24 self-start space-y-6 transition-all duration-300 ${isDesktopFilterVisible ? 'w-[260px] lg:w-[300px] opacity-100' : 'w-0 opacity-0 -translate-x-full'}`}>
               <div className={`bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-6 ${isDesktopFilterVisible ? 'block' : 'hidden'}`}>
                 <div className="flex items-center gap-3 mb-6">
                   <div

@@ -7,7 +7,6 @@ import React, {
   useCallback,
   useMemo,
   useRef,
-  startTransition,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../lib/i18n';
@@ -43,14 +42,12 @@ import {
   authenticatedFetch,
   getAuthHeaders,
   refreshAuthToken,
-  resetAuthFetchStateAfterLogout,
 } from '../utils/authenticatedFetch';
 import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
-import { setUserContext, clearUserContext } from '../utils/monitoring';
 import { logBackgroundSyncFailure, hasCachedVehicleCatalog } from '../utils/toastPolicy.js';
 import {
   buildVehicleMutationBody,
@@ -66,7 +63,6 @@ import {
 } from '../utils/vehicleIdentity';
 import { resolveVehicleFromApi } from '../services/vehicleIdentityService';
 import { randomAlphanumeric, randomIntBelow } from '../utils/secureRandom.js';
-import { clearRememberMeState } from '../utils/rememberMe';
 import { deduplicateRequest } from '../utils/requestDeduplication';
 import { enrichVehicleWithSellerInfo } from '../utils/vehicleEnrichment';
 import { filterVehiclesBySellerEmail } from '../utils/sellerVehicleFilter';
@@ -90,7 +86,9 @@ import {
   viewToDetailEntryOrdinal,
 } from '../utils/detailNavigationStorage';
 import { useAppNavigation } from '../hooks/useAppNavigation';
+import { useAppAuthRuntime } from './AppProvider/useAppAuthRuntime';
 import { useNotificationRuntime } from '../hooks/useNotificationRuntime';
+import { NotificationContextBridge } from '../contexts/NotificationContext';
 import { parseCityFromPath } from '../utils/citySlug.js';
 import { persistReRideNotifications, readPersistedReRideNotifications } from '../utils/notificationLocalStorage';
 import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot';
@@ -101,7 +99,6 @@ import { isCapacitorNative } from '../utils/apiConfig';
 import { getNativeMemoryRefreshToken } from '../utils/nativeTokenStorage';
 import { normalizeUserLocationForStorage } from '../utils/cityMapping';
 import {
-  clearSupabaseAuthStorage,
   getBrowserAccessTokenForApi,
   useHttpOnlyRefreshCookie,
 } from '../utils/authStorage';
@@ -112,13 +109,6 @@ import {
   participantIdMatchesAppUser,
 } from '../utils/conversationParticipants';
 import { getSupabaseClient } from '../lib/supabase';
-import { syncServiceProviderOAuth, syncWithBackend } from '../services/supabase-auth-service';
-import type { Session } from '@supabase/supabase-js';
-import {
-  clearPersistedUserSession,
-  isPersistedSessionAuthenticated,
-  readPersistedUser,
-} from '../utils/validatePersistedSession';
 import {
   ToastProvider,
   useToast,
@@ -128,156 +118,28 @@ import {
   useChat,
 } from '../contexts';
 import { mergeVehicleCatalog } from '../utils/mergeVehicleCatalog';
+import {
+  postgrestEqQuoted,
+  hasLikelyRefreshSource,
+  mergeConversationMessagesForRealtime,
+  mergeConversationLists,
+  getUserFriendlyErrorMessage,
+  isAdminUserRole,
+  type FeatureApiResponse,
+} from './AppProvider/helpers';
+import type { AppContextType, UserUpdateOptions, VehicleUpdateOptions } from '../types/appContext';
 
-/** PostgREST realtime filter value: quote emails so `@` and special chars parse correctly. */
-function postgrestEqQuoted(value: string): string {
-  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-}
-
-/** True if we can call refresh-token (native Keychain, JSON refresh, or HttpOnly cookie + persisted user). */
-function hasLikelyRefreshSource(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    if (localStorage.getItem('reRideRefreshToken')) return true;
-    if (isCapacitorNative()) {
-      if (getNativeMemoryRefreshToken()) return true;
-      if (localStorage.getItem('reRideCurrentUser')) return true;
-    }
-    if (useHttpOnlyRefreshCookie() && localStorage.getItem('reRideCurrentUser')) return true;
-  } catch {
-    /* ignore */
-  }
-  return false;
-}
-
-/** Merge local + server messages without duplicates (realtime + optimistic UI).
- *  Remote (server) wins when both exist so persisted read-state / payload updates propagate,
- *  but locally-only messages (optimistic sends not yet on server) are always kept. */
-function mergeConversationMessagesForRealtime(local: ChatMessage[], remote: ChatMessage[]): ChatMessage[] {
-  const byId = new Map<number, ChatMessage>();
-  const remoteIds = new Set<number>();
-  for (const m of remote || []) {
-    if (m?.id != null) {
-      const k = Number(m.id);
-      byId.set(k, sanitizePersistedChatMessage(m));
-      remoteIds.add(k);
-    }
-  }
-  for (const m of local || []) {
-    if (m?.id != null) {
-      const k = Number(m.id);
-      if (!remoteIds.has(k)) {
-        byId.set(k, sanitizePersistedChatMessage(m));
-      }
-    }
-  }
-  return Array.from(byId.values()).sort(
-    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-  );
-}
-
-/** Merge full conversation lists: keep optimistic local messages while absorbing server updates. */
-function mergeConversationLists(local: Conversation[], remote: Conversation[]): Conversation[] {
-  const remoteMap = new Map<string, Conversation>();
-  for (const c of remote) {
-    if (c?.id) remoteMap.set(String(c.id), c);
-  }
-
-  const merged: Conversation[] = [];
-  const seen = new Set<string>();
-
-  for (const rc of remote) {
-    if (!rc?.id) continue;
-    const key = String(rc.id);
-    seen.add(key);
-    const lc = local.find((l) => l && String(l.id) === key);
-    if (lc) {
-      const msgs = mergeConversationMessagesForRealtime(lc.messages || [], rc.messages || []);
-      merged.push({ ...rc, messages: msgs });
-    } else {
-      merged.push(rc);
-    }
-  }
-
-  for (const lc of local) {
-    if (!lc?.id) continue;
-    const key = String(lc.id);
-    if (!seen.has(key)) {
-      merged.push(lc);
-    }
-  }
-
-  return merged;
-}
-
-// PERFORMANCE: Helper function for user-friendly error messages
-// Improves UX by converting technical errors to actionable messages
-function getUserFriendlyErrorMessage(error: unknown, defaultMessage: string): string {
-  if (error instanceof Error) {
-    // Use formatSupabaseError for Supabase-specific errors
-    const formatted = formatSupabaseError(error);
-    if (formatted !== error.message) {
-      return formatted;
-    }
-    // Check for common error patterns
-    if (error.message.includes('network') || error.message.includes('fetch')) {
-      return i18n.t('errors.network');
-    }
-    if (error.message.includes('timeout')) {
-      return i18n.t('errors.timeout');
-    }
-    if (error.message.includes('permission') || error.message.includes('unauthorized')) {
-      return i18n.t('errors.permission');
-    }
-    return defaultMessage;
-  }
-  if (typeof error === 'string') {
-    return formatSupabaseError(error);
-  }
-  return defaultMessage;
-}
-
-/**
- * Capacitor Android WebView often OOM-kills the renderer when session storage, toast, router,
- * and a heavy first paint (e.g. mobile HOME) run in the same frame right after sign-in.
- * Spread that work across animation frames + a transition update.
- */
-function scheduleCapacitorPostLoginUi(fn: () => void): void {
-  if (typeof window === 'undefined' || !isCapacitorNative()) {
-    fn();
-    return;
-  }
-  window.requestAnimationFrame(() => {
-    window.requestAnimationFrame(() => {
-      window.setTimeout(() => {
-        startTransition(fn);
-      }, 0);
-    });
-  });
-}
+export type { AppContextType, UserUpdateOptions, VehicleUpdateOptions } from '../types/appContext';
+export {
+  postgrestEqQuoted,
+  hasLikelyRefreshSource,
+  mergeConversationLists,
+  getUserFriendlyErrorMessage,
+  isAdminUserRole,
+} from './AppProvider/helpers';
 
 // PERFORMANCE: Proper typing improves tree-shaking and prevents runtime errors
 type HistoryState = AppHistoryState;
-
-/** Compare vehicle ids from URL, JSON, or API (number vs numeric string). */
-
-function isAdminUserRole(role: string | undefined | null): boolean {
-  return (role || '').toLowerCase().trim() === 'admin';
-}
-
-// API response structure for vehicle feature operations
-interface FeatureApiResponse {
-  success?: boolean;
-  data?: unknown;
-  error?: string;
-  reason?: string;
-  alreadyFeatured?: boolean;
-  vehicle?: Vehicle;
-  remainingCredits?: number;
-}
-
-import type { AppContextType, UserUpdateOptions, VehicleUpdateOptions } from '../types/appContext';
-export type { AppContextType, UserUpdateOptions, VehicleUpdateOptions } from '../types/appContext';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -366,63 +228,34 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const leavingDetailUrlCatchUpRef = useRef(false);
   /** Featured carousel fires both touchend + synthetic click — avoid double navigate. */
   const lastVehicleSelectRef = useRef<{ id: number; t: number }>({ id: -1, t: 0 });
-  /** Prevents double handleLogin when both getSession + onAuthStateChange run after Google OAuth */
-  const googleOAuthSyncDoneRef = useRef(false);
-  /** While tryFinishGoogleOAuth is calling syncWithBackend — blocks duplicate session-restore sync */
-  const oauthGoogleProfileSyncInFlightUidRef = useRef<string | null>(null);
-  const handleRegisterRef = useRef<(user: User) => void>(() => {});
-  /** Mutex for session-restore sync (auth events can fire in bursts) */
-  const profileRestoreFromSupabaseInFlightRef = useRef(false);
-  /** Blocks Supabase session-restore / OAuth handlers from re-logging in during sign-out */
-  const logoutInProgressRef = useRef(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const currentUserRef = useRef<User | null>(null);
+  const setNotificationsRef = useRef<React.Dispatch<React.SetStateAction<Notification[]>>>(() => {});
+  const setNotificationsProxy = useCallback((value: React.SetStateAction<Notification[]>) => {
+    setNotificationsRef.current(value);
+  }, []);
+  const {
+    currentUser,
+    setCurrentUser,
+    handleLogin,
+    handleLogout,
+    handleRegister,
+  } = useAppAuthRuntime({
+    addToast,
+    t,
+    routerNavigate,
+    currentView,
+    setCurrentView,
+    setActiveChat,
+    setConversations,
+    setTypingStatus,
+    setChatPeerOnlineByConversationId,
+    setComparisonList,
+    setWishlist,
+    setNotifications: setNotificationsProxy,
+  });
   const [sellerInventory, setSellerInventory] = useState<Vehicle[]>([]);
   const [sellerInventoryReady, setSellerInventoryReady] = useState(false);
   const sellerInventoryRef = useRef<Vehicle[]>([]);
   sellerInventoryRef.current = sellerInventory;
-  currentUserRef.current = currentUser;
-
-  // Restore or reject persisted sessions (no optimistic auth UI before token validation).
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!localStorage.getItem('reRideCurrentUser')) return;
-
-    let cancelled = false;
-    void (async () => {
-      const authenticated = await isPersistedSessionAuthenticated();
-      if (cancelled) return;
-
-      if (authenticated) {
-        const user = readPersistedUser();
-        if (user) {
-          logInfo('🔄 Restoring logged-in user after session validation:', {
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            userId: user.id,
-          });
-          setCurrentUser(user);
-        }
-        return;
-      }
-
-      logWarn('⚠️ Persisted session failed token validation — signing out');
-      setCurrentUser(null);
-      clearPersistedUserSession();
-      resetAuthFetchStateAfterLogout();
-      try {
-        const { logout: logoutService } = await import('../services/userService');
-        logoutService();
-      } catch (logoutError) {
-        logWarn('Session cleanup logout error:', logoutError);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     ensureSyncQueueOnlineListener();
@@ -498,6 +331,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const [faqItems, setFaqItems] = useState<FAQItem[]>([]);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(() => getSupportTickets() || []);
   const { notifications, setNotifications } = useNotificationRuntime(currentUser?.email);
+  setNotificationsRef.current = setNotifications;
 
   const [confirmState, setConfirmState] = useState<{
     title: string;
@@ -548,720 +382,6 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     
     return () => clearTimeout(emergencyTimeout);
   }, [addToast, vehicles.length, t]); // Add vehicles.length dependency
-
-  const handleLogout = useCallback(async () => {
-    logoutInProgressRef.current = true;
-    try {
-      // Local sign-out only: default global signOut() revokes on Supabase (logout?scope=global)
-      // and returns 403 when the access token is already expired, which blocks logout.
-      try {
-        const { getSupabaseClient } = await import('../lib/supabase');
-        const supabase = getSupabaseClient();
-        const { error: signOutErr } = await supabase.auth.signOut({ scope: 'local' });
-        if (signOutErr) {
-          logDebug('Supabase local sign out:', signOutErr.message);
-        }
-      } catch (supabaseError) {
-        logDebug('Supabase sign out skipped:', supabaseError);
-      }
-      clearSupabaseAuthStorage();
-
-      try {
-        const { signOutGoogleNativeIfAvailable } = await import('../utils/nativeGoogleSignIn');
-        await signOutGoogleNativeIfAvailable();
-      } catch (googleSignOutError) {
-        logDebug('Native Google sign out skipped:', googleSignOutError);
-      }
-
-      // Clear tokens via logout service (includes Keychain / Keystore JWT pair on Capacitor)
-      try {
-        const { logout: logoutService } = await import('../services/userService');
-        await logoutService();
-      } catch (logoutError) {
-        logWarn('Logout service error:', logoutError);
-      }
-
-      // Clear user state
-      setCurrentUser(null);
-      clearUserContext();
-      clearPersistedUserSession();
-      
-      // Clear storage
-      sessionStorage.removeItem('reride_oauth_role');
-      sessionStorage.removeItem('reride_oauth_mode');
-      sessionStorage.removeItem('reride_last_role');
-      googleOAuthSyncDoneRef.current = false;
-      oauthGoogleProfileSyncInFlightUidRef.current = null;
-      localStorage.removeItem('reRideAccessToken');
-      localStorage.removeItem('reRideRefreshToken');
-      try {
-        localStorage.removeItem('reride_oauth_role');
-        localStorage.removeItem('reride_oauth_mode');
-        localStorage.removeItem('reride_last_role');
-      } catch {
-        /* ignore */
-      }
-      localStorage.removeItem('reRideServiceProvider');
-      clearRememberMeState();
-      resetAuthFetchStateAfterLogout();
-
-      // Clear user-specific data
-      setActiveChat(null);
-      setConversations([]);
-      try {
-        saveConversations([]);
-      } catch {
-        /* ignore */
-      }
-      setTypingStatus(null);
-      setChatPeerOnlineByConversationId({});
-      setComparisonList([]);
-      setNotifications([]);
-      try {
-        persistReRideNotifications([]);
-      } catch {
-        /* ignore */
-      }
-      try {
-        localStorage.removeItem('reride_comparison_list');
-      } catch { /* ignore storage errors */ }
-      
-      // Navigate to home
-      setCurrentView(View.HOME);
-      
-      // Show success message
-      addToast(t('toast.loggedOut'), 'info');
-    } catch (error) {
-      logError('Error during logout:', error);
-      try {
-        const { signOutGoogleNativeIfAvailable } = await import('../utils/nativeGoogleSignIn');
-        await signOutGoogleNativeIfAvailable();
-      } catch {
-        /* ignore */
-      }
-      try {
-        const { logout: logoutService } = await import('../services/userService');
-        await logoutService();
-      } catch {
-        /* ignore */
-      }
-      // Even if there's an error, clear local state
-      setCurrentUser(null);
-      clearPersistedUserSession();
-      sessionStorage.removeItem('reride_oauth_role');
-      sessionStorage.removeItem('reride_oauth_mode');
-      sessionStorage.removeItem('reride_last_role');
-      googleOAuthSyncDoneRef.current = false;
-      oauthGoogleProfileSyncInFlightUidRef.current = null;
-      localStorage.removeItem('reRideAccessToken');
-      localStorage.removeItem('reRideRefreshToken');
-      try {
-        localStorage.removeItem('reride_oauth_role');
-        localStorage.removeItem('reride_oauth_mode');
-        localStorage.removeItem('reride_last_role');
-      } catch {
-        /* ignore */
-      }
-      localStorage.removeItem('reRideServiceProvider');
-      clearSupabaseAuthStorage();
-      try {
-        localStorage.removeItem('reride_wishlist');
-        localStorage.removeItem('reride_comparison_list');
-      } catch {
-        /* ignore */
-      }
-      resetAuthFetchStateAfterLogout();
-      clearRememberMeState();
-      setConversations([]);
-      try {
-        saveConversations([]);
-      } catch {
-        /* ignore */
-      }
-      setTypingStatus(null);
-      setChatPeerOnlineByConversationId({});
-      setNotifications([]);
-      try {
-        persistReRideNotifications([]);
-      } catch {
-        /* ignore */
-      }
-      setCurrentView(View.HOME);
-      setActiveChat(null);
-      setComparisonList([]);
-      setWishlist([]);
-      addToast(t('toast.loggedOut'), 'info');
-    } finally {
-      window.setTimeout(() => {
-        logoutInProgressRef.current = false;
-      }, 2000);
-    }
-  }, [addToast, setComparisonList, setWishlist, t]);
-
-  // Listen for userDataUpdated events to sync currentUser state when plan expiry changes
-  useEffect(() => {
-    const handleUserDataUpdated = (event: Event) => {
-      const customEvent = event as CustomEvent<{ user: User }>;
-      if (customEvent.detail?.user) {
-        const updatedUser = customEvent.detail.user;
-        // Only update if this is the current user
-        setCurrentUser(prev => {
-          if (prev && prev.email === updatedUser.email) {
-            return updatedUser;
-          }
-          return prev;
-        });
-        logInfo('✅ User data updated from custom event:', updatedUser.email);
-      }
-    };
-
-    window.addEventListener('userDataUpdated', handleUserDataUpdated);
-    return () => {
-      window.removeEventListener('userDataUpdated', handleUserDataUpdated);
-    };
-  }, []);
-
-  const handleLogin = useCallback((user: User) => {
-    if (logoutInProgressRef.current) {
-      logDebug('handleLogin skipped — logout in progress');
-      return;
-    }
-    // CRITICAL: Validate user object before setting
-    if (!user || !user.email || !user.role) {
-      logError('❌ Invalid user object in handleLogin:', { 
-        hasUser: !!user, 
-        hasEmail: !!user?.email, 
-        hasRole: !!user?.role 
-      });
-      addToast(t('toast.loginInvalidUser'), 'error');
-      return;
-    }
-
-    const rawRole = user.role;
-    const trimmed = typeof rawRole === 'string' ? rawRole.trim() : '';
-    let normalizedRole: User['role'] | null = null;
-    if (['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(trimmed)) {
-      normalizedRole = trimmed as User['role'];
-    } else if (trimmed === 'service-provider' || trimmed.toLowerCase() === 'provider') {
-      normalizedRole = 'service_provider';
-    }
-
-    // Ensure role is valid (API / Supabase may return service_provider for provider accounts)
-    if (
-      !normalizedRole ||
-      !['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(normalizedRole)
-    ) {
-      logError('❌ Invalid role in handleLogin:', user.role);
-      addToast(t('toast.loginInvalidRole'), 'error');
-      return;
-    }
-
-    const userForSession: User = { ...user, role: normalizedRole };
-
-    // Set user first (this is critical - navigate checks currentUser)
-    setCurrentUser(userForSession);
-    setUserContext({ id: userForSession.id || userForSession.email, email: userForSession.email });
-    sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(userForSession));
-    localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(userForSession));
-    try {
-      if (
-        userForSession.role === 'customer' ||
-        userForSession.role === 'seller' ||
-        userForSession.role === 'service_provider'
-      ) {
-        sessionStorage.setItem('reride_last_role', userForSession.role);
-      }
-    } catch {
-      /* ignore */
-    }
-
-    // Verify user storage (for debugging production issues).
-    // MUST be deferred: running two sessionStorage reads + two JSON.parse calls synchronously
-    // on the same tick that fires the post-login re-render adds ~ms of blocking work to an
-    // already heavy frame and, on low-RAM Android WebViews, can be enough to trigger the
-    // Chromium renderer being killed (manifests as the app "auto-closing" after tapping Sign in).
-    const scheduleIdle = (cb: () => void): void => {
-      if (typeof window === 'undefined') {
-        cb();
-        return;
-      }
-      const ric = (window as unknown as {
-        requestIdleCallback?: (fn: () => void, opts?: { timeout?: number }) => number;
-      }).requestIdleCallback;
-      if (typeof ric === 'function') {
-        ric(cb, { timeout: 1500 });
-      } else {
-        window.setTimeout(cb, 0);
-      }
-    };
-    scheduleIdle(() => {
-      try {
-        const storedInSession = sessionStorage.getItem('currentUser');
-        const storedInLocal = localStorage.getItem('reRideCurrentUser');
-        logInfo('✅ User stored after login:', {
-          email: userForSession.email,
-          role: userForSession.role,
-          storedInSessionStorage: !!storedInSession,
-          storedInLocalStorage: !!storedInLocal,
-          sessionMatches: storedInSession
-            ? JSON.parse(storedInSession).email === userForSession.email
-            : false,
-          localMatches: storedInLocal
-            ? JSON.parse(storedInLocal).email === userForSession.email
-            : false,
-        });
-      } catch {
-        /* debug-only; never let verification break login */
-      }
-    });
-
-    const previousViewAtLogin = currentView;
-
-    const applyPostLoginNavigation = (): void => {
-      addToast(t('toast.welcomeBack', { name: userForSession.name }), 'success');
-
-      // Navigate based on user role
-      // Directly set view since we've already validated the user
-      // The navigate function will validate again, but we know the user is valid
-      let postLoginView = View.HOME;
-      if (userForSession.role === 'admin') {
-        postLoginView = View.ADMIN_PANEL;
-        setCurrentView(View.ADMIN_PANEL);
-      } else if (userForSession.role === 'seller') {
-        logDebug('🔄 Setting seller dashboard view after login');
-        postLoginView = View.SELLER_DASHBOARD;
-        setCurrentView(View.SELLER_DASHBOARD);
-      } else if (userForSession.role === 'service_provider') {
-        postLoginView = View.CAR_SERVICE_DASHBOARD;
-        setCurrentView(View.CAR_SERVICE_DASHBOARD);
-        try {
-          const loc =
-            typeof userForSession.location === 'string' && userForSession.location.trim()
-              ? userForSession.location.trim()
-              : '';
-          const detail = {
-            id: userForSession.id,
-            name: (userForSession.name && String(userForSession.name).trim()) || 'Service provider',
-            email: userForSession.email,
-            phone: userForSession.mobile || '',
-            city: loc || '',
-          };
-          window.dispatchEvent(new CustomEvent('reride:service-provider-oauth', { detail }));
-        } catch {
-          /* ignore */
-        }
-      } else if (userForSession.role === 'finance_partner') {
-        postLoginView = View.HOME;
-        setCurrentView(View.HOME);
-      } else if (userForSession.role === 'customer') {
-        let customerView = View.HOME;
-        try {
-          const returnView = sessionStorage.getItem('reride.postLoginView');
-          sessionStorage.removeItem('reride.postLoginView');
-          if (returnView === View.DETAIL || returnView === 'DETAIL') {
-            customerView = View.DETAIL;
-          }
-        } catch {
-          /* ignore */
-        }
-        postLoginView = customerView;
-        setCurrentView(customerView);
-      } else {
-        setCurrentView(View.HOME);
-      }
-
-      // Keep React Router URL in sync; otherwise location sync maps /login → LOGIN_PORTAL and overwrites HOME.
-      try {
-        const pathByRole =
-          userForSession.role === 'admin'
-            ? '/admin'
-            : userForSession.role === 'seller'
-              ? '/seller/dashboard'
-              : userForSession.role === 'service_provider'
-                ? '/car-services/dashboard'
-                : userForSession.role === 'finance_partner'
-                  ? '/'
-                  : '/';
-        routerNavigate(pathByRole, {
-          state: {
-            view: postLoginView,
-            previousView: previousViewAtLogin,
-            timestamp: Date.now(),
-          },
-        });
-      } catch {
-        /* ignore */
-      }
-    };
-
-    scheduleCapacitorPostLoginUi(applyPostLoginNavigation);
-  }, [addToast, currentView, routerNavigate, t]);
-
-  // After Supabase Google OAuth redirect: session exists; sync profile with ReRide API and log in
-  useEffect(() => {
-    let cancelled = false;
-    const supabase = getSupabaseClient();
-
-    const tryFinishGoogleOAuth = async (session: Session | null) => {
-      if (logoutInProgressRef.current) return;
-      let pendingRole = sessionStorage.getItem('reride_oauth_role') as
-        | 'customer'
-        | 'seller'
-        | 'service_provider'
-        | null;
-      if (!pendingRole) {
-        try {
-          pendingRole = localStorage.getItem('reride_oauth_role') as typeof pendingRole;
-        } catch { /* ignore */ }
-      }
-      let pendingMode: 'login' | 'register' =
-        (sessionStorage.getItem('reride_oauth_mode') as 'login' | 'register' | null) || 'login';
-      if (!sessionStorage.getItem('reride_oauth_mode')) {
-        try {
-          const fromLocal = localStorage.getItem('reride_oauth_mode') as 'login' | 'register' | null;
-          if (fromLocal) pendingMode = fromLocal;
-        } catch { /* ignore */ }
-      }
-      if (!pendingRole || !session?.user || googleOAuthSyncDoneRef.current || cancelled) {
-        return;
-      }
-      googleOAuthSyncDoneRef.current = true;
-      oauthGoogleProfileSyncInFlightUidRef.current = session.user.id;
-      const accessToken = session.access_token;
-      try {
-        try {
-          sessionStorage.removeItem('reride_oauth_role');
-      sessionStorage.removeItem('reride_oauth_mode');
-          localStorage.removeItem('reride_oauth_role');
-        localStorage.removeItem('reride_oauth_mode');
-          sessionStorage.removeItem('reride_oauth_mode');
-          localStorage.removeItem('reride_oauth_mode');
-        } catch {
-          /* ignore */
-        }
-
-        try {
-          if (pendingRole === 'service_provider') {
-            const result = await syncServiceProviderOAuth(
-              session.user as unknown as Record<string, unknown>,
-              accessToken,
-            );
-            if (result.success && result.provider) {
-              try {
-                window.dispatchEvent(
-                  new CustomEvent('reride:service-provider-oauth', { detail: result.provider }),
-                );
-                window.dispatchEvent(new CustomEvent('reride:oauth-complete'));
-              } catch {
-                /* ignore */
-              }
-            } else {
-              googleOAuthSyncDoneRef.current = false;
-              addToast(result.reason || t('toast.googleSignInFailed'), 'error');
-              await supabase.auth.signOut({ scope: 'local' });
-              clearSupabaseAuthStorage();
-              try {
-                window.dispatchEvent(
-                  new CustomEvent('reride:oauth-failed', {
-                    detail: { message: result.reason || t('toast.googleSignInFailed') },
-                  }),
-                );
-              } catch {
-                /* ignore */
-              }
-            }
-            return;
-          }
-
-          const result = await syncWithBackend(
-            session.user as unknown as Record<string, unknown>,
-            pendingRole,
-            'google',
-            accessToken,
-          );
-          if (result.success && result.user) {
-            if (pendingMode === 'register') {
-              handleRegisterRef.current(result.user);
-            } else {
-              handleLogin(result.user);
-            }
-            try {
-              window.dispatchEvent(new CustomEvent('reride:oauth-complete'));
-            } catch {
-              /* ignore */
-            }
-          } else {
-            googleOAuthSyncDoneRef.current = false;
-            addToast(result.reason || t('toast.googleSignInFailed'), 'error');
-            await supabase.auth.signOut({ scope: 'local' });
-            clearSupabaseAuthStorage();
-            try {
-              window.dispatchEvent(
-                new CustomEvent('reride:oauth-failed', {
-                  detail: { message: result.reason || t('toast.googleSignInFailed') },
-                }),
-              );
-            } catch {
-              /* ignore */
-            }
-          }
-        } catch (e) {
-          googleOAuthSyncDoneRef.current = false;
-          logError('Google OAuth backend sync failed:', e);
-          addToast(t('toast.googleSignInFailed'), 'error');
-          await supabase.auth.signOut({ scope: 'local' });
-          clearSupabaseAuthStorage();
-          try {
-            window.dispatchEvent(
-              new CustomEvent('reride:oauth-failed', { detail: { message: t('toast.googleSignInFailed') } }),
-            );
-          } catch {
-            /* ignore */
-          }
-        }
-      } finally {
-        oauthGoogleProfileSyncInFlightUidRef.current = null;
-      }
-    };
-
-    void supabase.auth.getSession().then(({ data: { session } }) => {
-      void tryFinishGoogleOAuth(session);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      void tryFinishGoogleOAuth(session);
-    });
-
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-    };
-  }, [handleLogin, addToast, t]);
-
-  useEffect(() => {
-    const onOAuthFailed = (e: Event) => {
-      const msg = (e as CustomEvent<{ message?: string }>).detail?.message;
-      addToast(msg || t('toast.googleSignInFailed'), 'error');
-    };
-    window.addEventListener('reride:oauth-failed', onOAuthFailed);
-    return () => window.removeEventListener('reride:oauth-failed', onOAuthFailed);
-  }, [addToast, t]);
-
-  // Supabase session exists but ReRide profile not in memory — resync (cold start, or PKCE finished after first paint).
-  // Subscribes to auth changes so we retry when the session appears (previous one-shot ref blocked this forever).
-  useEffect(() => {
-    if (currentUser) return;
-
-    const supabase = getSupabaseClient();
-    let cancelled = false;
-
-    const restoreFromSupabaseSession = async (session: Session | null) => {
-      if (cancelled || currentUserRef.current) return;
-      if (logoutInProgressRef.current) return;
-      if (!session?.user?.email) return;
-
-      const uid = session.user.id;
-      if (oauthGoogleProfileSyncInFlightUidRef.current === uid) return;
-
-      try {
-        if (sessionStorage.getItem('reride_oauth_role') || localStorage.getItem('reride_oauth_role')) {
-          return;
-        }
-      } catch {
-        /* ignore */
-      }
-
-      if (profileRestoreFromSupabaseInFlightRef.current) return;
-      profileRestoreFromSupabaseInFlightRef.current = true;
-      try {
-        const lastStored = sessionStorage.getItem('reride_last_role');
-        const meta = session.user.user_metadata as Record<string, unknown> | undefined;
-        const prov = (session.user.app_metadata as Record<string, unknown> | undefined)?.provider;
-        const isGoogleProvider = prov === 'google';
-
-        let resolved: 'customer' | 'seller' | 'service_provider' | null = null;
-        if (lastStored && ['customer', 'seller', 'service_provider'].includes(lastStored)) {
-          resolved = lastStored as 'customer' | 'seller' | 'service_provider';
-        }
-        if (!resolved) {
-          const mr = meta?.role;
-          if (typeof mr === 'string') {
-            const t = mr.trim();
-            if (['customer', 'seller', 'service_provider'].includes(t)) {
-              resolved = t as 'customer' | 'seller' | 'service_provider';
-            }
-          }
-        }
-        if (!resolved) {
-          resolved = 'customer';
-        }
-
-        if (resolved === 'service_provider') {
-          const spResult = await syncServiceProviderOAuth(
-            session.user as unknown as Record<string, unknown>,
-          );
-          if (cancelled || currentUserRef.current) return;
-          if (spResult.success && spResult.provider) {
-            const p = spResult.provider;
-            const emailNorm = String(p.email || session.user.email || '')
-              .toLowerCase()
-              .trim();
-            if (emailNorm) {
-              handleLogin({
-                id: String(p.id ?? p.uid ?? session.user.id),
-                name: String(p.name || 'Service provider'),
-                email: emailNorm,
-                mobile: String(p.phone ?? (session.user.phone as string) ?? ''),
-                role: 'service_provider',
-                location:
-                  typeof p.city === 'string' && p.city.trim() && p.city.trim().toLowerCase() !== 'pending setup'
-                    ? p.city.trim()
-                    : '',
-                status: 'active',
-                createdAt: new Date().toISOString(),
-                authProvider: isGoogleProvider ? 'google' : session.user.phone ? 'phone' : 'email',
-                firebaseUid: session.user.id,
-              });
-            }
-          }
-          return;
-        }
-
-        const authProvider: 'google' | 'phone' | 'email' =
-          isGoogleProvider ? 'google' : session.user.phone ? 'phone' : 'email';
-
-        const result = await syncWithBackend(
-          session.user as unknown as Record<string, unknown>,
-          resolved,
-          authProvider,
-        );
-        if (result.success && result.user) {
-          handleLogin(result.user);
-        }
-      } catch (e) {
-        logDebug('Supabase session restore skipped:', e);
-      } finally {
-        profileRestoreFromSupabaseInFlightRef.current = false;
-      }
-    };
-
-    void supabase.auth.getSession().then(({ data: { session } }) => {
-      void restoreFromSupabaseSession(session);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (logoutInProgressRef.current) return;
-      if (event === 'SIGNED_OUT') return;
-      void restoreFromSupabaseSession(session);
-    });
-
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-    };
-  }, [currentUser, handleLogin]);
-
-  const handleRegister = useCallback((user: User) => {
-    // CRITICAL: Validate user object before setting
-    if (!user || !user.email || !user.role) {
-      logError('❌ Invalid user object in handleRegister:', { 
-        hasUser: !!user, 
-        hasEmail: !!user?.email, 
-        hasRole: !!user?.role 
-      });
-      addToast(t('toast.registerInvalidUser'), 'error');
-      return;
-    }
-    
-    // Ensure role is valid
-    if (!['customer', 'seller', 'admin', 'service_provider', 'finance_partner'].includes(user.role)) {
-      logError('❌ Invalid role in handleRegister:', user.role);
-      addToast(t('toast.registerInvalidRole'), 'error');
-      return;
-    }
-    
-    // Set user first (this is critical - navigate checks currentUser)
-    setCurrentUser(user);
-    sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(user));
-    localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(user));
-    
-    // Verify user storage (for debugging production issues)
-    const storedInSession = sessionStorage.getItem('currentUser');
-    const storedInLocal = localStorage.getItem('reRideCurrentUser');
-    logInfo('✅ User stored after registration:', {
-      email: user.email,
-      role: user.role,
-      storedInSessionStorage: !!storedInSession,
-      storedInLocalStorage: !!storedInLocal,
-      sessionMatches: storedInSession ? JSON.parse(storedInSession).email === user.email : false,
-      localMatches: storedInLocal ? JSON.parse(storedInLocal).email === user.email : false
-    });
-
-    const applyPostRegisterNavigation = (): void => {
-      addToast(t('toast.welcomeNewUser', { name: user.name }), 'success');
-
-      let postRegisterView = View.HOME;
-      if (user.role === 'admin') {
-        postRegisterView = View.ADMIN_PANEL;
-        setCurrentView(View.ADMIN_PANEL);
-      } else if (user.role === 'seller') {
-        logDebug('🔄 Setting seller dashboard view after registration');
-        postRegisterView = View.SELLER_DASHBOARD;
-        setCurrentView(View.SELLER_DASHBOARD);
-      } else if (user.role === 'service_provider') {
-        postRegisterView = View.CAR_SERVICE_DASHBOARD;
-        setCurrentView(View.CAR_SERVICE_DASHBOARD);
-        try {
-          const loc =
-            typeof user.location === 'string' && user.location.trim() ? user.location.trim() : '';
-          window.dispatchEvent(
-            new CustomEvent('reride:service-provider-oauth', {
-              detail: {
-                id: user.id,
-                name: (user.name && String(user.name).trim()) || 'Service provider',
-                email: user.email,
-                phone: user.mobile || '',
-                city: loc || '',
-              },
-            }),
-          );
-        } catch {
-          /* ignore */
-        }
-      } else if (user.role === 'customer') {
-        postRegisterView = View.HOME;
-        setCurrentView(View.HOME);
-      } else {
-        setCurrentView(View.HOME);
-      }
-
-      try {
-        const pathByRole =
-          user.role === 'admin'
-            ? '/admin'
-            : user.role === 'seller'
-              ? '/seller/dashboard'
-              : user.role === 'service_provider'
-                ? '/car-services/dashboard'
-                : '/';
-        routerNavigate(pathByRole, {
-          state: {
-            view: postRegisterView,
-            timestamp: Date.now(),
-          },
-        });
-      } catch {
-        /* ignore */
-      }
-    };
-
-    scheduleCapacitorPostLoginUi(applyPostRegisterNavigation);
-  }, [addToast, routerNavigate, t]);
-  handleRegisterRef.current = handleRegister;
 
   const syncUserCachesByEmail = useCallback((email: string, updates: Partial<User>) => {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
@@ -6303,7 +5423,9 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   return (
     <AppContext.Provider value={contextValue}>
-      {children}
+      <NotificationContextBridge value={{ notifications, setNotifications }}>
+        {children}
+      </NotificationContextBridge>
       <ConfirmDialog
         open={confirmState != null}
         title={confirmState?.title ?? ''}

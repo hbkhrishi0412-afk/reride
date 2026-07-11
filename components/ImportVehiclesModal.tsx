@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import type { Vehicle } from '../types';
 import { VehicleCategory } from '../types';
+import { ModalShell } from './primitives/ModalShell';
 
 interface ImportVehiclesModalProps {
     onClose: () => void;
@@ -272,7 +273,7 @@ const ImportVehiclesModal: React.FC<ImportVehiclesModalProps> = ({ onClose, onIm
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <ModalShell isOpen onClose={onClose} aria-label="Close import vehicles dialog">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex justify-between items-center">
@@ -472,7 +473,7 @@ const ImportVehiclesModal: React.FC<ImportVehiclesModalProps> = ({ onClose, onIm
                     )}
                 </div>
             </div>
-        </div>
+        </ModalShell>
     );
 };
 

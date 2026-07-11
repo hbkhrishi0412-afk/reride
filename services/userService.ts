@@ -83,7 +83,11 @@ const storeTokens = async (accessToken: string, refreshToken?: string): Promise<
       sessionStorage.setItem('reRideAccessToken', accessToken);
       try {
         localStorage.removeItem('reRideAccessToken');
-        localStorage.removeItem('reRideRefreshToken');
+        if (refreshToken) {
+          localStorage.setItem('reRideRefreshToken', refreshToken);
+        } else {
+          localStorage.removeItem('reRideRefreshToken');
+        }
       } catch {
         /* ignore */
       }
@@ -879,25 +883,21 @@ export const login = async (credentials: { email?: string; password?: string; ro
   const out = await loginLocal({ ...credentials, skipRoleCheck });
   if (out.success) {
     cleanupStaleSessionsAfterLocalAuth();
-    // Local demo auth does not issue JWTs — retry API login in background so login UI is not blocked.
-    void (async () => {
-      try {
-        const retry = await authApi({
-          action: 'login',
-          email: credentials.email,
-          password: credentials.password,
-          role: credentials.role,
-        });
-        if (retry?.success && retry.accessToken) {
-          await storeTokens(retry.accessToken, retry.refreshToken);
-          if (retry.user) {
-            localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(retry.user));
-          }
-        }
-      } catch {
-        /* API still unavailable — user can browse UI but authed APIs need re-login */
+    // Local demo auth does not issue JWTs — must obtain API tokens before returning so
+    // persisted sessions survive full page reloads (Playwright navigation, refresh).
+    try {
+      const retry = await authApi({
+        action: 'login',
+        email: credentials.email,
+        password: credentials.password,
+        role: credentials.role,
+      });
+      if (retry?.success && retry.accessToken && retry.user?.email && retry.user?.role) {
+        return await applyLoginApiResult(retry, credentials);
       }
-    })();
+    } catch {
+      /* API still unavailable — fall through to local-only session (no authed APIs) */
+    }
   }
   return out;
 };

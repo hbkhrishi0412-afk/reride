@@ -12,7 +12,7 @@ import {
   ENTITY_LABEL_SELLER,
   ENTITY_LABEL_SERVICE_PROVIDER,
 } from './DealerProfiles';
-import { getSellerMapCoordinates, normalizeIndianPincode } from '../utils/sellerLocation';
+import { getSellerMapCoordinatesBatch, normalizeIndianPincode } from '../utils/sellerLocation';
 import { resolveSellerLogoUrl, sellerInitialsAvatarDataUri } from '../utils/imageUtils';
 import { sellerMatchesHeaderRegion } from '../utils/dealerRegionFilter';
 import { isRerideStaffPick } from '../utils/staffPick';
@@ -665,12 +665,14 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
   }, [fetchDealers]);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchCoords = async () => {
-      const sellersWithLocations: Array<{ seller: User; coords: CompanyLocation | null }> = [];
-      for (const seller of sellers) {
-        const coords = await getSellerMapCoordinates(seller);
-        sellersWithLocations.push({ seller, coords });
-      }
+      const coordMap = await getSellerMapCoordinatesBatch(sellers);
+      if (cancelled) return;
+      const sellersWithLocations = sellers.map((seller) => ({
+        seller,
+        coords: coordMap.get(seller.email || seller.id || '') ?? null,
+      }));
       setSellersWithCoords(sellersWithLocations);
       const validCoords = sellersWithLocations.filter(item => item.coords !== null).map(item => item.coords!);
       if (validCoords.length > 0) {
@@ -682,8 +684,11 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
         setMapCenter([20.5937, 78.9629]);
       }
     };
-    if (sellers.length > 0) fetchCoords();
+    if (sellers.length > 0) void fetchCoords();
     else setMapCenter([20.5937, 78.9629]);
+    return () => {
+      cancelled = true;
+    };
   }, [sellers]);
 
   const filteredSellers = useMemo(() => {
