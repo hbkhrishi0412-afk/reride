@@ -91,7 +91,8 @@
     "cap:build:android": "npm run build:android && npx cap sync android",
     "android": "npm run cap:build:android && npx cap open android",
     "env:copy": "node -e \"const fs=require('fs'); const p='.env'; if(!fs.existsSync(p)){ fs.copyFileSync('.env.example', p); console.log('Created .env from .env.example – edit .env and add your keys.'); } else { console.log('.env already exists.'); }\"",
-    "security:enable-compromised-password-protection": "node scripts/enable-compromised-password-protection.cjs"
+    "security:enable-compromised-password-protection": "node scripts/enable-compromised-password-protection.cjs",
+    "security:configure-free-tier-auth": "node scripts/configure-free-tier-auth.cjs"
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "^7.1.6",

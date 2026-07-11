@@ -48,11 +48,15 @@ async function main() {
   }
 
   if (process.env.SUPABASE_ACCESS_TOKEN?.trim()) {
-    console.log('\nStep 2: Enabling leaked-password protection...');
-    run('node', ['scripts/enable-compromised-password-protection.cjs']);
+    console.log('\nStep 2: Configuring auth security...');
+    const hibpStatus = run('node', ['scripts/enable-compromised-password-protection.cjs']);
+    if (hibpStatus !== 0) {
+      console.log('\nStep 2b: HIBP unavailable (likely Free tier) — applying compensating controls...');
+      run('node', ['scripts/configure-free-tier-auth.cjs']);
+    }
   } else {
     console.log('\nStep 2: SKIP — add SUPABASE_ACCESS_TOKEN to .env.local, then run:');
-    console.log('  npm run security:enable-compromised-password-protection');
+    console.log('  npm run security:configure-free-tier-auth');
   }
 
   console.log('\nStep 3: Verifying Supabase security_kv...');

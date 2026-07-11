@@ -11,9 +11,10 @@ export const SECURITY_CONFIG = {
     REQUIRE_NUMBERS: true, // Required for security
     REQUIRE_SPECIAL_CHARS: false, // Optional for better UX, but recommended
     COMMON_PASSWORDS: [
-      'password', '123456', '12345678', 'qwerty', 'abc123', 'password123',
-      'admin', 'letmein', 'welcome', 'monkey', 'dragon',
-      'master', 'hello', 'login', 'pass', '1234', '1234567890'
+      'password', 'password1', 'password123', '123456', '12345678', '123456789', '1234567890',
+      'qwerty', 'qwerty123', 'abc123', 'admin', 'letmein', 'welcome', 'monkey', 'dragon',
+      'master', 'hello', 'login', 'pass', '1234', 'test', 'test123', 'iloveyou', 'reride',
+      'customer', 'seller', 'service', 'welcome1', 'changeme', 'secret', 'football',
     ]
   },
 

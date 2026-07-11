@@ -11,9 +11,10 @@ const SECURITY_CONFIG = {
     REQUIRE_NUMBERS: true,
     REQUIRE_SPECIAL_CHARS: true,
     COMMON_PASSWORDS: [
-      'password', '123456', 'qwerty', 'abc123', 'password123',
-      'admin', 'letmein', 'welcome', 'monkey', 'dragon',
-      'master', 'hello', 'login', 'pass', '1234'
+      'password', 'password1', 'password123', '123456', '12345678', '123456789', '1234567890',
+      'qwerty', 'qwerty123', 'abc123', 'admin', 'letmein', 'welcome', 'monkey', 'dragon',
+      'master', 'hello', 'login', 'pass', '1234', 'test', 'test123', 'iloveyou', 'reride',
+      'customer', 'seller', 'service', 'welcome1', 'changeme', 'secret', 'football',
     ]
   },
 

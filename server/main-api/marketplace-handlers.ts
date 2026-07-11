@@ -180,8 +180,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         if (!resetToken || typeof resetToken !== 'string' || !newPassword || typeof newPassword !== 'string') {
           return res.status(400).json({ success: false, reason: 'Token and new password are required.' });
         }
-        if (String(newPassword).length < 8) {
-          return res.status(400).json({ success: false, reason: 'Password must be at least 8 characters.' });
+        const passwordValidation = core.validatePasswordStrength(newPassword);
+        if (!passwordValidation.isValid) {
+          return res.status(400).json({
+            success: false,
+            reason: 'Password does not meet security requirements.',
+            errors: passwordValidation.errors,
+          });
         }
         let emailFromToken: string;
         try {

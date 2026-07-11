@@ -12,8 +12,19 @@ type SecurityCheckResult =
 
 const RLS_PROBE_CACHE_MS = 5 * 60 * 1000;
 const UPSTASH_PROBE_CACHE_MS = 2 * 60 * 1000;
+const HIBP_PLAN_PROBE_CACHE_MS = 24 * 60 * 60 * 1000;
+/** Compensating control when Supabase HIBP is unavailable on Free tier. */
+const FREE_TIER_MIN_PASSWORD_LENGTH = 8;
 let rlsProbeCache: { verified: boolean; checkedAt: number } | null = null;
 let upstashProbeCache: { verified: boolean; checkedAt: number } | null = null;
+let hibpPlanProbeCache: { blockedByPlan: boolean; checkedAt: number } | null = null;
+
+/** @internal test helper */
+export function resetProductionSecurityProbeCachesForTests(): void {
+  rlsProbeCache = null;
+  upstashProbeCache = null;
+  hibpPlanProbeCache = null;
+}
 
 function isProdDeployment(): boolean {
   const vercelEnv = String(process.env.VERCEL_ENV || '').toLowerCase();
@@ -173,31 +184,87 @@ async function probeUpstashConnectivity(): Promise<boolean> {
   }
 }
 
-async function isLeakedPasswordProtectionReady(): Promise<boolean> {
-  if (parseBooleanEnv(process.env.SUPABASE_LEAKED_PASSWORD_PROTECTION_VERIFIED)) {
-    return true;
-  }
+function isHibpPlanBlockResponse(status: number, bodyText: string): boolean {
+  return status === 402 || /pro plan/i.test(bodyText) || /plan or higher/i.test(bodyText);
+}
 
+function isFreeTierPasswordPolicyReady(config: unknown): boolean {
+  if (!config || typeof config !== 'object') return false;
+  const minLength = (config as { password_min_length?: unknown }).password_min_length;
+  return typeof minLength === 'number' && minLength >= FREE_TIER_MIN_PASSWORD_LENGTH;
+}
+
+async function fetchSupabaseAuthConfig(): Promise<Record<string, unknown> | null> {
   const accessToken = process.env.SUPABASE_ACCESS_TOKEN?.trim();
   const projectRef = deriveSupabaseProjectRef();
-  if (!accessToken || !projectRef) {
-    return false;
-  }
+  if (!accessToken || !projectRef) return null;
 
   try {
     const response = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/config/auth`, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
     });
-    if (!response.ok) return false;
+    if (!response.ok) return null;
     const config = await response.json();
-    if (config && typeof config === 'object' && config.password_hibp_enabled === false) {
-      // Field exists but disabled — often because HIBP requires Supabase Pro.
-      return false;
-    }
-    return hasLeakedPasswordProtectionEnabled(config);
+    return config && typeof config === 'object' ? (config as Record<string, unknown>) : null;
   } catch {
+    return null;
+  }
+}
+
+async function isHibpBlockedBySupabasePlan(): Promise<boolean> {
+  const now = Date.now();
+  if (hibpPlanProbeCache && now - hibpPlanProbeCache.checkedAt < HIBP_PLAN_PROBE_CACHE_MS) {
+    return hibpPlanProbeCache.blockedByPlan;
+  }
+
+  const accessToken = process.env.SUPABASE_ACCESS_TOKEN?.trim();
+  const projectRef = deriveSupabaseProjectRef();
+  if (!accessToken || !projectRef) {
+    hibpPlanProbeCache = { blockedByPlan: false, checkedAt: now };
     return false;
   }
+
+  try {
+    const response = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/config/auth`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ password_hibp_enabled: true }),
+    });
+    const bodyText = await response.text();
+    const blockedByPlan = isHibpPlanBlockResponse(response.status, bodyText);
+    hibpPlanProbeCache = { blockedByPlan, checkedAt: now };
+    return blockedByPlan;
+  } catch {
+    hibpPlanProbeCache = { blockedByPlan: false, checkedAt: now };
+    return false;
+  }
+}
+
+async function isLeakedPasswordProtectionReady(): Promise<boolean> {
+  if (parseBooleanEnv(process.env.SUPABASE_LEAKED_PASSWORD_PROTECTION_VERIFIED)) {
+    return true;
+  }
+
+  const config = await fetchSupabaseAuthConfig();
+  if (!config) return false;
+
+  if (hasLeakedPasswordProtectionEnabled(config)) {
+    return true;
+  }
+
+  if (config.password_hibp_enabled === false) {
+    const planBlocked = await isHibpBlockedBySupabasePlan();
+    if (planBlocked) {
+      // Free tier: HIBP is unavailable — require compensating password policy instead.
+      return isFreeTierPasswordPolicyReady(config);
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -242,10 +309,22 @@ export async function verifyProductionSecurityReadiness(): Promise<SecurityCheck
 
   const leakedPasswordReady = await isLeakedPasswordProtectionReady();
   if (!leakedPasswordReady) {
-    issues.push('Supabase leaked-password protection (HaveIBeenPwned) is not enabled.');
-    requiredActions.push(
-      'Run npm run security:enable-compromised-password-protection (needs Supabase Pro for HIBP). If on Free tier, upgrade or set SUPABASE_LEAKED_PASSWORD_PROTECTION_VERIFIED=true in Vercel after accepting the limitation.',
-    );
+    const config = await fetchSupabaseAuthConfig();
+    const onFreeTier =
+      config?.password_hibp_enabled === false && (await isHibpBlockedBySupabasePlan());
+    if (onFreeTier && config && !isFreeTierPasswordPolicyReady(config)) {
+      issues.push(
+        `Supabase Free tier: password_min_length must be at least ${FREE_TIER_MIN_PASSWORD_LENGTH} (HIBP unavailable on Free).`,
+      );
+      requiredActions.push(
+        `Run npm run security:configure-free-tier-auth to set Supabase password_min_length=${FREE_TIER_MIN_PASSWORD_LENGTH}.`,
+      );
+    } else {
+      issues.push('Supabase leaked-password protection (HaveIBeenPwned) is not enabled.');
+      requiredActions.push(
+        'Run npm run security:enable-compromised-password-protection (needs Supabase Pro for HIBP). On Free tier, run npm run security:configure-free-tier-auth instead.',
+      );
+    }
   }
 
   if (issues.length > 0) {
@@ -255,8 +334,12 @@ export async function verifyProductionSecurityReadiness(): Promise<SecurityCheck
 }
 
 export {
+  FREE_TIER_MIN_PASSWORD_LENGTH,
   hasLeakedPasswordProtectionEnabled,
+  isFreeTierPasswordPolicyReady,
+  isHibpPlanBlockResponse,
   probeUpstashConnectivity,
+  isHibpBlockedBySupabasePlan,
   isLeakedPasswordProtectionReady,
   isDistributedSecurityReady,
 };
