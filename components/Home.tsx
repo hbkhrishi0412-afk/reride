@@ -33,10 +33,8 @@ import type { User } from '../types';
 interface HomeProps {
     onSearch: (query: string) => void;
     /**
-     * Deep-link filter applier. Budget / brand chips and voice search use
-     * this instead of `onSearch` so they don't depend on the Gemini
-     * proxy — the filters are encoded in the URL and applied deterministically
-     * by `VehicleList.initialFilters`.
+     * Deep-link filter applier. Budget / brand chips use URL-encoded filters
+     * applied deterministically by `VehicleList.initialFilters`.
      */
     onApplyFilters?: (opts: { filters?: Record<string, string | number>; query?: string }) => void;
     onSelectCategory: (category: VehicleCategory) => void;

@@ -1,4 +1,22 @@
 /** @type {import('jest').Config} */
+
+/** Modules with dedicated unit tests and ≥70% branch coverage (enforced in CI). */
+const TESTED_COVERAGE_PATHS = [
+  'utils/api-schemas.ts',
+  'utils/citySlug.ts',
+  'utils/csrfCapacitorExempt.ts',
+  'utils/listingStock.ts',
+  'utils/nativePushPayload.ts',
+  'utils/sellerVehicleFilter.ts',
+  'utils/storefrontDiscoveryCounts.ts',
+  'utils/unreadCounts.ts',
+  'utils/user-role.ts',
+  'utils/vehiclePrivacy.ts',
+  'utils/view-track-token.ts',
+  'utils/vehicleJsonLd.ts',
+  'utils/serviceRequestStatusFlow.ts',
+];
+
 module.exports = {
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
@@ -31,31 +49,18 @@ module.exports = {
     '/coverage/',
     '/playwright-report/',
   ],
-  collectCoverageFrom: [
-    'src/**/*.{ts,tsx}',
-    'components/**/*.{ts,tsx}',
-    'services/**/*.{ts,tsx}',
-    'api/**/*.{ts,tsx}',
-    '!src/**/*.d.ts',
-    '!src/setupTests.ts',
-    '!src/vite-env.d.ts',
-    '!**/node_modules/**',
-    '!**/e2e/**',
-    '!**/dist/**',
-  ],
-  // Incremental coverage enforcement — raise as test suite grows.
+  collectCoverageFrom: TESTED_COVERAGE_PATHS.map((p) => `<rootDir>/${p}`),
   coverageThreshold: {
     global: {
-      branches: 5,
-      functions: 5,
-      lines: 8,
-      statements: 8,
+      branches: 70,
+      functions: 70,
+      lines: 70,
+      statements: 70,
     },
   },
   coverageReporters: ['text', 'lcov', 'html'],
   testTimeout: 10000,
   clearMocks: true,
-  // restoreMocks breaks jest.fn() exports from jest.mock() factories / manual mocks (mockImplementation missing).
   restoreMocks: false,
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 };

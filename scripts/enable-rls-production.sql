@@ -1,6 +1,6 @@
--- ============================================================================
--- ReRide — Enable Row Level Security (Production)
--- ============================================================================
+-- After this script, also run:
+--   scripts/migrations/add-deal-platform-rls-policies.sql
+--   scripts/migrations/add-support-chat-tables.sql
 -- Run this ONCE in the Supabase SQL Editor before going live. It is idempotent:
 -- running it a second time replaces the existing policies.
 --
@@ -136,62 +136,80 @@ END $$;
 -- ============================================================================
 DROP POLICY IF EXISTS "Users read access"    ON users;
 DROP POLICY IF EXISTS "Users update access"  ON users;
+DROP POLICY IF EXISTS "Users public directory read" ON users;
+DROP POLICY IF EXISTS "Users owner read" ON users;
+DROP POLICY IF EXISTS "Users admin read" ON users;
+DROP POLICY IF EXISTS "Users owner update" ON users;
+DROP POLICY IF EXISTS "Users admin update" ON users;
 DROP POLICY IF EXISTS "Admins can read all users"    ON users;
 DROP POLICY IF EXISTS "Users can read own data"      ON users;
 DROP POLICY IF EXISTS "Public can read active users" ON users;
 DROP POLICY IF EXISTS "Admins can update all users"  ON users;
 DROP POLICY IF EXISTS "Users can update own data"    ON users;
 
-CREATE POLICY "Users read access"
-ON users
-FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM users AS u
-    WHERE u.id = (SELECT auth.uid())::text
-      AND u.role = 'admin'
-  )
-  OR (SELECT auth.uid())::text = id
-  OR status = 'active' AND role IN ('seller', 'service_provider')
+-- Split by role: anon cannot EXECUTE is_admin() (revoked in deal-platform migration).
+CREATE POLICY "Users public directory read"
+ON users FOR SELECT
+TO anon, authenticated
+USING (status = 'active' AND role IN ('seller', 'service_provider'));
+
+CREATE POLICY "Users owner read"
+ON users FOR SELECT
+TO authenticated
+USING ((SELECT auth.uid())::text = id);
+
+CREATE POLICY "Users admin read"
+ON users FOR SELECT
+TO authenticated
+USING (public.reride_is_admin());
+
+CREATE POLICY "Users owner update"
+ON users FOR UPDATE
+TO authenticated
+USING ((SELECT auth.uid())::text = id)
+WITH CHECK (
+  (SELECT auth.uid())::text = id
+  AND role <> 'admin'
 );
 
-CREATE POLICY "Users update access"
-ON users
-FOR UPDATE
-USING (
-  EXISTS (
-    SELECT 1 FROM users AS u
-    WHERE u.id = (SELECT auth.uid())::text
-      AND u.role = 'admin'
-  )
-  OR (SELECT auth.uid())::text = id
-)
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM users AS u
-    WHERE u.id = (SELECT auth.uid())::text
-      AND u.role = 'admin'
-  )
-  OR (
-    (SELECT auth.uid())::text = id
-    AND role <> 'admin'
-  )
-);
+CREATE POLICY "Users admin update"
+ON users FOR UPDATE
+TO authenticated
+USING (public.reride_is_admin())
+WITH CHECK (public.reride_is_admin());
+
+REVOKE EXECUTE ON FUNCTION public.reride_is_admin() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.reride_is_admin() TO authenticated;
 
 -- Column-level protection: VITE_SUPABASE_ANON_KEY is in every client bundle.
--- RLS controls rows; REVOKE prevents direct PostgREST reads of sensitive fields.
-REVOKE SELECT (password) ON public.users FROM anon, authenticated;
--- alternatePhone lives in metadata JSONB, not a dedicated column.
-REVOKE SELECT (
-  mobile,
-  address,
-  pincode,
-  firebase_uid,
-  metadata,
-  subscription_plan,
-  featured_credits,
-  used_certifications
-) ON public.users FROM anon;
+-- Must REVOKE ALL first (Supabase defaults anon/authenticated to ALL on users).
+REVOKE ALL ON TABLE public.users FROM anon;
+GRANT SELECT (
+  id,
+  email,
+  name,
+  role,
+  status,
+  avatar_url,
+  is_verified,
+  dealership_name,
+  bio,
+  logo_url,
+  phone_verified,
+  email_verified,
+  govt_id_verified,
+  trust_score,
+  location,
+  auth_provider,
+  created_at,
+  updated_at,
+  plan_activated_at,
+  plan_expires_at
+) ON TABLE public.users TO anon;
+
+REVOKE ALL ON TABLE public.users FROM authenticated;
+GRANT SELECT, UPDATE ON TABLE public.users TO authenticated;
+REVOKE SELECT (password) ON TABLE public.users FROM authenticated;
 
 -- ============================================================================
 -- 2. VEHICLES

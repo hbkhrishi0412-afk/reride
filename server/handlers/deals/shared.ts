@@ -1054,8 +1054,9 @@ export async function enrichLeadsBatch(
 
   const vehicleIds = [...new Set(leads.map((l) => l.vehicleId))];
   const vehicleById = new Map<string, { year: number; make: string; model: string }>();
+  const resolvedBatch = await supabaseVehicleService.resolveVehicleIdentitiesBatch(vehicleIds);
   for (const vehicleId of vehicleIds) {
-    const resolved = await resolveVehicleId(vehicleId);
+    const resolved = resolvedBatch.get(vehicleId);
     if (resolved?.vehicle) {
       vehicleById.set(vehicleId, resolved.vehicle);
     }

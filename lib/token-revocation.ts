@@ -11,6 +11,11 @@
  * multi-instance production — ensure Upstash is configured in prod.
  */
 import { Redis } from '@upstash/redis';
+import {
+  isSupabaseSecurityKvConfigured,
+  securityKvGet,
+  securityKvSet,
+} from './security-kv-supabase.js';
 
 const REVOKED_PREFIX = 'refresh:revoked:';
 
@@ -22,10 +27,14 @@ function getRedis(): Redis | null {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) {
+    if (isSupabaseSecurityKvConfigured()) {
+      cachedRedis = null;
+      return null;
+    }
     if (!redisWarningLogged && process.env.NODE_ENV === 'production') {
       console.warn(
         '⚠️ UPSTASH_REDIS_REST_URL/TOKEN not set — refresh-token revocation falling back to in-memory. ' +
-        'This is NOT safe for multi-instance deployments.',
+        'Configure Upstash or Supabase security_kv (run npm run db:apply-security-kv).',
       );
       redisWarningLogged = true;
     }
@@ -58,8 +67,11 @@ export async function revokeRefreshToken(jti: string | undefined, ttlSeconds: nu
       await redis.set(`${REVOKED_PREFIX}${jti}`, '1', { ex: effectiveTtl });
       return;
     } catch {
-      // fall through to in-memory
+      // fall through
     }
+  }
+  if (isSupabaseSecurityKvConfigured()) {
+    if (await securityKvSet(`${REVOKED_PREFIX}${jti}`, '1', effectiveTtl)) return;
   }
   pruneMemoryStore();
   memoryRevoked.set(jti, Date.now() + effectiveTtl * 1000);
@@ -73,8 +85,12 @@ export async function isRefreshTokenRevoked(jti: string | undefined): Promise<bo
       const result = await redis.get<string | null>(`${REVOKED_PREFIX}${jti}`);
       return result !== null && result !== undefined;
     } catch {
-      // fall through to in-memory
+      // fall through
     }
+  }
+  if (isSupabaseSecurityKvConfigured()) {
+    const val = await securityKvGet(`${REVOKED_PREFIX}${jti}`);
+    return val !== null;
   }
   pruneMemoryStore();
   const exp = memoryRevoked.get(jti);

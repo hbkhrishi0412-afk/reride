@@ -519,6 +519,17 @@ function mergeQueryStringFromRequestUrl(req: VercelRequest): void {
   }
 }
 
+function respondServiceUnavailable(
+  res: VercelResponse,
+  error: unknown,
+  reason?: string,
+): VercelResponse {
+  return res.status(503).json({
+    success: false,
+    reason: reason ?? errorToPublicMessage(error),
+  });
+}
+
 function errorToPublicMessage(error: unknown): string {
   const isDev =
     process.env.NODE_ENV === 'development' ||
@@ -612,5 +623,5 @@ export {
   checkUpstashRateLimit, checkLoginAllowed, recordFailedLogin, clearLoginLockout,
   resolveEffectiveApiPathname, appendRefreshTokenCookie, clearRefreshTokenCookie,
   getRefreshTokenFromRequest, isCapacitorAppClient, refreshCookieMaxAgeSeconds, randomBytes,
-  createHmac, randomInt, securityConfig,
+  createHmac, randomInt, securityConfig, respondServiceUnavailable,
 };

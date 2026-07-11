@@ -388,6 +388,49 @@ export const supabaseVehicleService = {
     throw new Error('Vehicle not found.');
   },
 
+  async resolveVehicleIdentitiesBatch(
+    vehicleIdRaws: string[],
+  ): Promise<Map<string, { vehicle: Vehicle; primaryKey: string }>> {
+    const unique = [...new Set(vehicleIdRaws.map((s) => s.trim()).filter(Boolean))];
+    const result = new Map<string, { vehicle: Vehicle; primaryKey: string }>();
+    if (!unique.length) return result;
+
+    const supabase = await resolveSupabaseClient();
+    const { data, error } = await supabase.from('vehicles').select('*').in('id', unique);
+    if (error) {
+      throw new Error(`Failed to batch-resolve vehicles: ${error.message}`);
+    }
+    for (const row of data || []) {
+      const vehicle = supabaseRowToVehicle(row);
+      const primaryKey = vehicle.databaseId || String(row.id);
+      result.set(String(row.id), { vehicle, primaryKey });
+      if (vehicle.databaseId && vehicle.databaseId !== String(row.id)) {
+        result.set(vehicle.databaseId, { vehicle, primaryKey });
+      }
+    }
+
+    const missing = unique.filter((id) => !result.has(id));
+    await Promise.all(
+      missing.map(async (raw) => {
+        try {
+          const resolved = await this.resolveVehicleIdentity({ databaseId: raw });
+          result.set(raw, resolved);
+        } catch {
+          const num = Number(raw);
+          if (Number.isFinite(num) && num > 0) {
+            try {
+              const resolved = await this.resolveVehicleIdentity({ id: num, databaseId: raw });
+              result.set(raw, resolved);
+            } catch {
+              /* not found */
+            }
+          }
+        }
+      }),
+    );
+    return result;
+  },
+
   // Get all vehicles
   async findAll(): Promise<Vehicle[]> {
     const supabase = await resolveSupabaseClient();

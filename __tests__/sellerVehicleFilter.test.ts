@@ -1,4 +1,3 @@
-import { describe, expect, it } from 'vitest';
 import type { Vehicle } from '../types';
 import { filterVehiclesBySellerEmail } from '../utils/sellerVehicleFilter';
 

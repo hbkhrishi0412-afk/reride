@@ -60,7 +60,7 @@ export function pathToView(path: string): View {
   if (normalizedPath === '/car-services/login') return View.CAR_SERVICE_LOGIN;
   if (normalizedPath === '/car-services/dashboard') return View.CAR_SERVICE_DASHBOARD;
   if (normalizedPath === '/car-services/cart') return View.SERVICE_CART;
-  if (normalizedPath === '/rental') return View.RENTAL;
+  if (normalizedPath === '/rental') return View.USED_CARS;
   if (normalizedPath === '/dealers') return View.DEALER_PROFILES;
   if (normalizedPath.startsWith('/vehicle/')) return View.DETAIL;
   if (normalizedPath === '/vehicle') return View.DETAIL;
@@ -101,6 +101,51 @@ export function pathToView(path: string): View {
   if (normalizedPath === '/sell-car') return View.SELL_CAR;
 
   return View.NOT_FOUND;
+}
+
+/** Static View → URL path (dynamic views use helpers in navigate()). */
+export const VIEW_TO_PATH_MAP: Partial<Record<View, string>> = {
+  [View.HOME]: '/',
+  [View.USED_CARS]: '/used-cars',
+  [View.CAR_SERVICES]: '/car-services',
+  [View.SERVICE_DETAIL]: '/car-services/detail',
+  [View.CAR_SERVICE_LOGIN]: '/car-services/login',
+  [View.CAR_SERVICE_DASHBOARD]: '/car-services/dashboard',
+  [View.SERVICE_CART]: '/car-services/cart',
+  [View.RENTAL]: '/used-cars',
+  [View.DEALER_PROFILES]: '/dealers',
+  [View.SELLER_DASHBOARD]: '/seller/dashboard',
+  [View.ADMIN_PANEL]: '/admin',
+  [View.ADMIN_LOGIN]: '/admin/login',
+  [View.LOGIN_PORTAL]: '/login',
+  [View.CUSTOMER_LOGIN]: '/login?role=customer',
+  [View.SELLER_LOGIN]: '/login?role=seller',
+  [View.COMPARISON]: '/compare',
+  [View.WISHLIST]: '/wishlist',
+  [View.PROFILE]: '/profile',
+  [View.FORGOT_PASSWORD]: '/forgot-password',
+  [View.INBOX]: '/inbox',
+  [View.PRICING]: '/pricing',
+  [View.SUPPORT]: '/support',
+  [View.ABOUT_US]: '/about-us',
+  [View.FAQ]: '/faq',
+  [View.HELP_CENTER]: '/help',
+  [View.PRIVACY_POLICY]: '/privacy-policy',
+  [View.TERMS_OF_SERVICE]: '/terms-of-service',
+  [View.REFUND_POLICY]: '/refund-policy',
+  [View.COMPLAINT_RESOLUTION]: '/complaint-resolution',
+  [View.FRAUD_POLICY]: '/fraud-policy',
+  [View.COOKIE_POLICY]: '/cookie-policy',
+  [View.SAFETY_CENTER]: '/safety-center',
+  [View.BUYER_DASHBOARD]: '/customer/dashboard',
+  [View.SELL_CAR]: '/sell-car',
+  [View.SELL_CAR_ADMIN]: '/admin/sell-car',
+  [View.NOTIFICATIONS_CENTER]: '/notifications',
+  [View.NOT_FOUND]: '/404',
+};
+
+export function viewToStaticPath(view: View): string {
+  return VIEW_TO_PATH_MAP[view] ?? '/';
 }
 
 /** Email segment from /seller/:email (excludes /seller/dashboard). */

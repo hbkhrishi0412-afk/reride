@@ -9,7 +9,7 @@ import { getSupabaseClient } from '../lib/supabase.js';
 import { setRememberMePreference } from '../utils/rememberMe';
 import {
   loadLastRememberedLoginRole,
-  saveRememberedCredentialsAsync,
+  saveRememberedCredentials,
   resolveRememberedCredentials,
 } from '../utils/rememberedCredentials';
 import OTPLogin from './OTPLogin';
@@ -350,7 +350,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           if (!sp.ok) {
             throw new Error(sp.message);
           }
-          await saveRememberedCredentialsAsync(selectedRole, email, password, rememberMe);
+          saveRememberedCredentials(selectedRole, email, password, rememberMe);
           setRememberMePreference(rememberMe);
           onServiceProviderLogin(sp.provider);
           return;
@@ -374,7 +374,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
       if (result.success && result.user) {
         if (mode === 'login') {
-          await saveRememberedCredentialsAsync(selectedRole, email, password, rememberMe);
+          saveRememberedCredentials(selectedRole, email, password, rememberMe);
           setRememberMePreference(rememberMe);
           onLogin(result.user);
         } else {
@@ -392,7 +392,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           const sp = await loginServiceProviderWithUsersTable(email, password);
           if (sp.ok) {
             setSelectedRole('service_provider');
-            await saveRememberedCredentialsAsync('service_provider', email, password, rememberMe);
+            saveRememberedCredentials('service_provider', email, password, rememberMe);
             setRememberMePreference(rememberMe);
             onServiceProviderLogin(sp.provider);
             return;

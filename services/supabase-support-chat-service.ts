@@ -1,13 +1,13 @@
+import { randomUUID } from 'crypto';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
+
+export type SupportChatSender = 'user' | 'bot' | 'admin';
 
 export interface SupportChatMessageRow {
   id: string;
   session_id: string;
-  user_id?: string | null;
-  user_name?: string | null;
-  message: string;
-  sender: 'user' | 'bot' | 'admin';
-  is_read: boolean;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
   metadata?: Record<string, unknown>;
   created_at: string;
 }
@@ -24,6 +24,18 @@ export interface SupportChatSessionRow {
 
 function requireAdmin() {
   return getSupabaseAdminClient();
+}
+
+function senderToRole(sender: SupportChatSender): SupportChatMessageRow['role'] {
+  if (sender === 'bot') return 'assistant';
+  if (sender === 'admin') return 'system';
+  return 'user';
+}
+
+export function roleToSender(role: string): SupportChatSender {
+  if (role === 'assistant') return 'bot';
+  if (role === 'system') return 'admin';
+  return 'user';
 }
 
 export const supabaseSupportChatService = {
@@ -72,22 +84,18 @@ export const supabaseSupportChatService = {
 
   async addMessage(input: {
     sessionId: string;
-    userId?: string;
-    userName?: string;
     message: string;
-    sender: 'user' | 'bot' | 'admin';
+    sender: SupportChatSender;
     metadata?: Record<string, unknown>;
   }): Promise<SupportChatMessageRow> {
     const supabase = requireAdmin();
     const { data, error } = await supabase
       .from('support_chat_messages')
       .insert({
+        id: randomUUID(),
         session_id: input.sessionId,
-        user_id: input.userId ?? null,
-        user_name: input.userName ?? null,
-        message: input.message,
-        sender: input.sender,
-        is_read: false,
+        role: senderToRole(input.sender),
+        content: input.message,
         metadata: input.metadata ?? {},
       })
       .select('*')
@@ -122,10 +130,18 @@ export const supabaseSupportChatService = {
 
   async getMessagesByUserId(userId: string, limit = 100): Promise<SupportChatMessageRow[]> {
     const supabase = requireAdmin();
+    const { data: sessions, error: sessionErr } = await supabase
+      .from('support_chat_sessions')
+      .select('session_id')
+      .eq('user_id', userId);
+    if (sessionErr) throw new Error(sessionErr.message);
+    const sessionIds = (sessions ?? []).map((s) => s.session_id);
+    if (sessionIds.length === 0) return [];
+
     const { data, error } = await supabase
       .from('support_chat_messages')
       .select('*')
-      .eq('user_id', userId)
+      .in('session_id', sessionIds)
       .order('created_at', { ascending: true })
       .limit(limit);
     if (error) throw new Error(error.message);

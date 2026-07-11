@@ -1,4 +1,4 @@
-﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as core from './shared.js';
 
 async function handleAI(req: VercelRequest, res: VercelResponse, _options: core.HandlerOptions) {
@@ -11,22 +11,9 @@ async function handleAI(req: VercelRequest, res: VercelResponse, _options: core.
 // Content handler - consolidates content.ts
 async function handleContent(req: VercelRequest, res: VercelResponse, _options: core.HandlerOptions) {
   if (!core.USE_SUPABASE) {
-    // For GET requests, return 200 with empty payload instead of 503
-    if (req.method === 'GET') {
-      const { type } = req.query;
-      res.setHeader('X-Data-Fallback', 'true');
-      if (type === 'faqs') {
-        return res.status(200).json([]);
-      }
-      // Support tickets client expects { success, tickets, count } â€” returning a
-      // bare [] makes data.tickets undefined on the client and shows 0 tickets.
-      if (type === 'support-tickets') {
-        return res.status(200).json({ success: true, tickets: [], count: 0 });
-      }
-    }
     return res.status(503).json({
       success: false,
-      reason: 'Firebase is not configured. Please set Firebase environment variables.'
+      reason: core.getSupabaseErrorMessage(),
     });
   }
 
@@ -46,25 +33,7 @@ async function handleContent(req: VercelRequest, res: VercelResponse, _options: 
     }
   } catch (error) {
     console.error('Content API Error:', error);
-    
-    // For GET requests, always return 200 with empty payload instead of 500
-    if (req.method === 'GET') {
-      const { type } = req.query;
-      if (type === 'faqs') {
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json([]);
-      }
-      if (type === 'support-tickets') {
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json({ success: true, tickets: [], count: 0 });
-      }
-    }
-    
-    // For other methods, return 500 with error details
-    return res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    });
+    return core.respondServiceUnavailable(res, error, 'Content service is temporarily unavailable.');
   }
 }
 
@@ -107,13 +76,7 @@ async function handleGetFAQs(req: VercelRequest, res: VercelResponse, faqsPath: 
     });
   } catch (error) {
     console.error('Error fetching FAQs:', error);
-    // Always return 200 with empty array instead of 500
-    res.setHeader('X-Data-Fallback', 'true');
-    return res.status(200).json({
-      success: true,
-      faqs: [],
-      count: 0
-    });
+    return core.respondServiceUnavailable(res, error, 'Unable to load FAQs.');
   }
 }
 
@@ -621,7 +584,14 @@ async function handlePlatformSettings(
         payload.listingFee = Math.max(0, Math.floor(feeNum));
       }
       if (typeof rawAnnouncement === 'string') {
-        payload.siteAnnouncement = rawAnnouncement.trim();
+        const trimmed = rawAnnouncement.trim();
+        if (trimmed.length > 500) {
+          return res.status(400).json({
+            success: false,
+            reason: 'siteAnnouncement must be 500 characters or fewer.',
+          });
+        }
+        payload.siteAnnouncement = trimmed;
       }
 
       if (payload.listingFee === undefined && payload.siteAnnouncement === undefined) {

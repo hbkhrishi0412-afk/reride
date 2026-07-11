@@ -50,7 +50,7 @@ interface VehicleListProps {
    * Deterministic filters applied on mount / when the reference changes.
    * Use this for deep-linked chip clicks (budget, brand) instead of
    * round-tripping a natural-language string through the AI parser —
-   * that path silently fails when the Gemini proxy is unreachable.
+   * URL query params — applied deterministically without external AI services.
    */
   initialFilters?: Partial<SearchFilters>;
   isWishlistMode?: boolean;
@@ -888,7 +888,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   }, [initialSearchQuery]);
 
   // Deep-linked structured filters: apply directly via setters so chip
-  // clicks (budget, brand, fuel) don't depend on the Gemini proxy.
+  // Budget / brand / fuel chips use URL-encoded filters (no external AI dependency).
   //
   // The dependency key is a stable JSON serialization of the payload so a
   // new object reference with the same values doesn't re-trigger.

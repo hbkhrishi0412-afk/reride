@@ -20,8 +20,7 @@ import ListingTrustProgress from './ListingTrustProgress';
 import MarkSoldDealModal from './MarkSoldDealModal';
 import SellerCommandHome from './command-center/SellerCommandHome';
 import DealDetailPage from './command-center/DealDetailPage';
-import { fetchSellerCommandCenter, invalidateSellerCommandCenterCache } from '../services/dealService';
-import type { DealLead, SellerCommandCenter } from '../types';
+import { useSellerDashboardController } from '../hooks/useSellerDashboardController';
 import {
   clearChecklistPhotoByUrl,
   extractChecklistGalleryUrls,
@@ -2465,64 +2464,16 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // Initialize all state hooks first
   const [activeView, setActiveView] = useState<DashboardView>('overview');
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
-  const [pendingDealCount, setPendingDealCount] = useState(0);
-  const [pendingAcceptCount, setPendingAcceptCount] = useState(0);
-  const [sellerActiveDeals, setSellerActiveDeals] = useState<DealLead[]>([]);
-  const [commandCenter, setCommandCenter] = useState<SellerCommandCenter | null>(null);
-  const [commandCenterLoading, setCommandCenterLoading] = useState(true);
-  const [dealStatsError, setDealStatsError] = useState<string | null>(null);
-
-  const refreshDealCommandStats = useCallback((force = false) => {
-    if (seller?.role !== 'seller' || !seller.email) {
-      setPendingDealCount(0);
-      setPendingAcceptCount(0);
-      setSellerActiveDeals([]);
-      setCommandCenter(null);
-      setCommandCenterLoading(false);
-      setDealStatsError(null);
-      return Promise.resolve();
-    }
-    setCommandCenterLoading(true);
-    if (force) invalidateSellerCommandCenterCache();
-    return fetchSellerCommandCenter(force)
-      .then((center) => {
-        setCommandCenter(center);
-        setPendingDealCount(center.stats.activeDealCount ?? 0);
-        setPendingAcceptCount(center.stats.pendingInterestCount ?? 0);
-        setSellerActiveDeals(center.activeDeals ?? []);
-        setDealStatsError(null);
-      })
-      .catch((err) => {
-        setDealStatsError(err instanceof Error ? err.message : 'Could not load deal stats');
-      })
-      .finally(() => {
-        setCommandCenterLoading(false);
-      });
-  }, [seller?.role, seller?.email]);
-
-  const dealsByVehicleId = useMemo(() => {
-    const map = new Map<string, DealLead[]>();
-    for (const deal of sellerActiveDeals) {
-      const key = String(deal.vehicleId);
-      const list = map.get(key) || [];
-      list.push(deal);
-      map.set(key, list);
-    }
-    return map;
-  }, [sellerActiveDeals]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      const { rehydrateApiCredentials } = await import('../utils/validatePersistedSession.js');
-      await rehydrateApiCredentials();
-      if (!cancelled) refreshDealCommandStats();
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshDealCommandStats, seller?.email]);
+  const {
+    commandCenter,
+    commandCenterLoading,
+    commandCenterError: dealStatsError,
+    pendingDealCount,
+    pendingAcceptCount,
+    sellerActiveDeals,
+    dealsByVehicleId,
+    refreshDealCommandStats,
+  } = useSellerDashboardController(seller);
 
   useEffect(() => {
     try {

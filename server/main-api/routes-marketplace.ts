@@ -30,6 +30,7 @@ import {
   securityConfig,
   shouldSkipCsrfForCapacitorNative,
   validateCsrfToken,
+  respondServiceUnavailable,
   type HandlerOptions,
 } from './shared.js';
 
@@ -51,12 +52,7 @@ export async function dispatchMarketplaceRoute(
     } catch (error) {
       logError('⚠️ Error in handleVehicles wrapper:', error);
       if (firstQueryParam(req.query?.type) === 'data') {
-        res.setHeader('Content-Type', 'application/json');
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json({
-          FOUR_WHEELER: [{ name: 'Maruti Suzuki', models: [{ name: 'Swift', variants: ['LXi', 'VXi', 'ZXi'] }] }],
-          TWO_WHEELER: [{ name: 'Honda', models: [{ name: 'Activa 6G', variants: ['Standard', 'DLX'] }] }],
-        });
+        return respondServiceUnavailable(res, error, 'Vehicle catalog data is temporarily unavailable.');
       }
       throw error;
     }
@@ -105,12 +101,7 @@ export async function dispatchMarketplaceRoute(
       return await handleVehicleData(req, res, handlerOptions);
     } catch (error) {
       logError('⚠️ Error in handleVehicleData wrapper:', error);
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('X-Data-Fallback', 'true');
-      return res.status(200).json({
-        FOUR_WHEELER: [{ name: 'Maruti Suzuki', models: [{ name: 'Swift', variants: ['LXi', 'VXi', 'ZXi'] }] }],
-        TWO_WHEELER: [{ name: 'Honda', models: [{ name: 'Activa 6G', variants: ['Standard', 'DLX'] }] }],
-      });
+      return respondServiceUnavailable(res, error, 'Vehicle catalog data is temporarily unavailable.');
     }
   }
   if (pathname.includes('/system') || pathname.endsWith('/system')) {

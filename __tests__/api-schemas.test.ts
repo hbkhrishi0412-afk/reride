@@ -1,4 +1,4 @@
-import { trackViewBodySchema, supportChatPostSchema, loginBodySchema } from '../utils/api-schemas';
+import { trackViewBodySchema, supportChatPostSchema, loginBodySchema, registerBodySchema } from '../utils/api-schemas';
 
 describe('api-schemas', () => {
   it('validates track-view body', () => {
@@ -25,5 +25,27 @@ describe('api-schemas', () => {
       password: 'secret123',
     });
     expect(result.success).toBe(true);
+  });
+
+  it('validates register body', () => {
+    const result = registerBodySchema.safeParse({
+      name: 'Test User',
+      email: 'user@example.com',
+      password: 'secret123',
+      mobile: '9876543210',
+      role: 'customer',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects register with short password', () => {
+    const result = registerBodySchema.safeParse({
+      name: 'Test User',
+      email: 'user@example.com',
+      password: 'short',
+      mobile: '9876543210',
+      role: 'customer',
+    });
+    expect(result.success).toBe(false);
   });
 });

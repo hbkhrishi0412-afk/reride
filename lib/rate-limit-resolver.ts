@@ -5,6 +5,11 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { getSecurityConfig } from '../utils/security-config.js';
+import {
+  checkSupabaseRateLimit,
+  isSupabaseSecurityKvConfigured,
+  securityKvTouch,
+} from './security-kv-supabase.js';
 
 export interface RateLimitConfig {
   maxRequests: number;
@@ -126,6 +131,19 @@ export async function resolveRateLimit(
       remaining: result.remaining,
       configured: true,
     };
+  }
+
+  if (isSupabaseSecurityKvConfigured()) {
+    const windowSeconds = Math.max(1, Math.round(resolved.windowMs / 1000));
+    const bucketKey = `${cacheKey}:${Math.floor(Date.now() / (windowSeconds * 1000))}`;
+    const count = await securityKvTouch(bucketKey, windowSeconds);
+    if (count != null) {
+      return {
+        allowed: count <= resolved.maxRequests,
+        remaining: Math.max(0, resolved.maxRequests - count),
+        configured: true,
+      };
+    }
   }
 
   const memory = await checkMemoryRateLimit(cacheKey, resolved);

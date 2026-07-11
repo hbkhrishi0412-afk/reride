@@ -7,7 +7,7 @@ import { authenticateRequestDual } from '../../api/auth.js';
 import { sanitizeString } from '../../utils/security.js';
 import { resolveRateLimit } from '../../lib/rate-limit-resolver.js';
 import { getSecurityConfig } from '../../utils/security-config.js';
-import { supabaseSupportChatService } from '../../services/supabase-support-chat-service.js';
+import { roleToSender, supabaseSupportChatService } from '../../services/supabase-support-chat-service.js';
 import { generateBotResponse } from '../utils/support-bot-responses.js';
 import { USE_SUPABASE } from '../handler-shared.js';
 import { getTrustedClientIP } from '../../utils/trusted-client-ip.js';
@@ -120,8 +120,6 @@ async function handlePostMessage(req: VercelRequest, res: VercelResponse) {
   await supabaseSupportChatService.upsertSession({ sessionId, userId, userName, metadata: meta });
   await supabaseSupportChatService.addMessage({
     sessionId,
-    userId,
-    userName,
     message: safeMessage,
     sender: 'user',
     metadata: meta,
@@ -130,8 +128,6 @@ async function handlePostMessage(req: VercelRequest, res: VercelResponse) {
   const botResponseText = await generateBotResponse(safeMessage, userName);
   const botRow = await supabaseSupportChatService.addMessage({
     sessionId,
-    userId,
-    userName: 'Support Bot',
     message: botResponseText,
     sender: 'bot',
   });
@@ -189,10 +185,10 @@ async function handleGetHistory(req: VercelRequest, res: VercelResponse) {
 
   const formattedMessages = rows.map((msg) => ({
     id: msg.id,
-    text: msg.message,
-    sender: msg.sender,
+    text: msg.content,
+    sender: roleToSender(msg.role),
     timestamp: msg.created_at,
-    isRead: msg.is_read ?? false,
+    isRead: false,
   }));
 
   return res.status(200).json({
@@ -220,7 +216,7 @@ export async function handleSupportChat(req: VercelRequest, res: VercelResponse)
   if (!USE_SUPABASE) {
     res.status(503).json({
       success: false,
-      error: 'Support chat requires Supabase. Apply scripts/migrations/add-support-chat-and-postgis.sql',
+      error: 'Support chat requires Supabase. Apply scripts/migrations/add-support-chat-tables.sql',
     });
     return;
   }

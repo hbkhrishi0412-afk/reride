@@ -7,6 +7,10 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { getSecurityConfig } from '../utils/security-config.js';
+import {
+  checkSupabaseRateLimit,
+  isSupabaseSecurityKvConfigured,
+} from './security-kv-supabase.js';
 
 let ratelimit: Ratelimit | null = null;
 
@@ -44,11 +48,20 @@ export async function checkUpstashRateLimit(
   identifier: string,
 ): Promise<{ allowed: boolean; remaining: number; configured: boolean }> {
   const rl = getUpstashRatelimit();
-  if (!rl) return { allowed: true, remaining: -1, configured: false };
-  const result = await rl.limit(identifier);
-  return {
-    allowed: result.success,
-    remaining: result.remaining,
-    configured: true,
-  };
+  if (rl) {
+    const result = await rl.limit(identifier);
+    return {
+      allowed: result.success,
+      remaining: result.remaining,
+      configured: true,
+    };
+  }
+
+  if (isSupabaseSecurityKvConfigured()) {
+    const cfg = getSecurityConfig().RATE_LIMIT;
+    const windowSeconds = Math.max(1, Math.round(cfg.WINDOW_MS / 1000));
+    return checkSupabaseRateLimit(identifier, cfg.MAX_REQUESTS, windowSeconds);
+  }
+
+  return { allowed: true, remaining: -1, configured: false };
 }

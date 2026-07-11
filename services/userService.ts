@@ -23,6 +23,7 @@ import {
   clearNativeTokens,
   setNativeAccessToken,
   setNativeRefreshToken,
+  getNativeRefreshToken,
 } from '../utils/nativeTokenStorage.js';
 import { setWebMemoryAccessToken } from '../utils/webTokenStorage.js';
 
@@ -44,7 +45,7 @@ const getAuthHeader = (): Record<string, string> => {
   }
 };
 
-const storeTokens = (accessToken: string, refreshToken?: string) => {
+const storeTokens = async (accessToken: string, refreshToken?: string): Promise<void> => {
   if (typeof window === 'undefined') {
     return;
   }
@@ -57,8 +58,8 @@ const storeTokens = (accessToken: string, refreshToken?: string) => {
   }
   try {
     if (isCapacitorNative()) {
-      void setNativeAccessToken(accessToken);
-      if (refreshToken) void setNativeRefreshToken(refreshToken);
+      await setNativeAccessToken(accessToken);
+      if (refreshToken) await setNativeRefreshToken(refreshToken);
       try {
         localStorage.removeItem('reRideAccessToken');
         localStorage.removeItem('reRideRefreshToken');
@@ -108,7 +109,7 @@ export const establishSessionFromOtpAuth = (payload: {
   refreshToken: string;
   user: User;
 }): void => {
-  storeTokens(payload.accessToken, payload.refreshToken);
+  void storeTokens(payload.accessToken, payload.refreshToken);
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(payload.user));
@@ -125,7 +126,7 @@ export const establishSessionFromBackendAuth = (payload: {
   user: User;
 }): void => {
   if (payload.accessToken) {
-    storeTokens(payload.accessToken, payload.refreshToken);
+    void storeTokens(payload.accessToken, payload.refreshToken);
   }
   try {
     if (typeof localStorage !== 'undefined') {
@@ -240,7 +241,10 @@ const handleResponse = async (response: Response): Promise<any> => {
             
             // Try to refresh token before giving up
             try {
-                const legacyRefresh = localStorage.getItem('reRideRefreshToken');
+                let legacyRefresh = localStorage.getItem('reRideRefreshToken');
+                if (!legacyRefresh && isCapacitorNative()) {
+                    legacyRefresh = await getNativeRefreshToken();
+                }
                 const canCookieRefresh = useHttpOnlyRefreshCookie();
                 if (legacyRefresh || canCookieRefresh) {
                     const refreshBody =
@@ -263,7 +267,7 @@ const handleResponse = async (response: Response): Promise<any> => {
                     if (refreshResponse.ok) {
                         const refreshData = await refreshResponse.json();
                         if (refreshData.success && refreshData.accessToken) {
-                            storeTokens(refreshData.accessToken, refreshData.refreshToken || legacyRefresh || undefined);
+                            await storeTokens(refreshData.accessToken, refreshData.refreshToken || legacyRefresh || undefined);
                             logInfo('✅ Token refreshed successfully, retrying original request');
                             // Return a special indicator that token was refreshed
                             // The caller should retry the original request
@@ -649,10 +653,21 @@ const authApi = async (body: any): Promise<any> => {
         }
     })();
     
+    const AUTH_REQUEST_TIMEOUT_MS = 50_000;
+    const timedPromise = Promise.race([
+        requestPromise,
+        new Promise<never>((_, reject) => {
+            setTimeout(() => {
+                pendingRequests.delete(requestKey);
+                reject(new Error('Request timed out. Please check your connection and try again.'));
+            }, AUTH_REQUEST_TIMEOUT_MS);
+        }),
+    ]);
+
     // Store the pending request
-    pendingRequests.set(requestKey, requestPromise);
+    pendingRequests.set(requestKey, timedPromise);
     
-    return requestPromise;
+    return timedPromise;
 };
 
 
@@ -777,10 +792,10 @@ export const updateUser = async (userData: Partial<User> & { email: string }): P
 export const deleteUser = isDevelopment ? deleteUserLocal : deleteUserApi;
 
 /** Apply login API response: store JWTs and session user. */
-function applyLoginApiResult(
+async function applyLoginApiResult(
   result: { success: boolean; user?: User; reason?: string; detectedRole?: string; accessToken?: string; refreshToken?: string },
   credentials: { email?: string; password?: string; role?: string },
-): { success: boolean; user?: User; reason?: string; detectedRole?: string } {
+): Promise<{ success: boolean; user?: User; reason?: string; detectedRole?: string }> {
   if (!result.success) {
     return {
       success: result.success,
@@ -802,7 +817,7 @@ function applyLoginApiResult(
   }
 
   if (result.accessToken) {
-    storeTokens(result.accessToken, result.refreshToken);
+    await storeTokens(result.accessToken, result.refreshToken);
     localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
     if (credentials.email && credentials.password) {
       void bridgeSupabasePasswordSession(String(credentials.email), String(credentials.password));
@@ -835,7 +850,7 @@ export const login = async (credentials: { email?: string; password?: string; ro
         throw new Error('Invalid response from server');
       }
       
-      return applyLoginApiResult(result, credentials);
+      return await applyLoginApiResult(result, credentials);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       // Clear stale caches on failure
@@ -854,7 +869,7 @@ export const login = async (credentials: { email?: string; password?: string; ro
   try {
     const result = await authApi({ action: 'login', ...credentials });
     if (result?.success && result.user?.email && result.user?.role) {
-      return applyLoginApiResult(result, credentials);
+      return await applyLoginApiResult(result, credentials);
     }
   } catch {
     // API unavailable or credentials not in dev mock store — fall back to localStorage demo auth
@@ -864,23 +879,25 @@ export const login = async (credentials: { email?: string; password?: string; ro
   const out = await loginLocal({ ...credentials, skipRoleCheck });
   if (out.success) {
     cleanupStaleSessionsAfterLocalAuth();
-    // Local demo auth does not issue JWTs — retry API login so /api/deals and other authed routes work.
-    try {
-      const retry = await authApi({
-        action: 'login',
-        email: credentials.email,
-        password: credentials.password,
-        role: credentials.role,
-      });
-      if (retry?.success && retry.accessToken) {
-        storeTokens(retry.accessToken, retry.refreshToken);
-        if (retry.user) {
-          localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(retry.user));
+    // Local demo auth does not issue JWTs — retry API login in background so login UI is not blocked.
+    void (async () => {
+      try {
+        const retry = await authApi({
+          action: 'login',
+          email: credentials.email,
+          password: credentials.password,
+          role: credentials.role,
+        });
+        if (retry?.success && retry.accessToken) {
+          await storeTokens(retry.accessToken, retry.refreshToken);
+          if (retry.user) {
+            localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(retry.user));
+          }
         }
+      } catch {
+        /* API still unavailable — user can browse UI but authed APIs need re-login */
       }
-    } catch {
-      /* API still unavailable — user can browse UI but authed APIs need re-login */
-    }
+    })();
   }
   return out;
 };
@@ -907,7 +924,7 @@ export const register = async (credentials: { email?: string; password?: string;
       const result = await authApi({ action: 'register', ...credentials });
       
       if (result.success && result.accessToken && result.refreshToken) {
-        storeTokens(result.accessToken, result.refreshToken);
+        await storeTokens(result.accessToken, result.refreshToken);
         localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
         void bridgeSupabasePasswordSession(
           String(credentials.email),
@@ -927,7 +944,7 @@ export const register = async (credentials: { email?: string; password?: string;
   try {
     const result = await authApi({ action: 'register', ...credentials });
     if (result?.success && result.user && result.accessToken) {
-      storeTokens(result.accessToken, result.refreshToken);
+      await storeTokens(result.accessToken, result.refreshToken);
       localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
       return result;
     }

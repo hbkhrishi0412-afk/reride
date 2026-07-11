@@ -50,11 +50,8 @@ const estimateMobileEmi = (price: number) => {
 interface MobileHomePageProps {
   onSearch: (query: string) => void;
   /**
-   * Deep-link filter applier. Used by budget and brand chips so they
-   * don't depend on the Gemini proxy to translate natural-language
-   * strings into structured filters (which silently fails in dev /
-   * offline). App.tsx pushes the filters into the URL query string and
-   * VehicleList applies them on mount.
+   * Deep-link filter applier. Budget and brand chips push structured filters
+   * into the URL query string; VehicleList applies them on mount.
    */
   onApplyFilters?: (opts: { filters?: Record<string, string | number>; query?: string }) => void;
   onSelectCategory: (category: VehicleCategory) => void;

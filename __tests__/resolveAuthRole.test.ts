@@ -7,10 +7,18 @@ describe('resolveAuthRoleFromEmail', () => {
   });
 
   it('does not elevate role from user_metadata-style hints alone without DB', async () => {
-    // With no DB in test env, only app_metadata admin hint is used as fallback
     await expect(resolveAuthRoleFromEmail('test@example.com', 'admin')).resolves.toBe('admin');
     await expect(resolveAuthRoleFromEmail('test@example.com', 'seller')).resolves.toBe('seller');
     await expect(resolveAuthRoleFromEmail('test@example.com', 'customer')).resolves.toBe('customer');
+  });
+
+  it('maps service_provider and finance_partner from app_metadata hint', async () => {
+    await expect(resolveAuthRoleFromEmail('sp@test.com', 'service_provider')).resolves.toBe(
+      'service_provider',
+    );
+    await expect(resolveAuthRoleFromEmail('fp@test.com', 'finance_partner')).resolves.toBe(
+      'finance_partner',
+    );
   });
 });
 

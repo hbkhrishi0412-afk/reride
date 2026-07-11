@@ -2,7 +2,6 @@
   {
     "name": "Prestige Motors",
     "email": "seller@test.com",
-    "password": "password",
     "mobile": "+91-98765-43210",
     "role": "seller",
     "status": "active",
@@ -22,7 +21,6 @@
   {
     "name": "Demo Seller",
     "email": "seller1@test.com",
-    "password": "password",
     "mobile": "+91-91234-56780",
     "role": "seller",
     "status": "active",
@@ -42,7 +40,6 @@
   {
     "name": "Auto World",
     "email": "seller2@test.com",
-    "password": "password",
     "mobile": "+91-98010-12345",
     "role": "seller",
     "status": "active",
@@ -62,7 +59,6 @@
   {
     "name": "City Motors",
     "email": "seller3@test.com",
-    "password": "password",
     "mobile": "+91-94567-89012",
     "role": "seller",
     "status": "active",
@@ -82,7 +78,6 @@
   {
     "name": "Elite Cars",
     "email": "seller4@test.com",
-    "password": "password",
     "mobile": "+91-87654-32100",
     "role": "seller",
     "status": "active",
@@ -102,7 +97,6 @@
   {
     "name": "Family Wheels",
     "email": "seller5@test.com",
-    "password": "password",
     "mobile": "+91-99887-76655",
     "role": "seller",
     "status": "active",
@@ -122,7 +116,6 @@
   {
     "name": "Mock Customer",
     "email": "customer@test.com",
-    "password": "password",
     "mobile": "+91-91234-00000",
     "role": "customer",
     "status": "active",
@@ -133,7 +126,6 @@
   {
     "name": "Mock Admin",
     "email": "admin@test.com",
-    "password": "password",
     "mobile": "+91-80000-11111",
     "role": "admin",
     "status": "active",

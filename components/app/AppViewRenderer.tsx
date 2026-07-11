@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View as ViewEnum, Vehicle, User, Notification, Conversation, ChatMessage, SubscriptionPlan, type SearchFilters } from '../../types';
+import { MARKETPLACE_VIEWS, CAR_SERVICE_VIEWS, DEAL_PIPELINE_VIEWS } from '../../features';
 import { useApp } from '../AppProvider';
 import useIsMobileApp from '../../hooks/useIsMobileApp';
 import useIsLgUp from '../../hooks/useIsLgUp';
@@ -37,6 +38,7 @@ import {
   ServiceCartErrorBoundary,
 } from '../ErrorBoundaries';
 import { DashboardSkeleton, MobileDashboardSkeleton, LoadingSpinner } from './AppViewSkeletons';
+import SellerDashboardRoute from '../seller-dashboard/SellerDashboardRoute';
 import type { AppApiResponse, AppServiceProvider, AppServiceRequestPayload } from '../../types/appServiceTypes';
 
 export interface AppViewRendererLocals {
@@ -90,41 +92,6 @@ const Home = React.lazy(() => import('../Home'));
 const VehicleList = React.lazy(() => import('../VehicleList'));
 const VehicleDetail = React.lazy(() => import('../VehicleDetail'));
 // Enhanced lazy loading with error handling for production
-const Dashboard = React.lazy(() => {
-  return import('../Dashboard').then(module => {
-    return module;
-  }).catch((error) => {
-    // Log the error for debugging in production
-    const isProduction = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
-    if (isProduction) {
-      logError('[Production] Failed to load Dashboard component:', {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        timestamp: new Date().toISOString(),
-        url: window.location.href
-      });
-    } else {
-      logError('Failed to load Dashboard component:', error);
-    }
-    // Return a fallback component module instead of throwing
-    return {
-      default: () => (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Failed to Load Dashboard</h2>
-            <p className="text-gray-600 mb-6">There was an error loading the dashboard. Please refresh the page.</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
-            >
-              Refresh Page
-            </button>
-          </div>
-        </div>
-      )
-    };
-  });
-});
 const AdminPanel = React.lazy(() => import('../AdminPanel'));
 const Comparison = React.lazy(() => import('../Comparison'));
 const Profile = React.lazy(() => import('../Profile'));
@@ -147,7 +114,6 @@ const SellCarPage = React.lazy(() => import('../SellCarPage'));
 const SellCarAdmin = React.lazy(() => import('../SellCarAdmin'));
 const AdminLogin = React.lazy(() => import('../../AdminLogin'));
 // Lazy-loaded Mobile view components (only loaded when needed - reduces initial bundle size)
-const MobileDashboard = React.lazy(() => import('../MobileDashboard'));
 const MobileVehicleDetail = React.lazy(() => import('../MobileVehicleDetail'));
 const MobileInbox = React.lazy(() => import('../MobileInbox'));
 const CustomerInbox = React.lazy(() => import('../CustomerInbox'));
@@ -322,6 +288,16 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
       /* ignore */
     }
   }, [currentView, selectedVehicle, setSelectedVehicle]);
+
+  const productScope =
+    (MARKETPLACE_VIEWS as readonly string[]).includes(currentView)
+      ? 'marketplace'
+      : (CAR_SERVICE_VIEWS as readonly string[]).includes(currentView)
+        ? 'car-services'
+        : (DEAL_PIPELINE_VIEWS as readonly string[]).includes(currentView)
+          ? 'deals'
+          : 'platform';
+  void productScope;
 
 switch (currentView) {
   case ViewEnum.HOME:
@@ -596,6 +572,7 @@ switch (currentView) {
             navigate(ViewEnum.CUSTOMER_LOGIN);
           }}
           onStartChat={handleStartVehicleChat}
+          onRequestTestDrive={handleRequestTestDrive}
           recommendations={recommendations}
           onSelectVehicle={selectVehicle}
           updateVehicle={updateVehicle}
@@ -620,6 +597,7 @@ switch (currentView) {
         updateVehicle={updateVehicle}
         onViewSellerProfile={openSellerProfileByEmail}
         onStartChat={handleStartVehicleChat}
+        onRequestTestDrive={handleRequestTestDrive}
         recommendations={recommendations}
         onSelectVehicle={selectVehicle}
       />
@@ -717,651 +695,19 @@ switch (currentView) {
       />
     );
 
-  case ViewEnum.SELLER_DASHBOARD: {
-    // CRITICAL: Enhanced validation for seller dashboard access
-    logInfo('ðŸ” Seller Dashboard Access Check:', {
-      hasCurrentUser: !!currentUser,
-      userEmail: currentUser?.email,
-      userRole: currentUser?.role,
-      userObject: currentUser ? {
-        id: currentUser.id,
-        email: currentUser.email,
-        role: currentUser.role,
-        name: currentUser.name
-      } : null,
-      isProduction: typeof window !== 'undefined' && !window.location.hostname.includes('localhost')
-    });
-    
-    if (!currentUser) {
-      logWarn('âš ï¸ Attempted to render seller dashboard without logged-in user');
-      navigate(ViewEnum.LOGIN_PORTAL);
-      return null;
-    }
-    
-    if (!currentUser.email || !currentUser.role) {
-      logError('âŒ Invalid user object - missing email or role:', { 
-        hasEmail: !!currentUser.email, 
-        hasRole: !!currentUser.role,
-        userObject: currentUser
-      });
-      navigate(ViewEnum.LOGIN_PORTAL);
-      return null;
-    }
-    
-    if (currentUser.role !== 'seller') {
-      logWarn('âš ï¸ Attempted to render seller dashboard with role:', currentUser.role, 'Expected: seller');
-      navigate(ViewEnum.LOGIN_PORTAL);
-      return null;
-    }
-    
-    logInfo('âœ… Seller dashboard validation passed, rendering dashboard');
-
-    const sellerEmailNorm = currentUser.email.toLowerCase().trim();
-    // Never fall back to the public storefront catalog — only show verified seller inventory.
-    const sellerVehiclesFiltered = filterVehiclesBySellerEmail(
-      sellerInventoryReady ? sellerInventory : [],
-      sellerEmailNorm,
-    );
-    const findSellerVehicle = (vehicleId: number, databaseId?: string) =>
-      findVehicleByIdentity(sellerVehiclesFiltered, vehicleId, databaseId);
-
-    // Use MobileDashboard for mobile / compact viewports, Dashboard for large desktop
-    if (preferCompactDashboard) {
-      // Return just the component - MobileLayout wrapper is handled by outer wrapper
+  case ViewEnum.SELLER_DASHBOARD:
       return (
-        <DashboardErrorBoundary>
-          <Suspense fallback={<MobileDashboardSkeleton />}>
-          <MobileDashboard
-              currentUser={currentUser}
-              userVehicles={enrichVehiclesWithSellerInfo(
-                sellerVehiclesFiltered,
-                users || []
-              )}
-              reportedVehicles={(sellerVehiclesFiltered || []).filter(
-                (v) => v && v.isFlagged
-              )}
-              conversations={(conversations || []).filter(
-                (c) =>
-                  c &&
-                  currentUser?.email &&
-                  conversationBelongsToSeller(c, currentUser.email, currentUser.id)
-              )}
-              onNavigate={navigate}
-              onEditVehicle={(vehicle) => {
-                // MobileDashboard handles editing internally
-                logInfo('Edit vehicle:', vehicle);
-              }}
-              onDeleteVehicle={async (vehicleId) => {
-                await deleteVehicle(vehicleId);
-              }}
-              onMarkAsSold={async (vehicleId) => {
-                const vehicle = findSellerVehicle(vehicleId);
-                if (!vehicle) return;
-                try {
-                  const { markVehicleAsSold } = await import('../../services/vehicleService');
-                  const updated = await markVehicleAsSold(vehicleId, vehicles);
-                  syncVehicleFromServer(updated);
-                  addToast('Vehicle marked as sold.', 'success');
-                } catch (err) {
-                  addToast(err instanceof Error ? err.message : 'Failed to mark vehicle as sold.', 'error');
-                }
-              }}
-              onMarkAsUnsold={async (vehicleId) => {
-                const vehicle = findSellerVehicle(vehicleId);
-                if (!vehicle) return;
-                const canPublish = await assertSellerCanPublishListing({
-                  currentUser,
-                  vehicle,
-                  sellerVehicles: sellerVehiclesFiltered || [],
-                  addToast,
-                });
-                if (!canPublish) return;
-                try {
-                  const { markVehicleAsUnsold } = await import('../../services/vehicleService');
-                  const updated = await markVehicleAsUnsold(vehicleId, vehicles);
-                  syncVehicleFromServer(updated);
-                  addToast('Listing is active again.', 'success');
-                } catch (err) {
-                  addToast(err instanceof Error ? err.message : 'Failed to update vehicle. Please try again.', 'error');
-                }
-              }}
-              onAddMultipleVehicles={async (vehiclesData) => {
-                if (currentUser.planExpiryDate) {
-                  const expiryDate = new Date(currentUser.planExpiryDate);
-                  if (expiryDate < new Date()) {
-                    addToast('Your subscription has expired. Please renew to add new listings.', 'error');
-                    return;
-                  }
-                }
-                const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
-                await addSellerListingsBulk({
-                  currentUser,
-                  vehiclesData,
-                  listingExpiresAt,
-                  setVehicles,
-                  setSellerInventory,
-                  nextNumericId: () => Date.now() + randomIntBelow(1000),
-                  addToast,
-                  logError,
-                  sellerVehicles: sellerVehiclesFiltered || [],
-                });
-              }}
-              onRequestCertification={async (vehicleId) => {
-                try {
-                  const vehicle = findSellerVehicle(vehicleId);
-                  const sellerEmail = vehicle?.sellerEmail || currentUser?.email;
-                  const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                  const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                  if (!seller) {
-                    addToast('Could not process certification request. Please try again.', 'error');
-                    return;
-                  }
-                  const planId = (seller.subscriptionPlan || 'free') as SubscriptionPlan;
-                  const planDetails = await planService.getPlanDetails(planId);
-                  const totalCertifications = planDetails.freeCertifications ?? 0;
-                  const usedCertifications = seller.usedCertifications ?? 0;
-                  if (totalCertifications <= 0) {
-                    addToast(
-                      `The ${planDetails.name} plan does not include certification requests. Upgrade your plan to request certifications.`,
-                      'warning'
-                    );
-                    return;
-                  }
-                  if (usedCertifications >= totalCertifications) {
-                    addToast(
-                      `You have used all ${totalCertifications} certification requests included in your ${planDetails.name} plan. Upgrade to request more.`,
-                      'warning'
-                    );
-                    return;
-                  }
-                  const { authenticatedFetch } = await import('../../utils/authenticatedFetch');
-                  const response = await authenticatedFetch('/api/vehicles?action=certify', {
-                    method: 'POST',
-                    body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles)),
-                  });
-                  const responseText = await response.text();
-                  let result: AppApiResponse = {};
-                  if (responseText) {
-                    try {
-                      result = JSON.parse(responseText) as AppApiResponse;
-                    } catch (parseError) {
-                      logWarn('âš ï¸ Failed to parse certification response JSON:', parseError);
-                    }
-                  }
-                  if (!response.ok) {
-                    addToast('Could not submit certification request. Please try again.', 'error');
-                    return;
-                  }
-                  if (result?.alreadyRequested) {
-                    addToast('This vehicle is already pending certification review.', 'info');
-                    return;
-                  }
-                  if (!result?.success || !result?.vehicle) {
-                    addToast('Could not submit certification request. Please try again.', 'error');
-                    return;
-                  }
-                  await updateVehicle(vehicleId, result.vehicle, {
-                    successMessage: 'Certification request submitted for review',
-                  });
-                  const updatedUsedCertifications =
-                    typeof result.usedCertifications === 'number'
-                      ? result.usedCertifications
-                      : usedCertifications + 1;
-                  setUsers((prevUsers: User[]) =>
-                    prevUsers.map((user: User) => {
-                      if (!user || !user.email) return user;
-                      return user.email.toLowerCase().trim() === normalizedSellerEmail
-                        ? { ...user, usedCertifications: updatedUsedCertifications }
-                        : user;
-                    })
-                  );
-                  if (currentUser?.email && currentUser.email.toLowerCase().trim() === normalizedSellerEmail) {
-                    setCurrentUser({
-                      ...currentUser,
-                      usedCertifications: updatedUsedCertifications,
-                    });
-                  }
-                  await runBackgroundSync('Certification usage sync', () =>
-                    updateUser(seller.email, { usedCertifications: updatedUsedCertifications }, { skipToast: true }),
-                  );
-                  if (typeof result.remainingCertifications === 'number') {
-                    addToast(
-                      `Certification requests remaining this month: ${result.remainingCertifications}`,
-                      'info'
-                    );
-                  }
-                } catch (error) {
-                  logError('âŒ Failed to certify vehicle:', error);
-                  addToast('Could not submit certification request. Please try again.', 'error');
-                }
-              }}
-              onFeatureListing={async (vehicleId) => {
-                try {
-                  const { authenticatedFetch } = await import('../../utils/authenticatedFetch');
-                  const response = await authenticatedFetch('/api/vehicles?action=feature', {
-                    method: 'POST',
-                    body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles))
-                  });
-
-                  const responseText = await response.text();
-                  let result: AppApiResponse<Vehicle> = {};
-                  if (responseText) {
-                    try {
-                      result = JSON.parse(responseText) as AppApiResponse<Vehicle>;
-                    } catch (parseError) {
-                      logWarn('âš ï¸ Failed to parse feature response JSON:', parseError);
-                      result = {};
-                    }
-                  }
-
-                  if (!response.ok) {
-                    const errorMessage = result?.reason || result?.error || 'Could not feature vehicle. Please try again.';
-                    addToast(errorMessage, response.status === 403 ? 'warning' : 'error');
-                    return;
-                  }
-
-                  if (result?.alreadyFeatured) {
-                    addToast('This vehicle is already featured.', 'info');
-                    return;
-                  }
-
-                  if (result?.success && result.vehicle) {
-                    await updateVehicle(vehicleId, result.vehicle, { skipToast: true });
-
-                    if (typeof result.remainingCredits === 'number') {
-                      const sellerEmail = result.vehicle?.sellerEmail || currentUser?.email;
-                      const remainingCredits = result.remainingCredits;
-
-                      if (sellerEmail) {
-                        if (currentUser?.email && currentUser.email.toLowerCase().trim() === sellerEmail.toLowerCase().trim()) {
-                          setCurrentUser({
-                            ...currentUser,
-                            featuredCredits: remainingCredits
-                          });
-                        }
-                        await runBackgroundSync('Featured credits sync', () =>
-                          updateUser(sellerEmail, { featuredCredits: remainingCredits }, { skipToast: true }),
-                        );
-                      }
-
-                      addToast(`Listing featured! You have ${remainingCredits} feature credits left.`, 'success');
-                    } else {
-                      addToast('Listing featured successfully!', 'success');
-                    }
-                  } else {
-                    addToast('Could not feature this listing. Please try again.', 'error');
-                  }
-                } catch (error) {
-                  logError('âŒ Failed to feature vehicle:', error);
-                  addToast('Could not feature this listing. Please try again.', 'error');
-                }
-              }}
-              onSendMessage={sendMessage}
-              onMarkConversationAsRead={markAsRead}
-              onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-                onOfferResponse(conversationId, parseInt(messageId), response as "accepted" | "rejected" | "countered", counterPrice);
-              }}
-              typingStatus={typingStatus}
-              onUserTyping={(conversationId, _userRole) => {
-                toggleTyping(conversationId, true);
-              }}
-              onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
-              }}
-              onFlagContent={flagContent}
-              onLogout={handleLogoutAll}
-              onViewVehicle={selectVehicle}
-              onAddVehicle={(vehicleData, isFeaturing = false) =>
-                addSellerListing({
-                  currentUser,
-                  vehicleData,
-                  isFeaturing,
-                  listingExpiresAt: computeListingExpiresAtForSeller(currentUser),
-                  setVehicles,
-                  setSellerInventory,
-                  nextNumericId: () => Date.now() + randomIntBelow(1000),
-                  successMessage: 'Vehicle added successfully!',
-                  addToast,
-                  logError,
-                  sellerVehicles: sellerVehiclesFiltered || [],
-                })
-              }
-              onUpdateVehicle={async (vehicleData) => {
-                await updateVehicle(vehicleData.id, vehicleData);
-              }}
-              vehicleData={vehicleData}
-              onUpdateProfile={async (profileData: Partial<User>) => {
-                if (currentUser) {
-                  await updateUser(currentUser.email, profileData);
-                  setCurrentUser({ ...currentUser, ...profileData } as User);
-                }
-              }}
-              onUpdateSellerProfile={async (details) => {
-                if (currentUser?.email) {
-                  await updateUser(currentUser.email, details);
-                }
-              }}
-              notifications={notifications.filter(n => n.recipientEmail === currentUser.email)}
-              onNotificationClick={handleNotificationClick}
-              onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
-              addToast={addToast}
-              onSetConversationReadState={(conversationId, isRead) =>
-                setConversationReadState(conversationId, 'seller', isRead)
-              }
-              onMarkAllAsReadBySeller={() => void markAllVisibleAsRead('seller')}
-              onSellerOpenChat={handleSellerOpenChatFromDashboard}
-            />
-          </Suspense>
-        </DashboardErrorBoundary>
-      );
-    }
-
-    // Derive flagged listings for this seller from the live vehicles list
-    // (powered by Supabase `vehicles.is_flagged` â†’ normalized to `isFlagged`).
-    // Previously this was hardcoded to [] which silently disconnected the
-    // seller's "Reports" inbox from the database.
-    const sellerReportedVehicles = (sellerVehiclesFiltered || []).filter(
-      (v) => v && v.isFlagged
+      <SellerDashboardRoute
+        locals={{
+          handleLogoutAll,
+          handleNotificationClick,
+          handleMarkNotificationsAsRead,
+          handleTestDriveResponse,
+          handleSellerOpenChatFromDashboard,
+          markAllVisibleAsRead,
+        }}
+      />
     );
-
-    return (
-      <DashboardErrorBoundary>
-        <Suspense fallback={<DashboardSkeleton />}>
-          <Dashboard
-          seller={currentUser}
-          sellerVehicles={enrichVehiclesWithSellerInfo(
-            sellerVehiclesFiltered, 
-            users || []
-          )}
-          reportedVehicles={sellerReportedVehicles}
-          onAddVehicle={async (vehicleData, isFeaturing = false) => {
-            await addSellerListing({
-              currentUser,
-              vehicleData,
-              isFeaturing,
-              listingExpiresAt: computeListingExpiresAtForSeller(currentUser),
-              setVehicles,
-              setSellerInventory,
-              nextNumericId: () => Date.now() + randomIntBelow(1000),
-              successMessage: 'Vehicle added successfully',
-              addToast,
-              logError,
-              errorMessage: 'Failed to add vehicle',
-              sellerVehicles: sellerVehiclesFiltered || [],
-            });
-          }}
-          onAddMultipleVehicles={async (vehiclesData) => {
-            if (currentUser.planExpiryDate) {
-              const expiryDate = new Date(currentUser.planExpiryDate);
-              if (expiryDate < new Date()) {
-                addToast('Your subscription has expired. Please renew to add new listings.', 'error');
-                return;
-              }
-            }
-            const listingExpiresAt = computeListingExpiresAtForSeller(currentUser);
-            await addSellerListingsBulk({
-              currentUser,
-              vehiclesData,
-              listingExpiresAt,
-              setVehicles,
-              setSellerInventory,
-              nextNumericId: () => Date.now() + randomIntBelow(1000),
-              addToast,
-              logError,
-              sellerVehicles: sellerVehiclesFiltered || [],
-            });
-          }}
-          onUpdateVehicle={async (vehicleData) => {
-            await updateVehicle(vehicleData.id, vehicleData);
-          }}
-          onDeleteVehicle={async (vehicleId) => {
-            await deleteVehicle(vehicleId);
-          }}
-          onMarkAsSold={async (vehicleId) => {
-            const vehicle = findSellerVehicle(vehicleId);
-            if (!vehicle) return;
-            try {
-              const { markVehicleAsSold } = await import('../../services/vehicleService');
-              const updated = await markVehicleAsSold(vehicleId, vehicles);
-              syncVehicleFromServer(updated);
-              addToast('Vehicle marked as sold.', 'success');
-            } catch (err) {
-              addToast(err instanceof Error ? err.message : 'Failed to mark vehicle as sold.', 'error');
-            }
-          }}
-          onMarkAsUnsold={async (vehicleId) => {
-            const vehicle = findSellerVehicle(vehicleId);
-            if (!vehicle) return;
-            const canPublish = await assertSellerCanPublishListing({
-              currentUser,
-              vehicle,
-              sellerVehicles: sellerVehiclesFiltered || [],
-              addToast,
-            });
-            if (!canPublish) return;
-            try {
-              const { markVehicleAsUnsold } = await import('../../services/vehicleService');
-              const updated = await markVehicleAsUnsold(vehicleId, vehicles);
-              syncVehicleFromServer(updated);
-              addToast('Listing is active again.', 'success');
-            } catch (err) {
-              addToast(err instanceof Error ? err.message : 'Failed to update vehicle. Please try again.', 'error');
-            }
-          }}
-          conversations={(conversations || []).filter(
-                (c) =>
-                  c &&
-                  currentUser?.email &&
-                  conversationBelongsToSeller(c, currentUser.email, currentUser.id)
-              )}
-          onSellerSendMessage={(conversationId, messageText, type, payload) => {
-            if (type || payload) {
-              sendMessageWithType(conversationId, messageText, type, payload);
-            } else {
-              sendMessage(conversationId, messageText);
-            }
-          }}
-          onMarkConversationAsReadBySeller={(conversationId) =>
-            markAsRead(conversationId, { readerRole: 'seller', forceReadState: true })
-          }
-          onSetConversationReadState={(conversationId, isRead) =>
-            setConversationReadState(conversationId, 'seller', isRead)
-          }
-          onMarkAllAsReadBySeller={() => void markAllVisibleAsRead('seller')}
-          typingStatus={typingStatus}
-          onUserTyping={(conversationId, _userRole) => toggleTyping(conversationId, true)}
-          onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
-          onMarkMessagesAsRead={(conversationId, _readerRole) =>
-            markAsRead(conversationId, { readerRole: 'seller', forceReadState: true })
-          }
-          onClearChat={clearConversationMessages}
-          onArchiveConversation={archiveConversation}
-          onDeleteConversation={deleteConversation}
-          onUpdateSellerProfile={async (details) => {
-            if (currentUser) {
-              await updateUser(currentUser.email, details);
-            }
-          }}
-          vehicleData={vehicleData}
-          onFeatureListing={async (vehicleId) => {
-            try {
-              const { authenticatedFetch } = await import('../../utils/authenticatedFetch');
-              const response = await authenticatedFetch('/api/vehicles?action=feature', {
-                method: 'POST',
-                body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles))
-              });
-
-              const responseText = await response.text();
-              let result: AppApiResponse<Vehicle> = {};
-              if (responseText) {
-                try {
-                  result = JSON.parse(responseText) as AppApiResponse<Vehicle>;
-                  } catch (parseError) {
-                  logWarn('âš ï¸ Failed to parse feature response JSON:', parseError);
-                  result = {};
-                }
-              }
-
-              if (!response.ok) {
-                const errorMessage = result?.reason || result?.error || 'Could not feature vehicle. Please try again.';
-                addToast(errorMessage, response.status === 403 ? 'warning' : 'error');
-                return;
-              }
-
-              if (result?.alreadyFeatured) {
-                addToast('This vehicle is already featured.', 'info');
-                return;
-              }
-
-              if (result?.success && result.vehicle) {
-                await updateVehicle(vehicleId, result.vehicle, { skipToast: true });
-
-                if (typeof result.remainingCredits === 'number') {
-                  const sellerEmail = result.vehicle?.sellerEmail || currentUser?.email;
-                  const remainingCredits = result.remainingCredits;
-
-                  if (sellerEmail) {
-                    // Normalize emails for comparison (critical for production)
-                    if (currentUser?.email && currentUser.email.toLowerCase().trim() === sellerEmail.toLowerCase().trim()) {
-                      setCurrentUser({
-                        ...currentUser,
-                        featuredCredits: remainingCredits
-                      });
-                    }
-                    await runBackgroundSync('Featured credits sync', () =>
-                      updateUser(sellerEmail, { featuredCredits: remainingCredits }, { skipToast: true }),
-                    );
-                  }
-
-                  addToast(`Listing featured! You have ${remainingCredits} feature credits left.`, 'success');
-                } else {
-                  addToast('Listing featured successfully!', 'success');
-                }
-              } else {
-                addToast('Could not feature this listing. Please try again.', 'error');
-              }
-            } catch (error) {
-              logError('âŒ Failed to feature vehicle:', error);
-              addToast('Could not feature this listing. Please try again.', 'error');
-            }
-          }}
-          onRequestCertification={async (vehicleId) => {
-            try {
-              const vehicle = findSellerVehicle(vehicleId);
-              const sellerEmail = vehicle?.sellerEmail || currentUser?.email;
-              // Normalize emails for comparison (critical for production)
-              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-
-              if (!seller) {
-                addToast('Could not process certification request. Please try again.', 'error');
-                return;
-              }
-
-              const planId = (seller.subscriptionPlan || 'free') as SubscriptionPlan;
-              const planDetails = await planService.getPlanDetails(planId);
-              const totalCertifications = planDetails.freeCertifications ?? 0;
-              const usedCertifications = seller.usedCertifications ?? 0;
-
-              if (totalCertifications <= 0) {
-                addToast(
-                  `The ${planDetails.name} plan does not include certification requests. Upgrade your plan to request certifications.`,
-                  'warning'
-                );
-                return;
-              }
-
-              if (usedCertifications >= totalCertifications) {
-                addToast(
-                  `You have used all ${totalCertifications} certification requests included in your ${planDetails.name} plan. Upgrade to request more.`,
-                  'warning'
-                );
-                return;
-              }
-
-              const { authenticatedFetch } = await import('../../utils/authenticatedFetch');
-              const response = await authenticatedFetch('/api/vehicles?action=certify', {
-                method: 'POST',
-                body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles))
-              });
-
-              const responseText = await response.text();
-              let result: AppApiResponse = {};
-              if (responseText) {
-                try {
-                  result = JSON.parse(responseText) as AppApiResponse;
-                } catch (parseError) {
-                  logWarn('âš ï¸ Failed to parse certification response JSON:', parseError);
-                }
-              }
-
-              if (!response.ok) {
-                addToast('Could not submit certification request. Please try again.', 'error');
-                return;
-              }
-
-              if (result?.alreadyRequested) {
-                addToast('This vehicle is already pending certification review.', 'info');
-                return;
-              }
-
-              if (!result?.success || !result?.vehicle) {
-                addToast('Could not submit certification request. Please try again.', 'error');
-                return;
-              }
-
-              await updateVehicle(vehicleId, result.vehicle, {
-                successMessage: 'Certification request submitted for review'
-              });
-              const updatedUsedCertifications = typeof result.usedCertifications === 'number'
-                ? result.usedCertifications
-                : usedCertifications + 1;
-
-              // Reuse normalizedSellerEmail from line 834 (already normalized)
-              setUsers((prevUsers: User[]) =>
-                prevUsers.map((user: User) => {
-                  if (!user || !user.email) return user;
-                  return user.email.toLowerCase().trim() === normalizedSellerEmail
-                    ? { ...user, usedCertifications: updatedUsedCertifications }
-                    : user;
-                })
-              );
-
-              if (currentUser?.email && currentUser.email.toLowerCase().trim() === normalizedSellerEmail) {
-                setCurrentUser({
-                  ...currentUser,
-                  usedCertifications: updatedUsedCertifications
-                });
-              }
-
-              await runBackgroundSync('Certification usage sync', () =>
-                updateUser(seller.email, { usedCertifications: updatedUsedCertifications }, { skipToast: true }),
-              );
-
-              if (typeof result.remainingCertifications === 'number') {
-                addToast(
-                  `Certification requests remaining this month: ${result.remainingCertifications}`,
-                  'info'
-                );
-              }
-            } catch (error) {
-              logError('âŒ Failed to certify vehicle:', error);
-              addToast('Could not submit certification request. Please try again.', 'error');
-            }
-          }}
-          onNavigate={navigate}
-          onTestDriveResponse={handleTestDriveResponse}
-          allVehicles={vehicles || []}
-          onOfferResponse={onOfferResponse}
-          onViewVehicle={selectVehicle}
-          onSellerOpenChat={handleSellerOpenChatFromDashboard}
-          chatPeerOnlineByConversationId={chatPeerOnlineByConversationId}
-          onNotify={(message, type = 'info') => addToast(message, type)}
-        />
-        </Suspense>
-      </DashboardErrorBoundary>
-    );
-  }
 
   case ViewEnum.BUYER_DASHBOARD:
     if (preferCompactDashboard && currentUser?.role === 'customer') {

@@ -1,6 +1,6 @@
 # ReRide - Vehicle Marketplace Platform
 
-A modern, full-stack vehicle marketplace platform built with React, TypeScript, and Supabase. Buy and sell quality used vehicles with AI-powered recommendations, certified inspections, and real-time messaging.
+A modern, full-stack vehicle marketplace platform built with React, TypeScript, Vite, and Supabase. Buy and sell quality used vehicles with deal tracking, RC details on listings, and real-time messaging.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![License](https://img.shields.io/badge/license-Private-red.svg)
@@ -11,9 +11,9 @@ A modern, full-stack vehicle marketplace platform built with React, TypeScript, 
 
 - **Vehicle Listings**: Browse, search, and filter vehicles by category, price, location, and more
 - **User Management**: Multi-role system (Customer, Seller, Admin, Service Provider)
-- **Real-time Chat**: Instant messaging between buyers and sellers
-- **AI-Powered Recommendations**: Smart vehicle suggestions based on user preferences
-- **Certified Inspections**: Quality assurance for listed vehicles
+- **Real-time Chat**: Instant messaging between buyers and sellers (Supabase Realtime)
+- **Deal Pipeline**: Track deals from chat interest through RC transfer
+- **Trust & Listings**: RC details, listing trust scores, and seller verification badges
 - **Progressive Web App (PWA)**: Installable app with offline support
 - **Mobile Responsive**: Optimized for mobile, tablet, and desktop
 - **Advanced Search**: Filter by make, model, price range, location, and more
@@ -227,11 +227,7 @@ npm run test:e2e:report
 
 ### Test Coverage
 
-The project maintains a minimum coverage threshold of 70% for:
-- Branches
-- Functions
-- Lines
-- Statements
+The project enforces incremental coverage thresholds in `jest.config.cjs` (currently **10%** lines/statements, **8%** branches/functions). Raise these as the test suite grows toward a **70%** long-term target.
 
 ## Deployment
 

@@ -177,7 +177,8 @@ export function structuredLog(
     if (level === 'error') {
       trackError(new Error(message), context);
     } else {
-      trackMessage(message, level === 'debug' ? 'info' : level);
+      const sentryLevel: 'info' | 'warning' = level === 'warn' ? 'warning' : 'info';
+      trackMessage(message, sentryLevel);
     }
   } else {
     console[level](`[${entry.timestamp}] ${message}`, context || '');

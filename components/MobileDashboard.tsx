@@ -1,9 +1,8 @@
 import React, { useState, memo, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { logInfo } from '../utils/logger.js';
-import type { User, Vehicle, Conversation, Notification, SellerCommandCenter } from '../types';
+import type { User, Vehicle, Conversation, Notification } from '../types';
 import { View as ViewEnum, VehicleCategory } from '../types';
-import { planService } from '../services/planService';
 import BulkUploadModal from './BulkUploadModal';
 import PricingGuidance from './PricingGuidance';
 import BoostListingModal from './BoostListingModal';
@@ -39,10 +38,7 @@ import {
 import { verifyVahanRegistration, applyVahanVerifyToVehicleFields } from '../services/vehicleTrustService';
 import MarkSoldDealModal from './MarkSoldDealModal';
 import { isListingLimitReached } from '../utils/listingPlanRules';
-import {
-  fetchSellerCommandCenter,
-  invalidateSellerCommandCenterCache,
-} from '../services/dealService.js';
+import { useSellerDashboardController } from '../hooks/useSellerDashboardController';
 
 // ---------- Premium inline SVG icon set (kept local to avoid new deps) ----------
 type IconProps = { className?: string; size?: number; stroke?: number };
@@ -404,16 +400,20 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   );
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
-  const [commandCenter, setCommandCenter] = useState<SellerCommandCenter | null>(null);
-  const [commandCenterLoading, setCommandCenterLoading] = useState(false);
-  const [commandCenterError, setCommandCenterError] = useState<string | null>(null);
+  const {
+    isSeller,
+    plan,
+    planLoading,
+    commandCenter,
+    commandCenterLoading,
+    commandCenterError,
+    refreshDealCommandStats,
+  } = useSellerDashboardController(currentUser);
   const [messagesHubFilter, setMessagesHubFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editFormData, setEditFormData] = useState<Vehicle | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
-  const [plan, setPlan] = useState<any>(null);
-  const [planLoading, setPlanLoading] = useState(true);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [boostVehicle, setBoostVehicle] = useState<Vehicle | null>(null);
   const [markSoldVehicle, setMarkSoldVehicle] = useState<Vehicle | null>(null);
@@ -520,100 +520,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     }
   }, [activeTab, currentUser.email]);
 
-  // Check if user is a seller
-  const isSeller = currentUser?.role === 'seller';
   const isAdmin = currentUser.role === 'admin';
-
-  // Load plan details and keep in sync with admin plan edits.
-  useEffect(() => {
-    if (!isSeller) return;
-
-    let active = true;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    const loadPlan = async (silent = false) => {
-      if (!silent) setPlanLoading(true);
-      try {
-        const planDetails = await planService.getPlanDetails(currentUser.subscriptionPlan || 'free');
-        if (!active) return;
-        setPlan(planDetails);
-      } catch (error) {
-        console.error('Failed to load plan details:', error);
-        if (!active) return;
-        setPlan({ name: t('sellerDashboard.freePlanName'), listingLimit: 1, price: 0 });
-      } finally {
-        if (active) setPlanLoading(false);
-      }
-    };
-
-    const reloadOnVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        void loadPlan(true);
-      }
-    };
-    const reloadOnPlanConfigUpdate = () => {
-      void loadPlan(true);
-    };
-    const reloadOnStoragePlanUpdate = (event: StorageEvent) => {
-      if (event.key === 'reRidePlanConfigUpdatedAt') {
-        void loadPlan(true);
-      }
-    };
-
-    void loadPlan(false);
-    intervalId = setInterval(() => {
-      void loadPlan(true);
-    }, 30000);
-    window.addEventListener('focus', reloadOnVisibility);
-    document.addEventListener('visibilitychange', reloadOnVisibility);
-    window.addEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);
-    window.addEventListener('storage', reloadOnStoragePlanUpdate);
-
-    return () => {
-      active = false;
-      if (intervalId) clearInterval(intervalId);
-      window.removeEventListener('focus', reloadOnVisibility);
-      document.removeEventListener('visibilitychange', reloadOnVisibility);
-      window.removeEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);
-      window.removeEventListener('storage', reloadOnStoragePlanUpdate);
-    };
-  }, [isSeller, currentUser.subscriptionPlan, t]);
-
-  const refreshDealCommandStats = useCallback((force = false) => {
-    if (!isSeller || !currentUser.email) {
-      setCommandCenter(null);
-      setCommandCenterLoading(false);
-      setCommandCenterError(null);
-      return Promise.resolve();
-    }
-    setCommandCenterLoading(true);
-    if (force) invalidateSellerCommandCenterCache();
-    return fetchSellerCommandCenter(force)
-      .then((center) => {
-        setCommandCenter(center);
-        setCommandCenterError(null);
-      })
-      .catch((err) => {
-        setCommandCenterError(err instanceof Error ? err.message : 'Could not load hot leads');
-      })
-      .finally(() => {
-        setCommandCenterLoading(false);
-      });
-  }, [isSeller, currentUser.email]);
-
-  useEffect(() => {
-    if (!isSeller) return;
-    let cancelled = false;
-    const load = async () => {
-      const { rehydrateApiCredentials } = await import('../utils/validatePersistedSession.js');
-      await rehydrateApiCredentials();
-      if (!cancelled) void refreshDealCommandStats();
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [isSeller, refreshDealCommandStats]);
 
   useEffect(() => {
     if (activeTab !== 'hotLeads') {

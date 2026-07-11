@@ -3,7 +3,7 @@ import { requestUsersTablePasswordReset } from '../services/passwordResetFromApi
 import { loginServiceProviderWithUsersTable } from '../services/serviceProviderLoginSupport';
 import { setRememberMePreference } from '../utils/rememberMe';
 import {
-  saveRememberedCredentialsAsync,
+  saveRememberedCredentials,
   resolveRememberedCredentials,
 } from '../utils/rememberedCredentials';
 import { View as ViewEnum } from '../types';
@@ -57,8 +57,8 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
     }
   }, []);
 
-  const persistRememberedCredentials = async () => {
-    await saveRememberedCredentialsAsync(SERVICE_PROVIDER_ROLE, email, password, rememberMe);
+  const persistRememberedCredentials = () => {
+    saveRememberedCredentials(SERVICE_PROVIDER_ROLE, email, password, rememberMe);
   };
 
   const handleMockLogin = () => {
@@ -86,7 +86,7 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
       if (!sp.ok) {
         throw new Error(sp.message);
       }
-      await persistRememberedCredentials();
+      persistRememberedCredentials();
       setRememberMePreference(rememberMe);
       onLoginSuccess(sp.provider);
       onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
@@ -154,7 +154,7 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
             'Account was created but sign-in failed. Try logging in with the same email and password.',
         );
       }
-      await persistRememberedCredentials();
+      persistRememberedCredentials();
       setRememberMePreference(true);
       onLoginSuccess(sp.provider);
       onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);

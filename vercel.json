@@ -128,7 +128,9 @@
     { "source": "/about", "destination": "/about-us", "permanent": true },
     { "source": "/terms", "destination": "/terms-of-service", "permanent": true },
     { "source": "/privacy", "destination": "/privacy-policy", "permanent": true },
-    { "source": "/safety", "destination": "/safety-center", "permanent": true }
+    { "source": "/safety", "destination": "/safety-center", "permanent": true },
+    { "source": "/rental", "destination": "/used-cars", "permanent": true },
+    { "source": "/new-cars", "destination": "/used-cars", "permanent": true }
   ],
   "rewrites": [
     { "source": "/api/send-sms-hook", "destination": "/api/send-sms-hook.ts" },

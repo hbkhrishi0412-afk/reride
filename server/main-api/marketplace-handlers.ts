@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as core from './shared.js';
-import { trackViewBodySchema, loginBodySchema } from '../../utils/api-schemas.js';
+import { trackViewBodySchema, loginBodySchema, registerBodySchema } from '../../utils/api-schemas.js';
 import { verifyViewTrackToken } from '../../utils/view-track-token.js';
 
 async function handleUsers(req: VercelRequest, res: VercelResponse, _options: core.HandlerOptions) {
@@ -75,7 +75,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           return res.status(200).json(enrichedProviders);
         } catch (error) {
           core.logError('❌ Error fetching service providers:', error);
-          return res.status(200).json([]);
+          return res.status(503).json({
+            success: false,
+            reason: core.errorToPublicMessage(error),
+          });
         }
       }
     }
@@ -594,17 +597,27 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
 
     // REGISTER
     if (action === 'register') {
-      if (!email || !password || !name || !mobile || !role) {
-        return res.status(400).json({ success: false, reason: 'All fields are required.' });
+      const registerParsed = registerBodySchema.safeParse({ name, email, password, mobile, role });
+      if (!registerParsed.success) {
+        return res.status(400).json({
+          success: false,
+          reason: 'Validation failed',
+          errors: registerParsed.error.flatten().fieldErrors,
+        });
       }
-
-      // Supabase connection is handled automatically - no need for connection checks
+      const reg = registerParsed.data;
 
       // Sanitize and validate input data
-      const sanitizedData = await core.sanitizeObject({ email, password, name, mobile, role });
+      const sanitizedData = await core.sanitizeObject({
+        email: reg.email,
+        password: reg.password,
+        name: reg.name,
+        mobile: reg.mobile,
+        role: reg.role,
+      });
       
-      // SECURITY: Block admin role self-registration - admin accounts must be created internally
-      if (sanitizedData.role === 'admin') {
+      // SECURITY: Block admin role self-registration (defense in depth beyond Zod)
+      if (String(sanitizedData.role || '').toLowerCase() === 'admin') {
         return res.status(403).json({ 
           success: false, 
           reason: 'Admin accounts cannot be created through public registration. Admin accounts must be provisioned internally.' 
@@ -2645,17 +2658,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
     // Ensure we always return JSON
     res.setHeader('Content-Type', 'application/json');
     
-    // For GET requests, always use fallback instead of 500 to prevent crashes
+    // For GET requests, surface outage instead of silent empty data
     if (req.method === 'GET') {
-      try {
-        const fallbackUsers = await getFallbackUsers();
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json(fallbackUsers);
-      } catch (fallbackError) {
-        core.logError('❌ Fallback users also failed:', fallbackError);
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json([]);
-      }
+      return core.respondServiceUnavailable(res, error, 'Unable to load users.');
     }
     
     // Check for server configuration errors (e.g. JWT_SECRET missing)
@@ -4630,57 +4635,20 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     return res.status(405).json({ success: false, reason: 'Method not allowed.' });
   } catch (error) {
     console.error('Error in handleVehicles:', error);
-    // Ensure we always return JSON
     res.setHeader('Content-Type', 'application/json');
-    
-    // Special handling for vehicle-data endpoints - NEVER return 500
+
     const isVehicleDataEndpoint = core.firstQueryParam(req.query?.type) === 'data';
     if (isVehicleDataEndpoint) {
-      res.setHeader('X-Data-Fallback', 'true');
-      const defaultData = {
-        FOUR_WHEELER: [{ name: "Maruti Suzuki", models: [{ name: "Swift", variants: ["LXi", "VXi", "ZXi"] }] }],
-        TWO_WHEELER: [{ name: "Honda", models: [{ name: "Activa 6G", variants: ["Standard", "DLX"] }] }]
-      };
-      if (req.method === 'GET') {
-        return res.status(200).json(defaultData);
-      } else {
-        return res.status(200).json({
-          success: true,
-          data: req.body || {},
-          message: 'Vehicle data processed (error occurred, using fallback)',
-          fallback: true,
-          timestamp: new Date().toISOString()
-        });
-      }
+      return core.respondServiceUnavailable(res, error, 'Vehicle catalog data is temporarily unavailable.');
     }
-    
-    // If it's a database connection error, return 200 with fallback data instead of 503
-    if (error instanceof Error && (error.message.includes('FIREBASE') || error.message.includes('Firebase') || error.message.includes('connect'))) {
-      const fallbackVehicles = await getFallbackVehicles();
-      const publishedFallbackVehicles = fallbackVehicles.filter(v => v.status === 'published');
-      res.setHeader('X-Data-Fallback', 'true');
-      return res.status(200).json(publishedFallbackVehicles);
-    }
-    
-    // For GET requests, always return 200 with fallback data instead of 500
+
     if (req.method === 'GET') {
-      try {
-        const fallbackVehicles = await getFallbackVehicles();
-        const publishedFallbackVehicles = fallbackVehicles.filter(v => v.status === 'published');
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json(publishedFallbackVehicles);
-      } catch (fallbackError) {
-        // Even fallback failed, return empty array
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json([]);
-      }
+      return core.respondServiceUnavailable(res, error, 'Unable to load vehicles.');
     }
-    
-    // For other methods, return 500 with error details
+
     return res.status(500).json({
       success: false,
-      reason: 'An error occurred while processing the request',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      reason: core.errorToPublicMessage(error),
     });
   }
 }
@@ -4823,6 +4791,25 @@ async function handleUploadImage(req: VercelRequest, res: VercelResponse) {
         success: false,
         reason: 'Invalid upload folder.',
       });
+    }
+    const uploaderEmail = uploadAuth.user?.email?.toLowerCase().trim() || '';
+    const emailPrefix = uploaderEmail.replace(/[^a-zA-Z0-9@._-]/g, '');
+    if (emailPrefix && folderBase !== 'vehicles' && folderBase !== 'chat-messages') {
+      if (!sanitizedFolder.startsWith(`${emailPrefix}/`) && sanitizedFolder !== emailPrefix) {
+        return res.status(403).json({
+          success: false,
+          reason: 'Upload folder must be scoped to your account.',
+        });
+      }
+    }
+    if (folderBase === 'chat-messages' && emailPrefix) {
+      const chatPrefix = `chat-messages/${emailPrefix}`;
+      if (!sanitizedFolder.startsWith(chatPrefix) && sanitizedFolder !== 'chat-messages') {
+        return res.status(403).json({
+          success: false,
+          reason: 'Chat uploads must use your account folder.',
+        });
+      }
     }
     const mime = detectedMime;
     const timestamp = Date.now();

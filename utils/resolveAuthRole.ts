@@ -1,7 +1,7 @@
 import { supabaseUserService } from '../services/supabase-user-service.js';
 import { normalizeUserRoleString } from './user-role.js';
 
-export type ApiAuthRole = 'customer' | 'seller' | 'admin';
+export type ApiAuthRole = 'customer' | 'seller' | 'admin' | 'service_provider' | 'finance_partner';
 
 /**
  * Authoritative role for API authorization — always prefers the database over
@@ -21,6 +21,8 @@ export async function resolveAuthRoleFromEmail(
       const role = normalizeUserRoleString(dbUser.role);
       if (role === 'admin') return 'admin';
       if (role === 'seller') return 'seller';
+      if (role === 'service_provider') return 'service_provider';
+      if (role === 'finance_partner') return 'finance_partner';
       return 'customer';
     }
   } catch {
@@ -30,5 +32,7 @@ export async function resolveAuthRoleFromEmail(
   const hinted = normalizeUserRoleString(appMetadataRole);
   if (hinted === 'admin') return 'admin';
   if (hinted === 'seller') return 'seller';
+  if (hinted === 'service_provider') return 'service_provider';
+  if (hinted === 'finance_partner') return 'finance_partner';
   return 'customer';
 }

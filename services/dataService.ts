@@ -1480,7 +1480,15 @@ class DataService {
 
   private async loginLocal(credentials: { email: string; password: string; role?: string }): Promise<{ success: boolean, user?: User, reason?: string }> {
     const users = await this.getUsersLocal();
-    const user = users.find(u => u.email === credentials.email && u.password === credentials.password);
+    const devPassword =
+      (typeof import.meta !== 'undefined' && import.meta.env?.VITE_MOCK_USER_PASSWORD) ||
+      (typeof process !== 'undefined' && process.env?.MOCK_USER_PASSWORD) ||
+      '';
+    const user = users.find((u) => {
+      if (u.email !== credentials.email) return false;
+      const expected = u.password || devPassword;
+      return Boolean(expected) && credentials.password === expected;
+    });
     
     if (!user) {
       return { success: false, reason: 'Invalid credentials.' };

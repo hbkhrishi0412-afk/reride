@@ -36,6 +36,7 @@ import { View } from '../types';
 import { getDealLead } from '../services/dealService';
 import DealStageChip from './DealStageChip';
 import { maskVehicleIdentifier } from '../utils/vehiclePrivacy';
+import VehicleJsonLd from './VehicleJsonLd';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -50,6 +51,7 @@ interface VehicleDetailProps {
   users: User[];
   onViewSellerProfile: (sellerEmail: string) => void;
   onStartChat: (vehicle: Vehicle) => void;
+  onRequestTestDrive?: (vehicle: Vehicle, details: { date: string; time: string }) => void | Promise<void>;
   recommendations: Vehicle[];
   onSelectVehicle: (vehicle: Vehicle) => void;
   updateVehicle?: (id: number, updates: Partial<Vehicle>, options?: { successMessage?: string; skipToast?: boolean }) => Promise<void>;
@@ -255,7 +257,7 @@ const CertifiedInspectionReport: React.FC<{ report: CertifiedInspection }> = ({ 
 };
 
 
-export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: onBackToHome, comparisonList, onToggleCompare, onAddSellerRating, wishlist, onToggleWishlist, currentUser, onFlagContent, users, onViewSellerProfile, onStartChat, recommendations, onSelectVehicle, updateVehicle: updateVehicleProp }) => {
+export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: onBackToHome, comparisonList, onToggleCompare, onAddSellerRating, wishlist, onToggleWishlist, currentUser, onFlagContent, users, onViewSellerProfile, onStartChat, onRequestTestDrive, recommendations, onSelectVehicle, updateVehicle: updateVehicleProp }) => {
   const { t } = useTranslation();
 
   // Get updateVehicle from context (hook must be called unconditionally)
@@ -340,6 +342,10 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const detailTabsRef = useRef<HTMLDivElement>(null);
   const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
   const [showEMICalculator, setShowEMICalculator] = useState<boolean>(false);
+  const [showTestDriveForm, setShowTestDriveForm] = useState(false);
+  const [testDriveDate, setTestDriveDate] = useState('');
+  const [testDriveTime, setTestDriveTime] = useState('');
+  const [isRequestingTestDrive, setIsRequestingTestDrive] = useState(false);
   const [vehicleDealLead, setVehicleDealLead] = useState<DealLead | null>(null);
   const ratingSuccessTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emiCalculatorRef = useRef<HTMLDivElement>(null);
@@ -349,6 +355,9 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   useEffect(() => {
     setCurrentIndex(0);
     setShowEMICalculator(false);
+    setShowTestDriveForm(false);
+    setTestDriveDate('');
+    setTestDriveTime('');
     scrollToEmiOnShowRef.current = false;
     setVehicleDealLead(null);
     setActiveMediaTab(vehicle.videoUrl ? 'video' : 'images');
@@ -553,6 +562,26 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     }
   };
 
+  const handleRequestTestDriveSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!onRequestTestDrive || !testDriveDate || !testDriveTime || isRequestingTestDrive) return;
+    setIsRequestingTestDrive(true);
+    try {
+      await Promise.resolve(
+        onRequestTestDrive(safeVehicle, {
+          date: testDriveDate,
+          time: testDriveTime,
+        }),
+      );
+      setShowTestDriveForm(false);
+      if (currentUser) {
+        await refreshVehicleDealLead();
+      }
+    } finally {
+      setIsRequestingTestDrive(false);
+    }
+  };
+
   const filteredRecommendations = useMemo(() => {
       const pool = recommendations.filter(rec => rec.id !== safeVehicle.id);
       if (pool.length === 0) return [];
@@ -617,6 +646,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
 
   return (
     <>
+      <VehicleJsonLd vehicle={safeVehicle} />
       <div className="bg-white dark:bg-white animate-fade-in vehicle-detail-page">
           <div className="max-w-7xl mx-auto py-4 sm:py-5 px-4 sm:px-6 lg:px-8">
               <button type="button" onClick={onBackToHome} className="mb-3 text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors flex items-center gap-2">
@@ -1611,6 +1641,70 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               ? t('vehicle.detail.openDealRoom', { defaultValue: 'Open deal room' })
                               : t('vehicle.detail.startTrackedDeal', { defaultValue: 'Start tracked deal' })}
                           </button>
+                          {onRequestTestDrive ? (
+                            <div className="rounded-lg border border-orange-100 bg-orange-50/60 p-3">
+                              {showTestDriveForm ? (
+                                <form className="space-y-2" onSubmit={handleRequestTestDriveSubmit}>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <label className="block">
+                                      <span className="mb-1 block text-xs font-semibold text-gray-700">
+                                        {t('vehicle.detail.testDriveDate', { defaultValue: 'Date' })}
+                                      </span>
+                                      <input
+                                        type="date"
+                                        value={testDriveDate}
+                                        min={new Date().toISOString().slice(0, 10)}
+                                        onChange={(event) => setTestDriveDate(event.target.value)}
+                                        className="w-full rounded-lg border border-orange-200 bg-white px-2 py-2 text-sm text-gray-900 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                        required
+                                      />
+                                    </label>
+                                    <label className="block">
+                                      <span className="mb-1 block text-xs font-semibold text-gray-700">
+                                        {t('vehicle.detail.testDriveTime', { defaultValue: 'Time' })}
+                                      </span>
+                                      <input
+                                        type="time"
+                                        value={testDriveTime}
+                                        onChange={(event) => setTestDriveTime(event.target.value)}
+                                        className="w-full rounded-lg border border-orange-200 bg-white px-2 py-2 text-sm text-gray-900 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                                        required
+                                      />
+                                    </label>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="submit"
+                                      disabled={!testDriveDate || !testDriveTime || isRequestingTestDrive}
+                                      className="flex-1 rounded-lg bg-orange-500 px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      {isRequestingTestDrive
+                                        ? t('common.sending', { defaultValue: 'Sending...' })
+                                        : t('vehicle.detail.sendTestDriveRequest', { defaultValue: 'Send request' })}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowTestDriveForm(false)}
+                                      className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                                    >
+                                      {t('common.cancel', { defaultValue: 'Cancel' })}
+                                    </button>
+                                  </div>
+                                </form>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowTestDriveForm(true)}
+                                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-bold text-orange-600 shadow-sm ring-1 ring-orange-200 transition-colors hover:bg-orange-50"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3M5 11h14M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                  </svg>
+                                  {t('vehicle.detail.bookTestDrive')}
+                                </button>
+                              )}
+                            </div>
+                          ) : null}
                           {/* Secondary contact options */}
                           {listingAvailable && (callHref || sellerWhatsAppUrl) ? (
                             <div className="grid grid-cols-2 gap-2">

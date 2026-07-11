@@ -1,10 +1,10 @@
-/** True when running inside Capacitor Android/iOS WebView (not mobile browser PWA). */
+import { isCapacitorNative } from './apiConfig.js';
+
+/**
+ * True when running inside Capacitor Android/iOS WebView or a packaged shell
+ * (https://localhost, appassets.androidplatform.net). Uses the same detection as
+ * API URL rewriting so native storage and fetch behave consistently.
+ */
 export function isCapacitorNativeApp(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const C = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
-    return C?.isNativePlatform?.() === true;
-  } catch {
-    return false;
-  }
+  return isCapacitorNative();
 }

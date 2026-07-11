@@ -9,6 +9,7 @@ import type {
   UniversalSellerChecklist,
   VahanSnapshot,
   VehicleTrustDeal,
+  Vehicle,
 } from '../types.js';
 
 const BASE = '/api/vehicle-trust';
@@ -19,7 +20,7 @@ export interface VahanVerifyResult {
   message?: string;
 }
 
-export function applyVahanVerifyToVehicleFields<T extends Record<string, unknown>>(
+export function applyVahanVerifyToVehicleFields<T extends Partial<Vehicle>>(
   prev: T,
   registrationNumber: string,
   result: VahanVerifyResult,
@@ -27,7 +28,7 @@ export function applyVahanVerifyToVehicleFields<T extends Record<string, unknown
   const next: T = {
     ...prev,
     registrationNumber,
-  };
+  } as T;
 
   if (result.verified && result.snapshot) {
     return {

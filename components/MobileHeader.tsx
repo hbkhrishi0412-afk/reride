@@ -120,6 +120,12 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
         badge: compareCount > 0 ? compareCount : undefined,
         tint: '#334155',
       },
+      {
+        icon: <PricingIcon />,
+        label: t('nav.pricing', { defaultValue: 'Pricing' }),
+        view: ViewEnum.PRICING,
+        tint: '#475569',
+      },
     ],
     [t, currentUser?.role, compareCount],
   );
@@ -165,10 +171,23 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
 
   const helpItems: MenuItemConfig[] = useMemo(
     () => [
+      { icon: <QuestionIcon />, label: t('footer.helpCenter', { defaultValue: 'Help center' }), view: ViewEnum.HELP_CENTER, tint: '#64748B' },
       { icon: <InfoIcon />, label: t('nav.support'), view: ViewEnum.SUPPORT, tint: '#64748B' },
       { icon: <ShieldIcon />, label: t('footer.safety'), view: ViewEnum.SAFETY_CENTER, tint: '#64748B' },
       { icon: <AboutIcon />, label: t('nav.aboutUs'), view: ViewEnum.ABOUT_US, tint: '#64748B' },
       { icon: <QuestionIcon />, label: t('footer.faq'), view: ViewEnum.FAQ, tint: '#64748B' },
+    ],
+    [t],
+  );
+
+  const legalItems: MenuItemConfig[] = useMemo(
+    () => [
+      { icon: <ShieldIcon />, label: t('footer.privacy'), view: ViewEnum.PRIVACY_POLICY, tint: '#64748B' },
+      { icon: <InfoIcon />, label: t('footer.terms'), view: ViewEnum.TERMS_OF_SERVICE, tint: '#64748B' },
+      { icon: <InfoIcon />, label: t('footer.refund', { defaultValue: 'Refund Policy' }), view: ViewEnum.REFUND_POLICY, tint: '#64748B' },
+      { icon: <ShieldIcon />, label: t('footer.complaint', { defaultValue: 'Complaint Resolution' }), view: ViewEnum.COMPLAINT_RESOLUTION, tint: '#64748B' },
+      { icon: <ShieldIcon />, label: t('footer.fraud', { defaultValue: 'Fraud Policy' }), view: ViewEnum.FRAUD_POLICY, tint: '#64748B' },
+      { icon: <InfoIcon />, label: t('footer.cookies', { defaultValue: 'Cookie Policy' }), view: ViewEnum.COOKIE_POLICY, tint: '#64748B' },
     ],
     [t],
   );
@@ -489,6 +508,19 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                   />
                 ))}
               </MenuSection>
+
+              <MenuSection title={t('footer.trustLegal', { defaultValue: 'Trust & legal' })}>
+                {legalItems.map((item) => (
+                  <MenuItem
+                    key={item.view}
+                    icon={item.icon}
+                    label={item.label}
+                    tint={item.tint}
+                    active={currentView === item.view}
+                    onClick={() => navigateAndClose(item.view)}
+                  />
+                ))}
+              </MenuSection>
             </nav>
 
             {/* Footer actions */}
@@ -614,6 +646,12 @@ const ServiceIcon = () => (
 const CompareIcon = () => (
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+  </svg>
+);
+
+const PricingIcon = () => (
+  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2m0-12a9 9 0 110 18 9 9 0 010-18z" />
   </svg>
 );
 

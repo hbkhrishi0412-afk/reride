@@ -60,7 +60,13 @@ function createJsonErrorResponse(
 let csrfToken: string | null = null;
 let csrfTokenPromise: Promise<string | null> | null = null;
 
+/** Capacitor sends `X-App-Client: capacitor`; the API skips CSRF for those requests. */
+function shouldFetchCsrfToken(): boolean {
+  return !isCapacitorNative();
+}
+
 export async function ensureCsrfToken(): Promise<string | null> {
+  if (!shouldFetchCsrfToken()) return null;
   if (csrfToken) return csrfToken;
   if (csrfTokenPromise) return csrfTokenPromise;
   csrfTokenPromise = (async () => {
@@ -68,8 +74,13 @@ export async function ensureCsrfToken(): Promise<string | null> {
       const csrfUrl = resolvedApiUrl('/api/csrf-token');
       const omitCreds =
         isCapacitorNative() || isApiRequestCrossOrigin(csrfUrl);
+      const csrfTimeoutSignal =
+        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(10_000)
+          : undefined;
       const res = await fetch(csrfUrl, {
         credentials: omitCreds ? 'omit' : 'include',
+        ...(csrfTimeoutSignal ? { signal: csrfTimeoutSignal } : {}),
       });
       if (!res.ok) return null;
       const data = await res.json();
@@ -410,7 +421,11 @@ export const authenticatedFetch = async (
     const isSimpleRead =
       skipAuth && (method === 'GET' || method === 'HEAD') && !hasBody;
 
-    if ((method === 'POST' || method === 'PUT' || method === 'DELETE') && !csrfToken) {
+    if (
+      shouldFetchCsrfToken() &&
+      (method === 'POST' || method === 'PUT' || method === 'DELETE') &&
+      !csrfToken
+    ) {
       await ensureCsrfToken();
     }
 
