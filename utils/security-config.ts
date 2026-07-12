@@ -270,7 +270,8 @@ export const getSecurityConfig = () => {
       ISSUER: jwtStatic.ISSUER,
       AUDIENCE: jwtStatic.AUDIENCE,
       get SECRET(): string {
-        const secret = resolveJwtSecret(envSecret);
+        // Read live env — serverless bundles must not rely on a stale closure from first import.
+        const secret = resolveJwtSecret(process.env.JWT_SECRET?.trim() || envSecret);
         if (secret) return secret;
         const hint = isDeployedEnvironment()
           ? 'Configure JWT_SECRET in Vercel → Environment Variables (Production AND Preview).'

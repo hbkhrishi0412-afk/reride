@@ -259,12 +259,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       const loginPassword = loginParsed.data.password;
       const loginRole = loginParsed.data.role ?? role;
 
-      // Sanitize input
-      const sanitizedData = await core.sanitizeObject({
-        email: loginEmail,
+      // Sanitize email/role only — password must stay exact for bcrypt
+      const sanitizedData = {
+        ...(await core.sanitizeObject({
+          email: loginEmail,
+          role: loginRole,
+        })),
         password: loginPassword,
-        role: loginRole,
-      });
+      };
       
       // Validate email format
       if (!core.validateEmail(sanitizedData.email)) {
@@ -282,7 +284,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           reason: loginLock.reason || 'Too many login attempts. Please try again later.',
         });
       }
-      
       // Use Supabase for user lookup
       let user: core.UserType | null = null;
       
@@ -453,7 +454,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       if (!isDevMockLogin) {
         try {
           isPasswordValid = user.password
-            ? await core.validatePassword(sanitizedData.password, user.password)
+            ? await core.validatePassword(loginPassword, user.password)
             : false;
         } catch (pwErr) {
           core.logWarn('⚠️ Password validation error (treating as invalid):', pwErr);
@@ -623,6 +624,17 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       } catch (loginError) {
         core.logError('❌ Login handler error:', loginError);
         const message = loginError instanceof Error ? loginError.message : 'Unknown error';
+        const isConfigError =
+          message.includes('JWT_SECRET') ||
+          message.includes('JWT secret') ||
+          message.includes('JWT not configured') ||
+          message.includes('environment variables');
+        if (isConfigError) {
+          return res.status(503).json({
+            success: false,
+            reason: 'Server configuration error. Please try again later.',
+          });
+        }
         return res.status(500).json({
           success: false,
           reason: 'Server error. Please try again later.',

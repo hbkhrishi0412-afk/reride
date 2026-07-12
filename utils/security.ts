@@ -97,6 +97,7 @@ export const validatePassword = async (password: string, hash: string): Promise<
 
 // JWT token utilities
 export const generateAccessToken = (user: User): string => {
+  const jwtConfig = getSecurityConfig().JWT;
   const payload = {
     userId: user.id || user.email,
     email: user.email,
@@ -104,26 +105,26 @@ export const generateAccessToken = (user: User): string => {
     type: 'access'
   };
   
-  const secret = config.JWT.SECRET;
+  const secret = jwtConfig.SECRET;
   if (!secret) {
     throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
   }
   
   // CRITICAL FIX: Ensure expiration is properly set
-  const expiresIn = config.JWT.ACCESS_TOKEN_EXPIRES_IN;
+  const expiresIn = jwtConfig.ACCESS_TOKEN_EXPIRES_IN;
   if (!expiresIn || expiresIn === '1m' || expiresIn === '60s') {
     console.error('❌ CRITICAL: Token expiration is set to 1 minute! Using default 48h');
     return jwt.sign(payload, secret, { 
       expiresIn: '48h', // Force 48 hours
-      issuer: config.JWT.ISSUER,
-      audience: config.JWT.AUDIENCE
+      issuer: jwtConfig.ISSUER,
+      audience: jwtConfig.AUDIENCE
     });
   }
   
   return jwt.sign(payload, secret, { 
     expiresIn: expiresIn as any,
-    issuer: config.JWT.ISSUER,
-    audience: config.JWT.AUDIENCE
+    issuer: jwtConfig.ISSUER,
+    audience: jwtConfig.AUDIENCE
   });
 };
 
@@ -148,6 +149,7 @@ const generateJti = (): string => {
 };
 
 export const generateRefreshToken = (user: User): string => {
+  const jwtConfig = getSecurityConfig().JWT;
   const payload = {
     userId: user.id || user.email,
     email: user.email,
@@ -157,14 +159,14 @@ export const generateRefreshToken = (user: User): string => {
     jti: generateJti(),
   };
 
-  const secret = config.JWT.SECRET;
+  const secret = jwtConfig.SECRET;
   if (!secret) {
     throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
   }
   return jwt.sign(payload, secret, {
-    expiresIn: config.JWT.REFRESH_TOKEN_EXPIRES_IN as any,
-    issuer: config.JWT.ISSUER,
-    audience: config.JWT.AUDIENCE,
+    expiresIn: jwtConfig.REFRESH_TOKEN_EXPIRES_IN as any,
+    issuer: jwtConfig.ISSUER,
+    audience: jwtConfig.AUDIENCE,
   });
 };
 
