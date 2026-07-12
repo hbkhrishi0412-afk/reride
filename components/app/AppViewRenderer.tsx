@@ -72,7 +72,7 @@ export interface AppViewRendererLocals {
   setForgotPasswordRole: (role: 'customer' | 'seller' | null) => void;
   handleLogin: (user: User) => void;
   handleRegister: (user: User) => void;
-  handleLogoutAll: () => void;
+  handleLogoutAll: () => void | Promise<void>;
   handleNotificationClick: (notification: Notification) => void;
   handleAcceptDealChat: (leadId: string, conversationId?: string) => void | Promise<void>;
   handleMarkNotificationsAsRead: (ids: number[]) => void | Promise<void>;

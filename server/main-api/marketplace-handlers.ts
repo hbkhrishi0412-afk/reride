@@ -4239,11 +4239,25 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             return res.status(403).json(core.listingLimitGuardResponse(publishValidation));
           }
 
-          const updatedVehicle = await core.vehicleService.update(mutation.primaryKey, {
+          const unsoldUpdates: Partial<core.VehicleType> = {
             status: 'published',
             listingStatus: 'active',
-            soldAt: '',
-          });
+            soldAt: undefined,
+          };
+          const listingExpired =
+            Boolean(vehicle.listingExpiresAt) &&
+            new Date(vehicle.listingExpiresAt as string) < new Date();
+          if (listingExpired) {
+            Object.assign(unsoldUpdates, core.buildListingRenewalUpdates(seller, vehicle));
+          }
+
+          const updatedVehicle = await core.vehicleService.update(mutation.primaryKey, unsoldUpdates);
+
+          if ((seller.soldListings || 0) > 0) {
+            await core.userService.update(normalizedVehicleSellerEmail, {
+              soldListings: Math.max(0, (seller.soldListings || 0) - 1),
+            });
+          }
 
           return res.status(200).json({ success: true, vehicle: updatedVehicle });
         } catch (error) {

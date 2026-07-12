@@ -679,7 +679,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
         <div className="px-4 py-6">
           <div className="border-t border-gray-200 pt-6">
             <button
-              onClick={onLogout}
+              onClick={() => { void Promise.resolve(onLogout()); }}
               className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-semibold border border-red-200 active:scale-95 transition-transform"
             >
               <div className="flex items-center justify-center gap-2">

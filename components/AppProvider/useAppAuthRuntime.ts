@@ -9,7 +9,7 @@ import { getSupabaseClient } from '../../lib/supabase';
 import { saveConversations } from '../../services/chatService';
 import { syncServiceProviderOAuth, syncWithBackend } from '../../services/supabase-auth-service';
 import { resetAuthFetchStateAfterLogout } from '../../utils/authenticatedFetch';
-import { clearSupabaseAuthStorage } from '../../utils/authStorage';
+import { clearSupabaseAuthStorage, clearSupabaseAuthStorageAsync } from '../../utils/authStorage';
 import { logDebug, logError, logInfo, logWarn } from '../../utils/logger';
 import { clearUserContext, setUserContext } from '../../utils/monitoring';
 import { persistReRideNotifications } from '../../utils/notificationLocalStorage';
@@ -72,6 +72,8 @@ export function useAppAuthRuntime({
   const profileRestoreFromSupabaseInFlightRef = useRef(false);
   /** Blocks Supabase session-restore / OAuth handlers from re-logging in during sign-out */
   const logoutInProgressRef = useRef(false);
+  /** Stays true after explicit logout until the next login/register — prevents silent re-auth */
+  const sessionRestoreBlockedRef = useRef(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const currentUserRef = useRef<User | null>(null);
   currentUserRef.current = currentUser;
@@ -119,6 +121,7 @@ export function useAppAuthRuntime({
 
   const handleLogout = useCallback(async () => {
     logoutInProgressRef.current = true;
+    sessionRestoreBlockedRef.current = true;
     try {
       // Local sign-out only: default global signOut() revokes on Supabase (logout?scope=global)
       // and returns 403 when the access token is already expired, which blocks logout.
@@ -131,7 +134,7 @@ export function useAppAuthRuntime({
       } catch (supabaseError) {
         logDebug('Supabase sign out skipped:', supabaseError);
       }
-      clearSupabaseAuthStorage();
+      await clearSupabaseAuthStorageAsync();
 
       try {
         const { signOutGoogleNativeIfAvailable } = await import('../../utils/nativeGoogleSignIn');
@@ -195,8 +198,15 @@ export function useAppAuthRuntime({
         /* ignore storage errors */
       }
 
-      // Navigate to home
+      // Navigate to home and sync router URL (otherwise /seller/dashboard keeps the dashboard mounted)
       setCurrentView(View.HOME);
+      try {
+        routerNavigate('/', {
+          state: { view: View.HOME, timestamp: Date.now() },
+        });
+      } catch {
+        /* ignore */
+      }
 
       // Show success message
       addToast(t('toast.loggedOut'), 'info');
@@ -232,7 +242,7 @@ export function useAppAuthRuntime({
         /* ignore */
       }
       localStorage.removeItem('reRideServiceProvider');
-      clearSupabaseAuthStorage();
+      await clearSupabaseAuthStorageAsync();
       try {
         localStorage.removeItem('reride_wishlist');
         localStorage.removeItem('reride_comparison_list');
@@ -256,6 +266,13 @@ export function useAppAuthRuntime({
         /* ignore */
       }
       setCurrentView(View.HOME);
+      try {
+        routerNavigate('/', {
+          state: { view: View.HOME, timestamp: Date.now() },
+        });
+      } catch {
+        /* ignore */
+      }
       setActiveChat(null);
       setComparisonList([]);
       setWishlist([]);
@@ -267,6 +284,7 @@ export function useAppAuthRuntime({
     }
   }, [
     addToast,
+    routerNavigate,
     setActiveChat,
     setChatPeerOnlineByConversationId,
     setComparisonList,
@@ -307,6 +325,7 @@ export function useAppAuthRuntime({
         logDebug('handleLogin skipped — logout in progress');
         return;
       }
+      sessionRestoreBlockedRef.current = false;
       // CRITICAL: Validate user object before setting
       if (!user || !user.email || !user.role) {
         logError('❌ Invalid user object in handleLogin:', {
@@ -484,7 +503,7 @@ export function useAppAuthRuntime({
     const supabase = getSupabaseClient();
 
     const tryFinishGoogleOAuth = async (session: Session | null) => {
-      if (logoutInProgressRef.current) return;
+      if (logoutInProgressRef.current || sessionRestoreBlockedRef.current) return;
       let pendingRole = sessionStorage.getItem('reride_oauth_role') as
         | 'customer'
         | 'seller'
@@ -644,7 +663,7 @@ export function useAppAuthRuntime({
 
     const restoreFromSupabaseSession = async (session: Session | null) => {
       if (cancelled || currentUserRef.current) return;
-      if (logoutInProgressRef.current) return;
+      if (logoutInProgressRef.current || sessionRestoreBlockedRef.current) return;
       if (!session?.user?.email) return;
 
       const uid = session.user.id;
@@ -750,6 +769,7 @@ export function useAppAuthRuntime({
 
   const handleRegister = useCallback(
     (user: User) => {
+      sessionRestoreBlockedRef.current = false;
       // CRITICAL: Validate user object before setting
       if (!user || !user.email || !user.role) {
         logError('❌ Invalid user object in handleRegister:', {

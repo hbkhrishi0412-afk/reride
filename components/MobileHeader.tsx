@@ -534,6 +534,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                     closeMenu();
                     void Promise.resolve(onLogout());
                   }}
+                  data-testid="mobile-menu-logout"
                 />
               ) : (
                 <div className="space-y-2">
@@ -575,10 +576,12 @@ const MenuItem: React.FC<{
   badge?: number;
   tint?: string;
   variant?: 'default' | 'danger';
-}> = ({ icon, label, onClick, active = false, badge, tint = '#475569', variant = 'default' }) => (
+  'data-testid'?: string;
+}> = ({ icon, label, onClick, active = false, badge, tint = '#475569', variant = 'default', 'data-testid': dataTestId }) => (
   <button
     type="button"
     onClick={onClick}
+    data-testid={dataTestId}
     className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-all active:scale-[0.99] ${
       variant === 'danger'
         ? 'text-red-600 hover:bg-red-50'

@@ -5,6 +5,7 @@ import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapsho
 import { userRolesEqual } from '../utils/user-role.js';
 import { isDevelopmentEnvironment } from '../utils/environment.js';
 import { isCapacitorNative } from '../utils/apiConfig.js';
+import { getCapacitorAuthFetchTimeoutMs } from '../utils/capacitorResilientFetch.js';
 import {
   authenticatedFetch,
   handleApiResponse,
@@ -15,6 +16,7 @@ import {
 } from '../utils/authenticatedFetch.js';
 import {
   clearSupabaseAuthStorage,
+  clearSupabaseAuthStorageAsync,
   clearSessionStoredAccessToken,
   getBrowserAccessTokenForApi,
   useHttpOnlyRefreshCookie,
@@ -156,7 +158,7 @@ const clearTokens = async () => {
       localStorage.removeItem('reRideRefreshToken');
       localStorage.removeItem('reRideCurrentUser');
     }
-    clearSupabaseAuthStorage();
+    await clearSupabaseAuthStorageAsync();
     resetAuthFetchStateAfterLogout();
   } catch (error) {
     console.warn('Failed to clear tokens:', error);
@@ -547,10 +549,6 @@ const authApi = async (body: any): Promise<any> => {
                 method: 'POST',
                 skipAuth: true,
                 body: JSON.stringify(body),
-                signal:
-                    typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
-                        ? AbortSignal.timeout(45_000)
-                        : undefined,
             });
             
             // Handle rate limiting (429) - don't retry immediately, wait and use fallback
@@ -657,7 +655,7 @@ const authApi = async (body: any): Promise<any> => {
         }
     })();
     
-    const AUTH_REQUEST_TIMEOUT_MS = 50_000;
+    const AUTH_REQUEST_TIMEOUT_MS = getCapacitorAuthFetchTimeoutMs() + 3_000;
     const timedPromise = Promise.race([
         requestPromise,
         new Promise<never>((_, reject) => {
@@ -821,8 +819,10 @@ async function applyLoginApiResult(
   }
 
   if (result.accessToken) {
-    await storeTokens(result.accessToken, result.refreshToken);
     localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
+    // Persist JWTs in the background — memory tokens are set synchronously in setNativeAccessToken
+    // so navigation/API calls work immediately without waiting on Keychain/Preferences I/O.
+    void storeTokens(result.accessToken, result.refreshToken);
     if (credentials.email && credentials.password) {
       void bridgeSupabasePasswordSession(String(credentials.email), String(credentials.password));
     }

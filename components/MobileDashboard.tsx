@@ -2307,7 +2307,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               { key: 'notifs', label: 'Notifications', sub: 'Activity & alerts', icon: <IconBell size={16} stroke={2} />, tint: 'rgba(255,107,53,0.10)', color: '#EA580C', onClick: () => setActiveTab('notifications'), badge: unreadNotifications.length },
               { key: 'privacy', label: 'Privacy', sub: 'Privacy policy', icon: <IconShield size={16} stroke={2} />, tint: 'rgba(71,85,105,0.10)', color: '#475569', onClick: () => onNavigate(ViewEnum.PRIVACY_POLICY) },
               { key: 'help', label: 'Help & support', sub: 'FAQ, contact us', icon: <IconChat size={16} stroke={2} />, tint: 'rgba(16,185,129,0.10)', color: '#047857', onClick: () => onNavigate(ViewEnum.SUPPORT) },
-              ...(onLogout ? [{ key: 'logout', label: 'Log out', sub: 'End this session', icon: <IconArrowUpRight size={16} stroke={2} />, tint: 'rgba(220,38,38,0.10)', color: '#DC2626', onClick: () => onLogout() }] : [])
+              ...(onLogout ? [{ key: 'logout', label: 'Log out', sub: 'End this session', icon: <IconArrowUpRight size={16} stroke={2} />, tint: 'rgba(220,38,38,0.10)', color: '#DC2626', onClick: () => { void Promise.resolve(onLogout()); } }] : [])
             ].map((row) => (
               <li key={row.key}>
                 <button
@@ -4261,7 +4261,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         icon: <IconArrowUpRight size={16} stroke={2} />,
         tint: 'rgba(220,38,38,0.10)',
         color: '#DC2626',
-        onClick: () => onLogout()
+        onClick: () => { void Promise.resolve(onLogout()); }
       }] : [])
     ];
 

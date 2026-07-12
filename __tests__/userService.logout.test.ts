@@ -16,6 +16,7 @@ jest.mock('../utils/authenticatedFetch', () => ({
 
 jest.mock('../utils/authStorage', () => ({
   clearSupabaseAuthStorage: jest.fn(),
+  clearSupabaseAuthStorageAsync: jest.fn().mockResolvedValue(undefined),
   clearSessionStoredAccessToken: jest.fn(),
   getBrowserAccessTokenForApi: jest.fn(() => null),
   useHttpOnlyRefreshCookie: jest.fn(() => false),
@@ -26,7 +27,7 @@ const { logout } = require('../services/userService') as typeof import('../servi
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { clearNativeTokens } = require('../utils/nativeTokenStorage') as typeof import('../utils/nativeTokenStorage');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { clearSupabaseAuthStorage } = require('../utils/authStorage') as typeof import('../utils/authStorage');
+const { clearSupabaseAuthStorageAsync } = require('../utils/authStorage') as typeof import('../utils/authStorage');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { resetAuthFetchStateAfterLogout } = require('../utils/authenticatedFetch') as typeof import('../utils/authenticatedFetch');
 
@@ -45,7 +46,7 @@ describe('userService.logout', () => {
     await logout();
 
     expect(clearNativeTokens).toHaveBeenCalledTimes(1);
-    expect(clearSupabaseAuthStorage).toHaveBeenCalledTimes(1);
+    expect(clearSupabaseAuthStorageAsync).toHaveBeenCalledTimes(1);
     expect(resetAuthFetchStateAfterLogout).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem('reRideCurrentUser')).toBeNull();
     expect(localStorage.getItem('reRideAccessToken')).toBeNull();

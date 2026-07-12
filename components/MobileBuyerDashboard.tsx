@@ -178,7 +178,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
             </button>
             {onLogout && (
               <button
-                onClick={onLogout}
+                onClick={() => { void Promise.resolve(onLogout()); }}
                 className="p-2 text-gray-600 hover:text-red-600 active:opacity-70 transition-colors"
                 title={t('nav.logout')}
                 aria-label={t('nav.logout')}
@@ -553,7 +553,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
             {onLogout && (
               <div className="mt-8 pt-6 border-t border-gray-200">
                 <button
-                  onClick={onLogout}
+                  onClick={() => { void Promise.resolve(onLogout()); }}
                   className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-semibold border border-red-200 active:scale-95 transition-transform"
                 >
                   <div className="flex items-center justify-center gap-2">

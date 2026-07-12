@@ -3304,11 +3304,29 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const syncVehicleFromServer = useCallback((vehicle: Vehicle) => {
     const result = normalizeVehicleIdentity(vehicle);
-    setVehicles((prev) =>
-      Array.isArray(prev)
-        ? prev.map((v) => (v && findVehicleByIdentity([v], result.id, result.databaseId) ? result : v))
-        : [result],
-    );
+    setVehicles((prev) => {
+      const list = Array.isArray(prev) ? [...prev] : [];
+      const idx = list.findIndex(
+        (v) => v && findVehicleByIdentity([v], result.id, result.databaseId),
+      );
+      if (result.status === 'published') {
+        if (idx >= 0) {
+          list[idx] = result;
+        } else {
+          list.push(result);
+        }
+        return list;
+      }
+      if (result.status === 'sold' || result.status === 'archived') {
+        if (idx >= 0) list.splice(idx, 1);
+        return list;
+      }
+      if (idx >= 0) {
+        list[idx] = result;
+        return list;
+      }
+      return list;
+    });
     setSellerInventory((prev) =>
       filterVehiclesBySellerEmail(
         Array.isArray(prev)

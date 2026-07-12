@@ -12,6 +12,10 @@ import {
   normalizeRerideApiHostToWww,
 } from './apiConfig.js';
 import {
+  fetchWithTimeoutAndFallback,
+  getCapacitorAuthFetchTimeoutMs,
+} from './capacitorResilientFetch.js';
+import {
   setNativeAccessToken,
   setNativeRefreshToken,
   clearNativeTokens,
@@ -493,23 +497,20 @@ export const authenticatedFetch = async (
     const timeoutMs =
       resolvedUrl.includes('/upload-image') || resolvedUrl.includes('/sell-car')
         ? 120_000
-        : 60_000;
-    const timeoutSignal =
-      !fetchOptions.signal &&
-      typeof AbortSignal !== 'undefined' &&
-      typeof AbortSignal.timeout === 'function'
-        ? AbortSignal.timeout(timeoutMs)
-        : undefined;
+        : getCapacitorAuthFetchTimeoutMs();
 
     // First attempt - wrap in try-catch to handle network errors
     let response: Response;
     try {
-      response = await fetch(resolvedUrl, {
-        ...fetchOptions,
-        headers: mergedHeaders,
-        credentials: credentialsMode,
-        ...(timeoutSignal ? { signal: timeoutSignal } : {}),
-      });
+      response = await fetchWithTimeoutAndFallback(
+        resolvedUrl,
+        {
+          ...fetchOptions,
+          headers: mergedHeaders,
+          credentials: credentialsMode,
+        },
+        timeoutMs,
+      );
     } catch (fetchError) {
       // Network error, CORS error, or other fetch failures
       // Return a Response-like object that indicates failure
@@ -588,14 +589,18 @@ export const authenticatedFetch = async (
           logInfo('✅ Token refreshed, retrying request...');
           // Retry with new token - wrap in try-catch
           try {
-            response = await fetch(resolvedUrl, {
-              ...fetchOptions,
-              headers: {
-                ...mergedHeaders,
-                'Authorization': `Bearer ${newToken}`,
+            response = await fetchWithTimeoutAndFallback(
+              resolvedUrl,
+              {
+                ...fetchOptions,
+                headers: {
+                  ...mergedHeaders,
+                  Authorization: `Bearer ${newToken}`,
+                },
+                credentials: credentialsMode,
               },
-              credentials: credentialsMode,
-            });
+              timeoutMs,
+            );
           } catch (retryError) {
             // Network error on retry - return original 401 response
             logWarn('⚠️ Network error on retry after token refresh:', retryError);

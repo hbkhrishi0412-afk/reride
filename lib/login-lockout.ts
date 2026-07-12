@@ -22,7 +22,15 @@ export async function checkLoginAllowed(email: string): Promise<{ allowed: boole
   const key = email.toLowerCase().trim();
   if (!key) return { allowed: true };
 
-  const upstash = await checkUpstashRateLimit(`login:${key}`);
+  const upstash = await Promise.race([
+    checkUpstashRateLimit(`login:${key}`),
+    new Promise<{ allowed: boolean; remaining: number; configured: boolean }>((resolve) => {
+      setTimeout(
+        () => resolve({ allowed: true, remaining: -1, configured: false }),
+        2_000,
+      );
+    }),
+  ]);
   if (!upstash.allowed) {
     return { allowed: false, reason: 'Too many login attempts. Please try again later.' };
   }

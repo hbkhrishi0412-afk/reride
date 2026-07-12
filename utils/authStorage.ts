@@ -104,30 +104,46 @@ export function getSupabaseAccessTokenFromStorage(): string | null {
  * Global `signOut()` hits `logout?scope=global` and returns 403 when the JWT is already invalid,
  * which blocks logout; use `signOut({ scope: 'local' })` plus this as a safety net.
  */
-export function clearSupabaseAuthStorage(): void {
-  if (typeof localStorage !== 'undefined') {
-    try {
-      const toRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key) continue;
-        if (key === 'sb-access-token' || key === 'supabase.auth.token') {
-          toRemove.push(key);
-          continue;
-        }
-        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-          toRemove.push(key);
-        }
+function clearSupabaseAuthStorageFromLocalStorage(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (key === 'sb-access-token' || key === 'supabase.auth.token') {
+        toRemove.push(key);
+        continue;
       }
-      toRemove.forEach((k) => localStorage.removeItem(k));
-    } catch {
-      /* ignore */
+      if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+        toRemove.push(key);
+      }
     }
+    toRemove.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* ignore */
   }
+}
+
+/** Sync clear for localStorage keys; native secure storage clear is fire-and-forget. */
+export function clearSupabaseAuthStorage(): void {
+  clearSupabaseAuthStorageFromLocalStorage();
   if (typeof window !== 'undefined') {
     void import('./supabaseNativeAuthStorage').then(({ clearSupabaseSecureAuthStorage }) =>
       clearSupabaseSecureAuthStorage(),
     );
+  }
+}
+
+/** Await native Keychain / Keystore wipe — use on logout before session-restore listeners run. */
+export async function clearSupabaseAuthStorageAsync(): Promise<void> {
+  clearSupabaseAuthStorageFromLocalStorage();
+  if (typeof window === 'undefined') return;
+  try {
+    const { clearSupabaseSecureAuthStorage } = await import('./supabaseNativeAuthStorage');
+    await clearSupabaseSecureAuthStorage();
+  } catch {
+    /* ignore */
   }
 }
 

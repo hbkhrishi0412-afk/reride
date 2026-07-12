@@ -16,7 +16,7 @@ import { randomIntBelow } from '../utils/secureRandom.js';
 import { conversationBelongsToSeller } from '../utils/conversationParticipants';
 
 export type SellerDashboardLocals = {
-  handleLogoutAll: () => void;
+  handleLogoutAll: () => void | Promise<void>;
   handleNotificationClick: (notification: Notification) => void;
   handleMarkNotificationsAsRead: (ids: number[]) => void | Promise<void>;
   handleTestDriveResponse: (
@@ -135,7 +135,10 @@ export function useSellerDashboardHandlers({ app, currentUser, locals }: UseSell
   const onMarkAsUnsold = useCallback(
     async (vehicleId: number) => {
       const vehicle = findSellerVehicle(vehicleId);
-      if (!vehicle) return;
+      if (!vehicle) {
+        addToast('Listing not found. Please refresh and try again.', 'error');
+        return;
+      }
       const canPublish = await assertSellerCanPublishListing({
         currentUser,
         vehicle,
@@ -145,14 +148,15 @@ export function useSellerDashboardHandlers({ app, currentUser, locals }: UseSell
       if (!canPublish) return;
       try {
         const { markVehicleAsUnsold } = await import('../services/vehicleService');
-        const updated = await markVehicleAsUnsold(vehicleId, vehicles);
+        // Sold vehicles live in seller inventory, not the public catalog — use seller list for identity lookup.
+        const updated = await markVehicleAsUnsold(vehicleId, sellerVehiclesFiltered);
         syncVehicleFromServer(updated);
         addToast('Listing is active again.', 'success');
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Failed to update vehicle. Please try again.', 'error');
       }
     },
-    [findSellerVehicle, currentUser, sellerVehiclesFiltered, vehicles, syncVehicleFromServer, addToast],
+    [findSellerVehicle, currentUser, sellerVehiclesFiltered, syncVehicleFromServer, addToast],
   );
 
   const onAddMultipleVehicles = useCallback(
