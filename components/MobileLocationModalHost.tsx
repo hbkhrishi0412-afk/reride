@@ -1,6 +1,5 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react';
-
-const LocationModal = lazy(() => import('./LocationModal'));
+import React, { useEffect, useState } from 'react';
+import LocationModal from './LocationModal';
 
 interface MobileLocationModalHostProps {
   userLocation: string;
@@ -11,6 +10,9 @@ interface MobileLocationModalHostProps {
 /**
  * Global mobile location picker — mounted once in the app shell so the modal
  * works from any screen (not only MobileHomePage).
+ *
+ * Eagerly imports LocationModal (not lazy) so Capacitor Android always has the
+ * same picker as web and cannot silently fail if a lazy chunk fails to load.
  */
 export const MobileLocationModalHost: React.FC<MobileLocationModalHostProps> = ({
   userLocation,
@@ -28,15 +30,13 @@ export const MobileLocationModalHost: React.FC<MobileLocationModalHostProps> = (
   if (!isOpen) return null;
 
   return (
-    <Suspense fallback={null}>
-      <LocationModal
-        isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
-        currentLocation={userLocation}
-        onLocationChange={onLocationChange}
-        addToast={addToast}
-      />
-    </Suspense>
+    <LocationModal
+      isOpen={isOpen}
+      onClose={() => setIsOpen(false)}
+      currentLocation={userLocation}
+      onLocationChange={onLocationChange}
+      addToast={addToast}
+    />
   );
 };
 

@@ -33,9 +33,12 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
 }) => {
   const { t } = useTranslation();
 
-  const locationDisplay =
-    selectedCity.trim() ||
-    (userLocation.trim() ? primaryLocationLabel(userLocation) || userLocation.trim() : '');
+  const locationDisplay = (() => {
+    const raw = selectedCity.trim() || userLocation.trim();
+    if (!raw) return '';
+    if (/^all of india$/i.test(raw)) return t('locationModal.allIndia', { defaultValue: 'All of India' });
+    return primaryLocationLabel(raw) || raw;
+  })();
 
   const openLocationPicker = useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -60,7 +63,7 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
             type="button"
             onClick={openLocationPicker}
             data-testid="header-location-picker"
-            className="inline-flex min-w-0 max-w-[5.75rem] items-center gap-0.5 rounded-full border border-blue-100 bg-blue-50/90 px-2 py-1 text-[10px] font-semibold leading-tight text-blue-700 active:scale-[0.98] transition-transform notranslate"
+            className="inline-flex min-w-0 max-w-[7.5rem] items-center gap-0.5 rounded-full border border-blue-100 bg-blue-50/90 px-2 py-1 text-[10px] font-semibold leading-tight text-blue-700 active:scale-[0.98] transition-transform notranslate"
             aria-label={t('a11y.chooseLocation')}
             title={locationDisplay || t('header.selectLocation')}
             data-no-translate

@@ -105,7 +105,7 @@ import { sanitizePersistedChatMessage, supabaseRowToConversation } from '../serv
 import { emailToKey } from '../services/supabase-user-service';
 import { isCapacitorNative } from '../utils/apiConfig';
 import { getNativeMemoryRefreshToken } from '../utils/nativeTokenStorage';
-import { normalizeUserLocationForStorage } from '../utils/cityMapping';
+import { normalizeUserLocationForStorage, primaryLocationLabel } from '../utils/cityMapping';
 import {
   getBrowserAccessTokenForApi,
   useHttpOnlyRefreshCookie,
@@ -497,8 +497,26 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       return;
     }
 
+    // Pan-India: keep the label in userLocation, but clear selectedCity so
+    // PopularCitiesChips / catalog filters treat it as "no city filter"
+    // (same as handleBrowseAllIndia).
+    if (/^all of india$/i.test(nextLocation)) {
+      setUserLocationState((prev) => (prev === 'All of India' ? prev : 'All of India'));
+      setSelectedCityState((prev) => (prev === '' ? prev : ''));
+      try {
+        localStorage.setItem('reRideUserLocation', 'All of India');
+        localStorage.removeItem('reRideSelectedCity');
+      } catch (error) {
+        logWarn('Failed to persist All of India location:', error);
+      }
+      return;
+    }
+
+    // Header/modal may store "City, State"; chips and routes key off the city.
+    const cityForFilter = primaryLocationLabel(nextLocation) || nextLocation;
+
     setUserLocationState(prev => (prev === nextLocation ? prev : nextLocation));
-    setSelectedCityState(prev => (prev === nextLocation ? prev : nextLocation));
+    setSelectedCityState(prev => (prev === cityForFilter ? prev : cityForFilter));
 
     try {
       localStorage.setItem('reRideUserLocation', nextLocation);
@@ -507,7 +525,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     }
 
     try {
-      localStorage.setItem('reRideSelectedCity', nextLocation);
+      localStorage.setItem('reRideSelectedCity', cityForFilter);
     } catch (error) {
       logWarn('Failed to persist selected city:', error);
     }

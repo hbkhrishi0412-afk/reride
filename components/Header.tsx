@@ -70,9 +70,12 @@ const Header: React.FC<HeaderProps> = memo(({
     const { t } = useTranslation();
     const isMdUp = useIsMdUp();
     const showHomeLocationActions = Boolean(isHomePage && onBrowseAllIndia && onUseMyLocation);
-    const locationDisplay =
-        selectedCity.trim() ||
-        (userLocation.trim() ? primaryLocationLabel(userLocation) || userLocation.trim() : '');
+    const locationDisplay = (() => {
+        const raw = selectedCity.trim() || userLocation.trim();
+        if (!raw) return '';
+        if (/^all of india$/i.test(raw)) return t('locationModal.allIndia', { defaultValue: 'All of India' });
+        return primaryLocationLabel(raw) || raw;
+    })();
     const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);

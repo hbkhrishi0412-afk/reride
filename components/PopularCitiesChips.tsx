@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { HOME_DISCOVERY_CITY_ORDER } from '../constants/homeDiscovery.js';
+import { primaryLocationLabel } from '../utils/cityMapping';
 
 export type PopularCityChip = {
   name: string;
@@ -49,7 +50,9 @@ export const PopularCitiesChips: React.FC<PopularCitiesChipsProps> = ({
       ? 'border-white bg-white text-purple-700 shadow-md'
       : 'border-purple-500 bg-purple-50 text-purple-800 ring-1 ring-purple-200';
 
-  const allIndiaActive = !selectedCity.trim();
+  const selectedPrimary = primaryLocationLabel(selectedCity).trim();
+  const allIndiaActive =
+    !selectedPrimary || /^all of india$/i.test(selectedPrimary) || /^all of india$/i.test(selectedCity.trim());
 
   return (
     <div className={className} data-testid="popular-cities-chips">
@@ -74,7 +77,8 @@ export const PopularCitiesChips: React.FC<PopularCitiesChipsProps> = ({
           {t('home.popularCities.allIndia', { defaultValue: 'All India' })}
         </button>
         {ordered.map(({ name, count }) => {
-          const active = selectedCity.trim().toLowerCase() === name.toLowerCase();
+          const active =
+            !allIndiaActive && selectedPrimary.toLowerCase() === name.toLowerCase();
           return (
             <button
               key={name}
