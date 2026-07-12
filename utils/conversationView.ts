@@ -30,3 +30,16 @@ export function getLastVisibleMessageForViewer(
   const msgs = filterMessagesForViewer(conversation, viewerRole);
   return msgs.length ? msgs[msgs.length - 1] : undefined;
 }
+
+/** True when the seller sent at least one message directly after a buyer message. */
+export function sellerRepliedInConversation(
+  conversation: Conversation | null | undefined,
+): boolean {
+  const messages = filterMessagesForViewer(conversation, 'seller');
+  for (let i = 0; i < messages.length - 1; i++) {
+    if (messages[i].sender === 'user' && messages[i + 1].sender === 'seller') {
+      return true;
+    }
+  }
+  return false;
+}

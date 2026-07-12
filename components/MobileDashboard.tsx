@@ -16,7 +16,10 @@ import {
   buildSellerShareUrl,
   sellerQrDownloadFileName,
 } from '../utils/sellerQrCode';
-import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../utils/conversationView';
+import {
+  getLastVisibleMessageForViewer,
+  sellerRepliedInConversation,
+} from '../utils/conversationView';
 import { formatRelativeTime } from '../utils/date';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
 import { 
@@ -1696,26 +1699,27 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       return Number.isFinite(t) && t >= rangeStartTime;
     };
 
-    /** Best-effort views in the selected window (uses `viewsLast7Days` / `viewsLast30Days` when present). */
+    /** Best-effort views in the selected window (uses period counters when present). */
     const viewScoreForWindow = (v: Vehicle, days: 7 | 30 | 90): number => {
       const total = v.views ?? 0;
       const w7 = v.viewsLast7Days ?? 0;
       const w30 = v.viewsLast30Days ?? 0;
+      const updatedMs = v.updatedAt ? new Date(v.updatedAt).getTime() : NaN;
+      const recentActivity = Number.isFinite(updatedMs) && updatedMs >= rangeStartTime;
+
       if (days === 7) {
         if (w7 > 0) return w7;
         if (w30 > 0) return Math.max(0, Math.round((w30 * 7) / 30));
-        if (total > 0) return Math.max(0, Math.round((total * 7) / 30));
-        return 0;
+        return recentActivity ? total : 0;
       }
       if (days === 30) {
         if (w30 > 0) return w30;
         if (w7 > 0) return Math.round((w7 * 30) / 7);
-        return total;
+        return recentActivity ? total : 0;
       }
-      if (total > 0) return total;
       if (w30 > 0) return Math.round((w30 * 90) / 30);
       if (w7 > 0) return Math.round((w7 * 90) / 7);
-      return 0;
+      return recentActivity ? total : 0;
     };
 
     const periodConversations = safeConversations.filter((c) => c && isIsoInWindow(c.lastMessageAt));
@@ -1731,17 +1735,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     const averageViewsPerListing = activeListings > 0 ? Math.round(periodTotalViews / activeListings) : 0;
     const conversionRate =
       periodTotalViews > 0 ? ((periodInquiries / periodTotalViews) * 100).toFixed(1) : '0.0';
+    const respondedThreads = periodConversations.filter((c) => sellerRepliedInConversation(c)).length;
     const responseRate =
-      periodInquiries > 0
-        ? (
-            (periodConversations.filter((c) => filterMessagesForViewer(c, 'seller').length > 0).length /
-              periodInquiries) *
-            100
-          ).toFixed(0)
-        : '0';
+      periodInquiries > 0 ? Math.round((respondedThreads / periodInquiries) * 100).toString() : '0';
     const avgPrice =
-      safeUserVehicles.length > 0
-        ? safeUserVehicles.reduce((sum, v) => sum + (v?.price || 0), 0) / safeUserVehicles.length
+      publishedVehicles.length > 0
+        ? publishedVehicles.reduce((sum, v) => sum + (v?.price || 0), 0) / publishedVehicles.length
         : 0;
 
     // Get top performing vehicles by estimated views in the selected window
@@ -1766,7 +1765,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         key: 'views',
         label: 'Total views',
         value: periodTotalViews.toLocaleString('en-IN'),
-        hint: averageViewsPerListing > 0 ? `${averageViewsPerListing} avg / listing Â· ${periodLabel}` : 'Awaiting traffic',
+        hint: averageViewsPerListing > 0 ? `${averageViewsPerListing} avg / listing · ${periodLabel}` : 'Awaiting traffic',
         icon: <IconEye size={16} stroke={1.9} />,
         accent: '#2563EB',
         tint: 'rgba(37,99,235,0.10)'
@@ -1793,7 +1792,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         key: 'price',
         label: 'Avg. price',
         value: `₹${formatPrice(avgPrice)}`,
-        hint: 'Across listings',
+        hint: 'Published listings',
         icon: <IconCar size={16} stroke={1.9} />,
         accent: '#FF6B35',
         tint: 'rgba(255,107,53,0.10)'
@@ -1916,7 +1915,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     <div
                       className="h-full rounded-full transition-all duration-700"
                       style={{
-                        width: `${Math.max(pct, 4)}%`,
+                        width: `${t1.value > 0 ? Math.max(pct, 4) : 0}%`,
                         background: `linear-gradient(90deg, ${t1.color}AA, ${t1.color})`
                       }}
                     />
@@ -2307,8 +2306,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               )}
               {(currentUser?.location || currentUser?.address || currentUser?.pincode) && (
                 <p className="text-[11.5px] text-white/55 mt-1 leading-relaxed font-medium">
-                  {[currentUser?.location, currentUser?.address].filter(Boolean).join(' Â· ')}
-                  {currentUser?.pincode ? ` Â· PIN ${String(currentUser.pincode).replace(/\D/g, '').slice(0, 6)}` : ''}
+                  {[currentUser?.location, currentUser?.address].filter(Boolean).join(' · ')}
+                  {currentUser?.pincode ? ` · PIN ${String(currentUser.pincode).replace(/\D/g, '').slice(0, 6)}` : ''}
                 </p>
               )}
             </div>
@@ -2468,7 +2467,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Inbox</p>
             <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Notifications</h3>
             <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">
-              {filteredNotifications.length} total Â· {unreadNotifications.length} unread
+              {filteredNotifications.length} total · {unreadNotifications.length} unread
             </p>
           </div>
           <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -4683,7 +4682,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
         {/* App version footer */}
         <p className="text-center text-[10.5px] text-slate-400 font-medium tracking-wide pt-2">
-          Reride Â· Premium Seller Hub
+          Reride · Premium Seller Hub
         </p>
       </div>
     );
