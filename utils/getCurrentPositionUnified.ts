@@ -92,7 +92,12 @@ async function ensureCapacitorLocationPermission(
     throw deniedError();
   }
 
-  perm = await Geolocation.requestPermissions();
+  perm = await Promise.race([
+    Geolocation.requestPermissions(),
+    new Promise<Awaited<ReturnType<typeof Geolocation.checkPermissions>>>((_, reject) => {
+      window.setTimeout(() => reject(geoTimeoutError()), 12_000);
+    }),
+  ]);
   if (perm.location !== 'granted') {
     throw deniedError();
   }

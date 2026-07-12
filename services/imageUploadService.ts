@@ -191,10 +191,11 @@ async function uploadViaApi(file: File, folder: string): Promise<UploadResult> {
   }
 }
 
-async function postApiUpload(file: File, folder: string): Promise<UploadResult> {
+async function postApiUpload(file: File, folder: string, attempt = 0): Promise<UploadResult> {
   const dataUrl = await convertFileToBase64(file);
   const fileBase64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
   const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+  const { parseRetryAfterSeconds, retryDelayMs, sleepMs } = await import('../utils/rateLimitClient.js');
   const res = await authenticatedFetch('/api/upload-image', {
     method: 'POST',
     body: JSON.stringify({
@@ -205,6 +206,12 @@ async function postApiUpload(file: File, folder: string): Promise<UploadResult> 
     }),
     credentials: 'include',
   });
+
+  if (res.status === 429 && attempt < 2) {
+    await sleepMs(retryDelayMs(parseRetryAfterSeconds(res), attempt));
+    return postApiUpload(file, folder, attempt + 1);
+  }
+
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const reason = (data.reason || data.error || `Upload failed (${res.status})`).toString();

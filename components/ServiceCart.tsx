@@ -10,6 +10,7 @@ import { CAR_SERVICE_OPTIONS } from '../constants/serviceProviderCatalog.js';
 import { useIsMobileApp } from '../hooks/useIsMobileApp';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 import { useApp } from './AppProvider';
+import { CLIENT_POLL_INTERVALS_MS } from '../utils/clientPolling.js';
 
 type ServicePackage = {
     id: string;
@@ -498,7 +499,7 @@ const ServiceCart: React.FC<Props> = ({
         fetchProviderServices();
         
         // Refresh services periodically to stay in sync
-        const interval = setInterval(fetchProviderServices, 30000); // Every 30 seconds
+        const interval = setInterval(fetchProviderServices, CLIENT_POLL_INTERVALS_MS.serviceProviderCatalog);
         return () => clearInterval(interval);
     }, []);
 

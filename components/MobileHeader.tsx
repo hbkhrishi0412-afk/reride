@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
+import { HELP_NAV_ITEMS } from '../constants/helpLegalNav.js';
 
 interface MobileHeaderProps {
   onNavigate: (view: ViewEnum) => void;
@@ -111,6 +112,12 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
         view: currentUser?.role === 'seller' ? ViewEnum.SELL_CAR : ViewEnum.SELLER_LOGIN,
         tint: '#334155',
       },
+      {
+        icon: <DealFlowIcon />,
+        label: t('nav.howDealsWork'),
+        view: ViewEnum.ABOUT_US,
+        tint: '#475569',
+      },
       { icon: <DealerIcon />, label: t('nav.dealers'), view: ViewEnum.DEALER_PROFILES, tint: '#475569' },
       { icon: <ServiceIcon />, label: t('nav.carServices'), view: ViewEnum.CAR_SERVICES, tint: '#475569' },
       {
@@ -169,26 +176,14 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
     return items;
   }, [currentUser, t, wishlistCount, inboxCount]);
 
-  const helpItems: MenuItemConfig[] = useMemo(
-    () => [
-      { icon: <QuestionIcon />, label: t('footer.helpCenter', { defaultValue: 'Help center' }), view: ViewEnum.HELP_CENTER, tint: '#64748B' },
-      { icon: <InfoIcon />, label: t('nav.support'), view: ViewEnum.SUPPORT, tint: '#64748B' },
-      { icon: <ShieldIcon />, label: t('footer.safety'), view: ViewEnum.SAFETY_CENTER, tint: '#64748B' },
-      { icon: <AboutIcon />, label: t('nav.aboutUs'), view: ViewEnum.ABOUT_US, tint: '#64748B' },
-      { icon: <QuestionIcon />, label: t('footer.faq'), view: ViewEnum.FAQ, tint: '#64748B' },
-    ],
-    [t],
-  );
-
-  const legalItems: MenuItemConfig[] = useMemo(
-    () => [
-      { icon: <ShieldIcon />, label: t('footer.privacy'), view: ViewEnum.PRIVACY_POLICY, tint: '#64748B' },
-      { icon: <InfoIcon />, label: t('footer.terms'), view: ViewEnum.TERMS_OF_SERVICE, tint: '#64748B' },
-      { icon: <InfoIcon />, label: t('footer.refund', { defaultValue: 'Refund Policy' }), view: ViewEnum.REFUND_POLICY, tint: '#64748B' },
-      { icon: <ShieldIcon />, label: t('footer.complaint', { defaultValue: 'Complaint Resolution' }), view: ViewEnum.COMPLAINT_RESOLUTION, tint: '#64748B' },
-      { icon: <ShieldIcon />, label: t('footer.fraud', { defaultValue: 'Fraud Policy' }), view: ViewEnum.FRAUD_POLICY, tint: '#64748B' },
-      { icon: <InfoIcon />, label: t('footer.cookies', { defaultValue: 'Cookie Policy' }), view: ViewEnum.COOKIE_POLICY, tint: '#64748B' },
-    ],
+  const helpNavItems: MenuItemConfig[] = useMemo(
+    () =>
+      HELP_NAV_ITEMS.map((item) => ({
+        icon: <QuestionIcon />,
+        label: t(item.labelKey, { defaultValue: item.defaultLabel }),
+        view: item.view,
+        tint: '#64748B',
+      })),
     [t],
   );
 
@@ -496,21 +491,8 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                 </MenuSection>
               ) : null}
 
-              <MenuSection title={t('nav.menuHelp')}>
-                {helpItems.map((item) => (
-                  <MenuItem
-                    key={item.view}
-                    icon={item.icon}
-                    label={item.label}
-                    tint={item.tint}
-                    active={currentView === item.view}
-                    onClick={() => navigateAndClose(item.view)}
-                  />
-                ))}
-              </MenuSection>
-
-              <MenuSection title={t('footer.trustLegal', { defaultValue: 'Trust & legal' })}>
-                {legalItems.map((item) => (
+              <MenuSection title={t('footer.support', { defaultValue: 'Support' })}>
+                {helpNavItems.map((item) => (
                   <MenuItem
                     key={item.view}
                     icon={item.icon}
@@ -633,6 +615,12 @@ const SellCarIcon = () => (
   </svg>
 );
 
+const DealFlowIcon = () => (
+  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+  </svg>
+);
+
 const DealerIcon = () => (
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -679,23 +667,6 @@ const DashboardIcon = () => (
 const UserIcon = () => (
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-  </svg>
-);
-
-const InfoIcon = () => (
-  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const ShieldIcon = () => (
-  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-    />
   </svg>
 );
 

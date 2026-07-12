@@ -24,6 +24,8 @@ interface MobileLayoutProps {
   compareCount?: number;
   /** Unread in-app notifications (Activity); drives header bell dot. */
   unreadNotificationCount?: number;
+  userLocation?: string;
+  selectedCity?: string;
   /**
    * Logged-in service provider (separate identity from `currentUser`). Passed
    * through to `MobileHeader` so the slide-out menu reflects auth state for
@@ -57,6 +59,8 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   compareCount = 0,
   unreadNotificationCount = 0,
   serviceProvider = null,
+  userLocation = '',
+  selectedCity = '',
 }) => {
   const { lang: uiLang, epoch: langEpoch } = useTranslationRefresh();
   const [showMenu, setShowMenu] = useState(false);
@@ -116,6 +120,8 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
           showNotifications={Boolean(currentUser || serviceProvider)}
           showLogin={!currentUser && !serviceProvider}
           onLogin={() => onNavigate(ViewEnum.LOGIN_PORTAL)}
+          userLocation={userLocation}
+          selectedCity={selectedCity}
         />
       )}
       {shouldRenderHeader && (

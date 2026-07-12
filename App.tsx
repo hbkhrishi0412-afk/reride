@@ -8,6 +8,7 @@ import TranslationProvider from './components/TranslationProvider';
 import PageTransition from './components/PageTransition';
 import SEO from './components/SEO';
 import CookieConsentBanner from './components/CookieConsentBanner';
+import AppLegalConsent from './components/AppLegalConsent';
 import { 
   VehicleListErrorBoundary, 
   ChatErrorBoundary, 
@@ -20,6 +21,7 @@ import Footer from './components/Footer';
 import ToastContainer from './components/ToastContainer';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import useIsMobileApp from './hooks/useIsMobileApp';
+import { CLIENT_POLL_INTERVALS_MS } from './utils/clientPolling.js';
 import { isCapacitorNativeApp } from './utils/isCapacitorNative';
 import { setCapacitorAndroidBackHandler } from './utils/capacitorAndroidBack';
 import { tryHardwareBack } from './utils/hardwareBackRegistry';
@@ -27,6 +29,7 @@ import ShareTargetHandler from './components/ShareTargetHandler';
 import OfflineIndicator from './components/OfflineIndicator';
 // Layout/utility components that are always needed - keep as eager imports
 import MobileLayout from './components/MobileLayout';
+import MobileLocationModalHost from './components/MobileLocationModalHost';
 import MobileSearch from './components/MobileSearch';
 import MobilePushNotificationManager from './components/MobilePushNotificationManager';
 import NativePushRegistration from './components/NativePushRegistration';
@@ -516,32 +519,20 @@ const AppContent: React.FC = () => {
     const handleServiceWorkerUpdate = (event: CustomEvent) => {
       const detail = event.detail as { message?: string; action?: () => void };
       addToast(
-        detail.message || 'A new version is available. Click to refresh.',
-        'info'
+        detail.message || 'A new version is available. Refresh to update.',
+        'info',
       );
-      
-      // Show a persistent notification with refresh button
+
       if (detail.action) {
-        // Store the action for when user clicks refresh
         (window as WindowWithSW).__swUpdateAction = detail.action;
-        
-        // Add a clickable refresh button via another toast
-        setTimeout(() => {
-          addToast(
-            'Click here to refresh and get the latest version',
-            'info'
-          );
-          // Listen for click on the toast (simplified - in production, use a proper button)
-          const refreshHandler = () => {
-            const win = window as WindowWithSW;
-            if (win.__swUpdateAction) {
-              win.__swUpdateAction();
-            } else {
-              window.location.reload();
-            }
-          };
-          (window as WindowWithSW).__swRefreshHandler = refreshHandler;
-        }, 1000);
+        (window as WindowWithSW).__swRefreshHandler = () => {
+          const win = window as WindowWithSW;
+          if (win.__swUpdateAction) {
+            win.__swUpdateAction();
+          } else {
+            window.location.reload();
+          }
+        };
       }
     };
     
@@ -669,12 +660,11 @@ const AppContent: React.FC = () => {
         city: city || '',
       });
       navigate(ViewEnum.CAR_SERVICE_DASHBOARD);
-      addToast(`Welcome, ${name}!`, 'success');
     };
     window.addEventListener('reride:service-provider-oauth', onServiceProviderGoogleOAuth as EventListener);
     return () =>
       window.removeEventListener('reride:service-provider-oauth', onServiceProviderGoogleOAuth as EventListener);
-  }, [navigate, addToast, setServiceProvider]);
+  }, [navigate, setServiceProvider]);
 
   // Keep `reRideServiceProvider` in sync when the dashboard saves (categories, skills, etc.),
   // so a refresh and the `provider` prop do not drop fields that only exist in the API response.
@@ -1266,8 +1256,6 @@ const AppContent: React.FC = () => {
           timestamp: new Date().toISOString(),
         }));
 
-        generatedNotifications.forEach((notif) => addToast(notif.message, 'info'));
-        const updatedNotifications = [...generatedNotifications, ...notificationsRef.current];
         setNotifications(updatedNotifications);
         try {
           persistReRideNotifications(updatedNotifications);
@@ -1280,7 +1268,7 @@ const AppContent: React.FC = () => {
     };
 
     pollCustomerRequestStatuses();
-    const interval = setInterval(pollCustomerRequestStatuses, 15000);
+    const interval = setInterval(pollCustomerRequestStatuses, CLIENT_POLL_INTERVALS_MS.customerServiceRequests);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -2180,6 +2168,8 @@ const AppContent: React.FC = () => {
           inboxCount={unreadMessagesCount}
           unreadNotificationCount={unreadNotificationsCount}
           serviceProvider={serviceProvider}
+          userLocation={userLocation}
+          selectedCity={selectedCity}
         >
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
@@ -2196,6 +2186,11 @@ const AppContent: React.FC = () => {
             setInitialSearchQuery(query);
             navigate(ViewEnum.USED_CARS);
           }}
+        />
+        <MobileLocationModalHost
+          userLocation={userLocation}
+          onLocationChange={setUserLocation}
+          addToast={addToast}
         />
         <ToastContainer toasts={toasts} onRemove={removeToast} />
         {pendingSurvey && (
@@ -2422,6 +2417,7 @@ const App: React.FC = () => {
         <TranslationProvider>
           <AppContent />
           <CookieConsentBanner />
+          <AppLegalConsent />
         </TranslationProvider>
       </AppProvider>
     </ErrorBoundary>

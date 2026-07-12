@@ -15,7 +15,7 @@ import { getSupabaseClient } from '../lib/supabase.js';
 import type { User } from '../types.js';
 import { authenticatedFetch } from '../utils/authenticatedFetch.js';
 import { clearSupabaseAuthStorage, resolveSupabaseAccessTokenForApi } from '../utils/authStorage.js';
-import { setRememberMePreference } from '../utils/rememberMe.js';
+import { setRememberMePreferenceAsync } from '../utils/rememberMe.js';
 
 export type GoogleOAuthRole = 'customer' | 'seller' | 'service_provider';
 
@@ -161,7 +161,7 @@ export async function runGoogleSignInButtonFlow(
   persistGoogleOAuthRole(role);
   persistGoogleOAuthMode(mode);
   // Persist before browser OAuth redirect so PKCE + remember-me survive the round-trip.
-  setRememberMePreference(mode === 'register' ? true : rememberMe);
+  await setRememberMePreferenceAsync(mode === 'register' ? true : rememberMe);
 
   const result = await Promise.race([
     supabaseGoogleSignIn(),

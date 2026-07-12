@@ -208,12 +208,19 @@ const DP_STYLES = `
     box-shadow: 0 8px 18px -10px rgba(245,158,11,.55), inset 0 1px 0 rgba(255,255,255,.6);
   }
 
-  .dp-logo-wrap { position: relative; }
+  .dp-logo-wrap {
+    position: relative;
+    align-self: flex-start;
+    flex-shrink: 0;
+  }
   .dp-logo-ring {
     position: relative;
-    padding: 2px; border-radius: 14px;
+    display: inline-flex;
+    padding: 2px;
+    border-radius: 14px;
     background: linear-gradient(135deg, var(--c1,#60a5fa), var(--c2,#a855f7));
     box-shadow: 0 10px 22px -10px rgba(79,70,229,.45);
+    overflow: hidden;
   }
   .dp-logo-ring img { display: block; }
   .dp-type-showroom { --c1:#34d399; --c2:#059669; }

@@ -8,6 +8,7 @@ interface LogoProps {
   showText?: boolean;
   /** `onDark` = light wordmark for orange/gradient bars (e.g. mobile drawer) */
   variant?: 'default' | 'onDark';
+  'aria-label'?: string;
 }
 
 const Logo: React.FC<LogoProps> = ({
@@ -16,6 +17,7 @@ const Logo: React.FC<LogoProps> = ({
   size = 'lg',
   showText = true,
   variant = 'default',
+  'aria-label': ariaLabel = 'ReRide home',
 }) => {
   /* Lockup: app-style tile + wordmark (cap height slightly below tile height), like a horizontal brand bar */
   const sizeConfig = {
@@ -33,6 +35,7 @@ const Logo: React.FC<LogoProps> = ({
     <button
       type="button"
       onClick={onClick}
+      aria-label={ariaLabel}
       // Brand lockup must stay Latin + identical in every locale (dom auto-translate skips this subtree)
       data-no-translate
       translate="no"
@@ -57,11 +60,11 @@ const Logo: React.FC<LogoProps> = ({
 
       {showText && (
         <span
-          className={`font-brand font-extrabold ${
-            isOnDark ? 'text-white drop-shadow-sm' : 'text-slate-900 dark:text-white'
+          className={`font-brand font-extrabold uppercase tracking-wide ${
+            isOnDark ? 'text-white drop-shadow-sm' : 'text-reride-orange'
           } ${config.text}`}
         >
-          RERIDE
+          ReRide
         </span>
       )}
     </button>

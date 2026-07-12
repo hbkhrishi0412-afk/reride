@@ -205,6 +205,21 @@ const MobilePrivacyPolicyPage: React.FC = () => {
               </p>
             </div>
           </section>
+
+          <section className="border-t border-gray-200 pt-6 mt-2">
+            <h2 className="text-lg font-bold text-gray-900 mb-2">Related policies</h2>
+            <p className="text-gray-700 text-sm leading-relaxed">
+              See also our{' '}
+              <a href="/cookie-policy" className="text-blue-600 hover:underline">
+                Cookie Policy
+              </a>{' '}
+              and{' '}
+              <a href="/terms-of-service" className="text-blue-600 hover:underline">
+                Terms of Service
+              </a>
+              .
+            </p>
+          </section>
         </div>
       </div>
     </div>

@@ -84,7 +84,7 @@ export function pathToView(path: string): View {
   if (normalizedPath === '/pricing') return View.PRICING;
   if (normalizedPath === '/support') return View.SUPPORT;
   if (normalizedPath === '/about-us') return View.ABOUT_US;
-  if (normalizedPath === '/faq') return View.FAQ;
+  if (normalizedPath === '/faq') return View.HELP_CENTER;
   if (normalizedPath === '/help') return View.HELP_CENTER;
   if (normalizedPath === '/privacy-policy') return View.PRIVACY_POLICY;
   if (normalizedPath === '/terms-of-service') return View.TERMS_OF_SERVICE;

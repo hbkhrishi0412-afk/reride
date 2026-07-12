@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { User, SupportTicket } from '../types';
 import AutoT from './AutoT';
 import { useAutoT } from '../hooks/useAutoT';
+import WebsitePageShell from './WebsitePageShell';
 
 interface SupportPageProps {
   currentUser: User | null;
@@ -168,8 +169,8 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
   const maxMessageLength = 2000;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-indigo-50">
-      <div className="relative max-w-6xl mx-auto px-4 py-10 md:py-14">
+    <WebsitePageShell className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-indigo-50" noPadding>
+      <div className="relative py-10 md:py-14">
         <div className="absolute inset-0 -z-10">
           <div className="absolute -top-10 -right-12 h-64 w-64 bg-indigo-200/40 blur-3xl rounded-full" />
           <div className="absolute -bottom-16 -left-10 h-72 w-72 bg-sky-200/30 blur-3xl rounded-full" />
@@ -474,7 +475,7 @@ const formInputClass = (hasError: boolean, isDisabled: boolean = false) =>
           </div>
         </div>
       </div>
-    </div>
+    </WebsitePageShell>
   );
 };
 

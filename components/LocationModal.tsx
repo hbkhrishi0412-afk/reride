@@ -27,6 +27,8 @@ interface LocationModalProps {
 
 type LocationOption = 'detect' | 'all' | 'district' | 'city';
 
+const REVERSE_GEO_DETECT_TIMEOUT_MS = 7000;
+
 function formatCityAndState(
     cityCanonical: string,
     stateCode: string,
@@ -39,7 +41,7 @@ function formatCityAndState(
 
 const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentLocation, onLocationChange, addToast }) => {
     const { t } = useTranslation();
-    const [selectedOption, setSelectedOption] = useState<LocationOption>('detect');
+    const [selectedOption, setSelectedOption] = useState<LocationOption>('all');
     const [selectedDistrict, setSelectedDistrict] = useState('');
     const [selectedCity, setSelectedCity] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
@@ -49,6 +51,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
     const [selectedLiveResult, setSelectedLiveResult] = useState<LocationSearchResult | null>(null);
     /** State whose city sub-list is expanded (independent of city vs state-only selection). */
     const [expandedDistrict, setExpandedDistrict] = useState('');
+    const [useMobileSheet, setUseMobileSheet] = useState(false);
     const detectingInFlightRef = useRef(false);
     const detectGenerationRef = useRef(0);
     const userEditedRef = useRef(false);
@@ -90,6 +93,15 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                 }
             }
         }, 400);
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const mq = window.matchMedia('(max-width: 640px)');
+        const update = () => setUseMobileSheet(mq.matches);
+        update();
+        mq.addEventListener('change', update);
+        return () => mq.removeEventListener('change', update);
     }, []);
 
     useEffect(() => {
@@ -157,7 +169,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         const loc = currentLocation.trim();
         const locPrimary = primaryLocationLabel(loc);
         if (!loc) {
-            setSelectedOption('detect');
+            setSelectedOption('all');
             setSelectedDistrict('');
             setSelectedCity('');
             setSearchTerm('');
@@ -333,16 +345,16 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             return 'locationModal.error.fallback';
         };
 
-        const finishSpinner = () => {
-            if (detectGenerationRef.current !== myGen) return;
+        const finishDetecting = () => {
             detectingInFlightRef.current = false;
-            setIsDetecting(false);
+            if (detectGenerationRef.current === myGen) {
+                setIsDetecting(false);
+            }
         };
 
         const applyDetected = (displayLocation: string) => {
             if (detectGenerationRef.current !== myGen) return;
-            detectingInFlightRef.current = false;
-            setIsDetecting(false);
+            finishDetecting();
             onLocationChange(displayLocation);
             addToast(t('locationModal.toast.detected', { place: displayLocation }), 'success');
             onClose();
@@ -356,19 +368,26 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                 const { latitude, longitude } = position.coords;
                 const snap = labelFromNearestCatalogCoordinate(latitude, longitude, allCities, indianStates);
 
+                let displayLocation = snap;
                 try {
-                    const address = await fetchReverseGeocodeAddress(latitude, longitude);
-                    const displayLocation = resolveDisplayLocationFromAddress(
+                    const address = await Promise.race([
+                        fetchReverseGeocodeAddress(latitude, longitude),
+                        new Promise<never>((_, reject) => {
+                            window.setTimeout(() => reject(new Error('reverse-geocode-timeout')), REVERSE_GEO_DETECT_TIMEOUT_MS);
+                        }),
+                    ]);
+                    displayLocation = resolveDisplayLocationFromAddress(
                         address,
                         allCities,
                         indianStates,
                         latitude,
                         longitude,
                     );
-                    applyDetected(displayLocation);
                 } catch {
-                    applyDetected(snap);
+                    /* use nearest-catalog snap */
                 }
+
+                applyDetected(displayLocation);
             } catch (e: unknown) {
                 if (detectGenerationRef.current !== myGen) return;
                 if (e && typeof e === 'object' && 'code' in e) {
@@ -384,7 +403,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     addToast(t('locationModal.error.fallback'), 'error');
                 }
             } finally {
-                finishSpinner();
+                finishDetecting();
             }
         })();
     };
@@ -522,13 +541,16 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             : result.city || result.displayName.split(',').slice(0, 2).join(',').trim();
         setSearchTerm(label);
         setLiveResults([]);
+        onLocationChange(label);
+        addToast(t('locationModal.toast.setTo', { place: label }), 'success');
+        onClose();
     };
 
     if (!isOpen) return null;
 
     return (
         <div 
-            className="fixed inset-0 bg-black/50 z-modal" 
+            className={`fixed inset-0 bg-black/50 z-modal ${useMobileSheet ? 'flex items-end' : ''}`}
             onClick={onClose}
             style={{ 
                 zIndex: 9999,
@@ -537,15 +559,20 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             }}
         >
             <div 
-                className="bg-white rounded-lg shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col absolute top-4 left-1/2 -translate-x-1/2 notranslate" 
+                className={`bg-white shadow-2xl w-full flex flex-col notranslate ${
+                    useMobileSheet
+                        ? 'max-h-[min(92vh,720px)] rounded-t-2xl'
+                        : 'rounded-lg max-w-md max-h-[85vh] absolute top-4 left-1/2 -translate-x-1/2'
+                }`}
                 onClick={e => e.stopPropagation()}
                 data-no-translate
                 translate="no"
                 style={{ 
-                    maxWidth: '420px',
-                    minHeight: '400px',
+                    maxWidth: useMobileSheet ? '100%' : '420px',
+                    minHeight: useMobileSheet ? undefined : '400px',
                     willChange: 'transform',
-                    contain: 'layout style paint'
+                    contain: 'layout style paint',
+                    paddingBottom: useMobileSheet ? 'env(safe-area-inset-bottom, 0px)' : undefined,
                 }}
             >
                 {/* Header */}
@@ -633,7 +660,6 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                 markUserEdited();
                                 setSelectedOption('detect');
                                 setSearchTerm('');
-                                handleDetectLocation();
                             }}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
@@ -641,7 +667,6 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                     markUserEdited();
                                     setSelectedOption('detect');
                                     setSearchTerm('');
-                                    handleDetectLocation();
                                 }
                             }}
                         >
@@ -690,6 +715,9 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                     setExpandedDistrict('');
                                     setSelectedDistrict('');
                                     setSelectedCity('');
+                                    onLocationChange('All of India');
+                                    addToast(t('locationModal.toast.allIndiaSet'), 'success');
+                                    onClose();
                                 }}
                                 className="w-4 h-4 text-blue-600 focus:ring-blue-500 accent-blue-600"
                             />
@@ -709,7 +737,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                         <button
                                             key={`${displayName}-${stateCode}`}
                                             type="button"
-                                            onClick={() => handleCitySelect(city, stateCode, false)}
+                                            onClick={() => handleCitySelect(city, stateCode, true)}
                                             className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
                                                 isCityRowSelected(city, stateCode)
                                                     ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
@@ -760,7 +788,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                             <button
                                                 key={city}
                                                 type="button"
-                                                onClick={() => handleCitySelect(city, district.code, false)}
+                                                onClick={() => handleCitySelect(city, district.code, true)}
                                                 className={`flex w-full items-center gap-3 p-2 rounded-md text-left transition-colors touch-manipulation ${
                                                     isCityRowSelected(city, district.code)
                                                         ? 'bg-blue-100 ring-2 ring-blue-500 shadow-sm'
@@ -802,7 +830,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                         <button
                                             key={`${city}-${stateCode}`}
                                             type="button"
-                                            onClick={() => handleCitySelect(city, stateCode, false)}
+                                            onClick={() => handleCitySelect(city, stateCode, true)}
                                             className={`flex w-full items-center gap-3 p-2 rounded-md text-left transition-colors touch-manipulation ${
                                                 isCityRowSelected(city, stateCode)
                                                     ? 'bg-blue-100 ring-2 ring-blue-500 shadow-sm'
@@ -926,7 +954,9 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     >
                         {isDetecting && selectedOption === 'detect'
                             ? t('locationModal.detecting')
-                            : t('locationModal.save')}
+                            : selectedOption === 'detect'
+                              ? t('locationModal.detectAction', { defaultValue: 'Detect location' })
+                              : t('locationModal.save')}
                     </button>
                 </div>
             </div>

@@ -4,6 +4,7 @@ import type { Vehicle } from '../types';
 import { getFirstValidImage, swapToPlaceholderOnError } from '../utils/imageUtils';
 import PageHeader from './PageHeader';
 import { getCategoryDisplayName } from '../utils/compareList.js';
+import WebsitePageShell from './WebsitePageShell';
 
 interface ComparisonProps {
   vehicles: Vehicle[];
@@ -61,14 +62,16 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, comparisonCategory = 
 
   if (vehicles.length === 0) {
     return (
-      <div className="text-center py-20 bg-white rounded-xl shadow-soft-lg">
+      <WebsitePageShell>
+        <div className="text-center py-20 bg-white rounded-xl shadow-soft-lg">
         <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark">{t('compare.title')}</h2>
         <p className="mt-4 text-brand-gray-600 dark:text-reride-text-dark">{t('compare.emptyLine1')}</p>
         <p className="text-reride-text dark:text-reride-text">{t('compare.emptyLine2')}</p>
         <button type="button" onClick={onBackToHome} className="mt-6 btn-brand-primary text-white font-bold py-2 px-6 rounded-lg transition-colors">
           &larr; {t('compare.backToListings')}
         </button>
-      </div>
+        </div>
+      </WebsitePageShell>
     );
   }
 
@@ -95,7 +98,8 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, comparisonCategory = 
   };
 
   return (
-    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-soft-lg animate-fade-in overflow-hidden">
+    <WebsitePageShell>
+    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-soft-lg overflow-hidden">
       <PageHeader
         title={t('compare.pageTitle')}
         backLabel={t('compare.backToListings')}
@@ -202,6 +206,7 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, comparisonCategory = 
         </table>
       </div>
     </div>
+    </WebsitePageShell>
   );
 };
 

@@ -521,18 +521,17 @@ export type { PaymentRequest };
  * Get all payment requests (admin function)
  */
 export async function getPaymentRequests(
-  adminEmail: string,
+  _adminEmail: string,
   status?: string
 ): Promise<PaymentRequest[]> {
   const queryParams = new URLSearchParams();
-  queryParams.append('action', 'list-requests');
-  queryParams.append('adminEmail', adminEmail);
-  if (status) queryParams.append('status', status);
+  if (status && status !== 'all') queryParams.set('status', status);
 
-  const response = await authenticatedFetch(`/api/payments?${queryParams.toString()}`);
-  const result = await handleApiResponse<{ requests: PaymentRequest[] }>(response);
-  
-  return result.data?.requests || [];
+  const qs = queryParams.toString();
+  const response = await authenticatedFetch(`/api/payments${qs ? `?${qs}` : ''}`);
+  const result = await handleApiResponse<{ paymentRequests?: PaymentRequest[] }>(response);
+
+  return result.data?.paymentRequests || [];
 }
 
 /**
@@ -546,76 +545,93 @@ export async function createPaymentRequest(
   paymentMethod?: 'upi' | 'bank_transfer' | 'card' | 'other',
   transactionId?: string
 ): Promise<{ success: boolean; requestId?: string; error?: string }> {
-  const response = await authenticatedFetch('/api/payments?action=create-request', {
+  const response = await authenticatedFetch('/api/payments?action=create', {
     method: 'POST',
     body: JSON.stringify({
       sellerEmail,
       planId,
+      plan: planId,
       amount,
       paymentProof,
       paymentMethod,
       transactionId,
-      status: 'pending',
-      requestedAt: new Date().toISOString(),
     }),
   });
-  
-  const result = await handleApiResponse<{ requestId: string }>(response);
+
+  const result = await handleApiResponse<{ paymentRequest?: { id: string } }>(response);
   return {
     success: result.success,
-    requestId: result.data?.requestId,
-    error: result.reason,
+    requestId: result.data?.paymentRequest?.id,
+    error: result.reason || result.error,
   };
 }
 
 /**
  * Get status of a specific payment request
  */
-export async function getPaymentRequestStatus(requestId: string): Promise<PaymentRequest | null> {
-  const response = await authenticatedFetch(`/api/payments?action=request-status&requestId=${encodeURIComponent(requestId)}`);
-  const result = await handleApiResponse<PaymentRequest>(response);
-  
-  return result.data || null;
+export async function getPaymentRequestStatus(sellerEmail: string): Promise<PaymentRequest | null> {
+  const response = await authenticatedFetch(
+    `/api/payments?action=status&sellerEmail=${encodeURIComponent(sellerEmail)}`
+  );
+  const result = await handleApiResponse<{
+    paymentRequest?: PaymentRequest | null;
+    paymentStatus?: { lastPayment?: PaymentRequest | null; status?: string } | PaymentRequest | null;
+  }>(response);
+
+  if (!result.success || !result.data) return null;
+
+  const data = result.data;
+  if (data.paymentRequest) return data.paymentRequest;
+
+  const paymentStatus = data.paymentStatus;
+  if (paymentStatus && typeof paymentStatus === 'object') {
+    if ('lastPayment' in paymentStatus && paymentStatus.lastPayment) {
+      return paymentStatus.lastPayment;
+    }
+    if ('id' in paymentStatus && 'sellerEmail' in paymentStatus) {
+      return paymentStatus as PaymentRequest;
+    }
+  }
+
+  return null;
 }
 
 /**
  * Approve a payment request (admin function)
  */
 export async function approvePaymentRequest(
-  requestId: string,
+  paymentRequestId: string,
   adminEmail: string
 ): Promise<{ success: boolean; error?: string }> {
-  const response = await authenticatedFetch('/api/payments?action=approve-request', {
+  const response = await authenticatedFetch('/api/payments?action=approve', {
     method: 'POST',
-    body: JSON.stringify({ 
-      requestId, 
-      approvedBy: adminEmail,
-      approvedAt: new Date().toISOString(),
+    body: JSON.stringify({
+      paymentRequestId,
+      adminEmail,
     }),
   });
-  
+
   const result = await handleApiResponse(response);
-  return { success: result.success, error: result.reason };
+  return { success: result.success, error: result.reason || result.error };
 }
 
 /**
  * Reject a payment request (admin function)
  */
 export async function rejectPaymentRequest(
-  requestId: string,
+  paymentRequestId: string,
   adminEmail: string,
   reason: string
 ): Promise<{ success: boolean; error?: string }> {
-  const response = await authenticatedFetch('/api/payments?action=reject-request', {
+  const response = await authenticatedFetch('/api/payments?action=reject', {
     method: 'POST',
-    body: JSON.stringify({ 
-      requestId, 
-      rejectedBy: adminEmail,
-      rejectedAt: new Date().toISOString(),
+    body: JSON.stringify({
+      paymentRequestId,
+      adminEmail,
       rejectionReason: reason,
     }),
   });
-  
+
   const result = await handleApiResponse(response);
-  return { success: result.success, error: result.reason };
+  return { success: result.success, error: result.reason || result.error };
 }

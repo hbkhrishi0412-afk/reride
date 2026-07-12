@@ -19,7 +19,18 @@
  *
  * Result: within a single tab/window the app behaves normally; once all tabs
  * close, the "don't remember" user is logged out on the next launch.
+ *
+ * On Capacitor, `reride_remember_me` and `reRideCurrentUser` are also mirrored
+ * to native Keychain / Preferences (see nativeSessionMirror.ts) because WebView
+ * localStorage is often cleared on cold start.
  */
+import { isCapacitorNative } from './apiConfig.js';
+import {
+  clearNativeSessionMirrorExceptPref,
+  mirrorSessionKeyToNative,
+  mirrorSessionKeyToNativeSync,
+} from './nativeSessionMirror.js';
+
 const PREF_KEY = 'reride_remember_me';
 const ALIVE_KEY = 'reride_session_alive';
 
@@ -144,6 +155,19 @@ export function enforceRememberMePolicyOnBoot(): void {
   }
   clearSupabaseAuthTokens();
 
+  if (isCapacitorNative()) {
+    void (async () => {
+      try {
+        const { clearNativeTokens } = await import('./nativeTokenStorage.js');
+        const { clearSupabaseSecureAuthStorage } = await import('./supabaseNativeAuthStorage.js');
+        await Promise.all([clearNativeTokens(), clearSupabaseSecureAuthStorage()]);
+        await clearNativeSessionMirrorExceptPref();
+      } catch {
+        /* ignore */
+      }
+    })();
+  }
+
   try {
     ls.removeItem(PREF_KEY);
   } catch {
@@ -151,12 +175,12 @@ export function enforceRememberMePolicyOnBoot(): void {
   }
 }
 
-/** Record the user's "Remember me" choice right after a successful login. */
-export function setRememberMePreference(remember: boolean): void {
+function writeRememberMePreference(remember: boolean): void {
   const ls = getLocal();
   const ss = getSession();
+  const prefValue = remember ? 'true' : 'false';
   try {
-    ls?.setItem(PREF_KEY, remember ? 'true' : 'false');
+    ls?.setItem(PREF_KEY, prefValue);
   } catch {
     /* ignore */
   }
@@ -164,6 +188,24 @@ export function setRememberMePreference(remember: boolean): void {
     ss?.setItem(ALIVE_KEY, '1');
   } catch {
     /* ignore */
+  }
+  mirrorSessionKeyToNativeSync('reride_remember_me', prefValue);
+}
+
+/** Record the user's "Remember me" choice right after a successful login. */
+export function setRememberMePreference(remember: boolean): void {
+  writeRememberMePreference(remember);
+}
+
+/** Await native mirror — use on Capacitor before post-login navigation. */
+export async function setRememberMePreferenceAsync(remember: boolean): Promise<void> {
+  writeRememberMePreference(remember);
+  if (isCapacitorNative()) {
+    try {
+      await mirrorSessionKeyToNative('reride_remember_me', remember ? 'true' : 'false');
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -176,6 +218,7 @@ export function clearRememberMeState(): void {
   } catch {
     /* ignore */
   }
+  mirrorSessionKeyToNativeSync('reride_remember_me', null);
   try {
     ss?.removeItem(ALIVE_KEY);
   } catch {

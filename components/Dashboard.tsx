@@ -1,7 +1,7 @@
 import { logInfo } from '../utils/logger.js';
 import React, { useState, useMemo, useEffect, useCallback, memo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, User, Conversation, VehicleData, ChatMessage, PlanDetails, SubscriptionPlan } from '../types';
+import type { Vehicle, User, Conversation, VehicleData, ChatMessage, PlanDetails, SubscriptionPlan, Notification } from '../types';
 import { View, VehicleCategory } from '../types';
 import { enhanceVehicleListing } from '../services/listingEnhancementService';
 import { getSafeImageSrc } from '../utils/imageUtils';
@@ -14,6 +14,7 @@ import VehicleCard from './VehicleCard';
 import { ChatWidget } from './ChatWidget';
 // Removed blocking import - will lazy load location data when needed
 import { planService } from '../services/planService';
+import { planDetailsForSeller } from '../utils/listingPlanRules.js';
 import BulkUploadModal from './BulkUploadModal';
 import SellerDisclosureForm from './SellerDisclosureForm';
 import ListingTrustProgress from './ListingTrustProgress';
@@ -21,6 +22,7 @@ import MarkSoldDealModal from './MarkSoldDealModal';
 import SellerCommandHome from './command-center/SellerCommandHome';
 import DealDetailPage from './command-center/DealDetailPage';
 import { useSellerDashboardController } from '../hooks/useSellerDashboardController';
+import { CLIENT_POLL_INTERVALS_MS } from '../utils/clientPolling.js';
 import {
   clearChecklistPhotoByUrl,
   extractChecklistGalleryUrls,
@@ -29,7 +31,7 @@ import {
   syncDocumentsFromChecklist,
 } from '../lib/universalChecklist/mediaSync';
 import { verifyVahanRegistration, applyVahanVerifyToVehicleFields } from '../services/vehicleTrustService';
-import { findVehicleByIdentity } from '../utils/vehicleIdentity';
+import { findVehicleByIdentity, getCanonicalPrimaryKey } from '../utils/vehicleIdentity';
 
 export type DashboardNotifyFn = (
   message: string,
@@ -114,9 +116,12 @@ interface DashboardProps {
   onSellerOpenChat?: (conversation: Conversation) => void;
   /** Toast / snackbar feedback (replaces blocking alert dialogs). */
   onNotify?: DashboardNotifyFn;
+  notifications?: Notification[];
+  onNotificationClick?: (notification: Notification) => void;
+  onMarkNotificationsAsRead?: (ids: number[]) => void;
 }
 
-type DashboardView = 'overview' | 'listings' | 'form' | 'messages' | 'analytics' | 'salesHistory' | 'reports' | 'settings';
+type DashboardView = 'overview' | 'listings' | 'form' | 'messages' | 'analytics' | 'salesHistory' | 'reports' | 'settings' | 'notifications';
 
 const HelpTooltip: React.FC<{ text: string }> = memo(({ text }) => (
     <span className="group relative ml-1">
@@ -400,18 +405,17 @@ const PlanStatusCard: React.FC<{
     // Real-time update state for expiry dates
     const [currentTime, setCurrentTime] = useState(new Date());
     
-    // Real-time expiry date updates - update every minute
+    // Real-time expiry date updates - update every minute (UI only, no API)
     useEffect(() => {
         const interval = setInterval(() => {
             setCurrentTime(new Date());
-        }, 60000); // Update every minute (60000ms)
-        
+        }, CLIENT_POLL_INTERVALS_MS.uiClock);
+
         return () => clearInterval(interval);
     }, []);
-    
+
     useEffect(() => {
         let active = true;
-        let intervalId: ReturnType<typeof setInterval> | null = null;
 
         const loadPlan = async (silent = false) => {
             if (!silent) setLoading(true);
@@ -422,11 +426,9 @@ const PlanStatusCard: React.FC<{
             } catch (error) {
                 console.error('Failed to load plan details:', error);
                 if (!active) return;
-                // Fallback to basic plan info
                 setPlan({
+                    ...planDetailsForSeller(seller),
                     name: t('sellerDashboard.freePlanName'),
-                    listingLimit: 1,
-                    price: 0
                 });
             } finally {
                 if (active) setLoading(false);
@@ -447,10 +449,8 @@ const PlanStatusCard: React.FC<{
             }
         };
 
+        setPlan(planDetailsForSeller(seller));
         void loadPlan(false);
-        intervalId = setInterval(() => {
-            void loadPlan(true);
-        }, 30000);
         window.addEventListener('focus', reloadOnVisibility);
         document.addEventListener('visibilitychange', reloadOnVisibility);
         window.addEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);
@@ -458,13 +458,12 @@ const PlanStatusCard: React.FC<{
 
         return () => {
             active = false;
-            if (intervalId) clearInterval(intervalId);
             window.removeEventListener('focus', reloadOnVisibility);
             document.removeEventListener('visibilitychange', reloadOnVisibility);
             window.removeEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);
             window.removeEventListener('storage', reloadOnStoragePlanUpdate);
         };
-    }, [seller.subscriptionPlan, t]);
+    }, [seller, seller.subscriptionPlan, t]);
     
     if (loading || !plan) {
         return (
@@ -1175,12 +1174,12 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     // Real-time update state for expiry dates
     const [currentTime, setCurrentTime] = useState(new Date());
     
-    // Real-time expiry date updates - update every minute
+    // Real-time expiry date updates - update every minute (UI only, no API)
     useEffect(() => {
         const interval = setInterval(() => {
             setCurrentTime(new Date());
-        }, 60000); // Update every minute (60000ms)
-        
+        }, CLIENT_POLL_INTERVALS_MS.uiClock);
+
         return () => clearInterval(interval);
     }, []);
     const [isUploading, setIsUploading] = useState(false);
@@ -2099,6 +2098,27 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 </div>
             </FormFieldset>
 
+            {editingVehicle && (
+              <FormFieldset title={t('sellerListing.section.listingStatus')} step={6} description="Control whether buyers can see this listing" defaultOpen>
+                <div>
+                  <label htmlFor="listing-status" className="block text-sm font-semibold text-gray-700 mb-2">
+                    {t('sellerListing.label.status')}
+                  </label>
+                  <select
+                    id="listing-status"
+                    name="status"
+                    value={formData.status}
+                    onChange={handleChange}
+                    className="block w-full p-3 border border-gray-200 dark:border-gray-300 rounded-lg bg-white"
+                  >
+                    <option value="published">{t('sellerListing.status.published')}</option>
+                    <option value="unpublished">{t('sellerListing.status.unpublished')}</option>
+                    <option value="sold">{t('sellerListing.status.sold')}</option>
+                  </select>
+                </div>
+              </FormFieldset>
+            )}
+
             <FormFieldset title="Promotion" step={6} description="Boost visibility with featured placement" defaultOpen={false}>
                 {(!editingVehicle || !editingVehicle.isFeatured) && (
                     <div className="p-4 bg-reride-orange dark:bg-reride-orange/20 border border-reride-orange dark:border-reride-orange rounded-lg">
@@ -2449,7 +2469,7 @@ const ReportsView: React.FC<{
 
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onDeleteConversation, onArchiveConversation, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat, onNotify }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onDeleteConversation, onArchiveConversation, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat, onNotify, notifications = [], onNotificationClick, onMarkNotificationsAsRead }) => {
   const notify = useCallback(
     (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') =>
       dashboardNotify(onNotify, message, type),
@@ -2523,7 +2543,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   const buildVehicleActionBody = useCallback(
     (vehicleId: number, extra: Record<string, unknown> = {}) => {
       const vehicle = findVehicleByIdentity(safeSellerVehicles, vehicleId);
-      const databaseId = vehicle?.databaseId?.trim();
+      const databaseId = vehicle ? getCanonicalPrimaryKey(vehicle) : undefined;
       return {
         vehicleId,
         ...(databaseId ? { databaseId } : {}),
@@ -2851,6 +2871,14 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       return conversationBelongsToSeller(c, seller.email, seller.id);
     }).length;
   }, [safeConversations, seller?.email, seller?.id]);
+  const sellerNotifications = useMemo(
+    () => (notifications || []).filter((n) => n.recipientEmail === seller?.email),
+    [notifications, seller?.email],
+  );
+  const unreadNotificationCount = useMemo(
+    () => sellerNotifications.filter((n) => !n.isRead).length,
+    [sellerNotifications],
+  );
   const activeListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status !== 'sold'), [safeSellerVehicles]);
   const publishedListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status === 'published'), [safeSellerVehicles]);
   const soldListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status === 'sold'), [safeSellerVehicles]);
@@ -3227,45 +3255,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         return;
       }
 
-      // Fallback: direct API call if prop not available
-      const response = await authenticatedFetch('/api/vehicles?action=unsold', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(buildVehicleActionBody(vehicleId))
-      });
-      
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          try {
-            const result = await response.json();
-            if (result && result.success && result.vehicle) {
-              // Update local state
-              onUpdateVehicle(result.vehicle);
-              if (process.env.NODE_ENV === 'development') {
-                logInfo('✅ Vehicle marked as unsold');
-              }
-            } else if (result && result.reason) {
-              if (process.env.NODE_ENV === 'development') {
-                console.warn('⚠️ Failed to mark vehicle as unsold:', result.reason);
-              }
-            }
-          } catch (jsonError) {
-            console.warn('⚠️ Failed to parse unsold response:', jsonError);
-          }
-        }
-      } else {
-        if (process.env.NODE_ENV === 'development') {
-          try {
-            const errorText = await response.text();
-            console.warn(`⚠️ Failed to mark vehicle as unsold: ${response.status} ${errorText}`);
-          } catch (textError) {
-            console.warn(`⚠️ Failed to mark vehicle as unsold: ${response.status}`);
-          }
-        }
-      }
+      // Fallback: shared service path (heals stale listing identity before POST)
+      const { markVehicleAsUnsold } = await import('../services/vehicleService.js');
+      const updated = await markVehicleAsUnsold(vehicleId, safeSellerVehicles);
+      onUpdateVehicle(updated);
     } catch (error) {
       // Silently handle errors to prevent dashboard crashes
       if (process.env.NODE_ENV === 'development') {
@@ -3491,7 +3484,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         </div>
         <button
           type="button"
-          onClick={() => handleNavigate('overview')}
+          onClick={() => handleNavigate('messages')}
           className="shrink-0 px-4 py-2 text-sm font-bold rounded-lg bg-amber-600 text-white hover:bg-amber-700"
         >
           {t('sellerDashboard.hotLeads.openButton')}
@@ -4124,15 +4117,15 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       case 'salesHistory':
         return (
           <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-            <h2 className="text-2xl font-bold text-reride-text-dark dark:text-gray-100 mb-6">Sales History</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('sellerDashboard.nav.salesHistory')}</h2>
             {soldListings.length > 0 ? (
                 <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="bg-white dark:bg-white">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">Vehicle</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">Sold Price</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">Action</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-700">Vehicle</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-700">Sold Price</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-700">Action</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
@@ -4197,7 +4190,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 )}
               </div>
             ) : (
-                <p className="text-center text-reride-text-dark dark:text-gray-100 py-8">You have not sold any vehicles yet.</p>
+                <p className="text-center text-gray-600 py-8">You have not sold any vehicles yet.</p>
             )}
           </div>
         );
@@ -4252,6 +4245,78 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     onEditVehicle={handleEditClick}
                     onDeleteVehicle={onDeleteVehicle}
                 />;
+      case 'notifications':
+        return (
+          <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
+            <div className="flex items-end justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-reride-text-dark dark:text-gray-100">Notifications</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {sellerNotifications.length} total · {unreadNotificationCount} unread
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => onNavigate(View.NOTIFICATIONS_CENTER)}
+                  className="text-sm font-semibold text-reride-orange hover:underline"
+                >
+                  Grouped view
+                </button>
+                {unreadNotificationCount > 0 && onMarkNotificationsAsRead && (
+                  <button
+                    type="button"
+                    onClick={() => onMarkNotificationsAsRead(sellerNotifications.filter((n) => !n.isRead).map((n) => n.id))}
+                    className="text-sm font-semibold text-blue-700 hover:underline"
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
+            </div>
+            {sellerNotifications.length === 0 ? (
+              <p className="text-gray-500 text-center py-12">You&apos;re all caught up. New alerts will appear here.</p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {sellerNotifications.map((notification) => (
+                  <li key={notification.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onNotificationClick?.(notification);
+                        if (!notification.isRead && onMarkNotificationsAsRead) {
+                          onMarkNotificationsAsRead([notification.id]);
+                        }
+                      }}
+                      className={`w-full text-left px-4 py-4 hover:bg-gray-50 transition-colors ${
+                        !notification.isRead ? 'bg-orange-50/40' : ''
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className={`text-sm ${!notification.isRead ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>
+                            {notification.targetType === 'conversation'
+                              ? 'New message'
+                              : notification.targetType === 'vehicle'
+                                ? 'Vehicle update'
+                                : 'Notification'}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {new Date(notification.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                        {!notification.isRead && (
+                          <span className="w-2 h-2 rounded-full bg-reride-orange shrink-0 mt-2" />
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
       default:
         return (
           <div className="text-center py-8">
@@ -4428,6 +4493,15 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
                   </svg>
                   <span>{t('sellerDashboard.nav.messages')}</span>
+                </div>
+              </NavItem>
+
+              <NavItem view="notifications" count={unreadNotificationCount}>
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                  </svg>
+                  <span>Notifications</span>
                 </div>
               </NavItem>
               
@@ -4678,10 +4752,27 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             conversations={conversations}
             sellerEmail={seller.email}
             onClose={() => setMarkSoldVehicle(null)}
-            onSuccess={() => {
+            onSuccess={async () => {
               notify('Sale recorded — buyer will confirm to unlock ratings', 'success');
-              onUpdateVehicle({ ...markSoldVehicle, status: 'sold', soldAt: new Date().toISOString() });
-              setMarkSoldVehicle(null);
+              try {
+                if (onMarkAsSold) {
+                  await onMarkAsSold(markSoldVehicle.id);
+                } else {
+                  await onUpdateVehicle({
+                    ...markSoldVehicle,
+                    status: 'sold',
+                    soldAt: new Date().toISOString(),
+                    listingStatus: 'sold',
+                  });
+                }
+              } catch (err) {
+                notify(
+                  err instanceof Error ? err.message : 'Failed to update listing status.',
+                  'error',
+                );
+              } finally {
+                setMarkSoldVehicle(null);
+              }
             }}
           />
         )}

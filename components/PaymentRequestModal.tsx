@@ -11,7 +11,10 @@ interface PaymentRequestModalProps {
   planId: SubscriptionPlan;
   amount: number;
   sellerEmail: string;
+  /** Called after Razorpay payment is verified and the plan is activated. */
   onSuccess: () => void;
+  /** Called after manual payment proof is submitted (plan stays pending until admin approval). */
+  onManualSubmitted?: () => void;
   /** User feedback (replaces window.alert). */
   onNotify?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 }
@@ -23,6 +26,7 @@ const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
   amount,
   sellerEmail,
   onSuccess,
+  onManualSubmitted,
   onNotify,
 }) => {
   const notify = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
@@ -57,7 +61,7 @@ const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      await createPaymentRequest(
+      const result = await createPaymentRequest(
         sellerEmail,
         planId,
         amount,
@@ -66,7 +70,16 @@ const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
         transactionId
       );
 
-      onSuccess();
+      if (!result.success) {
+        notify(result.error || 'Failed to submit payment request. Please try again.', 'error');
+        return;
+      }
+
+      notify(
+        'Payment proof submitted. Your plan will activate after admin verification (typically 1–2 business days).',
+        'success'
+      );
+      onManualSubmitted?.();
       onClose();
       resetForm();
     } catch (error) {

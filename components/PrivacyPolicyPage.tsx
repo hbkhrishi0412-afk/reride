@@ -1,4 +1,5 @@
 import React from 'react';
+import WebsitePageShell from './WebsitePageShell';
 import {
   legalEntityName,
   grievanceEmail,
@@ -9,7 +10,7 @@ import {
 
 const PrivacyPolicyPage: React.FC = () => {
   return (
-    <div className="animate-fade-in container mx-auto py-8 max-w-4xl px-4">
+    <WebsitePageShell narrow="4xl">
       <div className="bg-white rounded-xl shadow-lg p-8 md:p-12">
         <div className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-extrabold text-reride-text-dark mb-4">
@@ -243,9 +244,24 @@ const PrivacyPolicyPage: React.FC = () => {
               </p>
             </div>
           </section>
+
+          <section className="border-t border-gray-200 pt-8">
+            <h2 className="text-2xl font-bold text-reride-text-dark mb-4">Related policies</h2>
+            <p className="text-gray-700 leading-relaxed text-sm mb-3">
+              See also our{' '}
+              <a href="/cookie-policy" className="text-blue-600 hover:underline">
+                Cookie Policy
+              </a>{' '}
+              and{' '}
+              <a href="/terms-of-service" className="text-blue-600 hover:underline">
+                Terms of Service
+              </a>
+              .
+            </p>
+          </section>
         </div>
       </div>
-    </div>
+    </WebsitePageShell>
   );
 };
 

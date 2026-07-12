@@ -1,4 +1,5 @@
 import React from 'react';
+import WebsitePageShell from './WebsitePageShell';
 import { formatSupportPhoneDisplay, supportTelHref } from '../utils/whatsappShare.js';
 import { View } from '../types.js';
 import AutoT from './AutoT';
@@ -62,7 +63,7 @@ const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
   const whatWeDoBody = useAutoT('about.whatWeDo.body');
 
   return (
-    <div className="animate-fade-in container mx-auto py-6 sm:py-8 max-w-5xl px-4 pb-24 lg:pb-12">
+    <WebsitePageShell narrow="5xl">
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950 p-4 sm:p-8 md:p-12 shadow-reride-lg">
         <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-blue-500/10" />
         <div className="absolute -left-8 bottom-0 w-40 h-40 rounded-full bg-blue-400/10" />
@@ -185,7 +186,7 @@ const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
           </button>
         )}
       </div>
-    </div>
+    </WebsitePageShell>
   );
 };
 

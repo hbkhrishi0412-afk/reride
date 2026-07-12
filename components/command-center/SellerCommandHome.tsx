@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Conversation, User } from '../../types.js';
 import { dealStageLabel, type DealLead, type SellerCommandCenter, type SellerTask } from '../../types.js';
@@ -252,6 +252,7 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
   const [dealFilter, setDealFilter] = useState<DealFilter>('all');
   const [tasksVisible, setTasksVisible] = useState(TASKS_PAGE);
   const [dealsVisible, setDealsVisible] = useState(DEALS_PAGE);
+  const retryAvailableAtRef = useRef(0);
 
   const usesExternalData = externalCommandCenter !== undefined || onRefreshCommandCenter !== undefined;
 
@@ -285,6 +286,13 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
       setLoading(false);
     }
   }, [onRefreshCommandCenter]);
+
+  const handleRetry = useCallback(() => {
+    const now = Date.now();
+    if (now < retryAvailableAtRef.current) return;
+    retryAvailableAtRef.current = now + 8000;
+    void load(true);
+  }, [load]);
 
   useEffect(() => {
     if (usesExternalData) return;
@@ -414,7 +422,7 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
           defaultValue: '{{count}} active deals',
         });
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div className="space-y-4 animate-pulse">
         <div className="h-24 rounded-2xl bg-slate-100" />
@@ -424,12 +432,12 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-center">
         <p className="text-sm text-red-700">{error}</p>
         <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
-          <button type="button" onClick={() => void load()} className="text-sm font-semibold text-red-800 underline">
+          <button type="button" onClick={handleRetry} className="text-sm font-semibold text-red-800 underline">
             Retry
           </button>
           {onSignInAgain && (
@@ -444,6 +452,11 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
 
   return (
     <div className={compact ? 'space-y-2' : 'space-y-3'}>
+      {error && data && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+          {error} Showing your last loaded data.
+        </div>
+      )}
       <div className={`rounded-2xl border border-slate-200/80 bg-white shadow-sm ${compact ? 'px-3 py-2.5' : 'px-3.5 py-3'}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">

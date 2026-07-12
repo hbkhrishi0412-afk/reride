@@ -10,6 +10,7 @@ import { StatCard, StatCardGrid, EmptyState } from './dashboard/shared';
 import PendingDealsBanner from './PendingDealsBanner';
 import MyDealsList from './MyDealsList';
 import { useApp } from './AppProvider';
+import { getComparisonCategory, isCompareDisabledForVehicle } from '../utils/compareList.js';
 
 const ServiceCart = lazy(() => import('./ServiceCart'));
 const DealDetailPage = lazy(() => import('./command-center/DealDetailPage'));
@@ -43,10 +44,10 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
   conversations,
   onNavigate,
   onSelectVehicle,
-  onToggleWishlist: _onToggleWishlist,
-  onToggleCompare: _onToggleCompare,
+  onToggleWishlist,
+  onToggleCompare,
   comparisonList,
-  onViewSellerProfile: _onViewSellerProfile,
+  onViewSellerProfile,
   onLogout
 }) => {
   const { t } = useTranslation();
@@ -97,6 +98,11 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
     [vehicles, wishlist]
   );
 
+  const comparisonCategory = useMemo(
+    () => getComparisonCategory(vehicles, comparisonList),
+    [vehicles, comparisonList],
+  );
+
   const recentConversations = useMemo(
     () => conversations.slice(0, 5),
     [conversations]
@@ -120,6 +126,15 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
       setSavedSearches(buyerService.getSavedSearches(currentUser.email));
     },
     [currentUser.email]
+  );
+
+  const handleDeleteSearch = useCallback(
+    (searchId: string) => {
+      buyerService.deleteSavedSearch(currentUser.email, searchId);
+      setSavedSearches(buyerService.getSavedSearches(currentUser.email));
+      addToast(t('buyerDashboard.searchDeleted', 'Saved search removed.'), 'success');
+    },
+    [currentUser.email, addToast, t],
   );
 
   const mobileTabs = useMemo(
@@ -380,36 +395,70 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                   </button>
                 </div>
                 <div className="space-y-3">
-                  {wishlistVehicles.slice(0, 3).map((vehicle) => (
-                    <button
+                  {wishlistVehicles.slice(0, 3).map((vehicle) => {
+                    const isInCompare = comparisonList.includes(vehicle.id);
+                    const compareDisabled = isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory);
+                    return (
+                    <div
                       key={vehicle.id}
-                      type="button"
-                      onClick={() => onSelectVehicle(vehicle)}
-                      aria-label={`${vehicle.year} ${vehicle.make} ${vehicle.model}, ${formatCurrency(vehicle.price)}`}
-                      className="w-full text-left bg-white rounded-xl p-4 shadow-sm flex gap-4 active:scale-[0.98] transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-500"
+                      className="relative bg-white rounded-xl p-4 shadow-sm flex flex-col gap-3"
                     >
-                      <img
-                        src={getFirstValidImage(vehicle.images, vehicle.id)}
-                        alt=""
-                        aria-hidden="true"
-                        className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
-                        loading="lazy"
-                        decoding="async"
-                        onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 mb-1 truncate">
-                          {vehicle.year} {vehicle.make} {vehicle.model}
-                        </h3>
-                        <p className="text-lg font-bold text-orange-500 mb-1">
-                          {formatCurrency(vehicle.price)}
-                        </p>
-                        <p className="text-xs text-gray-600 truncate">
-                          {vehicle.mileage.toLocaleString()} km • {vehicle.fuelType}
-                        </p>
+                      <div className="flex gap-4">
+                      <button
+                        type="button"
+                        onClick={() => onSelectVehicle(vehicle)}
+                        aria-label={`${vehicle.year} ${vehicle.make} ${vehicle.model}, ${formatCurrency(vehicle.price)}`}
+                        className="flex flex-1 gap-4 text-left min-w-0 active:scale-[0.98] transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-500 rounded-lg"
+                      >
+                        <img
+                          src={getFirstValidImage(vehicle.images, vehicle.id)}
+                          alt=""
+                          aria-hidden="true"
+                          className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-900 mb-1 truncate">
+                            {vehicle.year} {vehicle.make} {vehicle.model}
+                          </h3>
+                          <p className="text-lg font-bold text-orange-500 mb-1">
+                            {formatCurrency(vehicle.price)}
+                          </p>
+                          <p className="text-xs text-gray-600 truncate">
+                            {vehicle.mileage.toLocaleString()} km • {vehicle.fuelType}
+                          </p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onToggleWishlist(vehicle.id)}
+                        aria-label={t('buyerDashboard.removeFromWishlist', 'Remove from saved')}
+                        className="shrink-0 self-start p-2 text-red-500 active:scale-95 transition-transform"
+                      >
+                        ♥
+                      </button>
                       </div>
-                    </button>
-                  ))}
+                      <button
+                        type="button"
+                        disabled={compareDisabled}
+                        onClick={() => onToggleCompare(vehicle.id)}
+                        className={`w-full py-2 px-4 rounded-lg text-sm font-semibold active:scale-95 transition-transform ${
+                          isInCompare
+                            ? 'bg-orange-500 text-white'
+                            : compareDisabled
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {isInCompare
+                          ? t('compare.remove', 'Remove from Compare')
+                          : t('compare.add', 'Compare')}
+                      </button>
+                    </div>
+                  );
+                  })}
                 </div>
               </div>
             )}
@@ -488,13 +537,22 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                       />
                       {t('buyerDashboard.emailAlerts')}
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                      className="text-sm text-orange-500 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded"
-                    >
-                      {t('buyerDashboard.mobile.viewResults')}
-                    </button>
+                    <div className="flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => onNavigate(ViewEnum.USED_CARS)}
+                        className="text-sm text-orange-500 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded"
+                      >
+                        {t('buyerDashboard.mobile.viewResults')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSearch(search.id)}
+                        className="text-sm text-red-600 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"
+                      >
+                        {t('buyerDashboard.deleteSearch', 'Delete')}
+                      </button>
+                    </div>
                   </div>
                 );
               })
@@ -515,36 +573,60 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
               <div>
                 <h2 className="text-lg font-bold text-gray-900 mb-3">{t('buyerDashboard.recentlyViewed')}</h2>
                 <div className="space-y-3">
-                  {recentlyViewed.map((vehicle) => (
-                    <button
+                  {recentlyViewed.map((vehicle) => {
+                    const isInCompare = comparisonList.includes(vehicle.id);
+                    const compareDisabled = isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory);
+                    return (
+                    <div
                       key={vehicle.id}
-                      type="button"
-                      onClick={() => onSelectVehicle(vehicle)}
-                      aria-label={`${vehicle.year} ${vehicle.make} ${vehicle.model}, ${formatCurrency(vehicle.price)}`}
-                      className="w-full text-left bg-white rounded-xl p-4 shadow-sm flex gap-4 active:scale-[0.98] transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-500"
+                      className="bg-white rounded-xl p-4 shadow-sm space-y-3"
                     >
-                      <img
-                        src={getFirstValidImage(vehicle.images, vehicle.id)}
-                        alt=""
-                        aria-hidden="true"
-                        className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
-                        loading="lazy"
-                        decoding="async"
-                        onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 mb-1 truncate">
-                          {vehicle.year} {vehicle.make} {vehicle.model}
-                        </h3>
-                        <p className="text-lg font-bold text-orange-500 mb-1">
-                          {formatCurrency(vehicle.price)}
-                        </p>
-                        <p className="text-xs text-gray-600 truncate">
-                          {vehicle.mileage.toLocaleString()} km • {vehicle.fuelType}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+                      <button
+                        type="button"
+                        onClick={() => onSelectVehicle(vehicle)}
+                        aria-label={`${vehicle.year} ${vehicle.make} ${vehicle.model}, ${formatCurrency(vehicle.price)}`}
+                        className="w-full text-left flex gap-4 active:scale-[0.98] transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-500"
+                      >
+                        <img
+                          src={getFirstValidImage(vehicle.images, vehicle.id)}
+                          alt=""
+                          aria-hidden="true"
+                          className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => swapToPlaceholderOnError(e.currentTarget)}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-900 mb-1 truncate">
+                            {vehicle.year} {vehicle.make} {vehicle.model}
+                          </h3>
+                          <p className="text-lg font-bold text-orange-500 mb-1">
+                            {formatCurrency(vehicle.price)}
+                          </p>
+                          <p className="text-xs text-gray-600 truncate">
+                            {vehicle.mileage.toLocaleString()} km • {vehicle.fuelType}
+                          </p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={compareDisabled}
+                        onClick={() => onToggleCompare(vehicle.id)}
+                        className={`w-full py-2 px-4 rounded-lg text-sm font-semibold active:scale-95 transition-transform ${
+                          isInCompare
+                            ? 'bg-orange-500 text-white'
+                            : compareDisabled
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {isInCompare
+                          ? t('compare.remove', 'Remove from Compare')
+                          : t('compare.add', 'Compare')}
+                      </button>
+                    </div>
+                  );
+                  })}
                 </div>
               </div>
             )}

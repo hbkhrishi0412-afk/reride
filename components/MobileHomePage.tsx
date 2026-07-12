@@ -1,17 +1,14 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View as ViewEnum, VehicleCategory, type Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
-import { matchesLocation, primaryLocationLabel } from '../utils/cityMapping';
+import { matchesLocation } from '../utils/cityMapping';
 import { countCityVehicles } from '../utils/storefrontDiscoveryCounts';
 import MobileVehicleCard from './MobileVehicleCard';
 import { useApp } from './AppProvider';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import LazyImage from './LazyImage';
 
-// Lazy-load the shared LocationModal — only costs the user the bundle when they
-// actually tap the location pill on the mobile hero.
-const LocationModal = lazy(() => import('./LocationModal'));
 import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
 import { isPublicBuyListing } from '../services/listingLifecycleService';
 import { showVerifiedListingBadge } from '../utils/listingTrust';
@@ -67,10 +64,8 @@ interface MobileHomePageProps {
   onNavigate: (view: ViewEnum) => void;
   onSelectCity: (city: string) => void;
   /**
-   * Current user's saved/detected location. When provided together with
-   * `onLocationChange`, the hero renders a tap-target that opens the shared
-   * LocationModal (city/district/detect) — mirroring the desktop header.
-   * Optional so we don't break existing callers during the rollout.
+   * Current user's saved/detected location. Passed through for catalog filtering;
+   * the location picker lives in the mobile brand header bar.
    */
   userLocation?: string;
   onLocationChange?: (location: string) => void;
@@ -109,8 +104,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   allVehicles,
   onNavigate,
   onSelectCity,
-  userLocation,
-  onLocationChange,
+  userLocation: _userLocation,
+  onLocationChange: _onLocationChange,
   addToast,
   selectedCity = '',
   onBrowseAllIndia,
@@ -121,28 +116,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 }) => {
   const { t } = useTranslation();
   const { comparisonCategory } = useApp();
-  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
-
-  const canUseLocationPicker = typeof onLocationChange === 'function';
-  const locationDisplay =
-    selectedCity.trim() ||
-    (userLocation?.trim()
-      ? primaryLocationLabel(userLocation) || userLocation.trim()
-      : '');
-
-  useEffect(() => {
-    if (!canUseLocationPicker) return;
-    const open = () => setIsLocationModalOpen(true);
-    window.addEventListener('reride:open-location-modal', open);
-    return () => window.removeEventListener('reride:open-location-modal', open);
-  }, [canUseLocationPicker]);
-
-  const handleLocationChange = useCallback(
-    (next: string) => {
-      onLocationChange?.(next);
-    },
-    [onLocationChange]
-  );
 
   // Fallback toast when the parent didn't pass one (keeps LocationModal happy
   // without forcing every caller to wire a toast bus).
@@ -494,7 +467,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         {/* Subtle grid texture (purely decorative) */}
         <div
           aria-hidden="true"
-          className="absolute inset-0 opacity-[0.07] pointer-events-none"
+          className="home-hero-grid absolute inset-0 opacity-[0.07] pointer-events-none"
           style={{
             backgroundImage:
               'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
@@ -503,6 +476,19 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             WebkitMaskImage: 'radial-gradient(ellipse at top, black 40%, transparent 75%)',
           }}
         />
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <span
+            key={i}
+            aria-hidden="true"
+            className="home-particle"
+            style={{
+              left: `${10 + i * 14}%`,
+              top: `${10 + (i % 3) * 22}%`,
+              ['--particle-dur' as string]: `${5.5 + (i % 2) * 1.5}s`,
+              ['--particle-delay' as string]: `${i * 0.55}s`,
+            }}
+          />
+        ))}
         {/* Soft drifting orbs */}
         <div
           aria-hidden="true"
@@ -516,31 +502,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         />
 
         <div className="relative">
-          {canUseLocationPicker ? (
-            <div className="flex justify-start mb-3 hero-rise hero-rise-1">
-              <button
-                type="button"
-                onClick={() => setIsLocationModalOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/25 px-3 py-1.5 text-white text-[12px] font-semibold active:scale-[0.98] transition-transform notranslate"
-                aria-label={t('a11y.chooseLocation')}
-                data-testid="mobile-home-location-pill"
-                data-no-translate
-                translate="no"
-              >
-                <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                {locationDisplay || t('header.selectLocation')}
-                <svg className="h-3 w-3 shrink-0 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-          ) : null}
-
           <div className="flex justify-center mb-4 hero-rise hero-rise-1">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-white/15 backdrop-blur-md rounded-full border border-white/20">
+            <div className="home-trust-badge inline-flex items-center gap-2 px-3.5 py-1.5 bg-white/15 backdrop-blur-md rounded-full border border-white/20">
               <span className="w-1.5 h-1.5 bg-green-400 rounded-full sparkle-pulse" />
               <span className="text-white text-[11px] font-medium tracking-wide">{t('home.trustBadgeVerified')}</span>
             </div>
@@ -559,8 +522,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
           {/* Search Bar */}
           <div
-            className="bg-white rounded-2xl overflow-hidden hero-rise hero-rise-4"
-            style={{ boxShadow: '0 12px 30px -10px rgba(0,0,0,0.35), 0 4px 8px -4px rgba(0,0,0,0.15)' }}
+            className="home-search-glow bg-white rounded-2xl overflow-hidden hero-rise hero-rise-4"
           >
             <div className="flex items-center gap-2 px-3.5 py-2.5">
               <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -704,12 +666,12 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 label: t('mobile.hero.freeRc'),
                 view: ViewEnum.SAFETY_CENTER,
               },
-            ].map((pill) => (
+            ].map((pill, index) => (
               <button
                 key={pill.label}
                 type="button"
                 onClick={() => onNavigate(pill.view)}
-                className="bg-white/12 backdrop-blur-sm rounded-xl p-2.5 text-center border border-white/15 active:scale-95 active:bg-white/20 transition-transform touch-manipulation"
+                className={`home-glass-card home-glass-card-${index + 1} rounded-xl p-2.5 text-center active:scale-95 active:bg-white/20 transition-transform touch-manipulation`}
                 aria-label={pill.label}
               >
                 <svg className="w-5 h-5 text-white mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -814,7 +776,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 <span className="h-px w-4 bg-purple-300" />
                 {t('home.featured.badge')}
               </div>
-              <h2 className="text-[22px] font-bold text-gray-900 tracking-tight leading-tight">{t('home.featured.title')}</h2>
+              <h2 className="home-section-heading text-[22px] font-bold text-gray-900 tracking-tight leading-tight">{t('home.featured.title')}</h2>
               <p className="text-gray-500 text-[12px] leading-snug">{t('home.featured.subtitle')}</p>
             </div>
             <button
@@ -1576,19 +1538,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         </div>
       </div>
 
-      {/* Location Picker Modal — lazily mounted on first open to avoid
-          shipping ~30KB of state/city data to users who never tap the pill. */}
-      {canUseLocationPicker && isLocationModalOpen && (
-        <Suspense fallback={null}>
-          <LocationModal
-            isOpen={isLocationModalOpen}
-            onClose={() => setIsLocationModalOpen(false)}
-            currentLocation={userLocation || ''}
-            onLocationChange={handleLocationChange}
-            addToast={addToast || noopToast}
-          />
-        </Suspense>
-      )}
     </div>
   );
 });

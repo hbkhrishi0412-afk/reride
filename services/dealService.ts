@@ -2,6 +2,7 @@
  * Client API for deal pipeline: leads, timeline, surveys, assistance.
  */
 import { authenticatedFetch } from '../utils/authenticatedFetch.js';
+import { isRateLimitError } from '../utils/rateLimitClient.js';
 import type {
   AdminKanbanBoard,
   DealDetail,
@@ -198,9 +199,17 @@ async function ensureDealApiAuth(): Promise<void> {
   }
 }
 
-const SELLER_COMMAND_CENTER_TTL_MS = 30_000;
+const SELLER_COMMAND_CENTER_TTL_MS = 60_000;
 let sellerCommandCenterCache: { data: SellerCommandCenter; ts: number } | null = null;
 let sellerCommandCenterInflight: Promise<SellerCommandCenter> | null = null;
+
+function isRateLimitMessage(message: string): boolean {
+  return isRateLimitError(new Error(message));
+}
+
+function isAuthMessage(message: string): boolean {
+  return /authentication required|unauthorized|session has expired|invalid token/i.test(message);
+}
 
 export function invalidateSellerCommandCenterCache(): void {
   sellerCommandCenterCache = null;
@@ -224,16 +233,26 @@ export async function fetchSellerCommandCenter(forceRefresh = false): Promise<Se
 
     const fetchOnce = async () => {
       const response = await authenticatedFetch(`${BASE}?action=seller-command-center`);
+      if (response.status === 429) {
+        throw new Error('Too many requests. Please try again later.');
+      }
       return parseJson<{ success: boolean; commandCenter: SellerCommandCenter }>(response);
     };
 
     try {
       const data = await fetchOnce();
       return data.commandCenter;
-    } catch {
-      await ensureDealApiAuth();
-      const data = await fetchOnce();
-      return data.commandCenter;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isRateLimitMessage(message) && sellerCommandCenterCache) {
+        return sellerCommandCenterCache.data;
+      }
+      if (isAuthMessage(message)) {
+        await ensureDealApiAuth();
+        const data = await fetchOnce();
+        return data.commandCenter;
+      }
+      throw err;
     }
   })();
 

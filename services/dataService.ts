@@ -290,18 +290,25 @@ class DataService {
           if (response.status === 429) {
             const errorText = await response.text();
             let errorMessage = 'Too many requests. Please wait a moment and try again.';
+            let retryAfter: number | undefined;
             
             try {
               const errorData = JSON.parse(errorText);
               errorMessage = errorData.reason || errorData.error || errorMessage;
+              if (typeof errorData.retryAfter === 'number') {
+                retryAfter = errorData.retryAfter;
+              }
             } catch {
               // Use default error message if JSON parsing fails
             }
+
+            const { parseRetryAfterSeconds } = await import('../utils/rateLimitClient.js');
+            retryAfter = retryAfter ?? parseRetryAfterSeconds(response) ?? undefined;
             
-            // Throw error with status code for request queue to handle
             const error: any = new Error(errorMessage);
             error.status = 429;
             error.code = 429;
+            if (retryAfter != null) error.retryAfter = retryAfter;
             throw error;
           }
           

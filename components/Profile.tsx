@@ -12,6 +12,7 @@ import {
 } from '../utils/sellerQrCode';
 import { userNeedsPasswordSetup } from '../utils/profilePassword';
 import { useApp } from './AppProvider';
+import WebsitePageShell from './WebsitePageShell';
 
 interface ProfileProps {
   currentUser: User;
@@ -642,8 +643,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
   const [expandedSection, setExpandedSection] = useState<string | null>('personal');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto">
+    <WebsitePageShell className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <div className="space-y-6">
           {/* Header */}
           <div className="text-center space-y-2 mb-8">
@@ -1449,8 +1449,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </WebsitePageShell>
   );
 };
 

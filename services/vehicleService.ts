@@ -211,12 +211,19 @@ export const getVehiclesApiPaginated = async (
   throw new Error('Invalid response format: expected object with vehicles property');
 };
 
-const addVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {
+const addVehicleApi = async (vehicleData: Vehicle, attempt = 0): Promise<Vehicle> => {
   const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
+  const { parseRetryAfterSeconds, retryDelayMs, sleepMs } = await import('../utils/rateLimitClient.js');
   const response = await authenticatedFetch('/api/vehicles', {
     method: 'POST',
     body: JSON.stringify(vehicleData),
   });
+
+  if (response.status === 429 && attempt < 2) {
+    await sleepMs(retryDelayMs(parseRetryAfterSeconds(response), attempt));
+    return addVehicleApi(vehicleData, attempt + 1);
+  }
+
   const result = await handleApiResponse<Vehicle>(response);
   if (!result.success) {
     throw new Error(result.reason || result.error || 'Failed to add vehicle');
@@ -233,9 +240,13 @@ const updateVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {
   const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
   const payload: Record<string, unknown> = {
     ...vehicleData,
-    id: vehicleData.id,
     databaseId,
   };
+  if (Number.isSafeInteger(vehicleData.id)) {
+    payload.id = vehicleData.id;
+  } else {
+    payload.id = databaseId;
+  }
   const response = await authenticatedFetch('/api/vehicles', {
     method: 'PUT',
     body: JSON.stringify(payload),
@@ -327,12 +338,28 @@ export const deleteVehicle = async (
 
 type VehicleActionResponse = { success?: boolean; vehicle?: Vehicle; reason?: string; error?: string };
 
-async function postVehicleAction(action: 'sold' | 'unsold', vehicleId: number, vehicles: Vehicle[]): Promise<Vehicle> {
-  const { buildVehicleMutationBody } = await import('../utils/vehicleIdentity.js');
+type VehicleActionOptions = {
+  sellerEmail?: string;
+  databaseId?: string;
+};
+
+async function postVehicleAction(
+  action: 'sold' | 'unsold',
+  vehicleId: number,
+  vehicles: Vehicle[],
+  options: VehicleActionOptions = {},
+): Promise<Vehicle> {
+  const { ensureVehicleMutationPayload } = await import('./vehicleIdentityService.js');
   const { authenticatedFetch } = await import('../utils/authenticatedFetch.js');
+  const { findVehicleByIdentity } = await import('../utils/vehicleIdentity.js');
+  const hintVehicle = findVehicleByIdentity(vehicles, vehicleId, options.databaseId);
+  const payload = await ensureVehicleMutationPayload(vehicleId, vehicles, {
+    sellerEmail: options.sellerEmail || hintVehicle?.sellerEmail,
+    databaseId: options.databaseId || hintVehicle?.databaseId,
+  });
   const response = await authenticatedFetch(`/api/vehicles?action=${action}`, {
     method: 'POST',
-    body: JSON.stringify(buildVehicleMutationBody(vehicleId, vehicles)),
+    body: JSON.stringify(payload),
   });
 
   const contentType = response.headers.get('content-type') || '';
@@ -348,8 +375,14 @@ async function postVehicleAction(action: 'sold' | 'unsold', vehicleId: number, v
   return result.vehicle;
 }
 
-export const markVehicleAsSold = async (vehicleId: number, vehicles: Vehicle[]): Promise<Vehicle> =>
-  postVehicleAction('sold', vehicleId, vehicles);
+export const markVehicleAsSold = async (
+  vehicleId: number,
+  vehicles: Vehicle[],
+  options?: VehicleActionOptions,
+): Promise<Vehicle> => postVehicleAction('sold', vehicleId, vehicles, options);
 
-export const markVehicleAsUnsold = async (vehicleId: number, vehicles: Vehicle[]): Promise<Vehicle> =>
-  postVehicleAction('unsold', vehicleId, vehicles);
+export const markVehicleAsUnsold = async (
+  vehicleId: number,
+  vehicles: Vehicle[],
+  options?: VehicleActionOptions,
+): Promise<Vehicle> => postVehicleAction('unsold', vehicleId, vehicles, options);

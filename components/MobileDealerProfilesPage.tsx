@@ -196,14 +196,25 @@ const MDP_STYLES = `
 
   .mdp-logo-ring {
     position: relative;
-    padding: 2px; border-radius: 14px;
+    display: inline-flex;
+    align-self: flex-start;
+    flex-shrink: 0;
+    padding: 2px;
+    border-radius: 14px;
     background: linear-gradient(135deg, var(--c1,#60a5fa), var(--c2,#a855f7));
     box-shadow: 0 10px 20px -10px rgba(79,70,229,.45);
-    flex-shrink: 0;
+    overflow: hidden;
   }
   .mdp-type-showroom { --c1:#34d399; --c2:#059669; }
   .mdp-type-service  { --c1:#60a5fa; --c2:#4f46e5; }
-  .mdp-logo-ring img { display: block; width: 60px; height: 60px; border-radius: 12px; object-fit: cover; background: #fff; }
+  .mdp-logo-ring img {
+    display: block;
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
+    object-fit: cover;
+    background: #fff;
+  }
 
   .mdp-name { font-weight: 900; color: #0f172a; font-size: 15px; line-height: 1.25; }
   .mdp-map-shell { height: clamp(180px, 32vh, 240px); }

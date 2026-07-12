@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { FAQItem } from '../types.js';
 import { View } from '../types.js';
 import { DEFAULT_PLATFORM_FAQS } from '../constants/defaultFaqs.js';
+import WebsitePageShell from './WebsitePageShell';
 
 const HELP_CATEGORIES = [
   { id: 'all', labelKey: 'help.category.all', defaultLabel: 'All topics' },
@@ -48,7 +49,7 @@ const HelpCenterPage: React.FC<HelpCenterPageProps> = ({ faqItems, onNavigate })
   }, [items]);
 
   return (
-    <div className="animate-fade-in container mx-auto py-6 sm:py-8 max-w-4xl px-4 pb-24 lg:pb-12">
+    <WebsitePageShell narrow="4xl">
       <div className="text-center mb-6 sm:mb-10">
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-reride-text-dark break-words">
           {t('help.title', { defaultValue: 'Help Center' })}
@@ -156,7 +157,7 @@ const HelpCenterPage: React.FC<HelpCenterPageProps> = ({ faqItems, onNavigate })
           </button>
         </div>
       )}
-    </div>
+    </WebsitePageShell>
   );
 };
 

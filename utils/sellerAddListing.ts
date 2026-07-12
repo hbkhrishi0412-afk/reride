@@ -1,11 +1,12 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { PlanDetails, SubscriptionPlan, User, Vehicle } from '../types.js';
+import type { PlanDetails, User, Vehicle } from '../types.js';
 import {
+  buildListingRenewalUpdates,
+  computeListingExpiresAtForSeller,
   planDetailsForSeller,
   validateNewListingCreation,
 } from './listingPlanRules.js';
 import { normalizeVehicleIdentity } from './vehicleIdentity.js';
-import { logWarn } from './logger.js';
 
 type AddListingDeps = {
   currentUser: User;
@@ -22,19 +23,6 @@ type AddListingDeps = {
   sellerVehicles?: Vehicle[];
   planDetails?: PlanDetails;
 };
-
-async function resolvePlanDetails(
-  currentUser: User,
-  planDetails?: PlanDetails,
-): Promise<PlanDetails> {
-  if (planDetails) return planDetails;
-  try {
-    const { planService } = await import('../services/planService');
-    return await planService.getPlanDetails((currentUser.subscriptionPlan || 'free') as SubscriptionPlan);
-  } catch {
-    return planDetailsForSeller(currentUser);
-  }
-}
 
 /** Create one seller listing via API, update local catalog, show a single outcome toast. */
 export async function addSellerListing(deps: AddListingDeps): Promise<boolean> {
@@ -55,14 +43,14 @@ export async function addSellerListing(deps: AddListingDeps): Promise<boolean> {
   } = deps;
 
   try {
-    const plan = await resolvePlanDetails(currentUser, planDetails);
+    const plan = planDetails ?? planDetailsForSeller(currentUser);
     const validation = validateNewListingCreation(currentUser, sellerVehicles, plan);
     if (!validation.allowed) {
       addToast(validation.reason || errorMessage, validation.limitReached ? 'warning' : 'error');
       return false;
     }
 
-    const { addVehicle, getVehicles } = await import('../services/vehicleService');
+    const { addVehicle } = await import('../services/vehicleService');
     const vehicleToAdd = {
       ...vehicleData,
       id: nextNumericId(),
@@ -79,13 +67,6 @@ export async function addSellerListing(deps: AddListingDeps): Promise<boolean> {
     setVehicles((prev) => [...prev, newVehicle]);
     setSellerInventory?.((prev) => [...prev, newVehicle]);
 
-    try {
-      const refreshedVehicles = await getVehicles();
-      setVehicles(refreshedVehicles);
-    } catch (refreshError) {
-      logWarn('Failed to refresh vehicles list after adding vehicle:', refreshError);
-    }
-
     addToast(successMessage, 'success');
     return true;
   } catch (error) {
@@ -96,6 +77,35 @@ export async function addSellerListing(deps: AddListingDeps): Promise<boolean> {
   }
 }
 
+/** Merge lifecycle fields when a seller re-publishes a listing via edit/save. */
+export function prepareSellerVehiclePublishUpdate(
+  vehicleData: Vehicle,
+  existing: Vehicle | undefined,
+  currentUser: User,
+): Vehicle {
+  if (vehicleData.status !== 'published' || existing?.status === 'published') {
+    return vehicleData;
+  }
+
+  const listingExpired =
+    Boolean(existing?.listingExpiresAt) &&
+    new Date(existing.listingExpiresAt as string) < new Date();
+  const lifecycle = listingExpired
+    ? buildListingRenewalUpdates(currentUser, existing || vehicleData)
+    : {
+        listingStatus: 'active' as const,
+        listingExpiresAt:
+          existing?.listingExpiresAt || computeListingExpiresAtForSeller(currentUser) || undefined,
+      };
+
+  return {
+    ...vehicleData,
+    ...lifecycle,
+    status: 'published',
+    ...(existing?.status === 'sold' ? { soldAt: undefined } : {}),
+  };
+}
+
 export async function assertSellerCanPublishListing(deps: {
   currentUser: User;
   vehicle: Vehicle;
@@ -104,7 +114,7 @@ export async function assertSellerCanPublishListing(deps: {
   planDetails?: PlanDetails;
 }): Promise<boolean> {
   const { validateListingRenewal } = await import('./listingPlanRules.js');
-  const plan = await resolvePlanDetails(deps.currentUser, deps.planDetails);
+  const plan = deps.planDetails ?? planDetailsForSeller(deps.currentUser);
   const validation = validateListingRenewal(deps.currentUser, deps.vehicle, deps.sellerVehicles, plan);
   if (!validation.allowed) {
     deps.addToast(validation.reason || 'Cannot publish this listing.', validation.limitReached ? 'warning' : 'error');
@@ -133,7 +143,7 @@ export async function addSellerListingsBulk(deps: AddMultipleListingDeps): Promi
   } = deps;
 
   try {
-    const plan = await resolvePlanDetails(currentUser, planDetails);
+    const plan = planDetails ?? planDetailsForSeller(currentUser);
     const validation = validateNewListingCreation(currentUser, sellerVehicles, plan);
     if (!validation.allowed) {
       addToast(validation.reason || 'Listing limit reached for your plan.', 'warning');
@@ -151,7 +161,7 @@ export async function addSellerListingsBulk(deps: AddMultipleListingDeps): Promi
       return false;
     }
 
-    const { addVehicle, getVehicles } = await import('../services/vehicleService');
+    const { addVehicle } = await import('../services/vehicleService');
     const newVehicles = vehiclesData.map((vehicle) =>
       normalizeVehicleIdentity({
         ...vehicle,
@@ -169,15 +179,8 @@ export async function addSellerListingsBulk(deps: AddMultipleListingDeps): Promi
       results.push(normalizeVehicleIdentity(await addVehicle(vehicle)));
     }
 
+    setVehicles((prev) => [...prev, ...results]);
     setSellerInventory?.((prev) => [...prev, ...results]);
-
-    try {
-      const refreshedVehicles = await getVehicles();
-      setVehicles(refreshedVehicles);
-    } catch (refreshError) {
-      logWarn('Failed to refresh vehicles list after adding vehicles:', refreshError);
-      setVehicles((prev) => [...prev, ...results]);
-    }
 
     addToast(`${results.length} vehicles added successfully`, 'success');
     return true;

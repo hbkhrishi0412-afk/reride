@@ -6,9 +6,12 @@ if (typeof document !== 'undefined') {
 }
 
 import { enforceRememberMePolicyOnBoot } from './utils/rememberMe';
+import { isCapacitorNative } from './utils/apiConfig';
 
 // Must run before Supabase client is initialised or any auth state is read.
-if (typeof window !== 'undefined') {
+// On Capacitor, native session mirror hydration runs in the async bootstrap below
+// (WebView localStorage is often empty on cold start).
+if (typeof window !== 'undefined' && !isCapacitorNative()) {
   try {
     enforceRememberMePolicyOnBoot();
   } catch {
@@ -31,7 +34,6 @@ import { injectCriticalCSS } from './utils/criticalCSS';
 import { validateEnvironmentVariablesSafe } from './utils/envValidation';
 import { logInfo, logWarn, logError } from './utils/logger';
 import { ensureCsrfToken } from './utils/authenticatedFetch';
-import { isCapacitorNative } from './utils/apiConfig';
 import { initAnalytics, trackPageView } from './utils/analytics';
 
 function escapeHtmlMountMessage(s: string): string {
@@ -167,6 +169,16 @@ const AppRouter = isCapacitorNative() ? HashRouter : BrowserRouter;
 
 void (async () => {
   try {
+    if (typeof window !== 'undefined' && isCapacitorNative()) {
+      try {
+        const { hydrateNativeSessionMirror } = await import('./utils/nativeSessionMirror');
+        await hydrateNativeSessionMirror();
+        enforceRememberMePolicyOnBoot();
+      } catch {
+        /* non-fatal */
+      }
+    }
+
     root.render(
       <React.StrictMode>
         <HelmetProvider>

@@ -6,8 +6,52 @@
 
 import type { Vehicle } from '../types.js';
 
-export const VEHICLE_LIST_CACHE_VERSION = 4;
+export const VEHICLE_LIST_CACHE_VERSION = 5;
 export const VEHICLE_LIST_CACHE_VERSION_KEY = 'reRideVehicleListSchemaVersion';
+
+export const SAFE_VEHICLE_ID_MULTIPLIER = 1000;
+
+let vehicleIdFallbackSeq = 0;
+
+/**
+ * Collision-resistant numeric id that stays within Number.MAX_SAFE_INTEGER.
+ * Uses ms timestamp × 1000 + random(0–999) → up to 1000 listings/ms (~2255 safe ceiling).
+ */
+export function generateSafeVehicleNumericId(): number {
+  let randomSuffix: number;
+  try {
+    const buf = new Uint8Array(2);
+    globalThis.crypto.getRandomValues(buf);
+    randomSuffix = ((buf[0] << 8) | buf[1]) % SAFE_VEHICLE_ID_MULTIPLIER;
+  } catch {
+    randomSuffix = vehicleIdFallbackSeq++ % SAFE_VEHICLE_ID_MULTIPLIER;
+  }
+  const id = Date.now() * SAFE_VEHICLE_ID_MULTIPLIER + randomSuffix;
+  if (!Number.isSafeInteger(id)) {
+    return Date.now() + randomSuffix;
+  }
+  return id;
+}
+
+/** True when a numeric id exceeds IEEE-754 safe integer range. */
+export function isUnsafeVehicleNumericId(id: unknown): boolean {
+  const n = Number(id);
+  return Number.isFinite(n) && n > 0 && !Number.isSafeInteger(n);
+}
+
+/** Parse a digit-only id string without losing precision. */
+function parseDigitIdString(raw: string): { numericId?: number; databaseId?: string } {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return {};
+  const parsed = Number(trimmed);
+  const numericId = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  const needsStringPk =
+    trimmed.length > 15 || (numericId != null && !Number.isSafeInteger(numericId));
+  return {
+    numericId,
+    databaseId: needsStringPk ? trimmed : undefined,
+  };
+}
 
 export const MUTATION_IDENTITY_REFRESH_MESSAGE =
   'Listing identity is outdated. Refresh your listings and try again.';
@@ -39,7 +83,7 @@ export function isUuidPrimaryKey(pk: string): boolean {
 
 /** Parse listing ids from API / dashboard request bodies. */
 export function parseVehicleIdentityFromBody(body: ParsedVehicleIdentityInput): ParsedVehicleIdentity {
-  const databaseId =
+  let databaseId =
     typeof body.databaseId === 'string' && body.databaseId.trim() !== ''
       ? body.databaseId.trim()
       : '';
@@ -47,9 +91,22 @@ export function parseVehicleIdentityFromBody(body: ParsedVehicleIdentityInput): 
   const raw = body.vehicleId ?? body.id;
   let numericId: number | undefined;
   if (raw !== undefined && raw !== null && raw !== '') {
-    const parsed = typeof raw === 'string' ? parseInt(raw, 10) : Number(raw);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      numericId = parsed;
+    if (typeof raw === 'string') {
+      const digitParsed = parseDigitIdString(raw);
+      if (digitParsed.numericId != null) {
+        numericId = digitParsed.numericId;
+        if (!databaseId && digitParsed.databaseId) {
+          databaseId = digitParsed.databaseId;
+        }
+      }
+    } else {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        numericId = parsed;
+        if (!databaseId && !Number.isSafeInteger(parsed)) {
+          databaseId = String(parsed);
+        }
+      }
     }
   }
 
@@ -97,6 +154,13 @@ export function normalizeVehicleIdentity<T extends Pick<Vehicle, 'id' | 'databas
     return trimmed === vehicle.databaseId ? vehicle : { ...vehicle, databaseId: trimmed };
   }
 
+  if (isUnsafeVehicleNumericId(vehicle.id)) {
+    const decimal = String(Number(vehicle.id));
+    if (/^\d+$/.test(decimal)) {
+      return { ...vehicle, databaseId: decimal };
+    }
+  }
+
   return vehicle;
 }
 
@@ -123,7 +187,18 @@ export function findVehicleByIdentity<T extends Pick<Vehicle, 'id' | 'databaseId
 export function getCanonicalPrimaryKey(vehicle: Pick<Vehicle, 'id' | 'databaseId'>): string | null {
   const normalized = normalizeVehicleIdentity(vehicle);
   const pk = normalized.databaseId?.trim();
-  return pk || null;
+  if (pk) return pk;
+
+  // Large numeric Supabase TEXT primary keys (e.g. Date.now()-based ids) exceed
+  // MAX_SAFE_INTEGER. Stale client rows often keep the rounded `id` but drop
+  // `databaseId`; the decimal string still matches `vehicles.id` in Supabase.
+  const idNum = Number(normalized.id);
+  if (Number.isFinite(idNum) && idNum > 0 && !Number.isSafeInteger(idNum)) {
+    const decimal = String(idNum);
+    if (/^\d+$/.test(decimal)) return decimal;
+  }
+
+  return null;
 }
 
 export function canMutateVehicle(vehicle: Pick<Vehicle, 'id' | 'databaseId'>): boolean {
@@ -165,11 +240,16 @@ export function buildVehicleMutationBody(
     throw new VehicleMutationIdentityError();
   }
 
-  return {
-    vehicleId,
+  const payload: Record<string, unknown> = {
     databaseId,
     ...extra,
   };
+  if (Number.isSafeInteger(vehicle.id)) {
+    payload.vehicleId = vehicleId;
+  } else {
+    payload.vehicleId = databaseId;
+  }
+  return payload;
 }
 
 export function assertVehicleMutationPayload(

@@ -1,8 +1,9 @@
 import React from 'react';
+import WebsitePageShell from './WebsitePageShell';
 
 const TermsOfServicePage: React.FC = () => {
   return (
-    <div className="animate-fade-in container mx-auto py-8 max-w-4xl px-4">
+    <WebsitePageShell narrow="4xl">
       <div className="bg-white rounded-xl shadow-lg p-8 md:p-12">
         <div className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-extrabold text-reride-text-dark mb-4">
@@ -238,9 +239,22 @@ const TermsOfServicePage: React.FC = () => {
               <p className="text-gray-700"><strong>Address:</strong> ReRide, India</p>
             </div>
           </section>
+
+          <section className="border-t border-gray-200 pt-8">
+            <h2 className="text-xl font-bold text-reride-text-dark mb-3">Related policies</h2>
+            <p className="text-gray-600 text-sm mb-3">
+              Additional policies referenced in these Terms:
+            </p>
+            <ul className="list-disc list-inside space-y-1 text-blue-600">
+              <li><a href="/privacy-policy" className="hover:underline">Privacy Policy</a></li>
+              <li><a href="/refund-policy" className="hover:underline">Refund Policy</a></li>
+              <li><a href="/complaint-resolution" className="hover:underline">Complaint Resolution</a></li>
+              <li><a href="/fraud-policy" className="hover:underline">Fraud Policy</a></li>
+            </ul>
+          </section>
         </div>
       </div>
-    </div>
+    </WebsitePageShell>
   );
 };
 

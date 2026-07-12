@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../lib/i18n';
+import { CLIENT_POLL_INTERVALS_MS } from '../utils/clientPolling.js';
 import { useNavigate as useRouterNavigate, useLocation } from 'react-router-dom';
 import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan, ChatMessage } from '../types';
 import { View } from '../types';
@@ -48,7 +49,14 @@ import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
-import { logBackgroundSyncFailure, hasCachedVehicleCatalog } from '../utils/toastPolicy.js';
+import {
+  logBackgroundSyncFailure,
+  hasCachedVehicleCatalog,
+  runBackgroundSync,
+  shouldShowInboundMessageToast,
+  shouldShowOfflineToast,
+  resetOfflineToastSession,
+} from '../utils/toastPolicy.js';
 import {
   buildVehicleMutationBody,
   findVehicleByRouteSegment,
@@ -1587,7 +1595,10 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
           }
           if (currentUser?.role === 'seller' && !conv.isReadBySeller) {
             const lastMsg = conv.messages?.[conv.messages.length - 1];
-            if (lastMsg?.sender === 'user') {
+            if (
+              lastMsg?.sender === 'user' &&
+              shouldShowInboundMessageToast(conv.id, activeChat?.id)
+            ) {
               addToast(
                 `New message from ${conv.customerName || 'Customer'} about ${conv.vehicleName || 'your listing'}`,
                 'info',
@@ -1615,7 +1626,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         } catch {
           void 0;
         }
-        if (hadUnreadFromCustomer) {
+        if (hadUnreadFromCustomer && shouldShowInboundMessageToast(merged.id, activeChat?.id)) {
           addToast(
             `New message from ${merged.customerName || 'Customer'} about ${merged.vehicleName || 'your listing'}`,
             'info',
@@ -1624,7 +1635,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         return next;
       });
     },
-    [currentUser?.email, currentUser?.id, currentUser?.role, addToast],
+    [currentUser?.email, currentUser?.id, currentUser?.role, addToast, activeChat?.id],
   );
 
   const onConversationRealtimeEvent = useCallback(
@@ -1973,11 +1984,10 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
             logWarn('Failed to show browser notification:', err);
           }
         });
-      } else if (notification.targetType === 'conversation') {
-        addToast(notification.message || notification.title || 'New message', 'info');
       } else if (notification.targetType === 'deal') {
         addToast(notification.message || notification.title || 'Deal update', 'info');
       }
+      // Conversation/message alerts: realtime + inbox badges only — no duplicate toasts.
     });
 
     // Clean up old notification IDs from the ref (keep last 100)
@@ -2114,7 +2124,9 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       return false;
     })();
     const isNativeWebView = isCapacitorNative();
-    const vehicleRefreshMs = isNativeWebView ? 3 * 60 * 1000 : 60 * 1000;
+    const vehicleRefreshMs = isNativeWebView
+      ? CLIENT_POLL_INTERVALS_MS.vehicleCatalogNative
+      : CLIENT_POLL_INTERVALS_MS.vehicleCatalogWeb;
     const vehicleListRefreshInterval = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) {
         return;
@@ -2143,7 +2155,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         .catch((error) => {
           logWarn('Failed to refresh vehicle data:', error);
         });
-    }, 5 * 60 * 1000); // 5 minutes
+    }, CLIENT_POLL_INTERVALS_MS.vehicleDataCatalog);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
@@ -2195,7 +2207,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     };
 
     refreshSupportTickets();
-    const interval = setInterval(refreshSupportTickets, 20000);
+    const interval = setInterval(refreshSupportTickets, CLIENT_POLL_INTERVALS_MS.supportTickets);
 
     return () => {
       isMounted = false;
@@ -2849,21 +2861,6 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
           setConversations((prev) => {
             const merged = mergeConversationLists(prev, normalizedConversations);
-            const prevUnread = prev.filter(
-              (c) =>
-                c &&
-                !c.isReadBySeller &&
-                conversationBelongsToSeller(c, normalizedSellerEmail, currentUser.id),
-            ).length;
-            const nextUnread = merged.filter((c) => c && !c.isReadBySeller).length;
-            if (
-              currentUser.role === 'seller' &&
-              nextUnread > prevUnread &&
-              typeof document !== 'undefined' &&
-              document.visibilityState === 'visible'
-            ) {
-              addToast('You have new buyer messages', 'info');
-            }
             try {
               saveConversations(merged);
             } catch (error) {
@@ -2891,11 +2888,11 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     // Load immediately
     loadSellerConversations();
     
-    // Fallback sync if Realtime/WebSocket misses an update
-    const refreshInterval = setInterval(loadSellerConversations, 10000);
+    // Fallback sync if Realtime/WebSocket misses an update (30s — avoids API rate limits)
+    const refreshInterval = setInterval(loadSellerConversations, CLIENT_POLL_INTERVALS_MS.sellerConversations);
     
     return () => clearInterval(refreshInterval);
-  }, [currentUser?.email, currentUser?.role, currentUser?.id, addToast]);
+  }, [currentUser?.email, currentUser?.role, currentUser?.id]);
 
   // Customers: poll API so seller replies appear even when Realtime RLS blocks postgres_changes
   useEffect(() => {
@@ -2939,7 +2936,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     };
 
     loadCustomerConversations();
-    const interval = setInterval(loadCustomerConversations, 10000);
+    const interval = setInterval(loadCustomerConversations, CLIENT_POLL_INTERVALS_MS.customerConversations);
     return () => clearInterval(interval);
   }, [currentUser?.email, currentUser?.role]);
 
@@ -3029,7 +3026,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     };
 
     void syncOpenThread();
-    const interval = setInterval(syncOpenThread, 5000);
+    const interval = setInterval(syncOpenThread, CLIENT_POLL_INTERVALS_MS.openChatSync);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -3083,8 +3080,8 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     // Load immediately
     loadNotifications();
     
-    // Then refresh periodically every 15 seconds
-    const refreshInterval = setInterval(loadNotifications, 15000);
+    // Refresh periodically (45s — dashboard polling must not exhaust API rate limits)
+    const refreshInterval = setInterval(loadNotifications, CLIENT_POLL_INTERVALS_MS.notifications);
     
     return () => clearInterval(refreshInterval);
   }, [currentUser?.email]);
@@ -3143,6 +3140,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
   // Add online/offline sync functionality
   useEffect(() => {
     const handleOnline = () => {
+      resetOfflineToastSession();
       logInfo('🔄 App came online, syncing data...');
       void processSyncQueue();
       dataService.syncWhenOnline().then(() => {
@@ -3154,7 +3152,9 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
     const handleOffline = () => {
       logInfo('📴 App went offline');
-      addToast(t('toast.nowOffline'), 'info');
+      if (shouldShowOfflineToast()) {
+        addToast(t('toast.nowOffline'), 'warning');
+      }
     };
 
     window.addEventListener('online', handleOnline);
@@ -3169,9 +3169,6 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const updateVehicleHandler = useCallback(async (id: number, updates: Partial<Vehicle>, options: VehicleUpdateOptions = {}) => {
     // Prevent duplicate updates for the same vehicle
     if (updatingVehiclesRef.current.has(id)) {
-      if (!options.skipToast) {
-        addToast('Please wait while we save your changes.', 'info');
-      }
       return;
     }
 
@@ -3208,8 +3205,9 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         findVehicleByIdentity(sellerInventoryRef.current, id, options.databaseId);
       if (!vehicleToUpdate) {
         updatingVehiclesRef.current.delete(id);
+        const notFoundError = new Error(t('toast.vehicleNotFound'));
         addToast(t('toast.vehicleNotFound'), 'error');
-        return;
+        throw notFoundError;
       }
 
       vehicleToUpdate = normalizeVehicleIdentity(vehicleToUpdate);
@@ -3243,6 +3241,46 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         throw new VehicleMutationIdentityError();
       }
 
+      const { successMessage, skipToast } = options;
+      const wasFeatured = Boolean(vehicleToUpdate.isFeatured);
+      const statusChanged = updates.status !== undefined && updates.status !== vehicleToUpdate.status;
+      let fallbackMessage = t('toast.vehicleUpdatedSuccess');
+      if (statusChanged) {
+        fallbackMessage = t('toast.vehicleStatusUpdated', { status: String(updates.status) });
+      } else if (updates.isFeatured === true && !wasFeatured) {
+        fallbackMessage = t('toast.vehicleFeaturedSuccess');
+      } else if (updates.isFeatured === false && wasFeatured) {
+        fallbackMessage = t('toast.vehicleUnfeaturedSuccess');
+      }
+
+      // Optimistic UI + instant toast (before API round-trip)
+      setVehicles((prev) =>
+        Array.isArray(prev)
+          ? prev.map((vehicle) =>
+              vehicle && findVehicleByIdentity([vehicle], id, mergedForApi.databaseId)
+                ? mergedForApi
+                : vehicle,
+            )
+          : [],
+      );
+      setSellerInventory((prev) =>
+        filterVehiclesBySellerEmail(
+          Array.isArray(prev)
+            ? prev.map((vehicle) =>
+                vehicle && findVehicleByIdentity([vehicle], id, mergedForApi.databaseId)
+                  ? mergedForApi
+                  : vehicle,
+              )
+            : [],
+          currentUser?.email,
+        ),
+      );
+      syncVehicleCachesById(id, () => mergedForApi);
+
+      if (!skipToast) {
+        addToast(successMessage ?? fallbackMessage, 'success');
+      }
+
       const { updateVehicle: updateVehicleApi } = await import('../services/vehicleService');
       const result = normalizeVehicleIdentity(await updateVehicleApi(mergedForApi));
 
@@ -3263,19 +3301,6 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       );
       syncVehicleCachesById(id, () => result);
 
-      const wasFeatured = Boolean(vehicleToUpdate.isFeatured);
-      const isNowFeatured = Boolean(result?.isFeatured);
-      const statusChanged = updates.status !== undefined && updates.status !== vehicleToUpdate.status;
-      const { successMessage, skipToast } = options;
-      let fallbackMessage = t('toast.vehicleUpdatedSuccess');
-      if (statusChanged) {
-        fallbackMessage = t('toast.vehicleStatusUpdated', { status: String(updates.status) });
-      } else if (!wasFeatured && isNowFeatured) {
-        fallbackMessage = t('toast.vehicleFeaturedSuccess');
-      } else if (wasFeatured && !isNowFeatured) {
-        fallbackMessage = t('toast.vehicleUnfeaturedSuccess');
-      }
-
       // Log audit entry for vehicle update
       const actor = currentUser?.name || currentUser?.email || 'System';
       const updateFields = Object.keys(updates).join(', ');
@@ -3283,9 +3308,6 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       const entry = logAction(actor, 'Update Vehicle', vehicleInfo, `Updated fields: ${updateFields}`);
       setAuditLog(prev => [entry, ...prev]);
 
-      if (!skipToast) {
-        addToast(successMessage ?? fallbackMessage, 'success');
-      }
       if (process.env.NODE_ENV === 'development') {
         logInfo('✅ Vehicle updated via API:', result);
       }
@@ -3293,7 +3315,9 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       if (process.env.NODE_ENV === 'development') {
         logError('❌ Failed to update vehicle:', error);
       }
-      addToast(t('toast.vehicleUpdateFailed'), 'error');
+      const message = getUserFriendlyErrorMessage(error, t('toast.vehicleUpdateFailed'));
+      addToast(message, 'error');
+      throw error;
     } finally {
       // Always remove from updating set, even if there was an error
       updatingVehiclesRef.current.delete(id);
@@ -3327,14 +3351,18 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       }
       return list;
     });
-    setSellerInventory((prev) =>
-      filterVehiclesBySellerEmail(
-        Array.isArray(prev)
-          ? prev.map((v) => (v && findVehicleByIdentity([v], result.id, result.databaseId) ? result : v))
-          : [],
-        currentUser?.email,
-      ),
-    );
+    setSellerInventory((prev) => {
+      const list = Array.isArray(prev) ? [...prev] : [];
+      const idx = list.findIndex(
+        (v) => v && findVehicleByIdentity([v], result.id, result.databaseId),
+      );
+      if (idx >= 0) {
+        list[idx] = result;
+      } else if (result.status === 'sold' || result.status === 'archived') {
+        list.push(result);
+      }
+      return filterVehiclesBySellerEmail(list, currentUser?.email);
+    });
     syncVehicleCachesById(result.id, () => result);
   }, [currentUser?.email, syncVehicleCachesById]);
 
@@ -5416,8 +5444,67 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         addToast(t('compare.maxReached', { max: MAX_COMPARE_VEHICLES }), 'error');
       }
     },
-    onOfferResponse: () => {
-      addToast('Offer actions moved to Deal Room pipeline.', 'info');
+    onOfferResponse: async (
+      conversationId: string,
+      messageId: number,
+      response: 'accepted' | 'rejected' | 'countered',
+      counterPrice?: number,
+    ) => {
+      if (!currentUser) return;
+
+      const conversation = conversations.find((c) => c && c.id === conversationId);
+      if (!conversation) return;
+
+      const target = conversation.messages?.find((m) => m && m.id === messageId);
+      if (!target || target.type !== 'offer') return;
+
+      const updatedMessages =
+        conversation.messages?.map((msg) => {
+          if (msg.id !== messageId) return msg;
+          if (response === 'countered' && counterPrice) {
+            return {
+              ...msg,
+              payload: {
+                ...msg.payload,
+                status: 'countered' as const,
+                counterPrice: msg.payload?.offerPrice,
+                offerPrice: counterPrice,
+              },
+            };
+          }
+          return {
+            ...msg,
+            payload: { ...msg.payload, status: response },
+          };
+        }) ?? [];
+
+      const updatedConversation: Conversation = { ...conversation, messages: updatedMessages };
+
+      setConversations((prev) => {
+        const next = prev.map((c) => (c && c.id === conversationId ? updatedConversation : c));
+        try {
+          saveConversations(next);
+        } catch {
+          /* ignore */
+        }
+        return next;
+      });
+      if (activeChat?.id === conversationId) {
+        setActiveChat(updatedConversation);
+      }
+
+      const label =
+        response === 'accepted'
+          ? 'Offer accepted'
+          : response === 'rejected'
+            ? 'Offer declined'
+            : 'Counter-offer sent';
+      addToast(label, 'success');
+
+      void runBackgroundSync('Offer response sync', async () => {
+        const { saveConversationToSupabase } = await import('../services/conversationService');
+        await saveConversationToSupabase(updatedConversation);
+      });
     },
   };
   }, [

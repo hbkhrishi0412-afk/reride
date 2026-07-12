@@ -1132,6 +1132,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
 
         return res.status(200).json({
           success: true,
+          paymentRequest: latest || null,
           paymentStatus
         });
 
@@ -1164,18 +1165,61 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           });
         }
 
+        const existing = await core.adminRead<Record<string, unknown>>(
+          paymentRequestsPath,
+          String(paymentRequestId)
+        );
+        if (!existing) {
+          return res.status(404).json({
+            success: false,
+            reason: 'Payment request not found',
+          });
+        }
+
+        const now = new Date().toISOString();
+        const adminEmail = req.body?.adminEmail != null ? String(req.body.adminEmail) : undefined;
+
         await core.adminUpdate(paymentRequestsPath, String(paymentRequestId), {
           status: 'approved',
-          reviewedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          approvedAt: now,
+          approvedBy: adminEmail,
+          reviewedAt: now,
+          updatedAt: now,
           notes: req.body?.notes,
-          adminEmail: req.body?.adminEmail
+          adminEmail,
         });
+
+        const planRaw = existing.planId ?? existing.plan;
+        const sellerEmail = String(existing.sellerEmail || '').toLowerCase().trim();
+        const planLower = String(planRaw || '').toLowerCase();
+        const normalizedPlan = planLower === 'basic' ? 'free' : planLower;
+        const ALLOWED_SUBSCRIPTION_PLANS = new Set(['free', 'pro', 'premium']);
+        let updatedUser: Record<string, unknown> | null = null;
+
+        if (sellerEmail && ALLOWED_SUBSCRIPTION_PLANS.has(normalizedPlan)) {
+          try {
+            const existingUser = await core.userService.findByEmail(sellerEmail);
+            if (existingUser) {
+              const expiry = new Date();
+              expiry.setDate(expiry.getDate() + 30);
+              const userUpdate: Record<string, unknown> = {
+                subscriptionPlan: normalizedPlan,
+                planExpiryDate: expiry.toISOString(),
+                planUpdatedAt: now,
+              };
+              await core.userService.update(sellerEmail, userUpdate);
+              updatedUser = { ...(existingUser as unknown as Record<string, unknown>), ...userUpdate };
+            }
+          } catch (planUpgradeErr) {
+            core.logWarn('Failed to upgrade plan after manual payment approval:', planUpgradeErr);
+          }
+        }
 
         return res.status(200).json({
           success: true,
           message: 'Payment request approved successfully',
-          paymentRequestId
+          paymentRequestId,
+          user: updatedUser,
         });
 
       } catch (error) {
@@ -1209,6 +1253,8 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
 
         await core.adminUpdate(paymentRequestsPath, String(paymentRequestId), {
           status: 'rejected',
+          rejectedAt: new Date().toISOString(),
+          rejectedBy: req.body?.adminEmail != null ? String(req.body.adminEmail) : undefined,
           reviewedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           rejectionReason: rejectionReason || 'No reason provided',

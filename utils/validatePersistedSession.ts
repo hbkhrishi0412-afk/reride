@@ -3,6 +3,7 @@ import { getSupabaseClient } from '../lib/supabase.js';
 import { getBrowserAccessTokenForApi } from './authStorage.js';
 import { isTokenLikelyValid, refreshAuthToken } from './authenticatedFetch.js';
 import { isCapacitorNative } from './apiConfig.js';
+import { mirrorSessionKeyToNativeSync } from './nativeSessionMirror.js';
 import { getNativeMemoryRefreshToken } from './nativeTokenStorage.js';
 import { useHttpOnlyRefreshCookie } from './authStorage.js';
 
@@ -52,6 +53,7 @@ export function clearPersistedUserSession(): void {
   try {
     localStorage.removeItem('reRideCurrentUser');
     sessionStorage.removeItem('currentUser');
+    mirrorSessionKeyToNativeSync('reRideCurrentUser', null);
   } catch {
     /* ignore */
   }

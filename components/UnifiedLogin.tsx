@@ -6,10 +6,11 @@ import { runGoogleSignInButtonFlow } from '../services/authService';
 import { syncWithBackend } from '../services/supabase-auth-service';
 import { loginServiceProviderWithUsersTable } from '../services/serviceProviderLoginSupport';
 import { getSupabaseClient } from '../lib/supabase.js';
-import { setRememberMePreference } from '../utils/rememberMe';
+import { setRememberMePreferenceAsync } from '../utils/rememberMe';
 import {
   loadLastRememberedLoginRole,
-  saveRememberedCredentials,
+  resolveLastRememberedLoginRole,
+  saveRememberedCredentialsAsync,
   resolveRememberedCredentials,
 } from '../utils/rememberedCredentials';
 import OTPLogin from './OTPLogin';
@@ -168,10 +169,16 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   // Restore last remembered account type on generic /login (no ?role=).
   useEffect(() => {
     if (forcedRole || selectedRole) return;
-    const lastRole = loadLastRememberedLoginRole();
-    if (lastRole && allowedRoles.includes(lastRole as UserRole)) {
-      setSelectedRole(lastRole as UserRole);
-    }
+    let cancelled = false;
+    void resolveLastRememberedLoginRole().then((lastRole) => {
+      if (cancelled || !lastRole) return;
+      if (allowedRoles.includes(lastRole as UserRole)) {
+        setSelectedRole(lastRole as UserRole);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
@@ -301,7 +308,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       );
       if (result.success && result.user) {
         setShowGoogleRolePicker(false);
-        setRememberMePreference(rememberMe);
+        await setRememberMePreferenceAsync(rememberMe);
         onLogin(result.user);
       } else {
         setError(result.reason || t('auth.error.googleSignInFailed'));
@@ -350,8 +357,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           if (!sp.ok) {
             throw new Error(sp.message);
           }
-          saveRememberedCredentials(selectedRole, email, password, rememberMe);
-          setRememberMePreference(rememberMe);
+          await saveRememberedCredentialsAsync(selectedRole, email, password, rememberMe);
+          await setRememberMePreferenceAsync(rememberMe);
           onServiceProviderLogin(sp.provider);
           return;
         }
@@ -374,11 +381,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
       if (result.success && result.user) {
         if (mode === 'login') {
-          saveRememberedCredentials(selectedRole, email, password, rememberMe);
-          setRememberMePreference(rememberMe);
+          await saveRememberedCredentialsAsync(selectedRole, email, password, rememberMe);
+          await setRememberMePreferenceAsync(rememberMe);
           onLogin(result.user);
         } else {
-          setRememberMePreference(true);
+          await setRememberMePreferenceAsync(true);
           onRegister(result.user);
         }
       } else {
@@ -392,8 +399,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           const sp = await loginServiceProviderWithUsersTable(email, password);
           if (sp.ok) {
             setSelectedRole('service_provider');
-            saveRememberedCredentials('service_provider', email, password, rememberMe);
-            setRememberMePreference(rememberMe);
+            await saveRememberedCredentialsAsync('service_provider', email, password, rememberMe);
+            await setRememberMePreferenceAsync(rememberMe);
             onServiceProviderLogin(sp.provider);
             return;
           }

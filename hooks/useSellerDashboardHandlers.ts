@@ -5,7 +5,12 @@ import { useApp } from '../components/AppProvider';
 import { enrichVehiclesWithSellerInfo } from '../utils/vehicleEnrichment';
 import { filterVehiclesBySellerEmail } from '../utils/sellerVehicleFilter';
 import { findVehicleByIdentity, buildVehicleMutationBody } from '../utils/vehicleIdentity';
-import { addSellerListing, addSellerListingsBulk, assertSellerCanPublishListing } from '../utils/sellerAddListing.js';
+import {
+  addSellerListing,
+  addSellerListingsBulk,
+  assertSellerCanPublishListing,
+  prepareSellerVehiclePublishUpdate,
+} from '../utils/sellerAddListing.js';
 import { computeListingExpiresAtForSeller } from '../utils/listingPlanRules.js';
 import { planService } from '../services/planService';
 import type { SubscriptionPlan } from '../types';
@@ -68,6 +73,7 @@ export function useSellerDashboardHandlers({ app, currentUser, locals }: UseSell
     archiveConversation,
     typingStatus,
     chatPeerOnlineByConversationId,
+    runIfConfirmed,
   } = app;
 
   const sellerEmailNorm = currentUser.email.toLowerCase().trim();
@@ -111,25 +117,38 @@ export function useSellerDashboardHandlers({ app, currentUser, locals }: UseSell
 
   const onDeleteVehicle = useCallback(
     async (vehicleId: number) => {
-      deleteVehicle(vehicleId);
+      const vehicle = findSellerVehicle(vehicleId);
+      const label = vehicle
+        ? `${vehicle.year} ${vehicle.make} ${vehicle.model}`
+        : 'this listing';
+      await runIfConfirmed(
+        `Delete ${label}? This cannot be undone.`,
+        async () => {
+          await deleteVehicle(vehicleId);
+        },
+        { variant: 'danger' },
+      );
     },
-    [deleteVehicle],
+    [findSellerVehicle, deleteVehicle, runIfConfirmed],
   );
 
   const onMarkAsSold = useCallback(
     async (vehicleId: number) => {
       const vehicle = findSellerVehicle(vehicleId);
       if (!vehicle) return;
+      addToast('Vehicle marked as sold.', 'success');
       try {
         const { markVehicleAsSold } = await import('../services/vehicleService');
-        const updated = await markVehicleAsSold(vehicleId, vehicles);
+        const updated = await markVehicleAsSold(vehicleId, sellerVehiclesFiltered, {
+          databaseId: vehicle.databaseId,
+          sellerEmail: currentUser.email,
+        });
         syncVehicleFromServer(updated);
-        addToast('Vehicle marked as sold.', 'success');
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Failed to mark vehicle as sold.', 'error');
       }
     },
-    [findSellerVehicle, vehicles, syncVehicleFromServer, addToast],
+    [findSellerVehicle, sellerVehiclesFiltered, syncVehicleFromServer, addToast, currentUser.email],
   );
 
   const onMarkAsUnsold = useCallback(
@@ -149,7 +168,10 @@ export function useSellerDashboardHandlers({ app, currentUser, locals }: UseSell
       try {
         const { markVehicleAsUnsold } = await import('../services/vehicleService');
         // Sold vehicles live in seller inventory, not the public catalog — use seller list for identity lookup.
-        const updated = await markVehicleAsUnsold(vehicleId, sellerVehiclesFiltered);
+        const updated = await markVehicleAsUnsold(vehicleId, sellerVehiclesFiltered, {
+          databaseId: vehicle.databaseId,
+          sellerEmail: currentUser.email,
+        });
         syncVehicleFromServer(updated);
         addToast('Listing is active again.', 'success');
       } catch (err) {
@@ -207,11 +229,52 @@ export function useSellerDashboardHandlers({ app, currentUser, locals }: UseSell
     [currentUser, addToast, setVehicles, setSellerInventory, sellerVehiclesFiltered],
   );
 
+  const onBoostListing = useCallback(
+    async (vehicleId: number, packageId: string) => {
+      try {
+        const { executeSellerBoostListing } = await import('../utils/sellerBoostListing.js');
+        const updated = await executeSellerBoostListing({
+          vehicleId,
+          packageId,
+          seller: currentUser,
+          sellerVehicles: sellerVehiclesFiltered || [],
+        });
+        await updateVehicle(vehicleId, updated, { skipToast: true });
+        addToast('Your listing has been boosted! It will get more visibility.', 'success');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to boost listing.';
+        addToast(message, 'error');
+        throw err;
+      }
+    },
+    [currentUser, sellerVehiclesFiltered, updateVehicle, addToast],
+  );
+
   const onUpdateVehicle = useCallback(
     async (vehicleData: Vehicle) => {
-      await updateVehicle(vehicleData.id, vehicleData);
+      const existing = findSellerVehicle(vehicleData.id, vehicleData.databaseId);
+      if (vehicleData.status === 'published' && existing?.status !== 'published') {
+        const canPublish = await assertSellerCanPublishListing({
+          currentUser,
+          vehicle: existing || vehicleData,
+          sellerVehicles: sellerVehiclesFiltered || [],
+          addToast,
+        });
+        if (!canPublish) {
+          throw new Error('Cannot publish this listing.');
+        }
+      }
+
+      const payload = prepareSellerVehiclePublishUpdate(vehicleData, existing, currentUser);
+      await updateVehicle(payload.id, payload, { databaseId: payload.databaseId });
     },
-    [updateVehicle],
+    [
+      findSellerVehicle,
+      currentUser,
+      sellerVehiclesFiltered,
+      addToast,
+      updateVehicle,
+    ],
   );
 
   const onFeatureListing = useCallback(
@@ -375,8 +438,8 @@ export function useSellerDashboardHandlers({ app, currentUser, locals }: UseSell
           updateUser(seller.email, { usedCertifications: updatedUsedCertifications }, { skipToast: true }),
         );
 
-        if (typeof result.remainingCertifications === 'number') {
-          addToast(`Certification requests remaining this month: ${result.remainingCertifications}`, 'info');
+        if (typeof result.remainingCertifications === 'number' && process.env.NODE_ENV === 'development') {
+          logInfo(`Certification requests remaining: ${result.remainingCertifications}`);
         }
       } catch (error) {
         logError('Failed to certify vehicle:', error);
@@ -422,6 +485,7 @@ export function useSellerDashboardHandlers({ app, currentUser, locals }: UseSell
     onAddMultipleVehicles,
     onAddVehicle,
     onUpdateVehicle,
+    onBoostListing,
     onFeatureListing,
     onRequestCertification,
     onUpdateSellerProfile,

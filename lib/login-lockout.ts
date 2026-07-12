@@ -4,7 +4,8 @@
  */
 
 import { getSecurityConfig } from '../utils/security-config.js';
-import { checkUpstashRateLimit } from './rate-limit-upstash.js';
+import { getRateLimitTierConfig } from './rate-limit-policy.js';
+import { resolveRateLimit } from './rate-limit-resolver.js';
 
 type LockEntry = { attempts: number; lockedUntil: number };
 
@@ -22,8 +23,9 @@ export async function checkLoginAllowed(email: string): Promise<{ allowed: boole
   const key = email.toLowerCase().trim();
   if (!key) return { allowed: true };
 
+  const sensitive = getRateLimitTierConfig('auth-sensitive');
   const upstash = await Promise.race([
-    checkUpstashRateLimit(`login:${key}`),
+    resolveRateLimit('login-attempt', `login:${key}`, sensitive),
     new Promise<{ allowed: boolean; remaining: number; configured: boolean }>((resolve) => {
       setTimeout(
         () => resolve({ allowed: true, remaining: -1, configured: false }),
@@ -59,7 +61,8 @@ export async function recordFailedLogin(email: string): Promise<void> {
   }
   memoryLocks.set(key, entry);
 
-  await checkUpstashRateLimit(`login-fail:${key}`);
+  const sensitive = getRateLimitTierConfig('auth-sensitive');
+  await resolveRateLimit('login-fail', `login-fail:${key}`, sensitive);
 }
 
 export function clearLoginLockout(email: string): void {

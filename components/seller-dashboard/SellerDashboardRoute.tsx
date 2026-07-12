@@ -11,7 +11,6 @@ import {
   getSellerDashboardAccessState,
   type SellerDashboardLocals,
 } from '../../hooks/useSellerDashboardHandlers';
-import { logInfo } from '../../utils/logger';
 import { AccessDenied } from '../primitives/AccessDenied';
 import { View as ViewEnum } from '../../types';
 
@@ -47,16 +46,21 @@ const SellerDashboardContent: React.FC<SellerDashboardContentProps> = ({
             reportedVehicles={handlers.sellerReportedVehicles}
             conversations={handlers.sellerConversations}
             onNavigate={handlers.navigate}
-            onEditVehicle={(vehicle) => {
-              logInfo('Edit vehicle:', vehicle);
-            }}
             onDeleteVehicle={handlers.onDeleteVehicle}
             onMarkAsSold={handlers.onMarkAsSold}
             onMarkAsUnsold={handlers.onMarkAsUnsold}
             onAddMultipleVehicles={handlers.onAddMultipleVehicles}
             onRequestCertification={handlers.onRequestCertification}
             onFeatureListing={handlers.onFeatureListing}
+            onBoostListing={handlers.onBoostListing}
             onSendMessage={handlers.sendMessage}
+            onSellerSendMessage={(conversationId, messageText, type, payload) => {
+              if (type || payload) {
+                handlers.sendMessageWithType(conversationId, messageText, type, payload);
+              } else {
+                handlers.sendMessage(conversationId, messageText);
+              }
+            }}
             onMarkConversationAsRead={handlers.markAsRead}
             onOfferResponse={(conversationId, messageId, response, counterPrice) => {
               handlers.onOfferResponse(
@@ -69,6 +73,9 @@ const SellerDashboardContent: React.FC<SellerDashboardContentProps> = ({
             typingStatus={handlers.typingStatus}
             onUserTyping={(conversationId) => {
               handlers.toggleTyping(conversationId, true);
+            }}
+            onUserStoppedTyping={(conversationId) => {
+              handlers.toggleTyping(conversationId, false);
             }}
             onMarkMessagesAsRead={(conversationId, _readerRole) => {
               handlers.markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
@@ -89,6 +96,7 @@ const SellerDashboardContent: React.FC<SellerDashboardContentProps> = ({
               handlers.setConversationReadState(conversationId, 'seller', isRead)
             }
             onMarkAllAsReadBySeller={() => void handlers.markAllVisibleAsRead('seller')}
+            chatPeerOnlineByConversationId={handlers.chatPeerOnlineByConversationId}
             onSellerOpenChat={handlers.handleSellerOpenChatFromDashboard}
           />
         </Suspense>
@@ -147,6 +155,9 @@ const SellerDashboardContent: React.FC<SellerDashboardContentProps> = ({
           onSellerOpenChat={handlers.handleSellerOpenChatFromDashboard}
           chatPeerOnlineByConversationId={handlers.chatPeerOnlineByConversationId}
           onNotify={(message, type = 'info') => handlers.addToast(message, type)}
+          notifications={handlers.sellerNotifications}
+          onNotificationClick={handlers.handleNotificationClick}
+          onMarkNotificationsAsRead={handlers.handleMarkNotificationsAsRead}
         />
       </Suspense>
     </DashboardErrorBoundary>

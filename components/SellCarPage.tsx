@@ -4,6 +4,7 @@ import { View as ViewEnum } from '../types';
 import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianStates, getDistrictsByState, getCarYears, getOwnershipOptions, ScrapedCarData, CarMake } from '../utils/rerideScraper';
 import { sellCarAPI } from '../services/sellCarService';
 import { fetchVehicleSpecs } from '../services/vehicleSpecsService';
+import { WebsitePageGutters } from './WebsitePageShell';
 import AutoT from './AutoT';
 import { useAutoT } from '../hooks/useAutoT';
 import { useApp } from './AppProvider';
@@ -1364,7 +1365,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
       <div className="pointer-events-none absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-orange-300/20 blur-3xl"></div>
 
       {/* Header */}
-      <div className="relative px-4 pt-2 md:pt-4 pb-5 max-w-6xl mx-auto">
+      <WebsitePageGutters className="relative pt-2 md:pt-4 pb-5">
         <div className="flex justify-center items-center gap-2 mb-3">
           <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center shadow-md">
             <span className="text-white font-bold text-lg">S</span>
@@ -1423,10 +1424,10 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
             </div>
           </div>
         )}
-      </div>
+      </WebsitePageGutters>
 
       {/* Step card */}
-      <div className="relative px-4">
+      <WebsitePageGutters className="relative">
         <div className={`bg-white rounded-3xl shadow-2xl p-5 md:p-8 mx-auto ${cardWidthClass} transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
           {renderCurrentStep()}
         </div>
@@ -1442,7 +1443,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
             ))}
           </div>
         )}
-      </div>
+      </WebsitePageGutters>
 
       {/* Benefits strip */}
       {currentStep >= 1 && (

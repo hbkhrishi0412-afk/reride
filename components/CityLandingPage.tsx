@@ -6,6 +6,7 @@ import VehicleCard from './VehicleCard';
 import MobileVehicleCard from './MobileVehicleCard';
 import { useApp } from './AppProvider';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
+import WebsitePageShell from './WebsitePageShell';
 
 interface CityLandingPageProps {
   city: string;
@@ -48,10 +49,12 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
       );
     }
     return (
-      <div className="container mx-auto py-16 text-center">
-        <h2 className="text-2xl font-bold text-gray-600">No vehicles found in {city}</h2>
-        <p className="text-gray-500 mt-4">Check back later for listings in this area.</p>
-      </div>
+      <WebsitePageShell>
+        <div className="py-16 text-center">
+          <h2 className="text-2xl font-bold text-gray-600">No vehicles found in {city}</h2>
+          <p className="text-gray-500 mt-4">Check back later for listings in this area.</p>
+        </div>
+      </WebsitePageShell>
     );
   }
 
@@ -113,7 +116,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 sm:py-8 pb-24 lg:pb-8">
+    <WebsitePageShell className="pb-24 lg:pb-8">
       <div className="bg-gradient-to-r from-reride-orange to-orange-600 text-white rounded-2xl p-4 sm:p-8 mb-6 sm:mb-8 animate-fade-in">
         <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4 break-words">Used Cars in {city}</h1>
         <p className="text-base sm:text-xl mb-4 sm:mb-6">
@@ -190,7 +193,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
           <li>Inspect in person and verify documents before payment</li>
         </ul>
       </div>
-    </div>
+    </WebsitePageShell>
   );
 };
 

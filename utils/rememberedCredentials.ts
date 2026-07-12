@@ -6,10 +6,11 @@
  * survive WebView localStorage clears on iOS/Android.
  */
 import { isCapacitorNative } from './apiConfig.js';
+import { mirrorSessionKeyToNative, mirrorSessionKeyToNativeSync } from './nativeSessionMirror.js';
 import { nativeKvGet, nativeKvRemove, nativeKvSet } from './nativeKeyValueStorage.js';
 
 const PWD_PREFIX = 'v1:';
-const LAST_ROLE_KEY = 'reride_last_login_role';
+export const LAST_ROLE_KEY = 'reride_last_login_role';
 
 export interface RememberedCredentials {
   email: string;
@@ -53,6 +54,18 @@ function decodePassword(encoded: string | null): string {
   }
 }
 
+function writeLastLoginRole(role: string | null): void {
+  const ls = getLocal();
+  if (!ls) return;
+  if (role) {
+    ls.setItem(LAST_ROLE_KEY, role);
+    mirrorSessionKeyToNativeSync('reride_last_login_role', role);
+  } else {
+    ls.removeItem(LAST_ROLE_KEY);
+    mirrorSessionKeyToNativeSync('reride_last_login_role', null);
+  }
+}
+
 function getLocal(): Storage | null {
   try {
     return typeof localStorage !== 'undefined' ? localStorage : null;
@@ -78,13 +91,13 @@ function writeLocalCredentials(
     } else {
       ls.removeItem(pk);
     }
-    ls.setItem(LAST_ROLE_KEY, role);
+    writeLastLoginRole(role);
   } else {
     ls.removeItem(ek);
     ls.removeItem(pk);
     const last = ls.getItem(LAST_ROLE_KEY);
     if (last === role) {
-      ls.removeItem(LAST_ROLE_KEY);
+      writeLastLoginRole(null);
     }
   }
 }
@@ -117,6 +130,25 @@ export function loadLastRememberedLoginRole(): string | null {
   }
 }
 
+/** On Capacitor, hydrate last login role from native when localStorage is empty. */
+export async function resolveLastRememberedLoginRole(): Promise<string | null> {
+  const fromLocal = loadLastRememberedLoginRole();
+  if (fromLocal || !isCapacitorNative()) {
+    return fromLocal;
+  }
+  try {
+    const role = await nativeKvGet('reride_ls_mirror:reride_last_login_role');
+    if (role && role.trim()) {
+      const ls = getLocal();
+      ls?.setItem(LAST_ROLE_KEY, role.trim());
+      return role.trim();
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 /** On Capacitor, hydrate from native KV when localStorage is empty or stale. */
 export async function hydrateRememberedCredentialsFromNative(
   role: string,
@@ -139,7 +171,7 @@ export async function hydrateRememberedCredentialsFromNative(
       } else {
         ls.removeItem(rememberedPasswordKey(role));
       }
-      ls.setItem(LAST_ROLE_KEY, role);
+      writeLastLoginRole(role);
     }
     return { email, password };
   } catch {
@@ -162,9 +194,14 @@ async function persistRememberedCredentialsNative(
     } else {
       await nativeKvRemove(npk);
     }
+    await mirrorSessionKeyToNative('reride_last_login_role', role);
   } else {
     await nativeKvRemove(nek);
     await nativeKvRemove(npk);
+    const ls = getLocal();
+    if (!ls?.getItem(LAST_ROLE_KEY)) {
+      await mirrorSessionKeyToNative('reride_last_login_role', null);
+    }
   }
 }
 

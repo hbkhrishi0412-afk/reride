@@ -1,7 +1,6 @@
 import { logInfo } from '../utils/logger.js';
 import React, { useState, useRef } from 'react';
-import type { User, View } from '../types';
-import { View as ViewEnum } from '../types';
+import type { User } from '../types';
 import PasswordInput from './PasswordInput';
 import { isTokenLikelyValid, refreshAuthToken } from '../utils/authenticatedFetch.js';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
@@ -24,7 +23,6 @@ interface MobileProfileProps {
   onBack?: () => void;
   onLogout?: () => void;
   addToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
-  onNavigate?: (view: View) => void;
 }
 
 interface FormErrors {
@@ -49,7 +47,6 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   onBack,
   onLogout,
   addToast,
-  onNavigate,
 }) => {
   const { runIfConfirmed } = useApp();
   const needsPasswordSetup = userNeedsPasswordSetup(currentUser);
@@ -629,16 +626,9 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-900 mb-1">Data &amp; privacy</h3>
           <p className="text-xs text-gray-500 mb-3">
-            Download a copy of your profile, read our privacy policy, or permanently delete your account.
+            Download a copy of your profile or permanently delete your account.
           </p>
           <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              onClick={() => onNavigate?.(ViewEnum.PRIVACY_POLICY)}
-              className="w-full py-2.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-800 border border-gray-200"
-            >
-              Privacy policy
-            </button>
             <button
               type="button"
               onClick={() => {

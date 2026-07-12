@@ -1,9 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { resolveRateLimit } from '../../lib/rate-limit-resolver.js';
+import {
+  rateLimitRetryAfterSeconds,
+  resolveGatewayRateLimit,
+} from '../../lib/rate-limit-policy.js';
 import {
   attachApiCors,
   authenticateRequestDual,
-  checkRateLimit,
-  checkUpstashRateLimit,
   errorToPublicMessage,
   firstQueryParam,
   generateCsrfToken,
@@ -15,7 +18,6 @@ import {
   logWarn,
   mergeQueryStringFromRequestUrl,
   resolveEffectiveApiPathname,
-  securityConfig,
   shouldSkipCsrfForCapacitorNative,
   validateCsrfToken,
   type HandlerOptions,
@@ -120,31 +122,46 @@ async function runApiCore(
       });
     }
 
-    let rateLimitIdentifier = getClientIP(req);
+    let userEmail: string | null = null;
     try {
       const auth = await authenticateRequestDual(req);
       if (auth.isValid && auth.user?.email) {
-        rateLimitIdentifier = `user:${auth.user.email.toLowerCase().trim()}`;
+        userEmail = auth.user.email.toLowerCase().trim();
       }
     } catch {
       /* unauthenticated */
     }
+
+    const rateDecision = resolveGatewayRateLimit({
+      pathname,
+      method: req.method || 'GET',
+      clientIp: getClientIP(req),
+      userEmail,
+    });
+
     let rateLimitResult: { allowed: boolean; remaining: number };
     try {
-      const upstashResult = await checkUpstashRateLimit(rateLimitIdentifier);
-      rateLimitResult = upstashResult.configured ? upstashResult : await checkRateLimit(rateLimitIdentifier);
+      const resolved = await resolveRateLimit(rateDecision.bucket, rateDecision.identifier, {
+        maxRequests: rateDecision.maxRequests,
+        windowMs: rateDecision.windowMs,
+      });
+      rateLimitResult = { allowed: resolved.allowed, remaining: resolved.remaining };
     } catch {
-      rateLimitResult = await checkRateLimit(rateLimitIdentifier);
+      rateLimitResult = { allowed: true, remaining: rateDecision.maxRequests };
     }
     if (!rateLimitResult.allowed) {
+      const retryAfter = rateLimitRetryAfterSeconds(rateDecision.windowMs);
+      res.setHeader('Retry-After', String(retryAfter));
       return res.status(429).json({
         success: false,
         reason: 'Too many requests. Please try again later.',
-        retryAfter: Math.ceil(securityConfig.RATE_LIMIT.WINDOW_MS / 1000),
+        retryAfter,
+        tier: rateDecision.tier,
       });
     }
     res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
-    res.setHeader('X-RateLimit-Limit', securityConfig.RATE_LIMIT.MAX_REQUESTS.toString());
+    res.setHeader('X-RateLimit-Limit', rateDecision.maxRequests.toString());
+    res.setHeader('X-RateLimit-Tier', rateDecision.tier);
   }
 
   const isStateChanging =

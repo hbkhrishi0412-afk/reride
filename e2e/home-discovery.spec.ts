@@ -27,11 +27,10 @@ test.describe('Home discovery — geo & city chips', () => {
     await expect(page.locator('[data-testid="vehicle-card"]').first()).toBeVisible({ timeout: 60_000 });
   });
 
-  test('shows location banner on desktop home', async ({ page }) => {
-    const banner = page.getByTestId('home-location-banner');
-    await expect(banner).toBeVisible({ timeout: 30_000 });
-    await expect(banner.getByRole('button', { name: /Use my location/i })).toBeVisible();
-    await expect(banner.getByRole('button', { name: /Browse all India/i })).toBeVisible();
+  test('shows location picker beside logo on desktop home', async ({ page }) => {
+    const picker = page.getByTestId('header-location-picker');
+    await expect(picker).toBeVisible({ timeout: 30_000 });
+    await expect(picker).toContainText(/All of India|Select location/i);
   });
 
   test('selecting a popular city chip filters the used cars list', async ({ page }) => {

@@ -1,7 +1,7 @@
 import React, { useState, memo, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { logInfo } from '../utils/logger.js';
-import type { User, Vehicle, Conversation, Notification } from '../types';
+import type { User, Vehicle, Conversation, Notification, ChatMessage } from '../types';
 import { View as ViewEnum, VehicleCategory } from '../types';
 import BulkUploadModal from './BulkUploadModal';
 import PricingGuidance from './PricingGuidance';
@@ -39,6 +39,7 @@ import { verifyVahanRegistration, applyVahanVerifyToVehicleFields } from '../ser
 import MarkSoldDealModal from './MarkSoldDealModal';
 import { isListingLimitReached } from '../utils/listingPlanRules';
 import { useSellerDashboardController } from '../hooks/useSellerDashboardController';
+import InlineChat from './InlineChat';
 
 // ---------- Premium inline SVG icon set (kept local to avoid new deps) ----------
 type IconProps = { className?: string; size?: number; stroke?: number };
@@ -88,6 +89,95 @@ const IconDollar = (p: IconProps) => (<Icon {...p}><line x1="12" y1="1" x2="12" 
 const IconTrendUp = (p: IconProps) => (<Icon {...p}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></Icon>);
 const IconFlame = (p: IconProps) => (<Icon {...p}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" /></Icon>);
 
+type SellerProfileFormData = {
+  name: string;
+  email: string;
+  mobile: string;
+  dealershipName: string;
+  bio: string;
+  location: string;
+  address: string;
+  pincode: string;
+};
+
+type ProfileEditFieldProps = {
+  label: string;
+  name: keyof SellerProfileFormData;
+  value: string;
+  error?: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  type?: string;
+  placeholder?: string;
+  required?: boolean;
+  multiline?: boolean;
+  rows?: number;
+  maxLength?: number;
+  inputMode?: 'text' | 'numeric' | 'tel' | 'email';
+  hint?: string;
+};
+
+/** Stable field row — must not be declared inside renderProfile or inputs lose focus on mobile. */
+const ProfileEditField = React.memo(function ProfileEditField({
+  label,
+  name,
+  value,
+  error,
+  onChange,
+  type = 'text',
+  placeholder,
+  required = false,
+  multiline = false,
+  rows = 3,
+  maxLength,
+  inputMode,
+  hint,
+}: ProfileEditFieldProps) {
+  const baseInput: React.CSSProperties = {
+    width: '100%',
+    padding: '12px 14px',
+    background: '#FFFFFF',
+    border: `1px solid ${error ? 'rgba(220,38,38,0.45)' : 'rgba(15,23,42,0.10)'}`,
+    borderRadius: 12,
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: 500,
+    outline: 'none',
+  };
+
+  return (
+    <label className="block">
+      <span className="block text-[11.5px] font-semibold text-slate-700 mb-1.5 tracking-tight">
+        {label} {required && <span className="text-rose-500">*</span>}
+      </span>
+      {multiline ? (
+        <textarea
+          name={name}
+          value={value}
+          onChange={onChange}
+          rows={rows}
+          placeholder={placeholder}
+          maxLength={maxLength}
+          style={{ ...baseInput, resize: 'none' }}
+        />
+      ) : (
+        <input
+          type={type}
+          name={name}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          maxLength={maxLength}
+          style={baseInput}
+          required={required}
+        />
+      )}
+      {hint && !error && <p className="text-[10.5px] text-slate-400 mt-1 font-medium">{hint}</p>}
+      {error && <p className="text-[11px] text-rose-600 mt-1 font-semibold">{error}</p>}
+    </label>
+  );
+});
+
 interface MobileDashboardProps {
   currentUser: User;
   userVehicles: Vehicle[];
@@ -95,18 +185,26 @@ interface MobileDashboardProps {
   allVehicles?: Vehicle[]; // For pricing guidance and analytics
   reportedVehicles?: Vehicle[]; // For reports view
   onNavigate: (view: ViewEnum) => void;
-  onEditVehicle: (vehicle: Vehicle) => void;
+  onEditVehicle?: (vehicle: Vehicle) => void;
   onDeleteVehicle: (vehicleId: number) => void;
   onMarkAsSold: (vehicleId: number) => void;
   onMarkAsUnsold?: (vehicleId: number) => void;
   onFeatureListing: (vehicleId: number) => void;
   onSendMessage: (conversationId: string, message: string) => void;
+  onSellerSendMessage?: (
+    conversationId: string,
+    messageText: string,
+    type?: ChatMessage['type'],
+    payload?: unknown,
+  ) => void;
   onMarkConversationAsRead: (conversationId: string) => void;
   onOfferResponse: (conversationId: string, messageId: string, response: string, counterPrice?: number) => void;
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
+  onUserStoppedTyping?: (conversationId: string) => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onFlagContent: (type: 'vehicle' | 'conversation', id: string, reason: string) => void;
+  chatPeerOnlineByConversationId?: Record<string, boolean>;
   onLogout?: () => void;
   // Add vehicle form handlers
   onAddVehicle?: (
@@ -357,13 +455,16 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   onMarkAsSold: _onMarkAsSold,
   onMarkAsUnsold,
   onFeatureListing: _onFeatureListing,
-  onSendMessage: _onSendMessage,
-  onMarkConversationAsRead: _onMarkConversationAsRead,
-  onOfferResponse: _onOfferResponse,
-  typingStatus: _typingStatus,
-  onUserTyping: _onUserTyping,
-  onMarkMessagesAsRead: _onMarkMessagesAsRead,
-  onFlagContent: _onFlagContent,
+  onSendMessage,
+  onSellerSendMessage,
+  onMarkConversationAsRead,
+  onOfferResponse,
+  typingStatus,
+  onUserTyping,
+  onUserStoppedTyping,
+  onMarkMessagesAsRead,
+  onFlagContent,
+  chatPeerOnlineByConversationId,
   onLogout,
   onAddVehicle,
   onAddMultipleVehicles,
@@ -410,6 +511,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     refreshDealCommandStats,
   } = useSellerDashboardController(currentUser);
   const [messagesHubFilter, setMessagesHubFilter] = useState<'all' | 'unread' | 'read'>('all');
+  const [hubSelectedConversation, setHubSelectedConversation] = useState<Conversation | null>(null);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editFormData, setEditFormData] = useState<Vehicle | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -489,8 +591,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     setEditErrors({});
   }, [editingVehicle]);
   
-  // Update profile form data when currentUser changes
+  // Sync profile form from server user — skip while the seller is actively editing.
   React.useEffect(() => {
+    if (isEditingProfile) return;
     setProfileFormData({
       name: currentUser.name,
       email: currentUser.email,
@@ -501,7 +604,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       address: currentUser?.address || '',
       pincode: currentUser?.pincode || '',
     });
-  }, [currentUser]);
+  }, [currentUser, isEditingProfile]);
   
   // Reset add form when switching away from addVehicle tab
   React.useEffect(() => {
@@ -1340,6 +1443,55 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   );
 
   const renderMessagesHub = () => {
+    if (hubSelectedConversation) {
+      return (
+        <div className="space-y-3 pb-4">
+          <button
+            type="button"
+            onClick={() => setHubSelectedConversation(null)}
+            className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[12.5px] font-semibold active:scale-95 transition-transform"
+            style={{ background: 'rgba(15,23,42,0.05)', color: '#334155' }}
+          >
+            <IconChevronRight size={14} stroke={2.2} className="rotate-180" />
+            Back to inbox
+          </button>
+          <div
+            className="rounded-3xl overflow-hidden"
+            style={{
+              background: '#FFFFFF',
+              border: '1px solid rgba(15,23,42,0.06)',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.20)',
+            }}
+          >
+            <InlineChat
+              conversation={hubSelectedConversation}
+              currentUserRole="seller"
+              currentUserEmail={currentUser.email}
+              otherUserName={hubSelectedConversation.customerName}
+              otherUserOnline={chatPeerOnlineByConversationId?.[String(hubSelectedConversation.id)]}
+              onSendMessage={(messageText, type, payload) => {
+                if (onSellerSendMessage) {
+                  onSellerSendMessage(hubSelectedConversation.id, messageText, type, payload);
+                  return;
+                }
+                onSendMessage(hubSelectedConversation.id, messageText);
+              }}
+              typingStatus={typingStatus}
+              onUserTyping={onUserTyping}
+              onUserStoppedTyping={onUserStoppedTyping}
+              uploaderEmail={currentUser.email}
+              onMarkMessagesAsRead={onMarkMessagesAsRead}
+              onFlagContent={onFlagContent}
+              onOfferResponse={(conversationId, messageId, response, counterPrice) =>
+                onOfferResponse(conversationId, String(messageId), response, counterPrice)
+              }
+              height="min-h-[58vh]"
+            />
+          </div>
+        </div>
+      );
+    }
+
     const filters: { key: 'all' | 'unread' | 'read'; label: string; count?: number }[] = [
       { key: 'all', label: 'All', count: safeConversations.length },
       { key: 'unread', label: 'Unread', count: unreadSellerThreads },
@@ -1442,7 +1594,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   <li key={conv.id} className="relative">
                     <button
                       type="button"
-                      onClick={() => onSellerOpenChat?.(conv)}
+                      onClick={() => {
+                        setHubSelectedConversation(conv);
+                        onMarkMessagesAsRead(conv.id, 'seller');
+                      }}
                       className="w-full text-left relative px-4 py-3.5 active:bg-slate-50 transition-colors cursor-pointer"
                     >
                     {isUnread && (
@@ -1897,17 +2052,16 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     );
   };
 
-  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleProfileChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setProfileFormData(prev => ({ ...prev, [name]: value }));
-    if (profileErrors[name]) {
-      setProfileErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
-      });
-    }
-  };
+    setProfileErrors(prev => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  }, []);
 
   const validateProfileForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -2004,65 +2158,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           pincode: currentUser?.pincode || '',
         });
       };
-      const Field = ({ label, name, type = 'text', placeholder, required = false, multiline = false, rows = 3, maxLength, inputMode, hint }: {
-        label: string;
-        name: keyof typeof profileFormData;
-        type?: string;
-        placeholder?: string;
-        required?: boolean;
-        multiline?: boolean;
-        rows?: number;
-        maxLength?: number;
-        inputMode?: 'text' | 'numeric' | 'tel' | 'email';
-        hint?: string;
-      }) => {
-        const err = profileErrors[name as string];
-        const value = profileFormData[name] as string;
-        const baseInput: React.CSSProperties = {
-          width: '100%',
-          padding: '12px 14px',
-          background: '#FFFFFF',
-          border: `1px solid ${err ? 'rgba(220,38,38,0.45)' : 'rgba(15,23,42,0.10)'}`,
-          borderRadius: 12,
-          fontSize: 14,
-          color: '#0F172A',
-          fontWeight: 500,
-          outline: 'none',
-          transition: 'all 0.18s ease'
-        };
-        return (
-          <label className="block">
-            <span className="block text-[11.5px] font-semibold text-slate-700 mb-1.5 tracking-tight">
-              {label} {required && <span className="text-rose-500">*</span>}
-            </span>
-            {multiline ? (
-              <textarea
-                name={name as string}
-                value={value}
-                onChange={handleProfileChange}
-                rows={rows}
-                placeholder={placeholder}
-                maxLength={maxLength}
-                style={{ ...baseInput, resize: 'none' }}
-              />
-            ) : (
-              <input
-                type={type}
-                name={name as string}
-                value={value}
-                onChange={handleProfileChange}
-                placeholder={placeholder}
-                inputMode={inputMode}
-                maxLength={maxLength}
-                style={baseInput}
-                required={required}
-              />
-            )}
-            {hint && !err && <p className="text-[10.5px] text-slate-400 mt-1 font-medium">{hint}</p>}
-            {err && <p className="text-[11px] text-rose-600 mt-1 font-semibold">{err}</p>}
-          </label>
-        );
-      };
 
       return (
         <div className="space-y-4 pb-4">
@@ -2085,13 +2180,13 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           </div>
 
           <form onSubmit={handleProfileSave} className="rounded-3xl p-5 space-y-4" style={cardStyle}>
-            <Field label="Name" name="name" required />
-            <Field label="Email" name="email" type="email" required />
-            <Field label="Mobile number" name="mobile" type="tel" inputMode="tel" placeholder="+91 98765 43210" required />
+            <ProfileEditField label="Name" name="name" value={profileFormData.name} error={profileErrors.name} onChange={handleProfileChange} required />
+            <ProfileEditField label="Email" name="email" type="email" value={profileFormData.email} error={profileErrors.email} onChange={handleProfileChange} required />
+            <ProfileEditField label="Mobile number" name="mobile" type="tel" inputMode="tel" placeholder="+91 98765 43210" value={profileFormData.mobile} error={profileErrors.mobile} onChange={handleProfileChange} required />
             {isSeller && (
               <>
-                <Field label="Dealership name" name="dealershipName" required />
-                <Field
+                <ProfileEditField label="Dealership name" name="dealershipName" value={profileFormData.dealershipName} error={profileErrors.dealershipName} onChange={handleProfileChange} required />
+                <ProfileEditField
                   label="Bio"
                   name="bio"
                   multiline
@@ -2099,10 +2194,13 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   placeholder="Tell buyers about your dealership..."
                   maxLength={500}
                   hint={`${profileFormData.bio.length}/500`}
+                  value={profileFormData.bio}
+                  error={profileErrors.bio}
+                  onChange={handleProfileChange}
                 />
-                <Field label="City or region" name="location" placeholder="e.g. Bengaluru, Karnataka" />
-                <Field label="Street address" name="address" multiline rows={2} placeholder="Building, street, locality" />
-                <Field label="PIN code" name="pincode" inputMode="numeric" maxLength={6} placeholder="6-digit PIN" />
+                <ProfileEditField label="City or region" name="location" placeholder="e.g. Bengaluru, Karnataka" value={profileFormData.location} error={profileErrors.location} onChange={handleProfileChange} />
+                <ProfileEditField label="Street address" name="address" multiline rows={2} placeholder="Building, street, locality" value={profileFormData.address} error={profileErrors.address} onChange={handleProfileChange} />
+                <ProfileEditField label="PIN code" name="pincode" inputMode="numeric" maxLength={6} placeholder="6-digit PIN" value={profileFormData.pincode} error={profileErrors.pincode} onChange={handleProfileChange} />
               </>
             )}
 
@@ -2305,8 +2403,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             {[
               { key: 'edit', label: 'Edit profile', sub: 'Personal & dealership info', icon: <IconEdit size={16} stroke={2} />, tint: 'rgba(37,99,235,0.10)', color: '#2563EB', onClick: () => setIsEditingProfile(true), badge: undefined as undefined | number },
               { key: 'notifs', label: 'Notifications', sub: 'Activity & alerts', icon: <IconBell size={16} stroke={2} />, tint: 'rgba(255,107,53,0.10)', color: '#EA580C', onClick: () => setActiveTab('notifications'), badge: unreadNotifications.length },
-              { key: 'privacy', label: 'Privacy', sub: 'Privacy policy', icon: <IconShield size={16} stroke={2} />, tint: 'rgba(71,85,105,0.10)', color: '#475569', onClick: () => onNavigate(ViewEnum.PRIVACY_POLICY) },
-              { key: 'help', label: 'Help & support', sub: 'FAQ, contact us', icon: <IconChat size={16} stroke={2} />, tint: 'rgba(16,185,129,0.10)', color: '#047857', onClick: () => onNavigate(ViewEnum.SUPPORT) },
+              { key: 'help', label: 'Help center', sub: 'FAQs & contact support', icon: <IconChat size={16} stroke={2} />, tint: 'rgba(16,185,129,0.10)', color: '#047857', onClick: () => onNavigate(ViewEnum.HELP_CENTER) },
               ...(onLogout ? [{ key: 'logout', label: 'Log out', sub: 'End this session', icon: <IconArrowUpRight size={16} stroke={2} />, tint: 'rgba(220,38,38,0.10)', color: '#DC2626', onClick: () => { void Promise.resolve(onLogout()); } }] : [])
             ].map((row) => (
               <li key={row.key}>
@@ -2886,7 +2983,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       }
     } catch (error) {
       console.error('Failed to update vehicle:', error);
-      notify('Failed to update listing. Please check your connection and try again.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -3953,7 +4049,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         {/* Section header */}
         <div>
           <p className="text-[10.5px] uppercase tracking-[0.18em] font-semibold text-slate-400">Revenue</p>
-          <h3 className="text-[19px] font-semibold text-slate-900 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Sales history</h3>
+          <h3
+            className="text-[19px] font-semibold text-slate-900 dark:text-slate-900 tracking-tight"
+            style={{ letterSpacing: '-0.02em', color: '#0f172a' }}
+          >
+            {t('sellerDashboard.nav.salesHistory')}
+          </h3>
           <p className="text-[11.5px] text-slate-500 mt-0.5 font-medium">{soldVehicles.length} vehicles sold to date</p>
         </div>
 
@@ -4166,6 +4267,29 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                       Flagged on {new Date(vehicle.flaggedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </p>
                   )}
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingVehicle(vehicle);
+                        setActiveTab('editVehicle');
+                      }}
+                      className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold active:scale-95 transition-transform"
+                      style={{ background: 'rgba(37,99,235,0.08)', color: '#1D4ED8' }}
+                    >
+                      Edit
+                    </button>
+                    {onDeleteVehicle && (
+                      <button
+                        type="button"
+                        onClick={() => void onDeleteVehicle(vehicle.id)}
+                        className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold active:scale-95 transition-transform"
+                        style={{ background: 'rgba(220,38,38,0.08)', color: '#B91C1C' }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -4237,22 +4361,13 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         onClick: () => setActiveTab('profile')
       },
       {
-        key: 'privacy',
-        label: 'Privacy & security',
-        sub: 'Manage account safety',
-        icon: <IconShield size={16} stroke={2} />,
-        tint: 'rgba(71,85,105,0.10)',
-        color: '#475569',
-        onClick: () => onNavigate(ViewEnum.PRIVACY_POLICY)
-      },
-      {
         key: 'help',
-        label: 'Help & support',
-        sub: 'FAQ, contact us',
+        label: 'Help center',
+        sub: 'FAQs & contact support',
         icon: <IconChat size={16} stroke={2} />,
         tint: 'rgba(16,185,129,0.10)',
         color: '#047857',
-        onClick: () => onNavigate(ViewEnum.SUPPORT)
+        onClick: () => onNavigate(ViewEnum.HELP_CENTER)
       },
       ...(onLogout ? [{
         key: 'logout',
@@ -4675,15 +4790,27 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           conversations={safeConversations}
           sellerEmail={currentUser.email}
           onClose={() => setMarkSoldVehicle(null)}
-          onSuccess={() => {
+          onSuccess={async () => {
             notify('Sale recorded — buyer will confirm to unlock ratings', 'success');
-            onUpdateVehicle?.({
-              ...markSoldVehicle,
-              status: 'sold',
-              soldAt: new Date().toISOString(),
-              listingStatus: 'sold',
-            });
-            setMarkSoldVehicle(null);
+            try {
+              if (_onMarkAsSold) {
+                await _onMarkAsSold(markSoldVehicle.id);
+              } else if (onUpdateVehicle) {
+                await onUpdateVehicle({
+                  ...markSoldVehicle,
+                  status: 'sold',
+                  soldAt: new Date().toISOString(),
+                  listingStatus: 'sold',
+                });
+              }
+            } catch (err) {
+              notify(
+                err instanceof Error ? err.message : 'Failed to update listing status.',
+                'error',
+              );
+            } finally {
+              setMarkSoldVehicle(null);
+            }
           }}
         />
       )}

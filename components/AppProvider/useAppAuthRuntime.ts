@@ -14,6 +14,7 @@ import { logDebug, logError, logInfo, logWarn } from '../../utils/logger';
 import { clearUserContext, setUserContext } from '../../utils/monitoring';
 import { persistReRideNotifications } from '../../utils/notificationLocalStorage';
 import { clearRememberMeState } from '../../utils/rememberMe';
+import { persistCurrentUserMirrorSync } from '../../utils/nativeSessionMirror';
 import { currentUserForLocalSessionJson } from '../../utils/userLocalStorageSnapshot';
 import {
   clearPersistedUserSession,
@@ -361,8 +362,10 @@ export function useAppAuthRuntime({
       // Set user first (this is critical - navigate checks currentUser)
       setCurrentUser(userForSession);
       setUserContext({ id: userForSession.id || userForSession.email, email: userForSession.email });
-      sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(userForSession));
-      localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(userForSession));
+      const userJson = currentUserForLocalSessionJson(userForSession);
+      sessionStorage.setItem('currentUser', userJson);
+      localStorage.setItem('reRideCurrentUser', userJson);
+      persistCurrentUserMirrorSync(userJson);
       try {
         if (
           userForSession.role === 'customer' ||
@@ -790,8 +793,10 @@ export function useAppAuthRuntime({
 
       // Set user first (this is critical - navigate checks currentUser)
       setCurrentUser(user);
-      sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(user));
-      localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(user));
+      const userJson = currentUserForLocalSessionJson(user);
+      sessionStorage.setItem('currentUser', userJson);
+      localStorage.setItem('reRideCurrentUser', userJson);
+      persistCurrentUserMirrorSync(userJson);
 
       // Verify user storage (for debugging production issues)
       const storedInSession = sessionStorage.getItem('currentUser');

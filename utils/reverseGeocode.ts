@@ -82,15 +82,30 @@ async function fetchNominatimDirect(lat: number, lon: number): Promise<Record<st
   }
 }
 
+const REVERSE_GEO_API_TIMEOUT_MS = 7000;
+
 /** Server proxy first (reliable in Capacitor), then direct Nominatim as fallback. */
 export async function fetchReverseGeocodeAddress(
   lat: number,
   lon: number,
+  externalSignal?: AbortSignal,
 ): Promise<Record<string, string>> {
+  const ac = new AbortController();
+  const onExternalAbort = () => ac.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) ac.abort();
+    else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+  }
+
+  const tid =
+    typeof window !== 'undefined'
+      ? window.setTimeout(() => ac.abort(), REVERSE_GEO_API_TIMEOUT_MS)
+      : undefined;
+
   try {
     const response = await publicApiFetch(
       `/api/geocode/reverse?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`,
-      { method: 'GET' },
+      { method: 'GET', signal: ac.signal },
     );
     if (response.ok) {
       const data = (await response.json()) as { success?: boolean; address?: Record<string, string> };
@@ -98,6 +113,9 @@ export async function fetchReverseGeocodeAddress(
     }
   } catch {
     // fall through to direct Nominatim
+  } finally {
+    if (tid !== undefined) window.clearTimeout(tid);
+    if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
   }
 
   if (typeof window !== 'undefined') {

@@ -1,6 +1,15 @@
 // Security Configuration
 // This file centralizes all security-related configuration
 
+function envInt(name: string, productionDefault: number, developmentDefault: number): number {
+  const raw = process.env[name]?.trim();
+  if (raw) {
+    const parsed = parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return process.env.NODE_ENV === 'production' ? productionDefault : developmentDefault;
+}
+
 export const SECURITY_CONFIG = {
   // Password requirements
   PASSWORD: {
@@ -36,14 +45,48 @@ export const SECURITY_CONFIG = {
     AUDIENCE: 'reride-users'
   },
 
-  // Rate Limiting
+  // Rate Limiting — per-user / per-IP buckets (NOT platform-wide). Vehicle count on the
+  // marketplace does not consume these quotas; only concurrent users and their request
+  // patterns do. Tune via RATE_LIMIT_* env vars as traffic grows.
   RATE_LIMIT: {
     WINDOW_MS: 15 * 60 * 1000, // 15 minutes
-    // Safer rate limits - configurable via environment variables
-    // Each authenticated user gets their own rate limit bucket, so this is per-user
-    MAX_REQUESTS: process.env.RATE_LIMIT_MAX_REQUESTS 
-      ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10)
-      : process.env.NODE_ENV === 'production' ? 300 : 100,
+    TIERS: {
+      /** Anonymous GET: browse catalog, plans, FAQs — high ceiling per IP. */
+      PUBLIC_READ: {
+        MAX_REQUESTS: envInt('RATE_LIMIT_PUBLIC_READ_MAX', 4000, 2000),
+        WINDOW_MS: 15 * 60 * 1000,
+      },
+      /** Signed-in GET: messages, notifications, deals, seller inventory reads. */
+      AUTH_READ: {
+        MAX_REQUESTS: envInt('RATE_LIMIT_AUTH_READ_MAX', 2500, 1200),
+        WINDOW_MS: 15 * 60 * 1000,
+      },
+      /** Signed-in POST/PUT/PATCH/DELETE: create listing, profile, deal actions. */
+      AUTH_WRITE: {
+        MAX_REQUESTS: envInt('RATE_LIMIT_AUTH_WRITE_MAX', 600, 400),
+        WINDOW_MS: 15 * 60 * 1000,
+      },
+      /** Listing photo uploads — separate bucket so 10+ photos never block saves. */
+      UPLOAD: {
+        MAX_REQUESTS: envInt('RATE_LIMIT_UPLOAD_MAX', 400, 250),
+        WINDOW_MS: 15 * 60 * 1000,
+      },
+      /** Login / register / OTP — strict per IP. */
+      AUTH_SENSITIVE: {
+        MAX_REQUESTS: envInt('RATE_LIMIT_AUTH_SENSITIVE_MAX', 40, 30),
+        WINDOW_MS: 15 * 60 * 1000,
+      },
+      /** Unauthenticated writes (rare) — strict per IP. */
+      ANONYMOUS_WRITE: {
+        MAX_REQUESTS: envInt('RATE_LIMIT_ANONYMOUS_WRITE_MAX', 120, 80),
+        WINDOW_MS: 15 * 60 * 1000,
+      },
+    },
+    // Legacy keys — kept for older env configs and in-memory fallback helpers.
+    MAX_REQUESTS: envInt('RATE_LIMIT_MAX_REQUESTS', 300, 250),
+    AUTHENTICATED_MAX_REQUESTS: envInt('RATE_LIMIT_AUTHENTICATED_MAX', 800, 500),
+    AUTHENTICATED_READ_MAX_REQUESTS: envInt('RATE_LIMIT_AUTHENTICATED_READ_MAX', 2500, 1200),
+    UPLOAD_MAX_REQUESTS: envInt('RATE_LIMIT_UPLOAD_MAX', 400, 250),
     LOGIN_MAX_ATTEMPTS: 5,
     LOGIN_LOCKOUT_TIME: 30 * 60 * 1000 // 30 minutes
   },

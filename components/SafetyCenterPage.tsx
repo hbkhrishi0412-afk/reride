@@ -2,6 +2,7 @@ import React from 'react';
 import { View } from '../types.js';
 import AutoT from './AutoT';
 import { useAutoT } from '../hooks/useAutoT';
+import WebsitePageShell from './WebsitePageShell';
 
 interface SafetyCenterPageProps {
   onNavigate?: (view: View) => void;
@@ -119,7 +120,7 @@ function SafetySection({ titleKey, accent, tipKeys, icon }: typeof SECTIONS[numb
 
 const SafetyCenterPage: React.FC<SafetyCenterPageProps> = ({ onNavigate }) => {
   return (
-    <div className="animate-fade-in container mx-auto py-6 sm:py-8 max-w-5xl px-4 pb-24 lg:pb-12">
+    <WebsitePageShell narrow="5xl">
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950 p-4 sm:p-8 md:p-12 shadow-reride-lg">
         <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-blue-500/10" />
         <div className="absolute -right-4 top-20 w-32 h-32 rounded-full bg-blue-400/10" />
@@ -177,7 +178,7 @@ const SafetyCenterPage: React.FC<SafetyCenterPageProps> = ({ onNavigate }) => {
           </button>
         )}
       </div>
-    </div>
+    </WebsitePageShell>
   );
 };
 

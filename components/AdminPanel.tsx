@@ -461,8 +461,8 @@ const CertificationRequestsView: React.FC<{
                     {!sellerInfo.hasFreeCredits && <div className="text-xs text-reride-text-dark">No free credits left</div>}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                    <button onClick={() => onCertificationApproval(vehicle.id, 'approved')} className="text-reride-orange hover:text-reride-orange">Approve</button>
-                    <button onClick={() => onCertificationApproval(vehicle.id, 'rejected')} className="text-reride-orange hover:text-reride-orange">Reject</button>
+                    <button onClick={() => onCertificationApproval(vehicle.id, 'approved')} className="text-emerald-600 hover:text-emerald-700 font-semibold">Approve</button>
+                    <button onClick={() => onCertificationApproval(vehicle.id, 'rejected')} className="text-red-600 hover:text-red-700 font-semibold">Reject</button>
                 </td>
             </tr>
         );
@@ -867,8 +867,8 @@ const PlanEditModal: React.FC<{
             newErrors.price = 'Price cannot be negative';
         }
         
-        if (formData.listingLimit !== 'unlimited' && formData.listingLimit < 0) {
-            newErrors.listingLimit = 'Listing limit cannot be negative';
+        if (formData.listingLimit !== 'unlimited' && formData.listingLimit < 1) {
+            newErrors.listingLimit = 'Listing limit must be at least 1';
         }
         
         if (formData.featuredCredits < 0) {
@@ -3239,7 +3239,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
                                                     const newStatus = nextQuickStatus(ticket);
-                                                    void Promise.resolve(onUpdateSupportTicket({ ...ticket, status: newStatus })).catch(() => {});
+                                                    void (async () => {
+                                                      try {
+                                                        await onUpdateSupportTicket({ ...ticket, status: newStatus });
+                                                      } catch (err) {
+                                                        console.error('Failed to update support ticket:', err);
+                                                        notify('Failed to update ticket status. Please try again.', 'error');
+                                                      }
+                                                    })();
                                                 }}
                                                 className="text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
                                             >
@@ -4211,21 +4218,17 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         }}
                         onAssign={async (activatedDate: string, expiryDate: string | null) => {
                             try {
-                                // Single API call that sets plan + dates + cascades to vehicle expiry
-                                const { updateUser } = await import('../services/userService');
-                                await updateUser({
-                                    email: assigningUser.email,
+                                await onAdminUpdateUser(assigningUser.email, {
                                     subscriptionPlan: assigningPlan,
                                     planActivatedDate: activatedDate,
                                     planExpiryDate: expiryDate || undefined,
                                 });
-                                
+
                                 setShowPlanAssignmentModal(false);
                                 setAssigningUser(null);
                                 setAssigningPlan(null);
-                                
+
                                 notify(`Plan "${assigningPlan}" assigned successfully. Vehicle listing expiry dates have been updated.`, 'success');
-                                window.location.reload();
                             } catch (error) {
                                 console.error('Failed to assign plan with dates:', error);
                                 notify('Failed to save plan dates. Please try again.', 'error');

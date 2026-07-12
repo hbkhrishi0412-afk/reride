@@ -881,7 +881,6 @@ switch (currentView) {
           onBack={() => goBack(ViewEnum.HOME)}
           onLogout={handleLogoutAll}
           addToast={addToast}
-          onNavigate={navigate}
         />
       );
     }
@@ -1118,9 +1117,18 @@ switch (currentView) {
     if (!serviceProvider) {
       return (
         <div className="min-h-[calc(100vh-140px)] flex items-center justify-center px-4">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-reride-orange mx-auto mb-3" />
-            <p className="text-gray-600 text-sm">Loading provider dashboardâ€¦</p>
+          <div className="text-center max-w-sm">
+            <h2 className="text-lg font-bold text-gray-900 mb-2">Service provider sign-in required</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Sign in with your workshop account to manage bookings and service requests.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate(ViewEnum.CAR_SERVICE_LOGIN)}
+              className="inline-flex items-center justify-center rounded-lg bg-reride-orange px-5 py-2.5 text-sm font-semibold text-white"
+            >
+              Sign in as provider
+            </button>
           </div>
         </div>
       );
@@ -1284,15 +1292,10 @@ switch (currentView) {
     );
 
   case ViewEnum.FAQ:
-    if (isMobileApp) {
-      return (
-        <MobileFAQPage faqItems={faqItems} />
-      );
-    }
     return (
-      <FAQPage 
-        faqItems={faqItems}
-      />
+      <React.Suspense fallback={<LoadingSpinner />}>
+        <HelpCenterPage faqItems={faqItems} onNavigate={navigate} />
+      </React.Suspense>
     );
 
   case ViewEnum.HELP_CENTER:

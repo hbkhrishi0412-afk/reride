@@ -96,15 +96,22 @@ type VehicleMutationResolve =
   | { ok: false; status: number; reason: string };
 
 /** Resolve listing for seller mutations — prefers `databaseId`, then numeric `id`. */
-async function resolveVehicleForMutation(body: Record<string, unknown>): Promise<VehicleMutationResolve> {
+async function resolveVehicleForMutation(
+  body: Record<string, unknown>,
+  options?: { sellerEmailHint?: string },
+): Promise<VehicleMutationResolve> {
   const parsed = parseVehicleIdentityFromBody(body);
   if (!hasResolvableVehicleIdentity(parsed)) {
     return { ok: false, status: 400, reason: 'Vehicle ID is required.' };
   }
+  const sellerEmailHint =
+    options?.sellerEmailHint ||
+    (typeof body.sellerEmail === 'string' ? body.sellerEmail.trim().toLowerCase() : undefined);
   try {
     const resolved = await vehicleService.resolveVehicleIdentity({
       id: parsed.numericId,
       databaseId: parsed.databaseId,
+      sellerEmail: sellerEmailHint,
     });
     if (
       !parsed.databaseId &&

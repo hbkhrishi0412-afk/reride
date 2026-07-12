@@ -1,4 +1,5 @@
 import { randomAlphanumeric } from './secureRandom.js';
+import { retryDelayMs } from './rateLimitClient.js';
 
 /**
  * Request Queue Utility
@@ -84,7 +85,7 @@ class RequestQueue {
         if (error.status === 429 || error.code === 429 || (error.response && error.response.status === 429)) {
           if (queuedRequest.retries < queuedRequest.maxRetries) {
             queuedRequest.retries++;
-            const backoffDelay = this.baseBackoffDelay * Math.pow(2, queuedRequest.retries - 1);
+            const backoffDelay = retryDelayMs(error.retryAfter, queuedRequest.retries - 1);
             
             console.warn(`⚠️ Rate limited (429). Retrying request ${queuedRequest.id} after ${backoffDelay}ms (attempt ${queuedRequest.retries}/${queuedRequest.maxRetries})`);
             

@@ -423,6 +423,7 @@ const en = {
   'footer.securePayments': 'Deal tracking',
   'footer.dealTracking': 'Deal tracking',
   'footer.trustLegal': 'Trust & legal',
+  'footer.helpAndLegal': 'Help & legal',
   'footer.platform': 'Platform',
   'footer.refund': 'Refund Policy',
   'footer.complaint': 'Complaint Resolution',
@@ -689,6 +690,10 @@ const en = {
   'auth.privacyPolicy': 'Privacy Policy',
   'auth.termsAnd': 'and',
   'auth.termsOfService': 'Terms of Service',
+  'legalConsent.title': 'Welcome to ReRide',
+  'legalConsent.body':
+    'By continuing, you agree to our Privacy Policy and Terms of Service. Please review them before using the app.',
+  'legalConsent.accept': 'Accept & Continue',
   'auth.error.unknown': 'An unknown error occurred.',
   'auth.error.serviceProviderLogin':
     'Service providers must login through the Service Provider login page.',

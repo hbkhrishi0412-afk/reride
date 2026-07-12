@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { FAQItem } from '../types';
+import WebsitePageShell from './WebsitePageShell';
 
 interface FAQPageProps {
   faqItems: FAQItem[];
@@ -35,7 +36,7 @@ const FAQPage: React.FC<FAQPageProps> = ({ faqItems }) => {
   };
 
   return (
-    <div className="animate-fade-in container mx-auto py-8 max-w-4xl">
+    <WebsitePageShell narrow="4xl">
       <div className="text-center mb-12">
         <h1 className="text-4xl md:text-5xl font-extrabold text-reride-text-dark dark:text-reride-text-dark">
           Frequently Asked Questions
@@ -109,7 +110,7 @@ const FAQPage: React.FC<FAQPageProps> = ({ faqItems }) => {
           </div>
         )}
       </div>
-    </div>
+    </WebsitePageShell>
   );
 };
 

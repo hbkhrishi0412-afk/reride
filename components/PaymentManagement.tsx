@@ -41,8 +41,12 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({ currentUser }) =>
 
   const handleApprove = async (paymentRequestId: string) => {
     try {
-      await approvePaymentRequest(paymentRequestId, currentUser.email);
-      addToast('Payment request approved', 'success');
+      const result = await approvePaymentRequest(paymentRequestId, currentUser.email);
+      if (!result.success) {
+        addToast(result.error || 'Failed to approve payment request', 'error');
+        return;
+      }
+      addToast('Payment request approved and seller plan activated', 'success');
       await loadPaymentRequests();
     } catch (error) {
       console.error('Error approving payment request:', error);
@@ -69,7 +73,11 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({ currentUser }) =>
     }
 
     try {
-      await rejectPaymentRequest(rejectingId, currentUser.email, reason);
+      const result = await rejectPaymentRequest(rejectingId, currentUser.email, reason);
+      if (!result.success) {
+        addToast(result.error || 'Failed to reject payment request', 'error');
+        return;
+      }
       addToast('Payment request rejected', 'success');
       cancelReject();
       await loadPaymentRequests();

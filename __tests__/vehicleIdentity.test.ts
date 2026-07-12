@@ -15,6 +15,8 @@ import {
   migrateVehicleListCache,
   VEHICLE_LIST_CACHE_VERSION_KEY,
   VEHICLE_LIST_CACHE_VERSION,
+  generateSafeVehicleNumericId,
+  isUnsafeVehicleNumericId,
 } from '../utils/vehicleIdentity';
 
 describe('vehicleIdentity', () => {
@@ -96,6 +98,14 @@ describe('vehicleIdentity', () => {
     });
   });
 
+  describe('getCanonicalPrimaryKey', () => {
+    it('infers decimal PK for unsafe integer ids missing databaseId', () => {
+      const unsafePk = '17772276006460884';
+      const corruptedId = Number(unsafePk);
+      expect(getCanonicalPrimaryKey({ id: corruptedId } as any)).toBe(unsafePk);
+    });
+  });
+
   describe('buildVehicleMutationBody', () => {
     it('includes databaseId when listing has one', () => {
       const body = buildVehicleMutationBody(99, [
@@ -110,6 +120,38 @@ describe('vehicleIdentity', () => {
       expect(() =>
         buildVehicleMutationBody(stringToNumericVehicleId(uuid), [{ id: stringToNumericVehicleId(uuid) }]),
       ).toThrow(VehicleMutationIdentityError);
+    });
+
+    it('includes inferred databaseId for unsafe numeric primary keys', () => {
+      const unsafePk = '17772276006460884';
+      const corruptedId = Number(unsafePk);
+      const body = buildVehicleMutationBody(corruptedId, [{ id: corruptedId, status: 'sold' } as any]);
+      expect(body).toEqual({ vehicleId: unsafePk, databaseId: unsafePk });
+    });
+  });
+
+  describe('generateSafeVehicleNumericId', () => {
+    it('returns a safe integer', () => {
+      const id = generateSafeVehicleNumericId();
+      expect(Number.isSafeInteger(id)).toBe(true);
+      expect(id).toBeGreaterThan(0);
+    });
+  });
+
+  describe('parseVehicleIdentityFromBody large ids', () => {
+    it('preserves digit-string primary keys', () => {
+      const parsed = parseVehicleIdentityFromBody({ vehicleId: '17772276006460884' });
+      expect(parsed.databaseId).toBe('17772276006460884');
+      expect(parsed.numericId).toBe(Number('17772276006460884'));
+    });
+  });
+
+  describe('normalizeVehicleIdentity unsafe ids', () => {
+    it('backfills databaseId for unsafe numeric ids', () => {
+      const unsafePk = '17772276006460884';
+      const v = normalizeVehicleIdentity({ id: Number(unsafePk) } as any);
+      expect(v.databaseId).toBe(unsafePk);
+      expect(isUnsafeVehicleNumericId(v.id)).toBe(true);
     });
   });
 

@@ -145,6 +145,16 @@ const MobileTermsOfServicePage: React.FC = () => {
               <p className="text-gray-700 text-sm"><strong>Address:</strong> ReRide, India</p>
             </div>
           </section>
+
+          <section className="border-t border-gray-200 pt-6 mt-2">
+            <h2 className="text-lg font-bold text-gray-900 mb-2">Related policies</h2>
+            <ul className="list-disc list-inside space-y-1 text-sm text-blue-600">
+              <li><a href="/privacy-policy" className="hover:underline">Privacy Policy</a></li>
+              <li><a href="/refund-policy" className="hover:underline">Refund Policy</a></li>
+              <li><a href="/complaint-resolution" className="hover:underline">Complaint Resolution</a></li>
+              <li><a href="/fraud-policy" className="hover:underline">Fraud Policy</a></li>
+            </ul>
+          </section>
         </div>
       </div>
     </div>

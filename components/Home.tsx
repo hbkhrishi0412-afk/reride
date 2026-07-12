@@ -530,7 +530,7 @@ const Home: React.FC<HomeProps> = ({
                 {/* Background Pattern + Glows + Cursor-follow Spotlight */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     <div
-                        className="absolute inset-0 opacity-[0.07]"
+                        className="home-hero-grid absolute inset-0 opacity-[0.07]"
                         style={{
                             backgroundImage:
                                 'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
@@ -539,6 +539,19 @@ const Home: React.FC<HomeProps> = ({
                             WebkitMaskImage: 'radial-gradient(ellipse at center, black 40%, transparent 75%)'
                         }}
                     ></div>
+                    {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                        <span
+                            key={i}
+                            aria-hidden="true"
+                            className="home-particle"
+                            style={{
+                                left: `${8 + i * 11}%`,
+                                top: `${12 + (i % 4) * 18}%`,
+                                ['--particle-dur' as string]: `${6 + (i % 3) * 1.5}s`,
+                                ['--particle-delay' as string]: `${i * 0.65}s`,
+                            }}
+                        />
+                    ))}
                     <div
                         className="absolute -top-32 -right-24 w-[30rem] h-[30rem] rounded-full blur-3xl opacity-40 animate-orb-a"
                         style={{ background: 'radial-gradient(circle, #FF6B35 0%, transparent 70%)' }}
@@ -564,7 +577,7 @@ const Home: React.FC<HomeProps> = ({
                 <div className="relative max-w-5xl mx-auto text-center">
                     {/* Trust Badge */}
                     <div 
-                        className="hero-rise hero-rise-1 inline-flex items-center gap-2 px-5 py-2 rounded-full mb-4 shadow-lg"
+                        className="home-trust-badge hero-rise hero-rise-1 inline-flex items-center gap-2 px-5 py-2 rounded-full mb-4 shadow-lg"
                         style={{
                             background: 'rgba(159, 122, 234, 0.3)',
                             backdropFilter: 'blur(10px)',
@@ -616,10 +629,9 @@ const Home: React.FC<HomeProps> = ({
 
                     {/* Search Bar */}
                     <div 
-                        className="hero-rise hero-rise-4 flex flex-col md:flex-row items-stretch md:items-center bg-white mb-6 max-w-3xl mx-auto overflow-hidden"
+                        className="home-search-glow hero-rise hero-rise-4 flex flex-col md:flex-row items-stretch md:items-center bg-white mb-6 max-w-3xl mx-auto overflow-hidden"
                         style={{
                             borderRadius: '20px',
-                            boxShadow: '0 12px 40px -8px rgba(0, 0, 0, 0.25)'
                         }}
                     >
                         <div className="flex-1 flex items-center gap-3 px-6 py-4 md:py-5">
@@ -744,15 +756,8 @@ const Home: React.FC<HomeProps> = ({
                         <button
                             type="button"
                             onClick={() => onNavigate(ViewEnum.SAFETY_CENTER)}
-                            className="p-5 md:p-6 transition-all duration-300 hover:-translate-y-1 cursor-pointer text-left w-full"
+                            className="home-glass-card home-glass-card-1 p-5 md:p-6 cursor-pointer text-left w-full"
                             aria-label={`${t('home.card.qualityTitle')} - learn more`}
-                            style={{
-                                background: 'rgba(255, 255, 255, 0.08)',
-                                backdropFilter: 'blur(14px)',
-                                WebkitBackdropFilter: 'blur(14px)',
-                                borderRadius: '18px',
-                                border: '1px solid rgba(255, 255, 255, 0.16)'
-                            }}
                         >
                             <div 
                                 className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
@@ -796,15 +801,8 @@ const Home: React.FC<HomeProps> = ({
                         <button
                             type="button"
                             onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                            className="p-5 md:p-6 transition-all duration-300 hover:-translate-y-1 cursor-pointer text-left w-full"
+                            className="home-glass-card home-glass-card-2 p-5 md:p-6 cursor-pointer text-left w-full"
                             aria-label={`${t('home.card.fixedTitle')} - browse cars`}
-                            style={{
-                                background: 'rgba(255, 255, 255, 0.08)',
-                                backdropFilter: 'blur(14px)',
-                                WebkitBackdropFilter: 'blur(14px)',
-                                borderRadius: '18px',
-                                border: '1px solid rgba(255, 255, 255, 0.16)'
-                            }}
                         >
                             <div 
                                 className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
@@ -855,15 +853,8 @@ const Home: React.FC<HomeProps> = ({
                         <button
                             type="button"
                             onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                            className="p-5 md:p-6 transition-all duration-300 hover:-translate-y-1 cursor-pointer text-left w-full"
+                            className="home-glass-card home-glass-card-3 p-5 md:p-6 cursor-pointer text-left w-full"
                             aria-label={`${t('home.card.moneyTitle')} - browse listings`}
-                            style={{
-                                background: 'rgba(255, 255, 255, 0.08)',
-                                backdropFilter: 'blur(14px)',
-                                WebkitBackdropFilter: 'blur(14px)',
-                                borderRadius: '18px',
-                                border: '1px solid rgba(255, 255, 255, 0.16)'
-                            }}
                         >
                             <div 
                                 className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
@@ -907,15 +898,8 @@ const Home: React.FC<HomeProps> = ({
                         <button
                             type="button"
                             onClick={() => onNavigate(ViewEnum.SAFETY_CENTER)}
-                            className="p-5 md:p-6 transition-all duration-300 hover:-translate-y-1 cursor-pointer text-left w-full"
+                            className="home-glass-card home-glass-card-4 p-5 md:p-6 cursor-pointer text-left w-full"
                             aria-label={`${t('home.card.rcTitle')} - safety tips`}
-                            style={{
-                                background: 'rgba(255, 255, 255, 0.08)',
-                                backdropFilter: 'blur(14px)',
-                                WebkitBackdropFilter: 'blur(14px)',
-                                borderRadius: '18px',
-                                border: '1px solid rgba(255, 255, 255, 0.16)'
-                            }}
                         >
                             <div 
                                 className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
@@ -999,7 +983,7 @@ const Home: React.FC<HomeProps> = ({
                                     <button
                                         key={vehicle.id}
                                         onClick={() => onSelectVehicle(vehicle)}
-                                        className={`group flex-shrink-0 w-[220px] md:w-[240px] ${HOME_LISTING_CARD} rounded-2xl overflow-hidden text-left`}
+                                        className={`group flex-shrink-0 w-[220px] md:w-[240px] ${HOME_LISTING_CARD} shine-on-hover rounded-2xl overflow-hidden text-left`}
                                     >
                                         <div className="relative h-[130px] bg-gray-100">
                                             {optimized ? (
@@ -1044,7 +1028,7 @@ const Home: React.FC<HomeProps> = ({
                                     </svg>
                                     {t('home.featured.badge')}
                                 </span>
-                                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight">{t('home.featured.title')}</h2>
+                                <h2 className="home-section-heading text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight">{t('home.featured.title')}</h2>
                                 <p className="text-gray-600 text-base max-w-xl leading-relaxed">{t('home.featured.subtitle')}</p>
                             </div>
                             <button
@@ -1058,7 +1042,7 @@ const Home: React.FC<HomeProps> = ({
                             </button>
                         </div>
 
-                        <div ref={featuredGridRef} className="reveal-on-scroll relative">
+                        <div ref={featuredGridRef} className="reveal-on-scroll reveal-blur relative">
                             {featuredVehicles.length > 1 && (
                                 <>
                                     <button
@@ -1091,7 +1075,7 @@ const Home: React.FC<HomeProps> = ({
                                     <div
                                         key={vehicle.id}
                                         onClick={() => onSelectVehicle(vehicle)}
-                                        className={`${HOME_LISTING_CARD} rounded-2xl overflow-hidden cursor-pointer flex-shrink-0 snap-start min-w-[260px] md:min-w-[300px] lg:min-w-[320px]`}
+                                        className={`${HOME_LISTING_CARD} shine-on-hover rounded-2xl overflow-hidden cursor-pointer flex-shrink-0 snap-start min-w-[260px] md:min-w-[300px] lg:min-w-[320px]`}
                                     >
                                         <div className="relative h-56 overflow-hidden">
                                             <LazyImage
@@ -1215,7 +1199,7 @@ const Home: React.FC<HomeProps> = ({
                                     <span className="h-px w-6 bg-orange-300"></span>
                                     Just Listed
                                 </span>
-                                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight">{t('home.recent.title')}</h2>
+                                <h2 className="home-section-heading text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight">{t('home.recent.title')}</h2>
                                 <p className="text-gray-600 text-base max-w-xl leading-relaxed">{t('home.recent.subtitle')}</p>
                             </div>
                             <button 
@@ -1229,7 +1213,7 @@ const Home: React.FC<HomeProps> = ({
                             </button>
                         </div>
 
-                        <div ref={recentGridRef} className="reveal-on-scroll grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
+                        <div ref={recentGridRef} className="reveal-on-scroll reveal-blur home-stagger-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
                             {recentVehicles.map((vehicle, index) => {
                                 const listingTimestamp = Date.parse(vehicle.createdAt || vehicle.featuredAt || vehicle.updatedAt || '');
                                 const isNewlyListed =
@@ -1240,7 +1224,7 @@ const Home: React.FC<HomeProps> = ({
                                 <div
                                     key={vehicle.id}
                                     onClick={() => onSelectVehicle(vehicle)}
-                                    className={`${HOME_LISTING_CARD} rounded-2xl overflow-hidden cursor-pointer`}
+                                    className={`${HOME_LISTING_CARD} shine-on-hover rounded-2xl overflow-hidden cursor-pointer`}
                                 >
                                     <div className="relative h-48 overflow-hidden">
                                         <LazyImage
@@ -1328,7 +1312,7 @@ const Home: React.FC<HomeProps> = ({
                                 </span>
                                 <span className="mc-eyebrow-accent">{t('mobile.home.exploreLocation')}</span>
                             </div>
-                            <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">
+                            <h2 className="home-section-heading text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">
                               {t('home.popularCities.label', { defaultValue: 'Popular cities' })}
                             </h2>
                             <p className="text-gray-500 text-[15px] leading-snug">{t('home.cities.subtitle')}</p>
@@ -1345,7 +1329,7 @@ const Home: React.FC<HomeProps> = ({
                         </button>
                     </div>
 
-                    <div ref={citiesGridRef} className="reveal-on-scroll grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
+                    <div ref={citiesGridRef} className="reveal-on-scroll reveal-blur home-stagger-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
                         {topCities.map((city, index) => {
                             const accent = getHomeMobileCityAccent(city.name);
 
@@ -1496,7 +1480,7 @@ const Home: React.FC<HomeProps> = ({
                             {t('home.dealJourney.badge')}
                             <span className="h-px w-6 bg-blue-300" />
                         </span>
-                        <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight">{t('home.testimonials.title')}</h2>
+                        <h2 className="home-section-heading text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight">{t('home.testimonials.title')}</h2>
                         <p className="text-gray-600 text-base max-w-xl mx-auto leading-relaxed">{t('home.testimonials.subtitle')}</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
@@ -1527,7 +1511,7 @@ const Home: React.FC<HomeProps> = ({
                                 <span className="h-px w-5 bg-orange-300" />
                                 Browse
                             </div>
-                            <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">
+                            <h2 className="home-section-heading text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">
                                 {t('home.categories.title')}
                             </h2>
                             <p className="text-gray-500 text-[15px] leading-snug">{t('mobile.home.quickTaps')}</p>
@@ -1605,7 +1589,7 @@ const Home: React.FC<HomeProps> = ({
             {/* Sell Car Steps Section */}
             <div ref={sellRef} className={`reveal-on-scroll py-16 md:py-20 px-4 ${HOME_SECTION_BG.sell}`}>
                 <div className="max-w-6xl mx-auto text-center">
-                    <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-12 md:mb-16 tracking-tight leading-tight">{t('home.sell.title')}</h2>
+                    <h2 className="home-section-heading text-3xl md:text-4xl font-bold text-gray-900 mb-12 md:mb-16 tracking-tight leading-tight">{t('home.sell.title')}</h2>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-12 mb-12">
                         {sellSteps.map((item, idx) => (
@@ -1667,7 +1651,7 @@ const Home: React.FC<HomeProps> = ({
                                 </svg>
                                 {t('home.trending.badge')}
                             </span>
-                            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight">{t('home.trending.title')}</h2>
+                            <h2 className="home-section-heading text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight">{t('home.trending.title')}</h2>
                             <p className="text-gray-600 text-base max-w-xl mx-auto leading-relaxed">{t('home.trending.subtitle')}</p>
                             <div className="pt-3">
                                 <button 

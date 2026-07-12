@@ -5,6 +5,7 @@ import { currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapsho
 import { userRolesEqual } from '../utils/user-role.js';
 import { isDevelopmentEnvironment } from '../utils/environment.js';
 import { isCapacitorNative } from '../utils/apiConfig.js';
+import { persistCurrentUserMirrorAsync, persistCurrentUserMirrorSync } from '../utils/nativeSessionMirror.js';
 import { getCapacitorAuthFetchTimeoutMs } from '../utils/capacitorResilientFetch.js';
 import {
   authenticatedFetch,
@@ -819,10 +820,15 @@ async function applyLoginApiResult(
   }
 
   if (result.accessToken) {
-    localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(result.user));
+    const userJson = currentUserForLocalSessionJson(result.user);
+    localStorage.setItem('reRideCurrentUser', userJson);
+    persistCurrentUserMirrorSync(userJson);
     // Persist JWTs in the background — memory tokens are set synchronously in setNativeAccessToken
     // so navigation/API calls work immediately without waiting on Keychain/Preferences I/O.
     void storeTokens(result.accessToken, result.refreshToken);
+    if (isCapacitorNative()) {
+      void persistCurrentUserMirrorAsync(userJson);
+    }
     if (credentials.email && credentials.password) {
       void bridgeSupabasePasswordSession(String(credentials.email), String(credentials.password));
     }

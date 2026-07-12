@@ -5,12 +5,10 @@ import type { Vehicle } from '../types.js';
 import { VehicleCategory } from '../vehicle-category.js';
 import { CITY_MAPPING } from '../utils/cityMapping.js';
 import { HOME_DISCOVERY_CITY_ORDER } from '../constants/homeDiscovery.js';
-import { stringToNumericVehicleId } from '../utils/vehicleIdentity.js';
+import { stringToNumericVehicleId, vehicleIdsEqual, generateSafeVehicleNumericId } from '../utils/vehicleIdentity.js';
 
 // Detect if we're in a server context (serverless function)
 const isServerSide = typeof window === 'undefined';
-
-let vehicleNumericIdFallbackSeq = 0;
 
 // Helper to validate and convert category string to VehicleCategory enum
 function validateCategory(category: unknown): VehicleCategory {
@@ -237,9 +235,9 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, options?: { partial?: b
   };
 
   if (!partial) {
-    row.id = vehicle.id?.toString() || undefined;
+    row.id = vehicle.databaseId?.trim() || vehicle.id?.toString() || undefined;
   } else if (has('id') && vehicle.id != null) {
-    row.id = String(vehicle.id);
+    row.id = vehicle.databaseId?.trim() || String(vehicle.id);
   }
 
   setColumn('category', 'category', vehicle.category || null);
@@ -310,22 +308,7 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, options?: { partial?: b
 export const supabaseVehicleService = {
   // Create a new vehicle
   async create(vehicleData: Omit<Vehicle, 'id'>): Promise<Vehicle> {
-    // Collision-resistant numeric ID. Plain Date.now() collides under concurrent
-    // serverless invocations (two creates in the same millisecond produced the
-    // same ID and the second insert overwrote the first). Multiplying by 10000
-    // and adding a cryptographically-random suffix makes collisions ~1-in-10k
-    // per millisecond. Result stays in Number.MAX_SAFE_INTEGER range for the
-    // next ~28 years, and remains numeric for the TEXT column + Number(row.id)
-    // parsing used by the app.
-    let id: number;
-    try {
-      const buf = new Uint8Array(4);
-      globalThis.crypto.getRandomValues(buf);
-      const randomSuffix = ((buf[0] << 8) | buf[1]) % 10000;
-      id = Date.now() * 10000 + randomSuffix;
-    } catch {
-      id = Date.now() * 10000 + (vehicleNumericIdFallbackSeq++ % 10000);
-    }
+    const id = generateSafeVehicleNumericId();
 
     const supabase = await resolveSupabaseClient();
     const row = vehicleToSupabaseRow({ ...vehicleData, id });
@@ -370,6 +353,7 @@ export const supabaseVehicleService = {
   async resolveVehicleIdentity(params: {
     id?: number;
     databaseId?: string;
+    sellerEmail?: string;
   }): Promise<{ vehicle: Vehicle; primaryKey: string }> {
     const dbId = params.databaseId?.trim();
     if (dbId) {
@@ -383,6 +367,21 @@ export const supabaseVehicleService = {
       const vehicle = await this.findById(numId);
       if (vehicle) {
         return { vehicle, primaryKey: vehicle.databaseId || String(numId) };
+      }
+
+      const sellerEmail = params.sellerEmail?.trim().toLowerCase();
+      if (sellerEmail) {
+        const sellerVehicles = await this.findBySellerEmail(sellerEmail);
+        const idStr = dbId || String(numId);
+        const match = sellerVehicles.find((v) => {
+          if (vehicleIdsEqual(v.id, numId)) return true;
+          const pk = v.databaseId?.trim();
+          return Boolean(pk && pk === idStr);
+        });
+        if (match) {
+          const primaryKey = match.databaseId || String(match.id);
+          return { vehicle: match, primaryKey };
+        }
       }
     }
     throw new Error('Vehicle not found.');

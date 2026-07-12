@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DealLead, PlanDetails, SellerCommandCenter, SubscriptionPlan, User } from '../types';
 import { PLAN_DETAILS } from '../constants/plans';
+import { planDetailsForSeller } from '../utils/listingPlanRules.js';
 import { planService } from '../services/planService';
 import {
   fetchSellerCommandCenter,
@@ -37,7 +38,6 @@ export function useSellerPlanDetails(subscriptionPlan: SubscriptionPlan | undefi
     }
 
     let active = true;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
 
     const loadPlan = async (silent = false) => {
       if (!silent) setPlanLoading(true);
@@ -62,8 +62,8 @@ export function useSellerPlanDetails(subscriptionPlan: SubscriptionPlan | undefi
       if (event.key === 'reRidePlanConfigUpdatedAt') void loadPlan(true);
     };
 
+    setPlan(planDetailsForSeller({ subscriptionPlan: subscriptionPlan ?? 'free' }));
     void loadPlan(false);
-    intervalId = setInterval(() => void loadPlan(true), 30000);
     window.addEventListener('focus', reloadOnVisibility);
     document.addEventListener('visibilitychange', reloadOnVisibility);
     window.addEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);
@@ -71,7 +71,6 @@ export function useSellerPlanDetails(subscriptionPlan: SubscriptionPlan | undefi
 
     return () => {
       active = false;
-      if (intervalId) clearInterval(intervalId);
       window.removeEventListener('focus', reloadOnVisibility);
       document.removeEventListener('visibilitychange', reloadOnVisibility);
       window.removeEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);

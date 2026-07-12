@@ -3199,14 +3199,16 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         if (!resolveAuth.isValid) {
           return res.status(401).json({ success: false, reason: resolveAuth.error || 'Unauthorized' });
         }
-        const mutation = await core.resolveVehicleForMutation(req.query as Record<string, unknown>);
+        const normalizedAuthEmail = core.normalizeAuthActorEmail(resolveAuth);
+        const mutation = await core.resolveVehicleForMutation(req.query as Record<string, unknown>, {
+          sellerEmailHint: normalizedAuthEmail || undefined,
+        });
         if (!mutation.ok) {
           return res.status(mutation.status).json({ success: false, reason: mutation.reason });
         }
         const normalizedVehicleSellerEmail = mutation.vehicle.sellerEmail
           ? mutation.vehicle.sellerEmail.toLowerCase().trim()
           : '';
-        const normalizedAuthEmail = core.normalizeAuthActorEmail(resolveAuth);
         if (
           resolveAuth.user?.role !== 'admin' &&
           normalizedVehicleSellerEmail &&
@@ -4161,7 +4163,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       if (action === 'sold') {
         try {
-          const mutation = await core.resolveVehicleForMutation((req.body || {}) as Record<string, unknown>);
+          const normalizedAuthEmail = core.normalizeAuthActorEmail(auth);
+          const mutation = await core.resolveVehicleForMutation((req.body || {}) as Record<string, unknown>, {
+            sellerEmailHint: normalizedAuthEmail || undefined,
+          });
           if (!mutation.ok) {
             return res.status(mutation.status).json({ success: false, reason: mutation.reason });
           }
@@ -4170,7 +4175,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
           // SECURITY FIX: Verify ownership (unless admin)
           const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
-          const normalizedAuthEmail = core.normalizeAuthActorEmail(auth);
           if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
             console.error('❌ Mark as sold failed: Ownership mismatch', { 
               vehicleSeller: normalizedVehicleSellerEmail, 
@@ -4203,7 +4207,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       if (action === 'unsold') {
         try {
-          const mutation = await core.resolveVehicleForMutation((req.body || {}) as Record<string, unknown>);
+          const normalizedAuthEmail = core.normalizeAuthActorEmail(auth);
+          const mutation = await core.resolveVehicleForMutation((req.body || {}) as Record<string, unknown>, {
+            sellerEmailHint: normalizedAuthEmail || undefined,
+          });
           if (!mutation.ok) {
             return res.status(mutation.status).json({ success: false, reason: mutation.reason });
           }
@@ -4211,7 +4218,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
           // SECURITY FIX: Verify ownership (unless admin)
           const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
-          const normalizedAuthEmail = core.normalizeAuthActorEmail(auth);
           if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
             console.error('❌ Mark as unsold failed: Ownership mismatch', { 
               vehicleSeller: normalizedVehicleSellerEmail, 
@@ -4465,8 +4471,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     try {
       const body = (req.body || {}) as Record<string, unknown>;
       const { id: _id, databaseId: _databaseId, ...updateData } = body;
+      const normalizedAuthEmail = core.normalizeAuthActorEmail(auth);
 
-      const mutation = await core.resolveVehicleForMutation(body);
+      const mutation = await core.resolveVehicleForMutation(body, {
+        sellerEmailHint: normalizedAuthEmail || undefined,
+      });
       if (!mutation.ok) {
         const reason =
           mutation.reason === 'Vehicle ID is required.'
@@ -4487,7 +4496,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       
       // Normalize emails for comparison (critical for production)
       const normalizedVehicleSellerEmail = existingVehicle.sellerEmail ? existingVehicle.sellerEmail.toLowerCase().trim() : '';
-      const normalizedAuthEmail = core.normalizeAuthActorEmail(auth);
       if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
@@ -4572,6 +4580,22 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         if (!publishValidation.allowed) {
           return res.status(403).json(core.listingLimitGuardResponse(publishValidation));
         }
+
+        sanitizedUpdate.listingStatus = 'active';
+        if (existingVehicle.status === 'sold') {
+          sanitizedUpdate.soldAt = null;
+        }
+
+        const listingExpired =
+          Boolean(existingVehicle.listingExpiresAt) &&
+          new Date(existingVehicle.listingExpiresAt as string) < new Date();
+        if (listingExpired) {
+          Object.assign(sanitizedUpdate, core.buildListingRenewalUpdates(seller, existingVehicle));
+        } else if (!existingVehicle.listingExpiresAt) {
+          sanitizedUpdate.listingExpiresAt = core.computeListingExpiresAtForSeller(seller);
+        }
+      } else if (nextStatus === 'unpublished' && existingVehicle.status === 'published') {
+        sanitizedUpdate.listingStatus = 'draft';
       }
 
       const updatedVehicle = await core.vehicleService.update(rowPk, sanitizedUpdate);

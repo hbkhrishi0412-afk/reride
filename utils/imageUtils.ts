@@ -425,6 +425,13 @@ function escapeSvgText(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 }
 
+/** First letters of the first two words, e.g. "Prestige Motors" → "PM". */
+export function sellerInitialsText(label: string): string {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return (parts[0]?.slice(0, 2) || '?').toUpperCase();
+}
+
 /** SVG data-URI avatar (no external fetch) — reliable when third-party avatars are blocked or logos 404. */
 export function sellerInitialsAvatarDataUri(seller: {
   dealershipName?: string;
@@ -432,8 +439,8 @@ export function sellerInitialsAvatarDataUri(seller: {
   email?: string;
 }): string {
   const label = (seller.dealershipName || seller.name || seller.email || 'D').trim();
-  const text = (label.slice(0, 2).toUpperCase() || '?');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect fill="#FF6B35" width="100%" height="100%"/><text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" fill="white" font-family="system-ui,sans-serif" font-size="40" font-weight="600">${escapeSvgText(text)}</text></svg>`;
+  const text = sellerInitialsText(label);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1F1F28"/><stop offset="100%" stop-color="#0E0E13"/></linearGradient></defs><rect fill="url(#g)" width="100%" height="100%"/><text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" fill="white" font-family="system-ui,sans-serif" font-size="40" font-weight="600">${escapeSvgText(text)}</text></svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 

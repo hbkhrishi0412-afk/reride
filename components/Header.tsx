@@ -10,8 +10,8 @@ import SellerDropdown from './SellerDropdown';
 import LanguageSwitcher from './LanguageSwitcher';
 import { supportTelHref } from '../utils/whatsappShare.js';
 import { useIsMdUp } from '../hooks/useIsMdUp';
-import { HomeLocationActionButtons } from './HomeLocationActionButtons';
 import { primaryLocationLabel } from '../utils/cityMapping';
+import { HELP_NAV_ITEMS } from '../constants/helpLegalNav.js';
 
 const LocationModal = lazy(() => import('./LocationModal'));
 
@@ -142,6 +142,35 @@ const Header: React.FC<HeaderProps> = memo(({
         setIsMobileMoreOpen(false);
     };
 
+    const openLocationPicker = () => {
+        setIsLocationModalOpen(true);
+        setIsMoreMenuOpen(false);
+        setIsMobileMoreOpen(false);
+        setIsMobileMenuOpen(false);
+    };
+
+    const renderHeaderLocationPicker = () => (
+        <button
+            type="button"
+            onClick={openLocationPicker}
+            data-testid="header-location-picker"
+            className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50/90 px-2 py-1 text-[11px] sm:text-xs lg:text-sm font-semibold text-blue-700 hover:bg-blue-100 active:scale-[0.98] transition-all min-w-0 max-w-[6.5rem] sm:max-w-[10rem] lg:max-w-[11rem] notranslate"
+            aria-label={t('a11y.chooseLocation')}
+            title={locationDisplay || t('header.selectLocation')}
+            data-no-translate
+            translate="no"
+        >
+            <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span className="truncate">{locationDisplay || t('header.selectLocation')}</span>
+            <svg className="h-3 w-3 shrink-0 opacity-70 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+        </button>
+    );
+
     const handleViewAllNotifications = () => {
         setIsNotificationsOpen(false);
         if (!currentUser) return;
@@ -167,74 +196,9 @@ const Header: React.FC<HeaderProps> = memo(({
     return (
         <>
             <header className="bg-white/80 backdrop-blur-xl border-b border-white/20 sticky top-0 z-[1200] shadow-lg">
-                {/* Premium Top Bar */}
-                {(showHomeLocationActions && isMdUp) || !isHomePage ? (
-                <div className="bg-gradient-to-r from-blue-50/50 to-purple-50/50 border-b border-gray-100/50">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-end items-center py-1.5">
-                        <div className="flex items-center gap-3">
-                            {showHomeLocationActions ? (
-                                <div className="hidden lg:flex items-center gap-2">
-                                    <HomeLocationActionButtons
-                                        testId="home-location-banner"
-                                        selectedCity={selectedCity}
-                                        onBrowseAllIndia={onBrowseAllIndia!}
-                                        onUseLocation={onUseMyLocation!}
-                                        addToast={addToast}
-                                    />
-                                </div>
-                            ) : null}
-                            {!isHomePage ? (
-                            <button 
-                                type="button"
-                                onClick={() => setIsLocationModalOpen(true)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                        e.preventDefault();
-                                        setIsLocationModalOpen(true);
-                                    }
-                                }}
-                                className="flex items-center gap-1.5 transition-colors font-medium text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 rounded-md px-2 py-1 hover:bg-white/60 notranslate" 
-                                style={{ color: '#1E88E5' }}
-                                aria-label={t('a11y.chooseLocation')}
-                                title={t('a11y.chooseLocation')}
-                                data-no-translate
-                                translate="no"
-                            >
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                                {userLocation || t('header.selectLocation')}
-                            </button>
-                            ) : null}
-                        </div>
-                    </div>
-                </div>
-                ) : null}
-
                 {showHomeLocationActions ? (
-                    <div className="lg:hidden border-b border-gray-100 bg-gray-50" data-testid="header-mobile-home-location">
-                        <div className="max-w-7xl mx-auto px-4 py-2 flex justify-end">
-                            <button
-                                type="button"
-                                onClick={() => setIsLocationModalOpen(true)}
-                                className="flex items-center gap-1 text-sm font-medium notranslate"
-                                style={{ color: '#1E88E5' }}
-                                aria-label={t('a11y.chooseLocation')}
-                                data-no-translate
-                                translate="no"
-                            >
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                                {locationDisplay || t('header.selectLocation')}
-                                <svg className="h-3 w-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-                        </div>
-                        <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-end gap-2 border-t border-gray-100 bg-white">
+                    <div className="lg:hidden border-b border-gray-100 bg-white" data-testid="header-mobile-home-location">
+                        <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-end gap-2">
                             <button onClick={onOpenCommandPalette} className="p-2 rounded-full" aria-label={t('common.search')}>
                                 <svg className="h-6 w-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -271,17 +235,20 @@ const Header: React.FC<HeaderProps> = memo(({
                 {/* Premium Main Navigation */}
                 <div className="bg-white/90 backdrop-blur-sm">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="flex justify-between items-center h-16">
-                            {/* Premium Logo */}
-                            <Logo 
-                                onClick={() => handleNavigate(ViewEnum.HOME)}
-                                className="cursor-pointer hover:scale-105 transition-transform duration-300"
-                                size="md"
-                                showText
-                            />
+                        <div className="flex items-center h-16 gap-2 lg:gap-3">
+                            {/* Logo + location */}
+                            <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
+                                <Logo 
+                                    onClick={() => handleNavigate(ViewEnum.HOME)}
+                                    className="cursor-pointer hover:scale-105 transition-transform duration-300 shrink-0"
+                                    size="md"
+                                    showText
+                                />
+                                {renderHeaderLocationPicker()}
+                            </div>
 
-                            {/* Premium Navigation */}
-                            <nav className="hidden lg:flex items-center gap-1">
+                            {/* Premium Navigation — flows after logo; right actions use ml-auto */}
+                            <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 shrink-0">
                                 <CityDropdown 
                                     allVehicles={allVehicles}
                                     onCitySelect={(city) => {
@@ -315,14 +282,16 @@ const Header: React.FC<HeaderProps> = memo(({
                                     }}
                                 />
                                 <button 
+                                    type="button"
                                     onClick={() => handleNavigate(ViewEnum.ABOUT_US)} 
-                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
+                                    className="inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-xl px-3 xl:px-4 font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange transition-all duration-300 hover:-translate-y-0.5 text-[14px] xl:text-[15px]"
                                 >
                                     {t('nav.howDealsWork')}
                                 </button>
                                 <button 
+                                    type="button"
                                     onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} 
-                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
+                                    className="inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-xl px-3 xl:px-4 font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange transition-all duration-300 hover:-translate-y-0.5 text-[14px] xl:text-[15px]"
                                 >
                                     {t('nav.dealers')}
                                 </button>
@@ -359,51 +328,22 @@ const Header: React.FC<HeaderProps> = memo(({
                                             <button
                                                 type="button"
                                                 role="menuitem"
-                                                onClick={() => handleNavigate(ViewEnum.HELP_CENTER)}
-                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
-                                            >
-                                                {t('footer.helpCenter', { defaultValue: 'Help center' })}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                onClick={() => handleNavigate(ViewEnum.FAQ)}
-                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
-                                            >
-                                                {t('footer.faq')}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                role="menuitem"
                                                 onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)}
                                                 className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
                                             >
                                                 {t('nav.carServices')}
                                             </button>
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                onClick={() => handleNavigate(ViewEnum.SUPPORT)}
-                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
-                                            >
-                                                {t('nav.support')}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                onClick={() => handleNavigate(ViewEnum.SAFETY_CENTER)}
-                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
-                                            >
-                                                {t('footer.safety')}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                onClick={() => handleNavigate(ViewEnum.ABOUT_US)}
-                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
-                                            >
-                                                {t('nav.aboutUs')}
-                                            </button>
+                                            {HELP_NAV_ITEMS.map((item) => (
+                                                <button
+                                                    key={item.view}
+                                                    type="button"
+                                                    role="menuitem"
+                                                    onClick={() => handleNavigate(item.view)}
+                                                    className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
+                                                >
+                                                    {t(item.labelKey, { defaultValue: item.defaultLabel })}
+                                                </button>
+                                            ))}
                                             </div>
                                         </div>
                                     )}
@@ -411,7 +351,7 @@ const Header: React.FC<HeaderProps> = memo(({
                             </nav>
 
                             {/* Right Side Actions */}
-                            <div className="hidden lg:flex items-center gap-3">
+                            <div className="hidden lg:flex items-center gap-2 xl:gap-3 shrink-0 ml-auto">
                                 <LanguageSwitcher />
                                 <button onClick={onOpenCommandPalette} className="p-2 hover:bg-white rounded-full transition-colors" aria-label={t('common.search')}>
                                     <svg className="h-6 w-6 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -586,7 +526,7 @@ const Header: React.FC<HeaderProps> = memo(({
                             </div>
 
                             {/* Mobile Menu Button */}
-                            <div className="lg:hidden">
+                            <div className="lg:hidden ml-auto shrink-0">
                                 <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-reride-text-dark" aria-label={t('nav.menu', { defaultValue: 'Menu' })} aria-expanded={isMobileMenuOpen}>
                                     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
@@ -605,6 +545,7 @@ const Header: React.FC<HeaderProps> = memo(({
                             <LanguageSwitcher variant="inline" onSelect={() => setIsMobileMenuOpen(false)} className="!px-0 !py-2 border-b border-gray-100 mb-2" />
                             <button onClick={() => handleNavigate(ViewEnum.USED_CARS)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.buyCar')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.SELLER_LOGIN)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.sellCar')}</button>
+                            <button onClick={() => handleNavigate(ViewEnum.ABOUT_US)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.howDealsWork')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.carServices')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.dealers')}</button>
                             <div className="rounded-lg border border-gray-100 overflow-hidden">
@@ -627,9 +568,15 @@ const Header: React.FC<HeaderProps> = memo(({
                                 </button>
                                 {isMobileMoreOpen && (
                                     <div className="border-t border-gray-100 bg-gray-50/80">
-                                        <button onClick={() => handleNavigate(ViewEnum.SUPPORT)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-3 px-6 min-h-[44px] hover:bg-white">{t('nav.support')}</button>
-                                        <button onClick={() => handleNavigate(ViewEnum.SAFETY_CENTER)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-3 px-6 min-h-[44px] hover:bg-white">{t('footer.safety')}</button>
-                                        <button onClick={() => handleNavigate(ViewEnum.ABOUT_US)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-3 px-6 min-h-[44px] hover:bg-white">{t('nav.aboutUs')}</button>
+                                        {HELP_NAV_ITEMS.map((item) => (
+                                            <button
+                                                key={item.view}
+                                                onClick={() => handleNavigate(item.view)}
+                                                className="block w-full text-left text-sm font-semibold text-reride-text-dark py-3 px-6 min-h-[44px] hover:bg-white"
+                                            >
+                                                {t(item.labelKey, { defaultValue: item.defaultLabel })}
+                                            </button>
+                                        ))}
                                     </div>
                                 )}
                             </div>

@@ -37,6 +37,7 @@ import {
   validateListingRenewal,
   validateNewListingCreation,
   isSellerPlanExpired,
+  computeListingExpiresAtForSeller,
 } from './utils/listingPlanRules.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -652,11 +653,17 @@ function computeStorefrontAggregatesFromVehicleList(list) {
   return { success: true, categories, cities };
 }
 
-// Fetch vehicles from Supabase when env is set (so local dev shows real images)
-async function fetchVehiclesFromSupabase() {
+function isSupabaseDevConfigured() {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !supabaseKey) return null;
+  return Boolean(supabaseUrl && supabaseKey);
+}
+
+// Fetch vehicles from Supabase when env is set (so local dev shows real images)
+async function fetchVehiclesFromSupabase() {
+  if (!isSupabaseDevConfigured()) return null;
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -666,7 +673,8 @@ async function fetchVehiclesFromSupabase() {
       .order('created_at', { ascending: false });
     if (error || !rows?.length) return null;
     const vehicles = rows.map((r) => {
-      const id = Number(r.id) || 0;
+      const rawId = r.id != null ? String(r.id).trim() : '';
+      const id = rawId && !Number.isNaN(Number(rawId)) ? Number(rawId) : 0;
       const images = Array.isArray(r.images) ? r.images : [];
       const imageUrls = images.map((img) => {
         if (typeof img !== 'string' || !img.trim()) return null;
@@ -676,6 +684,7 @@ async function fetchVehiclesFromSupabase() {
       }).filter(Boolean);
       return {
         id,
+        databaseId: rawId || undefined,
         make: r.make || '',
         model: r.model || '',
         variant: r.variant,
@@ -720,14 +729,14 @@ async function fetchVehiclesFromSupabase() {
 }
 
 /** Mark one catalog row sold (E2E + local QA). Returns mapped vehicle or null. */
-async function markVehicleSoldInSupabase(vehicleId) {
+async function markVehicleSoldInSupabase(vehicleId, databaseId) {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !supabaseKey || vehicleId == null) return null;
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const idStr = String(vehicleId);
+    const idStr = String(databaseId || vehicleId).trim();
     const { data: row, error } = await supabase
       .from('vehicles')
       .update({
@@ -738,7 +747,8 @@ async function markVehicleSoldInSupabase(vehicleId) {
       .select('*')
       .maybeSingle();
     if (error || !row) return null;
-    const id = Number(row.id) || 0;
+    const rawId = row.id != null ? String(row.id).trim() : '';
+    const id = rawId && !Number.isNaN(Number(rawId)) ? Number(rawId) : 0;
     const images = Array.isArray(row.images) ? row.images : [];
     const imageUrls = images.map((img) => {
       if (typeof img !== 'string' || !img.trim()) return null;
@@ -748,6 +758,7 @@ async function markVehicleSoldInSupabase(vehicleId) {
     }).filter(Boolean);
     return {
       id,
+      databaseId: rawId || undefined,
       make: row.make || '',
       model: row.model || '',
       variant: row.variant,
@@ -898,6 +909,13 @@ function resolveAuthRole(req) {
 // Vehicle Data API endpoints
 app.get('/api/vehicles', async (req, res) => {
   const { type, action } = req.query;
+
+  if (
+    isSupabaseDevConfigured() &&
+    (action === 'seller-mine' || action === 'resolve')
+  ) {
+    return delegateToMainHandler(req, res);
+  }
 
   if (action === 'track-view') {
     return res.json({ success: true });
@@ -1130,10 +1148,10 @@ app.post('/api/vehicles', async (req, res) => {
   }
 
   if (action === 'sold') {
-    const { vehicleId } = req.body;
+    const { vehicleId, databaseId } = req.body;
     const numericId = Number(vehicleId);
 
-    const supabaseVehicle = await markVehicleSoldInSupabase(vehicleId);
+    const supabaseVehicle = await markVehicleSoldInSupabase(vehicleId, databaseId);
     if (supabaseVehicle) {
       const mockIdx = mockVehicles.findIndex((v) => v.id === numericId);
       if (mockIdx !== -1) {
@@ -1163,6 +1181,10 @@ app.post('/api/vehicles', async (req, res) => {
   }
 
   if (action === 'unsold') {
+    if (isSupabaseDevConfigured()) {
+      return delegateToMainHandler(req, res);
+    }
+
     const { vehicleId } = req.body;
     const vehicle = mockVehicles.find(v => v.id === vehicleId);
     
@@ -1216,6 +1238,10 @@ app.post('/api/vehicles', async (req, res) => {
 });
 
 app.put('/api/vehicles', async (req, res) => {
+  if (isSupabaseDevConfigured()) {
+    return delegateToMainHandler(req, res);
+  }
+
   const { id, ...patch } = req.body || {};
   if (!id) return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
   const idx = mockVehicles.findIndex(v => v.id === id);
@@ -1227,6 +1253,15 @@ app.put('/api/vehicles', async (req, res) => {
     if (!publishGuard.ok) {
       return res.status(publishGuard.status).json(publishGuard.body);
     }
+    patch.listingStatus = 'active';
+    if (existing.status === 'sold') {
+      patch.soldAt = null;
+    }
+    if (!existing.listingExpiresAt) {
+      patch.listingExpiresAt = computeListingExpiresAtForSeller(publishGuard.seller);
+    }
+  } else if (nextStatus === 'unpublished' && existing.status === 'published') {
+    patch.listingStatus = 'draft';
   }
   mockVehicles[idx] = { ...mockVehicles[idx], ...patch };
   // Emit real-time update
@@ -1236,7 +1271,11 @@ app.put('/api/vehicles', async (req, res) => {
   res.json(mockVehicles[idx]);
 });
 
-app.delete('/api/vehicles', (req, res) => {
+app.delete('/api/vehicles', async (req, res) => {
+  if (isSupabaseDevConfigured()) {
+    return delegateToMainHandler(req, res);
+  }
+
   const { id } = req.body || {};
   if (!id) return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
   const before = mockVehicles.length;
@@ -3076,10 +3115,14 @@ app.get('/api/payments', (req, res) => {
     });
   }
   
-  // Default: return all payment requests
+  // Default: return all payment requests (admin)
+  let filtered = [...mockPaymentRequests];
+  if (status) {
+    filtered = filtered.filter((p) => p.status === status);
+  }
   res.json({
     success: true,
-    paymentRequests: mockPaymentRequests
+    paymentRequests: filtered
   });
 });
 
@@ -3219,6 +3262,27 @@ app.post('/api/payments', async (req, res) => {
     if (payment) {
       payment.status = 'approved';
       payment.approvedAt = new Date().toISOString();
+      payment.approvedBy = req.body?.adminEmail;
+
+      const planId = payment.planId || payment.plan;
+      const sellerEmail = payment.sellerEmail;
+      const normalizedPlan = String(planId || '').toLowerCase();
+      const allowedPlans = new Set(['free', 'pro', 'premium']);
+      if (sellerEmail && allowedPlans.has(normalizedPlan)) {
+        const userIndex = mockUsers.findIndex(
+          (u) => u.email?.toLowerCase?.().trim() === String(sellerEmail).toLowerCase().trim()
+        );
+        if (userIndex >= 0) {
+          const expiry = new Date();
+          expiry.setDate(expiry.getDate() + 30);
+          mockUsers[userIndex] = {
+            ...mockUsers[userIndex],
+            subscriptionPlan: normalizedPlan,
+            planExpiryDate: expiry.toISOString(),
+            planUpdatedAt: payment.approvedAt,
+          };
+        }
+      }
       
       // Emit real-time update
       if (io) {
@@ -3235,7 +3299,8 @@ app.post('/api/payments', async (req, res) => {
   }
   
   if (action === 'reject') {
-    const { paymentRequestId, reason } = req.body;
+    const { paymentRequestId, rejectionReason, reason } = req.body;
+    const rejectReason = rejectionReason || reason;
     
     if (!paymentRequestId) {
       return res.status(400).json({ 
@@ -3249,7 +3314,8 @@ app.post('/api/payments', async (req, res) => {
     if (payment) {
       payment.status = 'rejected';
       payment.rejectedAt = new Date().toISOString();
-      payment.rejectionReason = reason || 'No reason provided';
+      payment.rejectionReason = rejectReason || 'No reason provided';
+      payment.rejectedBy = req.body?.adminEmail;
       
       // Emit real-time update
       if (io) {
@@ -3262,7 +3328,7 @@ app.post('/api/payments', async (req, res) => {
       success: true,
       message: 'Payment request rejected',
       paymentRequestId,
-      reason: reason || 'No reason provided'
+      reason: rejectReason || 'No reason provided'
     });
   }
   

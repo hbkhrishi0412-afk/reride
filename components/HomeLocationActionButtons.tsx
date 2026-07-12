@@ -10,6 +10,8 @@ interface HomeLocationActionButtonsProps {
   className?: string;
   /** Distinct id when header renders desktop + mobile instances (avoids Playwright strict-mode collisions). */
   testId?: string;
+  /** `inline` = horizontal pills; `stacked` = full-width rows for nav dropdown menus. */
+  variant?: 'inline' | 'stacked';
 }
 
 /** "Use my location" + "Browse all India" pill pair for the header top bar. */
@@ -20,6 +22,7 @@ export const HomeLocationActionButtons: React.FC<HomeLocationActionButtonsProps>
   addToast,
   className = '',
   testId = 'home-location-banner',
+  variant = 'inline',
 }) => {
   const { t } = useTranslation();
   const [detecting, setDetecting] = useState(false);
@@ -54,15 +57,26 @@ export const HomeLocationActionButtons: React.FC<HomeLocationActionButtonsProps>
 
   if (dismissed && !selectedCity.trim()) return null;
 
+  const isStacked = variant === 'stacked';
+  const rowClass = isStacked
+    ? 'flex flex-col items-stretch gap-1.5 w-full'
+    : 'flex items-center gap-2';
+  const pillClass = isStacked
+    ? 'inline-flex w-full items-center justify-start gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold'
+    : 'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold';
+  const secondaryPillClass = isStacked
+    ? 'inline-flex w-full items-center justify-start rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors'
+    : 'inline-flex items-center rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 transition-colors';
+
   if (selectedCity.trim()) {
     return (
       <div
-        className={`flex items-center gap-2 ${className}`}
+        className={`${rowClass} ${className}`}
       data-testid={testId}
       role="group"
       aria-label={t('home.locationBanner.aria', { defaultValue: 'Choose how to browse cars' })}
     >
-        <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-800">
+        <span className={`${pillClass} bg-purple-50 text-purple-800`}>
           <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -75,7 +89,7 @@ export const HomeLocationActionButtons: React.FC<HomeLocationActionButtonsProps>
             onBrowseAllIndia();
             setDismissed(false);
           }}
-          className="inline-flex items-center rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+          className={secondaryPillClass}
         >
           {t('home.locationBanner.changeLocation', { defaultValue: 'Change location' })}
         </button>
@@ -85,7 +99,7 @@ export const HomeLocationActionButtons: React.FC<HomeLocationActionButtonsProps>
 
   return (
     <div
-      className={`flex items-center gap-2 ${className}`}
+      className={`${rowClass} ${className}`}
       data-testid={testId}
       role="group"
       aria-label={t('home.locationBanner.aria', { defaultValue: 'Choose how to browse cars' })}
@@ -94,7 +108,7 @@ export const HomeLocationActionButtons: React.FC<HomeLocationActionButtonsProps>
         type="button"
         disabled={detecting}
         onClick={() => void handleUseLocation()}
-        className="inline-flex items-center gap-1.5 rounded-full bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-purple-700 disabled:opacity-60 transition-colors"
+        className={`${pillClass} bg-purple-600 text-white shadow-sm hover:bg-purple-700 disabled:opacity-60 transition-colors`}
       >
         <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -110,7 +124,7 @@ export const HomeLocationActionButtons: React.FC<HomeLocationActionButtonsProps>
           onBrowseAllIndia();
           setDismissed(true);
         }}
-        className="inline-flex items-center rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+        className={secondaryPillClass}
       >
         {t('home.locationBanner.browseAllIndia', { defaultValue: 'Browse all India' })}
       </button>
