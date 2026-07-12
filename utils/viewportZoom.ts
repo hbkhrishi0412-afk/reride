@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { isCapacitorNativeApp } from './isCapacitorNative';
+import { isCapacitorNativeApp } from './isCapacitorNative.js';
 
 /**
  * Resets browser zoom to 100% and ensures proper viewport scaling
