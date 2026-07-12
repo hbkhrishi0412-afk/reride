@@ -479,9 +479,9 @@ const en = {
   'user.greeting': 'Hi, {{name}}',
   'home.trustBadge1M': 'Marketplace for buyers & sellers',
   'home.trustBadgeVerified': 'RC & seller details on listings',
-  'home.premiumUsedCars': 'Manage your used vehicle deal — from first message to RC transfer',
+  'home.premiumUsedCars': 'Your deal, tracked — from chat to RC transfer',
   'home.marketingSubhead':
-    'Browse listings with RC details, chat with sellers, and track every step until the RC is in your name. Free to list.',
+    'India\'s used vehicle deal management platform — RC details on listings, one deal room to chat and track milestones till RC transfer. Guidance when you need it. List free.',
   'home.card.qualityTitle': 'See the full picture',
   'home.card.qualityDesc': 'RC, owners, insurance & photos before you visit',
   'home.card.fixedTitle': 'One deal room per vehicle',
@@ -588,7 +588,7 @@ const en = {
   'mobile.home.readyToSell': 'Ready to Sell?',
   'mobile.home.listVehicle': 'List your vehicle for free and connect with buyers in your city',
   'mobile.home.heroSub':
-    'Browse with RC details and track your deal from first message to RC transfer.',
+    'Deal management platform — track from chat to RC transfer with guidance when you need it.',
   'search.placeholderMobile': 'Search by brand, model, budget...',
   'mobile.home.browseAllCars': 'Browse All Cars',
   'mobile.home.exploreLocation': 'Explore by Location',
