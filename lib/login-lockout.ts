@@ -19,13 +19,25 @@ function getConfig() {
   };
 }
 
+async function safeResolveRateLimit(
+  bucket: string,
+  identifier: string,
+  config: ReturnType<typeof getRateLimitTierConfig>,
+): Promise<{ allowed: boolean; remaining: number; configured: boolean }> {
+  try {
+    return await resolveRateLimit(bucket, identifier, config);
+  } catch {
+    return { allowed: true, remaining: -1, configured: false };
+  }
+}
+
 export async function checkLoginAllowed(email: string): Promise<{ allowed: boolean; reason?: string }> {
   const key = email.toLowerCase().trim();
   if (!key) return { allowed: true };
 
   const sensitive = getRateLimitTierConfig('auth-sensitive');
   const upstash = await Promise.race([
-    resolveRateLimit('login-attempt', `login:${key}`, sensitive),
+    safeResolveRateLimit('login-attempt', `login:${key}`, sensitive),
     new Promise<{ allowed: boolean; remaining: number; configured: boolean }>((resolve) => {
       setTimeout(
         () => resolve({ allowed: true, remaining: -1, configured: false }),
@@ -62,7 +74,7 @@ export async function recordFailedLogin(email: string): Promise<void> {
   memoryLocks.set(key, entry);
 
   const sensitive = getRateLimitTierConfig('auth-sensitive');
-  await resolveRateLimit('login-fail', `login-fail:${key}`, sensitive);
+  await safeResolveRateLimit('login-fail', `login-fail:${key}`, sensitive);
 }
 
 export function clearLoginLockout(email: string): void {
