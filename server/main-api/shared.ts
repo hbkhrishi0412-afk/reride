@@ -503,19 +503,37 @@ function firstQueryParam(val: string | string[] | undefined): string | undefined
   return Array.isArray(val) ? val[0] : val;
 }
 
+function copyQueryRecord(
+  source: VercelRequest['query'],
+): Record<string, string | string[] | undefined> {
+  if (!source || typeof source !== 'object') return {};
+  const out: Record<string, string | string[] | undefined> = {};
+  for (const [k, v] of Object.entries(source)) {
+    if (v === undefined) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Vercel may provide a frozen/non-extensible `req.query`. Routing and handlers must
+ * not mutate that object in place — copy first.
+ */
+function ensureMutableRequestQuery(req: VercelRequest): void {
+  req.query = copyQueryRecord(req.query);
+}
+
 /**
  * Vercel rewrites /api/* → /api/main.ts; the query string may be present on `req.url` but not parsed into `req.query`.
  * Merging before routing fixes resolveEffectiveApiPathname() (skipExpiryCheck, type=data, etc.).
  */
 function mergeQueryStringFromRequestUrl(req: VercelRequest): void {
+  ensureMutableRequestQuery(req);
   if (typeof req.url !== 'string' || !req.url.includes('?')) return;
   try {
     const qPart = req.url.split('?').slice(1).join('?');
     if (!qPart) return;
     const params = new URLSearchParams(qPart);
-    if (!req.query) {
-      req.query = {};
-    }
     const q = req.query as Record<string, string | string[] | undefined>;
     for (const [k, v] of params) {
       if (q[k] === undefined) {
@@ -609,7 +627,8 @@ export {
   toPublicDirectoryUser, normalizeAuthActorEmail, authenticateRequest, authenticateRequestDual,
   requireAuth, requireAdmin, getClientIP, checkRateLimit, checkTrackViewRateLimit, attachViewTrackTokens,
   cleanupVehicleCache, vehicleCache, VEHICLE_CACHE_TTL, storefrontAggregateCache,
-  setStorefrontAggregateCache, STOREFRONT_AGGREGATE_CACHE_TTL_MS, firstQueryParam, mergeQueryStringFromRequestUrl,
+  setStorefrontAggregateCache, STOREFRONT_AGGREGATE_CACHE_TTL_MS, firstQueryParam, ensureMutableRequestQuery,
+  mergeQueryStringFromRequestUrl,
   errorToPublicMessage, getEffectivePathnameForErrorFallback,
   getSupabaseAdminClient, PLAN_DETAILS, buildListingRenewalUpdates, computeListingExpiresAtForSeller,
   isSellerPlanExpired, validateListingRenewal, listingLimitGuardResponse, invalidateSellerPlanCache,

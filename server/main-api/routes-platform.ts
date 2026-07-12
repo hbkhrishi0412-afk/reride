@@ -9,7 +9,12 @@ import {
   handleNotifications,
   handlePlatformSettings,
 } from './platform-handlers.js';
-import { firstQueryParam, logInfo, type HandlerOptions } from './shared.js';
+import { ensureMutableRequestQuery, logInfo, type HandlerOptions } from './shared.js';
+
+function setContentQueryType(req: VercelRequest, type: string): void {
+  ensureMutableRequestQuery(req);
+  (req.query as Record<string, string | string[] | undefined>).type = type;
+}
 
 export async function dispatchPlatformRoute(
   req: VercelRequest,
@@ -24,13 +29,11 @@ export async function dispatchPlatformRoute(
     if (process.env.NODE_ENV !== 'production') {
       logInfo(`✅ Routing ${req.method} request to handleContent/FAQs handler`);
     }
-    req.query = req.query || {};
-    req.query.type = 'faqs';
+    setContentQueryType(req, 'faqs');
     return await handleContent(req, res, handlerOptions);
   }
   if (pathname.includes('/support-tickets') || pathname.endsWith('/support-tickets')) {
-    req.query = req.query || {};
-    req.query.type = 'support-tickets';
+    setContentQueryType(req, 'support-tickets');
     return await handleContent(req, res, handlerOptions);
   }
   if (pathname.includes('/content') || pathname.endsWith('/content')) {
@@ -88,13 +91,11 @@ export async function dispatchPlatformRewrite(
   handlerOptions: HandlerOptions,
 ): Promise<void | VercelResponse> {
   if (checkPath.includes('/faqs') || checkPath.endsWith('/faqs')) {
-    req.query = req.query || {};
-    req.query.type = 'faqs';
+    setContentQueryType(req, 'faqs');
     return await handleContent(req, res, handlerOptions);
   }
   if (checkPath.includes('/support-tickets') || checkPath.endsWith('/support-tickets')) {
-    req.query = req.query || {};
-    req.query.type = 'support-tickets';
+    setContentQueryType(req, 'support-tickets');
     return await handleContent(req, res, handlerOptions);
   }
   if (checkPath.includes('/content') || checkPath.endsWith('/content')) {

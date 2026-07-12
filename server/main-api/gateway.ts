@@ -112,13 +112,22 @@ async function runApiCore(
     pathname.endsWith('/health');
 
   if (!isHealthEndpoint) {
-    const securityReadiness = await verifyProductionSecurityReadiness();
-    if (!securityReadiness.ok) {
+    try {
+      const securityReadiness = await verifyProductionSecurityReadiness();
+      if (!securityReadiness.ok) {
+        return res.status(503).json({
+          success: false,
+          reason: 'Production security prerequisites are not satisfied.',
+          issues: securityReadiness.issues,
+          requiredActions: securityReadiness.requiredActions,
+        });
+      }
+    } catch (securityError) {
+      logError('❌ Production security readiness check threw:', securityError);
       return res.status(503).json({
         success: false,
-        reason: 'Production security prerequisites are not satisfied.',
-        issues: securityReadiness.issues,
-        requiredActions: securityReadiness.requiredActions,
+        reason: 'Production security check failed. Please try again shortly.',
+        error: errorToPublicMessage(securityError),
       });
     }
 
@@ -132,47 +141,68 @@ async function runApiCore(
       /* unauthenticated */
     }
 
-    const rateDecision = resolveGatewayRateLimit({
-      pathname,
-      method: req.method || 'GET',
-      clientIp: getClientIP(req),
-      userEmail,
-    });
-
-    let rateLimitResult: { allowed: boolean; remaining: number };
     try {
-      const resolved = await resolveRateLimit(rateDecision.bucket, rateDecision.identifier, {
-        maxRequests: rateDecision.maxRequests,
-        windowMs: rateDecision.windowMs,
+      const rateDecision = resolveGatewayRateLimit({
+        pathname,
+        method: req.method || 'GET',
+        clientIp: getClientIP(req),
+        userEmail,
       });
-      rateLimitResult = { allowed: resolved.allowed, remaining: resolved.remaining };
-    } catch {
-      rateLimitResult = { allowed: true, remaining: rateDecision.maxRequests };
+
+      let rateLimitResult: { allowed: boolean; remaining: number };
+      try {
+        const resolved = await resolveRateLimit(rateDecision.bucket, rateDecision.identifier, {
+          maxRequests: rateDecision.maxRequests,
+          windowMs: rateDecision.windowMs,
+        });
+        rateLimitResult = { allowed: resolved.allowed, remaining: resolved.remaining };
+      } catch {
+        rateLimitResult = { allowed: true, remaining: rateDecision.maxRequests };
+      }
+      if (!rateLimitResult.allowed) {
+        const retryAfter = rateLimitRetryAfterSeconds(rateDecision.windowMs);
+        res.setHeader('Retry-After', String(retryAfter));
+        return res.status(429).json({
+          success: false,
+          reason: 'Too many requests. Please try again later.',
+          retryAfter,
+          tier: rateDecision.tier,
+        });
+      }
+      res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
+      res.setHeader('X-RateLimit-Limit', rateDecision.maxRequests.toString());
+      res.setHeader('X-RateLimit-Tier', rateDecision.tier);
+    } catch (rateLimitError) {
+      logWarn('⚠️ Rate limit setup failed — allowing request:', rateLimitError);
     }
-    if (!rateLimitResult.allowed) {
-      const retryAfter = rateLimitRetryAfterSeconds(rateDecision.windowMs);
-      res.setHeader('Retry-After', String(retryAfter));
-      return res.status(429).json({
-        success: false,
-        reason: 'Too many requests. Please try again later.',
-        retryAfter,
-        tier: rateDecision.tier,
-      });
-    }
-    res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
-    res.setHeader('X-RateLimit-Limit', rateDecision.maxRequests.toString());
-    res.setHeader('X-RateLimit-Tier', rateDecision.tier);
   }
 
   const isStateChanging =
     req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH' || req.method === 'DELETE';
   const appClientHeader = String(req.headers['x-app-client'] || req.headers['X-App-Client'] || '').toLowerCase();
   const skipCsrfForCapacitorNative = shouldSkipCsrfForCapacitorNative(appClientHeader, originHeader);
+  const bodyAction =
+    req.body &&
+    typeof req.body === 'object' &&
+    typeof (req.body as { action?: unknown }).action === 'string'
+      ? String((req.body as { action: string }).action)
+      : '';
+  const isUsersAuthAction =
+    pathname.includes('/users') &&
+    (bodyAction === 'login' ||
+      bodyAction === 'register' ||
+      bodyAction === 'refresh-token' ||
+      bodyAction === 'request-password-reset' ||
+      bodyAction === 'complete-password-reset' ||
+      bodyAction === 'oauth-login' ||
+      bodyAction === 'oauth-service-provider' ||
+      bodyAction === 'logout');
   const isCsrfExempt =
     pathname.includes('/login') ||
     pathname.includes('/csrf-token') ||
     pathname.includes('/health') ||
     pathname.includes('/db-health') ||
+    isUsersAuthAction ||
     skipCsrfForCapacitorNative;
 
   if (isStateChanging && !isCsrfExempt) {
