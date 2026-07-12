@@ -184,11 +184,14 @@ async function runApiCore(
   const bodyAction =
     req.body &&
     typeof req.body === 'object' &&
+    !Array.isArray(req.body) &&
     typeof (req.body as { action?: unknown }).action === 'string'
       ? String((req.body as { action: string }).action)
       : '';
+  const isUsersPost =
+    req.method === 'POST' && (pathname.includes('/users') || pathname.endsWith('/users'));
   const isUsersAuthAction =
-    pathname.includes('/users') &&
+    isUsersPost &&
     (bodyAction === 'login' ||
       bodyAction === 'register' ||
       bodyAction === 'refresh-token' ||
@@ -196,7 +199,8 @@ async function runApiCore(
       bodyAction === 'complete-password-reset' ||
       bodyAction === 'oauth-login' ||
       bodyAction === 'oauth-service-provider' ||
-      bodyAction === 'logout');
+      bodyAction === 'logout' ||
+      bodyAction === '');
   const isCsrfExempt =
     pathname.includes('/login') ||
     pathname.includes('/csrf-token') ||

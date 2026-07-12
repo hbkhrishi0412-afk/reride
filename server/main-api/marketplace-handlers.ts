@@ -97,8 +97,18 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
 
   // Handle authentication actions (POST with action parameter)
   if (req.method === 'POST') {
-
-    const { action, email, password, role, name, mobile, authProvider, avatarUrl } = req.body;
+    const body =
+      req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+        ? (req.body as Record<string, unknown>)
+        : {};
+    const action = typeof body.action === 'string' ? body.action : undefined;
+    const email = typeof body.email === 'string' ? body.email : undefined;
+    const password = typeof body.password === 'string' ? body.password : undefined;
+    const role = typeof body.role === 'string' ? body.role : undefined;
+    const name = typeof body.name === 'string' ? body.name : undefined;
+    const mobile = typeof body.mobile === 'string' ? body.mobile : undefined;
+    const authProvider = typeof body.authProvider === 'string' ? body.authProvider : undefined;
+    const avatarUrl = typeof body.avatarUrl === 'string' ? body.avatarUrl : undefined;
 
     // Validate that action is provided
     if (!action || typeof action !== 'string') {
