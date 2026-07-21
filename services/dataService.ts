@@ -117,11 +117,11 @@ class DataService {
     // Higher priority for GET requests (read operations are more critical)
     const requestPriority = method === 'GET' ? Math.max(priority, 7) : priority;
 
-    // Bypass the sequential queue for catalog reads and auth/login so open + sign-in
-    // are not stalled behind the 200ms request stagger.
+    // Bypass the sequential queue for catalog reads so open is not stalled behind
+    // the request stagger. Auth POSTs (/users login/signup) stay queued so concurrent
+    // attempts cannot bypass client-side rate limiting.
     const bypassQueue =
-      (method === 'GET' && (isCapacitorNative() || endpoint.includes('/vehicles'))) ||
-      (method === 'POST' && endpoint.includes('/users'));
+      method === 'GET' && (isCapacitorNative() || endpoint.includes('/vehicles'));
 
     const doRequest = async () => {
         let csrfHeader: string | undefined;
@@ -1019,9 +1019,9 @@ class DataService {
                   ? mergeVehicleCatalog(prevCache, normalized, false)
                   : normalized;
               this.setLocalStorageData(cacheKey, toStore);
-              logInfo(`✅ Background refresh: Updated cache with ${normalized.length} vehicles (page refresh)`);
+              logInfo(`✅ Background refresh: Updated cache with ${toStore.length} vehicles (page refresh)`);
               if (typeof window !== 'undefined' && window.dispatchEvent) {
-                window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles: normalized } }));
+                window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles: toStore } }));
               }
             } else if (vehicles.length === 0) {
               console.warn('⚠️ Background refresh returned 0 vehicles. Keeping cached data.');
