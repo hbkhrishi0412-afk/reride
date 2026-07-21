@@ -86,8 +86,10 @@ export default defineConfig(({ mode }) => {
       registerType: 'autoUpdate',
       injectRegister: null,
       workbox: {
-        maximumFileSizeToCacheInBytes: 20 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webp,webmanifest}'],
+        // Oversized brand assets must not fail the SW build (or bloat install).
+        globIgnores: ['**/icon-512.orig.png', '**/icon-192.orig.png'],
         navigateFallback: capacitor ? undefined : '/index.html',
         runtimeCaching: [
           {

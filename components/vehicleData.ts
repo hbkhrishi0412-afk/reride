@@ -1,17 +1,10 @@
 import { VehicleCategory } from '../types.js';
 import type { VehicleCategoryData } from '../vehicleDataTypes';
+import { VEHICLE_IMAGE_PLACEHOLDER_DATA_URI } from '../utils/imageUtils.js';
 
-const DEFAULT_PLACEHOLDER = 'https://picsum.photos/800/600?random=1';
+const DEFAULT_PLACEHOLDER = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
 
-export const getPlaceholderImage = (make?: string, model?: string): string => {
-    if (make && model) {
-        // Use a consistent seed for the same make/model combination
-        return `https://picsum.photos/seed/${make}${model}/800/600`;
-    }
-    if (make) {
-        // Fallback to a make-specific placeholder
-        return `https://picsum.photos/seed/${make}/800/600`;
-    }
+export const getPlaceholderImage = (_make?: string, _model?: string): string => {
     return DEFAULT_PLACEHOLDER;
 };
 

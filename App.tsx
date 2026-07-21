@@ -3,6 +3,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useSearchParams, useNavigate as useRouterNavigate } from 'react-router-dom';
 import { AppProvider, useApp } from './components/AppProvider';
+import { useNotifications } from './contexts/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import TranslationProvider from './components/TranslationProvider';
 import PageTransition from './components/PageTransition';
@@ -19,6 +20,7 @@ import {
 import Header from './components/Header';
 import Footer from './components/Footer';
 import ToastContainer from './components/ToastContainer';
+import AppChatWidgetHost from './components/AppChatWidgetHost';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import useIsMobileApp from './hooks/useIsMobileApp';
 import { CLIENT_POLL_INTERVALS_MS } from './utils/clientPolling.js';
@@ -54,7 +56,6 @@ import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
 import { matchesCity } from './utils/cityMapping';
 import { randomIntBelow } from './utils/secureRandom.js';
-import { resolveChatCallPhone, resolveChatOtherPartyName } from './utils/chatContact';
 import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
 import { logWarn, logDebug, logError, logInfo } from './utils/logger';
 import { currentUserForLocalSessionJson } from './utils/userLocalStorageSnapshot';
@@ -99,7 +100,6 @@ const MinimalLoader: React.FC = () => null;
 // Lazy-loaded non-critical components (loaded on demand)
 const CommandPalette = React.lazy(() => import('./components/CommandPalette'));
 const KeyboardShortcutsHelp = React.lazy(() => import('./components/KeyboardShortcutsHelp'));
-const ChatWidget = React.lazy(() => import('./components/ChatWidget').then(module => ({ default: module.ChatWidget })));
 
 // Preload critical components - optimized for faster loading
 const preloadCriticalComponents = () => {
@@ -173,8 +173,6 @@ const AppContent: React.FC = () => {
     handleLogout, 
     comparisonList, 
     wishlist, 
-    notifications,
-    setNotifications,
     userLocation,
     setUserLocation,
     addToast,
@@ -189,7 +187,6 @@ const AppContent: React.FC = () => {
     vehiclesCatalogReady,
     conversations,
     setConversations,
-    toasts,
     activeChat,
     users,
     setUsers,
@@ -204,9 +201,6 @@ const AppContent: React.FC = () => {
     selectedCity,
     setSelectedCity,
     publicSellerProfile,
-    typingStatus,
-    chatPeerOnlineByConversationId,
-    removeToast,
     setActiveChat,
     isCommandPaletteOpen,
     setWishlist,
@@ -257,6 +251,8 @@ const AppContent: React.FC = () => {
     onOfferResponse,
     refreshVehicles,
   } = useApp();
+
+  const { notifications, setNotifications } = useNotifications();
 
   const pushNotificationsForCurrentUser = useMemo(() => {
     if (!currentUser?.email) return [];
@@ -1256,12 +1252,15 @@ const AppContent: React.FC = () => {
           timestamp: new Date().toISOString(),
         }));
 
-        setNotifications(updatedNotifications);
-        try {
-          persistReRideNotifications(updatedNotifications);
-        } catch {
-          // ignore localStorage failures
-        }
+        setNotifications((prev) => {
+          const next = [...generatedNotifications, ...prev];
+          try {
+            persistReRideNotifications(next);
+          } catch {
+            // ignore localStorage failures
+          }
+          return next;
+        });
       } catch {
         // ignore transient polling failures
       }
@@ -2192,7 +2191,7 @@ const AppContent: React.FC = () => {
           onLocationChange={setUserLocation}
           addToast={addToast}
         />
-        <ToastContainer toasts={toasts} onRemove={removeToast} />
+        <ToastContainer />
         {pendingSurvey && (
           <DealSurveyModal
             surveyId={pendingSurvey.surveyId}
@@ -2202,60 +2201,12 @@ const AppContent: React.FC = () => {
             onSubmitted={() => setPendingSurvey(null)}
           />
         )}
-        {currentUser && activeChat && (
-          <ChatErrorBoundary>
-            <Suspense fallback={<MinimalLoader />}>
-              <ChatWidget
-                conversation={activeChat}
-                currentUserRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
-                currentUserEmail={currentUser.email}
-                otherUserName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
-                otherUserOnline={chatPeerOnlineByConversationId[String(activeChat.id)]}
-                callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
-                callTargetName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
-                isInlineLaunch={chatInlineLaunch}
-                onStartCall={(phone) => {
-                  if (!phone) return;
-                  window.open(`tel:${phone}`);
-                }}
-                onClose={handleCloseChat}
-                onSendMessage={(messageText, type, payload) => {
-                  if (type || payload) {
-                    sendMessageWithType(activeChat.id, messageText, type, payload);
-                  } else {
-                    sendMessage(activeChat.id, messageText);
-                  }
-                }}
-                typingStatus={typingStatus}
-                onUserTyping={(conversationId, _userRole) => {
-                  toggleTyping(conversationId, true);
-                }}
-                onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
-                uploaderEmail={currentUser?.email}
-                onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                  markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
-                }}
-                onFlagContent={(type, id, _reason) => {
-                  flagContent(type, id);
-                }}
-                onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-                  onOfferResponse(conversationId, messageId, response, counterPrice);
-                }}
-                onTestDriveResponse={handleTestDriveResponse}
-                onClearChat={clearConversationMessages}
-                onArchiveConversation={archiveConversation}
-                onDeleteConversation={deleteConversation}
-                onSetConversationReadState={(conversationId, isRead) =>
-                  setConversationReadState(
-                    conversationId,
-                    currentUser.role === 'seller' ? 'seller' : 'customer',
-                    isRead,
-                  )
-                }
-              />
-            </Suspense>
-          </ChatErrorBoundary>
-        )}
+        <AppChatWidgetHost
+          chatInlineLaunch={chatInlineLaunch}
+          onClose={handleCloseChat}
+          onTestDriveResponse={handleTestDriveResponse}
+          ChatErrorBoundary={ChatErrorBoundary}
+        />
       </>
     );
   }
@@ -2323,10 +2274,7 @@ const AppContent: React.FC = () => {
         
         {/* Desktop Global Components */}
         <PWAInstallPrompt />
-        <ToastContainer 
-          toasts={toasts} 
-          onRemove={removeToast} 
-        />
+        <ToastContainer />
         {pendingSurvey && (
           <DealSurveyModal
             surveyId={pendingSurvey.surveyId}
@@ -2351,60 +2299,12 @@ const AppContent: React.FC = () => {
             onClose={() => setIsKeyboardShortcutsOpen(false)}
           />
         </Suspense>
-        {currentUser && activeChat && (
-          <ChatErrorBoundary>
-            <Suspense fallback={<MinimalLoader />}>
-              <ChatWidget
-                conversation={activeChat}
-                currentUserRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
-                currentUserEmail={currentUser.email}
-                otherUserName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
-                otherUserOnline={chatPeerOnlineByConversationId[String(activeChat.id)]}
-                callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
-                callTargetName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
-                isInlineLaunch={chatInlineLaunch}
-                onStartCall={(phone) => {
-                  if (!phone) return;
-                  window.open(`tel:${phone}`);
-                }}
-                onClose={handleCloseChat}
-                onSendMessage={(messageText, type, payload) => {
-                  if (type || payload) {
-                    sendMessageWithType(activeChat.id, messageText, type, payload);
-                  } else {
-                    sendMessage(activeChat.id, messageText);
-                  }
-                }}
-                typingStatus={typingStatus}
-                onUserTyping={(conversationId, _userRole) => {
-                  toggleTyping(conversationId, true);
-                }}
-                onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
-                uploaderEmail={currentUser?.email}
-                onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                  markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
-                }}
-                onFlagContent={(type, id, _reason) => {
-                  flagContent(type, id);
-                }}
-                onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-                  onOfferResponse(conversationId, messageId, response, counterPrice);
-                }}
-                onTestDriveResponse={handleTestDriveResponse}
-                onClearChat={clearConversationMessages}
-                onArchiveConversation={archiveConversation}
-                onDeleteConversation={deleteConversation}
-                onSetConversationReadState={(conversationId, isRead) =>
-                  setConversationReadState(
-                    conversationId,
-                    currentUser.role === 'seller' ? 'seller' : 'customer',
-                    isRead,
-                  )
-                }
-              />
-            </Suspense>
-          </ChatErrorBoundary>
-        )}
+        <AppChatWidgetHost
+          chatInlineLaunch={chatInlineLaunch}
+          onClose={handleCloseChat}
+          onTestDriveResponse={handleTestDriveResponse}
+          ChatErrorBoundary={ChatErrorBoundary}
+        />
       </div>
     </>
   );

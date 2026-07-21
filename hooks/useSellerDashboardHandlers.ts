@@ -2,6 +2,8 @@ import { useMemo, useCallback } from 'react';
 import type { Vehicle, User, Conversation, Notification } from '../types';
 import { View as ViewEnum } from '../types';
 import { useApp } from '../components/AppProvider';
+import { useChat } from '../contexts/ChatContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { enrichVehiclesWithSellerInfo } from '../utils/vehicleEnrichment';
 import { filterVehiclesBySellerEmail } from '../utils/sellerVehicleFilter';
 import { findVehicleByIdentity, buildVehicleMutationBody } from '../utils/vehicleIdentity';
@@ -48,7 +50,6 @@ export function useSellerDashboardHandlers({ app, currentUser, locals }: UseSell
     sellerInventory,
     sellerInventoryReady,
     conversations,
-    notifications,
     vehicleData,
     navigate,
     selectVehicle,
@@ -71,10 +72,11 @@ export function useSellerDashboardHandlers({ app, currentUser, locals }: UseSell
     clearConversationMessages,
     deleteConversation,
     archiveConversation,
-    typingStatus,
-    chatPeerOnlineByConversationId,
     runIfConfirmed,
   } = app;
+
+  const { typingStatus, chatPeerOnlineByConversationId } = useChat();
+  const { notifications } = useNotifications();
 
   const sellerEmailNorm = currentUser.email.toLowerCase().trim();
 

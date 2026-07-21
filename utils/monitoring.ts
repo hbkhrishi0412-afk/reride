@@ -114,30 +114,42 @@ export interface WebVitals {
  * Initialize Web Vitals monitoring
  */
 export function initWebVitals(onPerfEntry?: (metric: WebVitals) => void): void {
-  if (typeof window === 'undefined' || process.env.NODE_ENV !== 'production') {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const forceEnable =
+    String((import.meta as any)?.env?.VITE_ENABLE_WEB_VITALS || '').toLowerCase() === 'true';
+  if (process.env.NODE_ENV !== 'production' && !forceEnable) {
     return;
   }
 
   import('web-vitals').then(({ onCLS, onINP, onFCP, onLCP, onTTFB }) => {
     const reportMetric = (metric: WebVitals) => {
-      // Send to analytics endpoint
       if (onPerfEntry) {
         onPerfEntry(metric);
       }
-      
-      // Log to console in development
-      if (process.env.NODE_ENV === 'development') {
-        logInfo(`[Web Vitals] ${metric.name}: ${metric.value.toFixed(2)}ms`);
+
+      // Surface in Sentry performance breadcrumbs when available
+      try {
+        if (errorTracker) {
+          errorTracker.captureMessage(`web_vital:${metric.name}`, 'info');
+        }
+      } catch {
+        /* ignore */
+      }
+
+      if (process.env.NODE_ENV === 'development' || forceEnable) {
+        logInfo(`[Web Vitals] ${metric.name}: ${metric.value.toFixed(2)}`);
       }
     };
 
     onCLS(reportMetric);
-    onINP(reportMetric); // Replaces deprecated onFID in web-vitals v3
+    onINP(reportMetric);
     onFCP(reportMetric);
     onLCP(reportMetric);
     onTTFB(reportMetric);
   }).catch(() => {
-    // Web Vitals not available
+    /* web-vitals optional */
   });
 }
 

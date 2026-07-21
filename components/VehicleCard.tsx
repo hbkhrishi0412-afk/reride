@@ -131,8 +131,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
           src={getFirstValidImage(vehicle.images, vehicle.id)}
           alt={`${vehicle.make} ${vehicle.model}`}
           className="w-full h-full object-cover"
-          width={640}
-          quality={78}
+          width={400}
+          quality={72}
           data-testid="vehicle-image"
         />
         {/* Stock + optional verified / featured badges */}

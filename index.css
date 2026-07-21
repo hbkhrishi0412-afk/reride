@@ -1124,7 +1124,8 @@ nav[data-testid="mobile-bottom-nav"] button:focus-visible {
 
 /* Bottom sheet / modal for mobile */
 .mobile-sheet {
-  @apply fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl max-h-[85vh] overflow-hidden;
+  @apply fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl overflow-hidden;
+  max-height: min(85dvh, 85vh);
   animation: slide-up-sheet 0.3s ease-out;
 }
 
@@ -1779,6 +1780,8 @@ code {
   overflow: hidden;
   box-shadow: var(--shadow-sm);
   border: 1px solid #F0F0F0;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 420px;
 }
 
 /* Price Display */

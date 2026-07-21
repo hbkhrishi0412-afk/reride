@@ -162,26 +162,40 @@ export const CatalogProvider: React.FC<{ children: React.ReactNode }> = ({ child
       .slice(0, 6);
   }, [vehicles]);
 
-  const value: CatalogContextType = {
-    vehicles,
-    setVehicles,
-    users,
-    setUsers,
-    isLoading,
-    setIsLoading,
-    vehiclesCatalogReady,
-    setVehiclesCatalogReady,
-    comparisonList,
-    setComparisonList,
-    wishlist,
-    setWishlist,
-    ratings,
-    setRatings,
-    sellerRatings,
-    setSellerRatings,
-    comparisonCategory,
-    recommendations,
-  };
+  const value = useMemo<CatalogContextType>(
+    () => ({
+      vehicles,
+      setVehicles,
+      users,
+      setUsers,
+      isLoading,
+      setIsLoading,
+      vehiclesCatalogReady,
+      setVehiclesCatalogReady,
+      comparisonList,
+      setComparisonList,
+      wishlist,
+      setWishlist,
+      ratings,
+      setRatings,
+      sellerRatings,
+      setSellerRatings,
+      comparisonCategory,
+      recommendations,
+    }),
+    [
+      vehicles,
+      users,
+      isLoading,
+      vehiclesCatalogReady,
+      comparisonList,
+      wishlist,
+      ratings,
+      sellerRatings,
+      comparisonCategory,
+      recommendations,
+    ],
+  );
 
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>;
 };

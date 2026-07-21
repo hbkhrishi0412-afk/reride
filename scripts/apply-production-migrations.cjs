@@ -19,6 +19,8 @@ const dryRun = process.argv.includes('--dry-run');
 const MIGRATION_FILES = [
   'scripts/migrations/add-deal-platform-rls-policies.sql',
   'scripts/migrations/add-support-chat-tables.sql',
+  'supabase/migrations/20260721000000_marketplace_perf_indexes.sql',
+  'supabase/migrations/20260722000000_messages_normalize_and_perf_indexes.sql',
 ];
 
 function loadEnvFile(filePath) {

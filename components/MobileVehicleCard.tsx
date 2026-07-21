@@ -185,12 +185,14 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
       }}
       className="cursor-pointer touch-manipulation outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 rounded-2xl"
       style={{
+        contentVisibility: 'auto',
+        containIntrinsicSize: '0 320px',
         background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFAFA 100%)',
         borderRadius: '16px',
         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.08)',
         border: '0.5px solid rgba(0, 0, 0, 0.04)',
         overflow: 'hidden',
-        marginBottom: '16px'
+        marginBottom: '16px',
       }}
     >
       {/* Image Section */}

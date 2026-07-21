@@ -206,7 +206,7 @@ interface MobileDashboardProps {
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
   onUserStoppedTyping?: (conversationId: string) => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
-  onFlagContent: (type: 'vehicle' | 'conversation', id: string, reason: string) => void;
+  onFlagContent: (type: 'vehicle' | 'conversation', id: string | number, reason: string) => void;
   chatPeerOnlineByConversationId?: Record<string, boolean>;
   onLogout?: () => void;
   // Add vehicle form handlers

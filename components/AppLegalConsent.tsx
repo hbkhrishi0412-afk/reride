@@ -1,28 +1,69 @@
 /**
- * First-launch legal consent for Capacitor (Android/iOS).
- * Mirrors common Indian app onboarding: accept Privacy Policy & Terms before use.
+ * First-launch Terms & Privacy acceptance (device-level).
+ * Matches common marketplace apps (Swiggy / Flipkart / PhonePe style):
+ * blocking bottom sheet, explicit checkbox, links to legal pages, versioned persist.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View as ViewEnum } from '../types.js';
 import { useApp } from './AppProvider';
-import { isCapacitorNativeApp } from '../utils/isCapacitorNative';
 
-const STORAGE_KEY = 'reride_legal_consent_accepted_v1';
+/** Bump when Privacy Policy or Terms of Service materially change to re-prompt users. */
+export const LEGAL_CONSENT_VERSION = 1;
 
-function hasAcceptedLegalConsent(): boolean {
-  if (typeof window === 'undefined') return true;
+const STORAGE_KEY = 'reride_legal_consent';
+/** Legacy key from Capacitor-only v1 gate */
+const LEGACY_STORAGE_KEY = 'reride_legal_consent_accepted_v1';
+
+type StoredConsent = {
+  version: number;
+  acceptedAt: string;
+};
+
+function readStoredConsent(): StoredConsent | null {
+  if (typeof window === 'undefined') return null;
   try {
-    return localStorage.getItem(STORAGE_KEY) === '1';
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as StoredConsent;
+      if (
+        parsed &&
+        typeof parsed.version === 'number' &&
+        typeof parsed.acceptedAt === 'string'
+      ) {
+        return parsed;
+      }
+    }
+    // Migrate legacy flag → current version once
+    if (localStorage.getItem(LEGACY_STORAGE_KEY) === '1') {
+      const migrated: StoredConsent = {
+        version: LEGAL_CONSENT_VERSION,
+        acceptedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      return migrated;
+    }
   } catch {
-    return true;
+    /* storage blocked or corrupt */
   }
+  return null;
+}
+
+function hasAcceptedCurrentLegalConsent(): boolean {
+  const stored = readStoredConsent();
+  return stored?.version === LEGAL_CONSENT_VERSION;
 }
 
 function persistLegalConsent(): void {
   try {
-    localStorage.setItem(STORAGE_KEY, '1');
+    const payload: StoredConsent = {
+      version: LEGAL_CONSENT_VERSION,
+      acceptedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
     /* storage blocked */
   }
@@ -31,15 +72,30 @@ function persistLegalConsent(): void {
 export default function AppLegalConsent() {
   const { t } = useTranslation();
   const { navigate, currentView } = useApp();
+  const titleId = useId();
   const [pendingConsent, setPendingConsent] = useState(false);
   const [accepted, setAccepted] = useState(false);
 
   useEffect(() => {
-    if (!isCapacitorNativeApp()) return;
-    if (!hasAcceptedLegalConsent()) {
+    if (!hasAcceptedCurrentLegalConsent()) {
       setPendingConsent(true);
     }
   }, []);
+
+  // Lock background scroll while the gate is visible (real-app pattern)
+  useEffect(() => {
+    if (!pendingConsent) return;
+    const viewingLegal =
+      currentView === ViewEnum.PRIVACY_POLICY ||
+      currentView === ViewEnum.TERMS_OF_SERVICE;
+    if (viewingLegal) return;
+
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [pendingConsent, currentView]);
 
   const viewingLegalPage =
     currentView === ViewEnum.PRIVACY_POLICY || currentView === ViewEnum.TERMS_OF_SERVICE;
@@ -47,7 +103,9 @@ export default function AppLegalConsent() {
 
   if (!showOverlay) return null;
 
-  const openLegalPage = (view: ViewEnum) => {
+  const openLegalPage = (view: ViewEnum, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     navigate(view);
   };
 
@@ -58,21 +116,23 @@ export default function AppLegalConsent() {
   };
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/50 p-4 sm:items-center">
+    <div
+      className="fixed inset-0 z-[300] flex items-end justify-center bg-black/55 sm:items-center sm:p-4"
+      role="presentation"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div
-        className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"
+        className="w-full max-w-md rounded-t-2xl bg-white px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 shadow-xl sm:rounded-2xl sm:pb-5"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="legal-consent-title"
+        aria-labelledby={titleId}
+        onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="legal-consent-title" className="text-lg font-bold text-gray-900">
-          {t('legalConsent.title', { defaultValue: 'Welcome to ReRide' })}
+        <h2 id={titleId} className="text-lg font-bold text-gray-900">
+          {t('legalConsent.title')}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-gray-600">
-          {t('legalConsent.body', {
-            defaultValue:
-              'By continuing, you agree to our Privacy Policy and Terms of Service. Please review them before using the app.',
-          })}
+          {t('legalConsent.body')}
         </p>
 
         <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-sm text-gray-700">
@@ -80,22 +140,23 @@ export default function AppLegalConsent() {
             type="checkbox"
             checked={accepted}
             onChange={(e) => setAccepted(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-[#FF6B35] focus:ring-[#FF6B35]"
+            aria-required="true"
           />
           <span>
             {t('auth.termsPrefix')}{' '}
             <button
               type="button"
-              onClick={() => openLegalPage(ViewEnum.PRIVACY_POLICY)}
-              className="font-medium text-orange-600 hover:underline"
+              onClick={(e) => openLegalPage(ViewEnum.PRIVACY_POLICY, e)}
+              className="font-medium text-[#FF6B35] hover:underline"
             >
               {t('auth.privacyPolicy')}
             </button>{' '}
             {t('auth.termsAnd')}{' '}
             <button
               type="button"
-              onClick={() => openLegalPage(ViewEnum.TERMS_OF_SERVICE)}
-              className="font-medium text-orange-600 hover:underline"
+              onClick={(e) => openLegalPage(ViewEnum.TERMS_OF_SERVICE, e)}
+              className="font-medium text-[#FF6B35] hover:underline"
             >
               {t('auth.termsOfService')}
             </button>
@@ -106,9 +167,9 @@ export default function AppLegalConsent() {
           type="button"
           disabled={!accepted}
           onClick={handleAccept}
-          className="mt-5 w-full rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-5 w-full rounded-xl bg-[#FF6B35] py-3.5 text-sm font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
         >
-          {t('legalConsent.accept', { defaultValue: 'Accept & Continue' })}
+          {t('legalConsent.accept')}
         </button>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import React, { useState, memo } from 'react';
 import LazyImage from './LazyImage.js';
+import { VEHICLE_IMAGE_PLACEHOLDER_DATA_URI } from '../utils/imageUtils.js';
 
 interface OptimizedVehicleImageProps {
   src: string;
@@ -14,7 +15,7 @@ const OptimizedVehicleImage: React.FC<OptimizedVehicleImageProps> = memo(({
   src,
   alt,
   className = '',
-  fallbackSrc = 'https://picsum.photos/800/600?random=1',
+  fallbackSrc = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI,
   onLoad,
   onError
 }) => {

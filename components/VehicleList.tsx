@@ -66,12 +66,18 @@ interface VehicleListProps {
   onRetryLoadVehicles?: () => void | Promise<void>;
   /** Optional CTA when wishlist/filter results are empty */
   onBrowseAll?: () => void;
+  /**
+   * Fetch/append the next server page into the global catalog when the client
+   * has exhausted locally loaded rows but the API still has more.
+   * Returns true if more pages may remain.
+   */
+  onRequestMoreVehicles?: () => Promise<boolean>;
 }
 
 // Base items per page - optimized for performance (10-12 vehicles per load)
 const BASE_ITEMS_PER_PAGE = 12;
 /** Desktop list (tile) view: virtualize rows once enough items are paginated in. */
-const VIRTUALIZE_TILE_THRESHOLD = 18;
+const VIRTUALIZE_TILE_THRESHOLD = 12;
 
 /** Scroll root id set on MobileLayout `<main>` — avoids walking the tree and fixes IO root when overflow is scrollable but heights match before paint. */
 const MOBILE_SCROLL_ROOT_ID = 'mobile-app-scroll-root';
@@ -344,6 +350,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   sourceVehicleCount,
   onRetryLoadVehicles,
   onBrowseAll,
+  onRequestMoreVehicles,
 }) => {
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   
@@ -456,6 +463,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [isDesktopFilterVisible, setIsDesktopFilterVisible] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'tile'>('grid');
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [serverHasMore, setServerHasMore] = useState(true);
   const [isBackgroundHydratingVehicles, setIsBackgroundHydratingVehicles] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const hasMoreRef = useRef(true);
@@ -1579,8 +1587,24 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
   const dealLabelByVehicleId = useMemo(() => {
     const map = new Map<number, BuyerVisibleDealLabel>();
-    const pool = (vehicles || []).filter((v) => v.status === 'published' || !v.status);
-    for (const v of processedVehicles) {
+    if (paginatedVehicles.length === 0) return map;
+
+    // Index published pool by make|model so each visible card scans a small group
+    // instead of O(n × catalog) on every filter/page change.
+    const byMakeModel = new Map<string, typeof vehicles>();
+    for (const v of vehicles || []) {
+      if (v.status && v.status !== 'published') continue;
+      const key = `${v.make}|${v.model}`;
+      let group = byMakeModel.get(key);
+      if (!group) {
+        group = [];
+        byMakeModel.set(key, group);
+      }
+      group.push(v);
+    }
+
+    for (const v of paginatedVehicles) {
+      const pool = byMakeModel.get(`${v.make}|${v.model}`) || [];
       const similar = findSimilarVehicles(v, pool);
       const analysis = analyzeVehiclePricing(v, similar);
       if (analysis.buyerVisibleLabel) {
@@ -1588,10 +1612,11 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       }
     }
     return map;
-  }, [vehicles, processedVehicles]);
+  }, [vehicles, paginatedVehicles]);
   
   const totalPages = Math.ceil(processedVehicles.length / BASE_ITEMS_PER_PAGE);
-  const hasMore = currentPage < totalPages;
+  const hasMoreLocal = currentPage < totalPages;
+  const hasMore = hasMoreLocal || (!!onRequestMoreVehicles && serverHasMore);
 
   hasMoreRef.current = hasMore;
   isLoadingMoreRef.current = isLoadingMore;
@@ -1615,11 +1640,39 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           if (!hasMoreRef.current || isLoadingMoreRef.current) return;
           isLoadingMoreRef.current = true;
           setIsLoadingMore(true);
-          window.setTimeout(() => {
+
+          const bumpLocalPage = () => {
             setCurrentPage((p) => p + 1);
             setIsLoadingMore(false);
             isLoadingMoreRef.current = false;
-          }, 200);
+          };
+
+          // Prefer revealing already-loaded rows first; only hit the API when local pages are exhausted.
+          if (currentPage < totalPages) {
+            window.setTimeout(bumpLocalPage, 120);
+            return;
+          }
+
+          if (onRequestMoreVehicles) {
+            void onRequestMoreVehicles()
+              .then((more) => {
+                if (cancelled) return;
+                setServerHasMore(!!more);
+                setCurrentPage((p) => p + 1);
+              })
+              .catch(() => {
+                if (!cancelled) setServerHasMore(false);
+              })
+              .finally(() => {
+                if (!cancelled) {
+                  setIsLoadingMore(false);
+                  isLoadingMoreRef.current = false;
+                }
+              });
+            return;
+          }
+
+          window.setTimeout(bumpLocalPage, 200);
         },
         {
           root: rootEl ?? null,
@@ -1642,7 +1695,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       cancelAnimationFrame(raf2);
       observer?.disconnect();
     };
-  }, [hasMore, currentPage, processedVehicles.length, isLoading]);
+  }, [hasMore, currentPage, totalPages, processedVehicles.length, isLoading, onRequestMoreVehicles]);
 
   const toggleTempPriceBucket = (id: string) => {
     setTempFilters((prev) => {

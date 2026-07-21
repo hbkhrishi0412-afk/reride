@@ -520,7 +520,7 @@ function copyQueryRecord(
  * not mutate that object in place — copy first.
  */
 function ensureMutableRequestQuery(req: VercelRequest): void {
-  req.query = copyQueryRecord(req.query);
+  req.query = copyQueryRecord(req.query) as VercelRequest['query'];
 }
 
 /**

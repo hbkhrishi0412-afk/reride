@@ -56,7 +56,12 @@ const SellerDashboardContent: React.FC<SellerDashboardContentProps> = ({
             onSendMessage={handlers.sendMessage}
             onSellerSendMessage={(conversationId, messageText, type, payload) => {
               if (type || payload) {
-                handlers.sendMessageWithType(conversationId, messageText, type, payload);
+                handlers.sendMessageWithType(
+                  conversationId,
+                  messageText,
+                  type,
+                  payload as Parameters<typeof handlers.sendMessageWithType>[3],
+                );
               } else {
                 handlers.sendMessage(conversationId, messageText);
               }

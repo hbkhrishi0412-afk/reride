@@ -4,11 +4,14 @@ import { useTranslation } from 'react-i18next';
 import { View as ViewEnum, Vehicle, User, Notification, Conversation, ChatMessage, SubscriptionPlan, type SearchFilters } from '../../types';
 import { MARKETPLACE_VIEWS, CAR_SERVICE_VIEWS, DEAL_PIPELINE_VIEWS } from '../../features';
 import { useApp } from '../AppProvider';
+import { useChat } from '../../contexts/ChatContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import useIsMobileApp from '../../hooks/useIsMobileApp';
 import useIsLgUp from '../../hooks/useIsLgUp';
 import { enrichVehiclesWithSellerInfo } from '../../utils/vehicleEnrichment';
 import { filterVehiclesBySellerEmail } from '../../utils/sellerVehicleFilter';
 import { findVehicleByIdentity } from '../../utils/vehicleIdentity';
+import { mergeVehicleCatalog } from '../../utils/mergeVehicleCatalog';
 import { matchesLocation } from '../../utils/cityMapping';
 import { buildVehicleMutationBody } from '../../utils/vehicleIdentity';
 import { addSellerListing, addSellerListingsBulk, assertSellerCanPublishListing } from '../../utils/sellerAddListing.js';
@@ -182,8 +185,6 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     platformSettings,
     auditLog,
     supportTickets,
-    notifications,
-    typingStatus,
     userLocation,
     addToast,
     setInitialSearchQuery,
@@ -234,7 +235,6 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     setConversations,
     setUserLocation,
     refreshVehicles,
-    chatPeerOnlineByConversationId,
     sendMessageWithType,
     setConversationReadState,
     clearConversationMessages,
@@ -244,6 +244,9 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     onImportUsers,
     onImportVehicles,
   } = useApp();
+
+  const { typingStatus, chatPeerOnlineByConversationId } = useChat();
+  const { notifications } = useNotifications();
 
   const {
     serviceProvider,
@@ -466,6 +469,29 @@ switch (currentView) {
           }}
           sourceVehicleCount={vehicles.length}
           onRetryLoadVehicles={() => void refreshVehicles({ userInitiated: true })}
+          onRequestMoreVehicles={async () => {
+            const { fetchNextPublishedVehiclePage, getPublishedCatalogHasMore } = await import(
+              '../../services/dataService'
+            );
+            const serverFilters: Record<string, string | number | undefined> = {};
+            if (selectedCity?.trim()) serverFilters.city = selectedCity.trim();
+            if (filtersFromUrl?.make) serverFilters.make = String(filtersFromUrl.make);
+            if (filtersFromUrl?.model) serverFilters.model = String(filtersFromUrl.model);
+            if (filtersFromUrl?.fuelType) serverFilters.fuelType = String(filtersFromUrl.fuelType);
+            if (filtersFromUrl?.minPrice != null) serverFilters.minPrice = Number(filtersFromUrl.minPrice);
+            if (filtersFromUrl?.maxPrice != null) serverFilters.maxPrice = Number(filtersFromUrl.maxPrice);
+            if (currentCategory && currentCategory !== 'ALL') serverFilters.category = String(currentCategory);
+
+            const { vehicles: pageVehicles, hasMore, reset } = await fetchNextPublishedVehiclePage(
+              Object.keys(serverFilters).length > 0 ? serverFilters : {},
+            );
+            if (pageVehicles.length > 0) {
+              setVehicles((prev) =>
+                reset ? pageVehicles : mergeVehicleCatalog(prev, pageVehicles, false),
+              );
+            }
+            return hasMore || getPublishedCatalogHasMore();
+          }}
         />
       </VehicleListErrorBoundary>
     );

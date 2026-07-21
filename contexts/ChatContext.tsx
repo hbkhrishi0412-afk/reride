@@ -1,9 +1,4 @@
-/**
- * Chat / inbox state — conversations, active thread, typing and presence.
- * Message handlers remain in AppProvider until a later extraction phase.
- */
-
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 import type { Conversation } from '../types';
 
 export interface ChatContextType {
@@ -40,16 +35,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     Record<string, boolean>
   >({});
 
-  const value: ChatContextType = {
-    conversations,
-    setConversations,
-    activeChat,
-    setActiveChat,
-    typingStatus,
-    setTypingStatus,
-    chatPeerOnlineByConversationId,
-    setChatPeerOnlineByConversationId,
-  };
+  const value = useMemo<ChatContextType>(
+    () => ({
+      conversations,
+      setConversations,
+      activeChat,
+      setActiveChat,
+      typingStatus,
+      setTypingStatus,
+      chatPeerOnlineByConversationId,
+      setChatPeerOnlineByConversationId,
+    }),
+    [conversations, activeChat, typingStatus, chatPeerOnlineByConversationId],
+  );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 };

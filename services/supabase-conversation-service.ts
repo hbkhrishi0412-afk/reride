@@ -176,6 +176,72 @@ export interface Conversation {
   updatedAt?: string;
 }
 
+/** Keep inbox payloads bounded — full history loads when a thread is opened/synced. */
+function capConversationMessagesForInbox(conv: Conversation, maxMessages = 5): Conversation {
+  const messages = conv.messages || [];
+  if (messages.length <= maxMessages) return conv;
+  return { ...conv, messages: messages.slice(-maxMessages) };
+}
+
+function messageRowToChatMessage(row: any): ChatMessage {
+  return sanitizePersistedChatMessage({
+    id: Number(row.id),
+    sender: (row.sender || 'user') as ChatMessage['sender'],
+    text: row.text || '',
+    timestamp: row.created_at || new Date().toISOString(),
+    isRead: !!row.is_read,
+    type: (row.message_type || 'text') as ChatMessage['type'],
+    payload: row.payload && typeof row.payload === 'object' ? row.payload : undefined,
+  } as ChatMessage);
+}
+
+/** Prefer normalized `messages` table when rows exist for this conversation. */
+async function loadMessagesFromTable(
+  supabase: SupabaseDb,
+  conversationId: string,
+): Promise<ChatMessage[] | null> {
+  if (!isConversationUuid(conversationId)) return null;
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id, conversation_id, sender, text, message_type, payload, is_read, created_at')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true });
+    if (error || !data || data.length === 0) return null;
+    return data.map(messageRowToChatMessage);
+  } catch {
+    return null;
+  }
+}
+
+/** Dual-write new chat rows into `messages` (idempotent upsert). */
+async function upsertMessageRow(
+  supabase: SupabaseDb,
+  conversationId: string,
+  message: ChatMessage,
+): Promise<void> {
+  if (!isConversationUuid(conversationId)) return;
+  const id = Number(message.id);
+  if (!Number.isFinite(id)) return;
+  try {
+    await supabase.from('messages').upsert(
+      {
+        id,
+        conversation_id: conversationId,
+        sender: message.sender,
+        text: message.text || '',
+        message_type: message.type || 'text',
+        payload: message.payload || null,
+        is_read: !!message.isRead,
+        created_at: message.timestamp || new Date().toISOString(),
+      },
+      { onConflict: 'id' },
+    );
+  } catch (err) {
+    console.warn('messages upsert skipped:', err);
+  }
+}
+
 // Detect if we're in a server context (serverless function)
 const isServerSide = typeof window === 'undefined';
 
@@ -371,7 +437,12 @@ export const supabaseConversationService = {
       }
 
       const [hydrated] = await hydrateConversationRows(supabase, [data]);
-      return hydrated ?? null;
+      if (!hydrated) return null;
+      const fromTable = await loadMessagesFromTable(supabase, hydrated.id);
+      if (fromTable) {
+        hydrated.messages = fromTable;
+      }
+      return hydrated;
     }
 
     // Non-uuid ids (conv_*, legacy composite keys) — resolve via metadata alias
@@ -395,7 +466,12 @@ export const supabaseConversationService = {
     }
 
     const [hydrated] = await hydrateConversationRows(supabase, [row]);
-    return hydrated ?? null;
+    if (!hydrated) return null;
+    const fromTable = await loadMessagesFromTable(supabase, hydrated.id);
+    if (fromTable) {
+      hydrated.messages = fromTable;
+    }
+    return hydrated;
   },
 
   // Get all conversations (used by admin; limit to avoid slow loads)
@@ -585,11 +661,13 @@ export const supabaseConversationService = {
     }
 
     const hydrated = await hydrateConversationRows(supabase, data || []);
-    return hydrated.map((conv) => ({
-      ...conv,
-      sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
-      customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
-    }));
+    return hydrated.map((conv) =>
+      capConversationMessagesForInbox({
+        ...conv,
+        sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+        customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
+      }),
+    );
   },
 
   // Find conversations by seller ID
@@ -635,11 +713,13 @@ export const supabaseConversationService = {
     }
 
     const hydrated = await hydrateConversationRows(supabase, data || []);
-    return hydrated.map((conv) => ({
-      ...conv,
-      sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
-      customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
-    }));
+    return hydrated.map((conv) =>
+      capConversationMessagesForInbox({
+        ...conv,
+        sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+        customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
+      }),
+    );
   },
 
   // Find conversation by vehicle ID and customer ID
@@ -752,6 +832,9 @@ export const supabaseConversationService = {
         lastMessage: message.text,
         ...readPatch,
       });
+      // Dual-write into normalized messages table (source of truth going forward).
+      const supabase = await resolveSupabaseClient();
+      await upsertMessageRow(supabase, conversation.id, sanitizePersistedChatMessage(message));
       logInfo('✅ Supabase: Message added successfully');
     } catch (error) {
       console.error('❌ Supabase: Error updating conversation:', {

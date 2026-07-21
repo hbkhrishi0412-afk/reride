@@ -120,38 +120,42 @@ export default function EMICalculator({
           -webkit-appearance: none;
           appearance: none;
           width: 100%;
-          height: 12px;
+          height: 28px;
           border-radius: 9999px;
           outline: none;
-        }
-        .emi-calc-root input[type='range']::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 22px;
-          height: 22px;
-          border-radius: 50%;
-          background: #9333ea;
-          border: 3px solid #fff;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.22);
-          margin-top: -6px;
-          cursor: pointer;
-        }
-        .emi-calc-root input[type='range']::-moz-range-thumb {
-          width: 22px;
-          height: 22px;
-          border-radius: 50%;
-          background: #9333ea;
-          border: 3px solid #fff;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.22);
-          cursor: pointer;
+          background: transparent;
+          touch-action: none;
         }
         .emi-calc-root input[type='range']::-webkit-slider-runnable-track {
           height: 10px;
           border-radius: 9999px;
+          background: var(--emi-track);
         }
         .emi-calc-root input[type='range']::-moz-range-track {
           height: 10px;
           border-radius: 9999px;
+          background: var(--emi-track);
+        }
+        .emi-calc-root input[type='range']::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: #FF6B35;
+          border: 3px solid #fff;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+          margin-top: -7px;
+          cursor: pointer;
+        }
+        .emi-calc-root input[type='range']::-moz-range-thumb {
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: #FF6B35;
+          border: 3px solid #fff;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+          cursor: pointer;
         }
       `}</style>
 
@@ -377,7 +381,7 @@ function SliderBlock(props: {
           ) : null}
         </div>
       </div>
-      <div className="py-2">
+      <div className="px-1 py-1">
         <input
           type="range"
           min={min}
@@ -386,7 +390,7 @@ function SliderBlock(props: {
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
           className="w-full cursor-pointer block"
-          style={{ background: track }}
+          style={{ ['--emi-track' as string]: track }}
           aria-valuemin={min}
           aria-valuemax={max}
           aria-valuenow={value}

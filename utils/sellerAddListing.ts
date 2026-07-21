@@ -87,9 +87,8 @@ export function prepareSellerVehiclePublishUpdate(
     return vehicleData;
   }
 
-  const listingExpired =
-    Boolean(existing?.listingExpiresAt) &&
-    new Date(existing.listingExpiresAt as string) < new Date();
+  const expiresAt = existing?.listingExpiresAt;
+  const listingExpired = Boolean(expiresAt) && new Date(expiresAt as string) < new Date();
   const lifecycle = listingExpired
     ? buildListingRenewalUpdates(currentUser, existing || vehicleData)
     : {
