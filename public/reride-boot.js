@@ -169,7 +169,7 @@
       font.rel = 'preload';
       font.as = 'style';
       font.href =
-        'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Nunito+Sans:wght@600;700;800&display=swap';
+        'https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Nunito+Sans:wght@600;700&display=swap';
       font.onload = function () {
         this.onload = null;
         this.rel = 'stylesheet';
@@ -199,11 +199,16 @@
     var isLocalhost = h3 === 'localhost' || h3 === '127.0.0.1' || h3.indexOf('localhost') !== -1;
     if (!isLocalhost) {
       var firstPageUrl = '/api/vehicles?limit=30&page=1&skipExpiryCheck=true';
+      var earlyAbort =
+        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(5000)
+          : undefined;
       window.__RERIDE_EARLY_VEHICLES__ = fetch(firstPageUrl, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         credentials: 'include',
         cache: 'default',
+        signal: earlyAbort,
       })
         .then(function (response) {
           if (!response.ok) return null;

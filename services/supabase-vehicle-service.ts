@@ -28,6 +28,75 @@ function validateCategory(category: unknown): VehicleCategory {
 
 const SUPABASE_IMAGES_BUCKET = 'Images';
 
+/** Lean columns for list/catalog queries — avoid select('*') payloads. */
+const VEHICLE_LIST_COLUMNS =
+  'id, make, model, variant, year, price, mileage, category, seller_email, seller_name, status, is_featured, images, description, engine, fuel_type, transmission, fuel_efficiency, color, registration_year, insurance_validity, insurance_type, rto, city, state, location, no_of_owners, displacement, ground_clearance, boot_space, features, created_at, updated_at, listing_expires_at, listing_status, views, inquiries_count, certification_status, metadata';
+
+/** Optional server-side filters for published listing queries. */
+export type VehicleListFilters = {
+  city?: string;
+  state?: string;
+  make?: string;
+  model?: string;
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minYear?: number;
+  maxYear?: number;
+  fuelType?: string;
+  transmission?: string;
+  q?: string;
+};
+
+function applyVehicleListFilters<T extends { or: Function; eq: Function; ilike: Function; gte: Function; lte: Function }>(
+  query: T,
+  status: string,
+  filters?: VehicleListFilters,
+): T {
+  let q = query;
+  // For published vehicles, also exclude expired listings at the DB level
+  if (status === 'published') {
+    q = q
+      .or('listing_status.is.null,listing_status.eq.active')
+      .or('listing_expires_at.is.null,listing_expires_at.gt.' + new Date().toISOString()) as T;
+  }
+  if (!filters) return q;
+  const city = filters.city?.trim();
+  if (city) q = q.ilike('city', city) as T;
+  const state = filters.state?.trim();
+  if (state) q = q.ilike('state', state) as T;
+  const make = filters.make?.trim();
+  if (make) q = q.ilike('make', make) as T;
+  const model = filters.model?.trim();
+  if (model) q = q.ilike('model', model) as T;
+  const category = filters.category?.trim();
+  if (category && category !== 'ALL') q = q.eq('category', category) as T;
+  if (typeof filters.minPrice === 'number' && Number.isFinite(filters.minPrice)) {
+    q = q.gte('price', filters.minPrice) as T;
+  }
+  if (typeof filters.maxPrice === 'number' && Number.isFinite(filters.maxPrice)) {
+    q = q.lte('price', filters.maxPrice) as T;
+  }
+  if (typeof filters.minYear === 'number' && Number.isFinite(filters.minYear)) {
+    q = q.gte('year', filters.minYear) as T;
+  }
+  if (typeof filters.maxYear === 'number' && Number.isFinite(filters.maxYear)) {
+    q = q.lte('year', filters.maxYear) as T;
+  }
+  const fuel = filters.fuelType?.trim();
+  if (fuel) q = q.ilike('fuel_type', fuel) as T;
+  const transmission = filters.transmission?.trim();
+  if (transmission) q = q.ilike('transmission', transmission) as T;
+  const search = filters.q?.trim();
+  if (search) {
+    const like = `%${search.replace(/%/g, '')}%`;
+    q = q.or(
+      `make.ilike.${like},model.ilike.${like},variant.ilike.${like},city.ilike.${like},description.ilike.${like}`,
+    ) as T;
+  }
+  return q;
+}
+
 /** Build public storage URL from base URL and path (no Supabase client needed) */
 function buildStoragePublicUrl(filePath: string): string | null {
   const baseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
@@ -446,7 +515,7 @@ export const supabaseVehicleService = {
     while (hasMore) {
       const { data, error } = await supabase
         .from('vehicles')
-        .select('*')
+        .select(VEHICLE_LIST_COLUMNS)
         .range(offset, offset + pageSize - 1)
         .order('created_at', { ascending: false });
       
@@ -601,8 +670,9 @@ export const supabaseVehicleService = {
     
     const { data, error } = await supabase
       .from('vehicles')
-      .select('*')
-      .eq('seller_email', sellerEmail.toLowerCase().trim());
+      .select(VEHICLE_LIST_COLUMNS)
+      .eq('seller_email', sellerEmail.toLowerCase().trim())
+      .order('created_at', { ascending: false });
     
     if (error) {
       throw new Error(`Failed to fetch vehicles by seller: ${error.message}`);
@@ -701,13 +771,20 @@ export const supabaseVehicleService = {
   },
 
   // Count vehicles by status (much faster than fetching all and counting)
-  async countByStatus(status: 'published' | 'unpublished' | 'sold'): Promise<number> {
+  async countByStatus(
+    status: 'published' | 'unpublished' | 'sold',
+    filters?: VehicleListFilters,
+  ): Promise<number> {
     const supabase = await resolveSupabaseClient();
     
-    const { count, error } = await supabase
+    let query = supabase
       .from('vehicles')
       .select('*', { count: 'exact', head: true })
       .eq('status', status);
+
+    query = applyVehicleListFilters(query, status, filters);
+    
+    const { count, error } = await query;
     
     if (error) {
       throw new Error(`Failed to count vehicles by status: ${error.message}`);
@@ -721,7 +798,13 @@ export const supabaseVehicleService = {
   // This index dramatically speeds up the most common query pattern
   async findByStatus(
     status: 'published' | 'unpublished' | 'sold',
-    options?: { orderBy?: string; orderDirection?: 'asc' | 'desc'; limit?: number; offset?: number }
+    options?: {
+      orderBy?: string;
+      orderDirection?: 'asc' | 'desc';
+      limit?: number;
+      offset?: number;
+      filters?: VehicleListFilters;
+    },
   ): Promise<Vehicle[]> {
     const supabase = await resolveSupabaseClient();
     
@@ -732,15 +815,10 @@ export const supabaseVehicleService = {
     
     let query = supabase
       .from('vehicles')
-      .select('id, make, model, variant, year, price, mileage, category, seller_email, seller_name, status, is_featured, images, description, engine, fuel_type, transmission, fuel_efficiency, color, registration_year, insurance_validity, insurance_type, rto, city, state, location, no_of_owners, displacement, ground_clearance, boot_space, features, created_at, updated_at, listing_expires_at, listing_status, views, inquiries_count, certification_status, metadata')
+      .select(VEHICLE_LIST_COLUMNS)
       .eq('status', status);
-    
-    // For published vehicles, also exclude expired listings at the DB level
-    if (status === 'published') {
-      query = query
-        .or('listing_status.is.null,listing_status.eq.active')
-        .or('listing_expires_at.is.null,listing_expires_at.gt.' + new Date().toISOString());
-    }
+
+    query = applyVehicleListFilters(query, status, options?.filters);
     
     // Apply database-level sorting (much faster than in-memory sorting)
     // Uses composite index idx_vehicles_status_created_at for optimal performance

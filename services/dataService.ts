@@ -13,6 +13,7 @@ import { userRolesEqual } from '../utils/user-role.js';
 import { currentUserForLocalSession, currentUserForLocalSessionJson } from '../utils/userLocalStorageSnapshot.js';
 import { migrateVehicleListCache, normalizeVehiclesList } from '../utils/vehicleIdentity.js';
 import { filterVehiclesBySellerEmail } from '../utils/sellerVehicleFilter.js';
+import { mergeVehicleCatalog } from '../utils/mergeVehicleCatalog.js';
 
 function formatServiceUnavailableMessage(errorData: {
   reason?: string;
@@ -116,11 +117,11 @@ class DataService {
     // Higher priority for GET requests (read operations are more critical)
     const requestPriority = method === 'GET' ? Math.max(priority, 7) : priority;
 
-    // Bypass the sequential queue for public read paths so vehicle catalog startup is not
-    // delayed behind other GETs (200ms gaps) or blocked by /users on first visit.
+    // Bypass the sequential queue for catalog reads and auth/login so open + sign-in
+    // are not stalled behind the 200ms request stagger.
     const bypassQueue =
-      method === 'GET' &&
-      (isCapacitorNative() || endpoint.includes('/vehicles'));
+      (method === 'GET' && (isCapacitorNative() || endpoint.includes('/vehicles'))) ||
+      (method === 'POST' && endpoint.includes('/users'));
 
     const doRequest = async () => {
         let csrfHeader: string | undefined;
@@ -187,7 +188,9 @@ class DataService {
           } catch {
             fallbackUrl = null;
           }
-          const fetchTimeoutMs = isCapacitorNative() ? 20000 : 7000;
+          const fetchTimeoutMs = isCapacitorNative()
+            ? (endpoint.includes('/vehicles') ? 10000 : 15000)
+            : (endpoint.includes('/vehicles') ? 6000 : 7000);
           try {
             const controller = new AbortController();
             timeoutId = setTimeout(() => controller.abort(), fetchTimeoutMs);
@@ -553,9 +556,7 @@ class DataService {
     const maxPages = 100;
 
     while (hasMore && page <= maxPages) {
-      const endpoint = isNativeWebView
-        ? `/vehicles?limit=${limit}&page=${page}&skipExpiryCheck=true`
-        : `/vehicles?limit=${limit}&page=${page}&skipExpiryCheck=true`;
+      const endpoint = this.buildPublishedVehiclesEndpoint(page, limit, this.publishedCatalogCursor.filters);
       const nextRaw = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: typeof pagination }>(endpoint);
       const next = this.extractVehiclesFromApiResponse(nextRaw);
       merged.push(...next.vehicles);
@@ -582,8 +583,199 @@ class DataService {
   }
 
   /**
+   * Web storefront: optionally expand remaining pages in the background.
+   * Disabled by default — listing uses on-demand page fetches instead of
+   * holding the full catalog in memory (company-standard pagination).
+   * Re-enable with VITE_VEHICLES_FULL_HYDRATION=true for admin-like full cache.
+   */
+  private shouldFullHydratePublishedCatalog(): boolean {
+    try {
+      const meta = (typeof import.meta !== 'undefined' ? import.meta : {}) as {
+        env?: { VITE_VEHICLES_FULL_HYDRATION?: string };
+      };
+      return String(meta?.env?.VITE_VEHICLES_FULL_HYDRATION || '').toLowerCase() === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  /** Optional server-side filters for published listing pagination. */
+  private publishedCatalogCursor: {
+    page: number;
+    limit: number;
+    hasMore: boolean;
+    total: number;
+    filters: Record<string, string>;
+  } = { page: 1, limit: 30, hasMore: false, total: 0, filters: {} };
+
+  getPublishedCatalogHasMore(): boolean {
+    return this.publishedCatalogCursor.hasMore;
+  }
+
+  getPublishedCatalogTotal(): number {
+    return this.publishedCatalogCursor.total;
+  }
+
+  /** Normalize list filters into stable query-string params. */
+  private normalizePublishedFilters(
+    filters?: Record<string, string | number | undefined | null> | null,
+  ): Record<string, string> {
+    if (!filters) return {};
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(filters)) {
+      if (value === undefined || value === null) continue;
+      const s = String(value).trim();
+      if (!s || s === 'ALL') continue;
+      out[key] = s;
+    }
+    return out;
+  }
+
+  private publishedFiltersEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const key of keys) {
+      if ((a[key] || '') !== (b[key] || '')) return false;
+    }
+    return true;
+  }
+
+  private buildPublishedVehiclesEndpoint(
+    page: number,
+    limit: number,
+    filters: Record<string, string> = this.publishedCatalogCursor.filters,
+  ): string {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    params.set('page', String(page));
+    params.set('skipExpiryCheck', 'true');
+    for (const [key, value] of Object.entries(filters)) {
+      params.set(key, value);
+    }
+    return `/vehicles?${params.toString()}`;
+  }
+
+  private rememberPublishedCursor(
+    pagination?: { page?: number; limit?: number; total?: number; pages?: number; hasMore?: boolean },
+    pageVehiclesLength = 0,
+    filters: Record<string, string> = this.publishedCatalogCursor.filters,
+  ): void {
+    if (!pagination) {
+      this.publishedCatalogCursor = {
+        page: 1,
+        limit: this.getWebVehiclesPageSize(),
+        hasMore: false,
+        total: pageVehiclesLength,
+        filters,
+      };
+      return;
+    }
+    const page = Number(pagination.page) || 1;
+    const limit = Math.max(1, Number(pagination.limit) || this.getWebVehiclesPageSize());
+    const total =
+      typeof pagination.total === 'number' && !Number.isNaN(pagination.total)
+        ? pagination.total
+        : pageVehiclesLength;
+    const pages =
+      typeof pagination.pages === 'number' && !Number.isNaN(pagination.pages)
+        ? pagination.pages
+        : undefined;
+    const hasMore =
+      !!pagination.hasMore ||
+      (pages !== undefined && page < pages) ||
+      (typeof pagination.total === 'number' && page * limit < pagination.total);
+    this.publishedCatalogCursor = { page, limit, hasMore, total, filters };
+  }
+
+  /**
+   * Fetch page 1 under the given filters (replaces cursor). Used when city/filters change.
+   */
+  async fetchPublishedVehiclesWithFilters(
+    filters?: Record<string, string | number | undefined | null> | null,
+  ): Promise<{ vehicles: Vehicle[]; hasMore: boolean; total: number; reset: true }> {
+    const nextFilters = this.normalizePublishedFilters(filters);
+    const limit = this.publishedCatalogCursor.limit || this.getWebVehiclesPageSize();
+    const endpoint = this.buildPublishedVehiclesEndpoint(1, limit, nextFilters);
+    const raw = await this.makeApiRequest<
+      Vehicle[] | { vehicles?: Vehicle[]; pagination?: { page?: number; limit?: number; total?: number; pages?: number; hasMore?: boolean } }
+    >(endpoint);
+    const { vehicles, pagination } = this.extractVehiclesFromApiResponse(raw);
+    this.rememberPublishedCursor(pagination, vehicles.length, nextFilters);
+    if (!pagination) {
+      this.publishedCatalogCursor = {
+        page: 1,
+        limit,
+        hasMore: vehicles.length >= limit,
+        total: vehicles.length,
+        filters: nextFilters,
+      };
+    }
+    return {
+      vehicles: this.finalizeVehicleList(vehicles),
+      hasMore: this.publishedCatalogCursor.hasMore,
+      total: this.publishedCatalogCursor.total,
+      reset: true,
+    };
+  }
+
+  /**
+   * Fetch the next published page and return only the new rows (for catalog append).
+   * If `filters` differ from the current cursor, resets to page 1 under those filters.
+   */
+  async fetchNextPublishedVehiclePage(
+    filters?: Record<string, string | number | undefined | null> | null,
+  ): Promise<{
+    vehicles: Vehicle[];
+    hasMore: boolean;
+    total: number;
+    reset: boolean;
+  }> {
+    const nextFilters =
+      filters === undefined || filters === null
+        ? this.publishedCatalogCursor.filters
+        : this.normalizePublishedFilters(filters);
+
+    if (!this.publishedFiltersEqual(nextFilters, this.publishedCatalogCursor.filters)) {
+      return this.fetchPublishedVehiclesWithFilters(nextFilters);
+    }
+
+    if (!this.publishedCatalogCursor.hasMore) {
+      return {
+        vehicles: [],
+        hasMore: false,
+        total: this.publishedCatalogCursor.total,
+        reset: false,
+      };
+    }
+    const nextPage = this.publishedCatalogCursor.page + 1;
+    const limit = this.publishedCatalogCursor.limit;
+    const endpoint = this.buildPublishedVehiclesEndpoint(nextPage, limit, nextFilters);
+    const raw = await this.makeApiRequest<
+      Vehicle[] | { vehicles?: Vehicle[]; pagination?: { page?: number; limit?: number; total?: number; pages?: number; hasMore?: boolean } }
+    >(endpoint);
+    const { vehicles, pagination } = this.extractVehiclesFromApiResponse(raw);
+    this.rememberPublishedCursor(pagination, vehicles.length, nextFilters);
+    // If API omitted pagination, advance manually when we got a full page.
+    if (!pagination) {
+      const hasMore = vehicles.length >= limit;
+      this.publishedCatalogCursor = {
+        page: nextPage,
+        limit,
+        hasMore,
+        total: this.publishedCatalogCursor.total + vehicles.length,
+        filters: nextFilters,
+      };
+    }
+    return {
+      vehicles: this.finalizeVehicleList(vehicles),
+      hasMore: this.publishedCatalogCursor.hasMore,
+      total: this.publishedCatalogCursor.total,
+      reset: false,
+    };
+  }
+
+  /**
    * Web storefront optimization:
-   * return page-1 quickly, then hydrate the full merged catalog in the background.
+   * return page-1 quickly, then optionally hydrate remaining pages in the background.
    */
   private hydrateRemainingVehiclePagesInBackground(
     firstResponse: Vehicle[] | { vehicles?: Vehicle[]; pagination?: { page?: number; limit?: number; total?: number; pages?: number; hasMore?: boolean } },
@@ -591,6 +783,19 @@ class DataService {
     isNativeWebView: boolean,
     cacheKey: string
   ): void {
+    if (!this.shouldFullHydratePublishedCatalog()) {
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        const { vehicles, pagination } = this.extractVehiclesFromApiResponse(firstResponse);
+        this.rememberPublishedCursor(pagination, vehicles.length, {});
+        window.dispatchEvent(
+          new CustomEvent('vehiclesBackgroundHydration', {
+            detail: { status: 'done', count: vehicles.length, deferred: true },
+          }),
+        );
+      }
+      return;
+    }
+
     if (typeof window !== 'undefined' && window.dispatchEvent) {
       window.dispatchEvent(new CustomEvent('vehiclesBackgroundHydration', { detail: { status: 'start' } }));
     }
@@ -604,6 +809,13 @@ class DataService {
           return;
         }
         this.setLocalStorageData(cacheKey, fullVehicles);
+        this.publishedCatalogCursor = {
+          page: Math.max(1, Math.ceil(fullVehicles.length / this.getWebVehiclesPageSize())),
+          limit: this.getWebVehiclesPageSize(),
+          hasMore: false,
+          total: fullVehicles.length,
+          filters: {},
+        };
         if (typeof window !== 'undefined' && window.dispatchEvent) {
           window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles: fullVehicles } }));
           window.dispatchEvent(new CustomEvent('vehiclesBackgroundHydration', { detail: { status: 'done', count: fullVehicles.length } }));
@@ -642,8 +854,21 @@ class DataService {
     if (typeof window === 'undefined') return null;
     const early = (window as Window & { __RERIDE_EARLY_VEHICLES__?: Promise<unknown> }).__RERIDE_EARLY_VEHICLES__;
     if (!early || typeof early.then !== 'function') return null;
+    // Never block catalog init on a hung/slow boot prefetch (was awaiting for minutes).
+    const PREFETCH_WAIT_MS = 4500;
     try {
-      const raw = await early;
+      const raw = await Promise.race([
+        early,
+        new Promise<null>((resolve) => {
+          setTimeout(() => resolve(null), PREFETCH_WAIT_MS);
+        }),
+      ]);
+      // Clear so a late-resolving hung promise cannot be awaited again.
+      try {
+        delete (window as Window & { __RERIDE_EARLY_VEHICLES__?: Promise<unknown> }).__RERIDE_EARLY_VEHICLES__;
+      } catch {
+        /* ignore */
+      }
       if (!raw) return null;
       if (Array.isArray(raw)) return raw;
       if (typeof raw === 'object' && raw !== null && 'vehicles' in raw) {
@@ -774,17 +999,29 @@ class DataService {
       this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint)
         .then(async (response) => {
           try {
-            const vehicles = await this.expandPublishedVehiclesIfPaginated(
-              response,
-              includeAllStatuses,
-              isNativeWebView
-            );
+            // Storefront: refresh page 1 only — do not re-expand the full catalog in the background.
+            const { vehicles: pageVehicles, pagination } = this.extractVehiclesFromApiResponse(response);
+            this.rememberPublishedCursor(pagination, pageVehicles.length, {});
+            let vehicles = pageVehicles;
+            if (includeAllStatuses || this.shouldFullHydratePublishedCatalog()) {
+              vehicles = await this.expandPublishedVehiclesIfPaginated(
+                response,
+                includeAllStatuses,
+                isNativeWebView,
+              );
+            }
             if (Array.isArray(vehicles) && vehicles.length >= 0) {
               const normalized = this.finalizeVehicleList(vehicles);
-              this.setLocalStorageData(cacheKey, normalized);
-              logInfo(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
+              // Upsert into cache instead of replacing a larger catalog with page 1.
+              const prevCache = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
+              const toStore =
+                !includeAllStatuses && normalized.length < prevCache.length
+                  ? mergeVehicleCatalog(prevCache, normalized, false)
+                  : normalized;
+              this.setLocalStorageData(cacheKey, toStore);
+              logInfo(`✅ Background refresh: Updated cache with ${normalized.length} vehicles (page refresh)`);
               if (typeof window !== 'undefined' && window.dispatchEvent) {
-                window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles } }));
+                window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles: normalized } }));
               }
             } else if (vehicles.length === 0) {
               console.warn('⚠️ Background refresh returned 0 vehicles. Keeping cached data.');
@@ -808,7 +1045,7 @@ class DataService {
         nativeVehiclesPageLimit
       );
       let response: Vehicle[] | { vehicles?: Vehicle[]; pagination?: any } | null = null;
-      if (!forceRefresh && !includeAllStatuses && !isNativeWebView) {
+      if (!forceRefresh && !includeAllStatuses) {
         response = await this.tryConsumeEarlyVehiclesPrefetch();
         if (response) {
           logInfo('✅ Used early vehicle prefetch from boot script');
@@ -817,15 +1054,17 @@ class DataService {
       if (!response) {
         response = await this.makeApiRequest<Vehicle[] | { vehicles?: Vehicle[]; pagination?: any }>(endpoint);
       }
+      // Paint page 1 immediately on web AND native — never sequentially expand 100 pages on open.
       const shouldFastPaintFirstPage =
         !includeAllStatuses &&
-        !isNativeWebView &&
-        !forceRefresh;
+        !forceRefresh &&
+        !this.shouldFullHydratePublishedCatalog();
 
       let vehicles: Vehicle[];
       if (shouldFastPaintFirstPage) {
         const { vehicles: firstPageVehicles, pagination } = this.extractVehiclesFromApiResponse(response);
         vehicles = firstPageVehicles;
+        this.rememberPublishedCursor(pagination, firstPageVehicles.length, {});
 
         const hasMorePages =
           !!pagination?.hasMore &&
@@ -835,7 +1074,7 @@ class DataService {
             (pagination.pages === undefined && pagination.total === undefined)
           );
 
-        if (hasMorePages) {
+        if (hasMorePages && this.shouldFullHydratePublishedCatalog()) {
           this.hydrateRemainingVehiclePagesInBackground(
             response,
             includeAllStatuses,
@@ -843,12 +1082,26 @@ class DataService {
             cacheKey
           );
         }
+      } else if (!includeAllStatuses && forceRefresh && !this.shouldFullHydratePublishedCatalog()) {
+        // Soft force-refresh: page 1 only (realtime/poll) — avoid full expand.
+        const { vehicles: firstPageVehicles, pagination } = this.extractVehiclesFromApiResponse(response);
+        vehicles = firstPageVehicles;
+        this.rememberPublishedCursor(pagination, firstPageVehicles.length, {});
       } else {
         vehicles = await this.expandPublishedVehiclesIfPaginated(
           response,
           includeAllStatuses,
           isNativeWebView
         );
+        if (!includeAllStatuses) {
+          this.publishedCatalogCursor = {
+            page: Math.max(1, Math.ceil(vehicles.length / this.getWebVehiclesPageSize())),
+            limit: this.getWebVehiclesPageSize(),
+            hasMore: false,
+            total: vehicles.length,
+            filters: {},
+          };
+        }
       }
 
       if (!Array.isArray(vehicles)) {
@@ -1699,6 +1952,14 @@ export const dataService = new DataService();
 
 // Export individual methods for backward compatibility
 export const getVehicles = () => dataService.getVehicles();
+export const fetchNextPublishedVehiclePage = (
+  filters?: Record<string, string | number | undefined | null> | null,
+) => dataService.fetchNextPublishedVehiclePage(filters);
+export const fetchPublishedVehiclesWithFilters = (
+  filters?: Record<string, string | number | undefined | null> | null,
+) => dataService.fetchPublishedVehiclesWithFilters(filters);
+export const getPublishedCatalogHasMore = () => dataService.getPublishedCatalogHasMore();
+export const getPublishedCatalogTotal = () => dataService.getPublishedCatalogTotal();
 export const getSellerVehicles = () => dataService.getSellerVehicles();
 export const addVehicle = (vehicleData: Vehicle) => dataService.addVehicle(vehicleData);
 export const updateVehicle = (vehicleData: Vehicle) => dataService.updateVehicle(vehicleData);

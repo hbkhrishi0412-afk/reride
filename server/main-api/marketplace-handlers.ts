@@ -970,9 +970,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           name: sanitizedData.name,
           mobile,
           location,
-          role: sanitizedData.role,
+          role: sanitizedData.role as core.UserType['role'],
           // REMOVED: firebaseUid - not used in Supabase
-          authProvider: sanitizedData.authProvider,
+          authProvider: sanitizedData.authProvider as core.UserType['authProvider'],
           avatarUrl: sanitizedData.avatarUrl,
           status: 'active' as const,
           isVerified: true,
@@ -1807,7 +1807,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
     // For non-admin requests without auth, return empty array instead of 401
     // This prevents console errors when users aren't logged in
     const authResult = await core.authenticateRequestDual(req);
-    if (!authResult.isValid) {
+    if (!authResult.isValid || !authResult.user) {
       // If no auth and not requesting specific action, return empty array gracefully
       if (!action && !email) {
         // Only log in development to avoid information leakage
@@ -1817,25 +1817,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         return res.status(200).json([]);
       }
       // For specific actions (like trust-score), still require auth
-      const auth = await core.requireAuth(req, res, 'GET /users');
-      if (!auth) {
-        return;
-      }
-    } else {
-      // Auth is valid, continue with normal flow
-      const auth = await core.requireAuth(req, res, 'GET /users');
-      if (!auth) {
-        return;
-      }
+      return res.status(401).json({ success: false, reason: authResult.error || 'Authentication required' });
     }
-    
-    // Get auth user for the rest of the handler
-    const auth = await core.requireAuth(req, res, 'GET /users');
-    if (!auth || !auth.user) {
-      // This shouldn't happen if we got here, but handle it gracefully
-      return res.status(200).json([]);
-    }
-    const authUser = auth.user;
+    const authUser = authResult.user;
 
     if (action === 'trust-score' && email) {
       try {
@@ -1971,40 +1955,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         });
       }
       
-      // CRITICAL: Add direct database query test before using service
-      core.logInfo('🔍 Testing direct database query with admin client...');
-      try {
-        const testClient = core.getSupabaseAdminClient();
-        const { data: testData, error: testError, count: testCount } = await testClient
-          .from('users')
-          .select('*', { count: 'exact', head: false })
-          .limit(1);
-        
-        if (testError) {
-          core.logError('❌ Direct query test failed:', {
-            message: testError.message,
-            details: testError.details,
-            hint: testError.hint,
-            code: testError.code
-          });
-        } else {
-          core.logInfo(`✅ Direct query test: Found ${testCount || 0} users in database`);
-          if (testData && testData.length > 0) {
-            core.logInfo('📊 Sample row from direct query:', {
-              hasId: !!testData[0].id,
-              id: testData[0].id,
-              hasEmail: !!testData[0].email,
-              email: testData[0].email,
-              hasRole: !!testData[0].role,
-              role: testData[0].role,
-              rowKeys: Object.keys(testData[0])
-            });
-          }
-        }
-      } catch (testErr) {
-        core.logError('❌ Direct query test exception:', testErr);
-      }
-      
       const users = await core.userService.findAll();
       core.logInfo(`✅ Fetched ${users.length} raw users from Supabase database via core.userService`);
       
@@ -2017,26 +1967,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         core.logWarn('   5. Service role key might not have proper permissions');
         core.logWarn('   6. SUPABASE_SERVICE_ROLE_KEY might not be configured in Vercel environment variables');
         core.logWarn('   7. Users might be getting filtered out during conversion');
-        
-        // CRITICAL: Try a raw count query to verify users exist
-        try {
-          const countClient = core.getSupabaseAdminClient();
-          const { count, error: countError } = await countClient
-            .from('users')
-            .select('*', { count: 'exact', head: true });
-          
-          if (countError) {
-            core.logError('❌ Count query error:', countError);
-          } else {
-            core.logInfo(`📊 Raw count query result: ${count || 0} users in database`);
-            if (count && count > 0) {
-              core.logWarn('⚠️ Users exist in database but core.userService.findAll() returned 0!');
-              core.logWarn('   This suggests an issue with the core.userService.findAll() method or data conversion.');
-            }
-          }
-        } catch (countErr) {
-          core.logError('❌ Count query exception:', countErr);
-        }
         
         // Return a warning but still return empty array (not an error)
         return res.status(200).json([]);
@@ -3334,6 +3264,29 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       if (limit === 0 && isProductionEnv) {
         limit = 80;
       }
+
+      const parseNum = (v: unknown): number | undefined => {
+        if (v === undefined || v === null || v === '') return undefined;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : undefined;
+      };
+      const listFilters = {
+        city: core.firstQueryParam(req.query.city) || undefined,
+        state: core.firstQueryParam(req.query.state) || undefined,
+        make: core.firstQueryParam(req.query.make) || undefined,
+        model: core.firstQueryParam(req.query.model) || undefined,
+        category: core.firstQueryParam(req.query.category) || undefined,
+        fuelType: core.firstQueryParam(req.query.fuelType) || undefined,
+        transmission: core.firstQueryParam(req.query.transmission) || undefined,
+        q: core.firstQueryParam(req.query.q) || undefined,
+        minPrice: parseNum(core.firstQueryParam(req.query.minPrice)),
+        maxPrice: parseNum(core.firstQueryParam(req.query.maxPrice)),
+        minYear: parseNum(core.firstQueryParam(req.query.minYear)),
+        maxYear: parseNum(core.firstQueryParam(req.query.maxYear)),
+      };
+      const hasListFilters = Object.values(listFilters).some(
+        (v) => v !== undefined && v !== null && String(v).trim() !== '',
+      );
       
       let vehicles: core.VehicleType[];
       let totalVehiclesCount: number = 0;
@@ -3352,23 +3305,29 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             orderBy: 'created_at',
             orderDirection: 'desc',
             limit,
-            offset
+            offset,
+            filters: hasListFilters ? listFilters : undefined,
           });
           
           // Get total count from cache if available, otherwise use COUNT query (much faster)
-          const cachedCount = cached?.totalCount;
+          const cachedCount = !hasListFilters ? cached?.totalCount : undefined;
           if (cachedCount !== undefined) {
             totalVehiclesCount = cachedCount;
             core.logInfo(`📊 Using cached total count: ${totalVehiclesCount}`);
           } else {
             // Use COUNT query instead of fetching all vehicles (dramatically faster)
             try {
-              totalVehiclesCount = await core.vehicleService.countByStatus('published');
-              // Update cache with total count
-              if (cached) {
-                cached.totalCount = totalVehiclesCount;
-              } else {
-                core.vehicleCache.set(cacheKey, { vehicles: [], timestamp: Date.now(), totalCount: totalVehiclesCount });
+              totalVehiclesCount = await core.vehicleService.countByStatus(
+                'published',
+                hasListFilters ? listFilters : undefined,
+              );
+              // Update cache with total count only for unfiltered catalog
+              if (!hasListFilters) {
+                if (cached) {
+                  cached.totalCount = totalVehiclesCount;
+                } else {
+                  core.vehicleCache.set(cacheKey, { vehicles: [], timestamp: Date.now(), totalCount: totalVehiclesCount });
+                }
               }
               core.logInfo(`📊 Fetched total count using COUNT query: ${totalVehiclesCount}`);
             } catch (countError) {
@@ -3377,13 +3336,16 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
               const allVehiclesForCount = await core.vehicleService.findByStatus('published', {
                 orderBy: 'created_at',
                 orderDirection: 'desc',
-                limit: 0
+                limit: 0,
+                filters: hasListFilters ? listFilters : undefined,
               });
               totalVehiclesCount = allVehiclesForCount.length;
-              if (cached) {
-                cached.totalCount = totalVehiclesCount;
-              } else {
-                core.vehicleCache.set(cacheKey, { vehicles: [], timestamp: Date.now(), totalCount: totalVehiclesCount });
+              if (!hasListFilters) {
+                if (cached) {
+                  cached.totalCount = totalVehiclesCount;
+                } else {
+                  core.vehicleCache.set(cacheKey, { vehicles: [], timestamp: Date.now(), totalCount: totalVehiclesCount });
+                }
               }
               core.logInfo(`📊 Fetched and cached total count (fallback): ${totalVehiclesCount}`);
             }
@@ -3396,7 +3358,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           vehicles = await core.vehicleService.findByStatus('published', {
             orderBy: 'created_at',
             orderDirection: 'desc',
-            limit: 0
+            limit: 0,
+            filters: hasListFilters ? listFilters : undefined,
           });
           if (skipExpiryCheck) {
             totalVehiclesCount = vehicles.length;
@@ -3456,7 +3419,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         });
       }
       
-      // Expiry enforcement: always run to keep listings accurate
+      // Hot path (boot + catalog): skipExpiryCheck=true → read-only list.
+      // Expiry / plan-limit writes belong on cron or authenticated mutations — never block GET.
+      let finalVehicles = vehicles;
+      if (!skipExpiryCheck) {
       const sellerMap = new Map<string, core.UserType>();
       const vehicleUpdates: Array<{ id: number; primaryKey: string; updates: Partial<core.VehicleType> }> = [];
       
@@ -3518,7 +3484,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           }
         }
         
-        // Process expiry checks only if not skipped
         vehicles.forEach(vehicle => {
         const updateFields: Record<string, any> = {};
         
@@ -3611,11 +3576,13 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           const planDetails = seller
             ? await core.resolveSellerPlanDetails(seller, core.USE_SUPABASE)
             : core.PLAN_DETAILS.free;
-          const limit = planDetails.listingLimit;
-          if (limit === 'unlimited') {
-            return;
+          const planLimit = planDetails.listingLimit;
+          // CRITICAL: must continue (not return) — bare return hung the HTTP response for minutes
+          // whenever any Premium/unlimited seller appeared on the page.
+          if (planLimit === 'unlimited') {
+            continue;
           }
-          const numericLimit = Number(limit) || 0;
+          const numericLimit = Number(planLimit) || 0;
           if (publishedVehicles.length > numericLimit) {
             const extras = publishedVehicles.slice(numericLimit); // older ones
             extras.forEach(v => {
@@ -3647,7 +3614,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         });
       }
       
-      let finalVehicles = vehicles;
       if (vehicleUpdates.length > 0) {
         // Only refresh published vehicles after updates (with database sorting)
         const refreshOffset = limit > 0 ? (page - 1) * limit : 0;
@@ -3659,6 +3625,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         });
         core.logInfo(`📊 Refreshed ${finalVehicles.length} published vehicles after ${vehicleUpdates.length} updates`);
       }
+      } // End of !skipExpiryCheck enforcement block
       
       // Always hide expired listings from the public catalog (even when skipExpiryCheck skips DB writes)
       finalVehicles = finalVehicles.filter(core.isPublicBuyListing);
@@ -3669,6 +3636,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         finalVehicles.map((v) => ({
           ...v,
           sellerEmail: v.sellerEmail?.toLowerCase().trim() || v.sellerEmail,
+          // Catalog cards only need a cover (+1 spare). Full galleries load on detail.
+          images: Array.isArray(v.images) && v.images.length > 3 ? v.images.slice(0, 3) : v.images,
         })),
         ),
       );

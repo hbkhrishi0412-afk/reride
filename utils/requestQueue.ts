@@ -20,7 +20,7 @@ interface QueuedRequest<T> {
 class RequestQueue {
   private queue: QueuedRequest<any>[] = [];
   private processing = false;
-  private delayBetweenRequests = 200; // 200ms delay between requests
+  private delayBetweenRequests = 50; // Keep light stagger without making post-login feel sequential
   private baseBackoffDelay = 1000; // 1 second base delay for retries
 
   /**

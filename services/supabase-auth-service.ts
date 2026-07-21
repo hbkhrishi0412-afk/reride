@@ -552,7 +552,7 @@ export type ServiceProviderOAuthPayload = Record<string, unknown> & {
  * After Google (or other Supabase) sign-in as a service provider: ensure `service_providers`
  * row exists and return profile for the car-services dashboard.
  */
-const OAUTH_API_FETCH_TIMEOUT_MS = 30_000;
+const OAUTH_API_FETCH_TIMEOUT_MS = 12_000;
 
 async function oauthApiAuthHeaders(accessTokenOverride?: string): Promise<Record<string, string>> {
   const token =

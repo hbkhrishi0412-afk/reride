@@ -151,6 +151,11 @@ type HistoryState = AppHistoryState;
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+/** Stable sentinels — toast / typing / notifications live in dedicated contexts. */
+const EMPTY_TOASTS: ToastType[] = [];
+const EMPTY_PEER_ONLINE: Record<string, boolean> = {};
+const EMPTY_NOTIFICATIONS: Notification[] = [];
+
 // Hook export - Fast Refresh compatible
 export const useApp = () => {
   const context = useContext(AppContext);
@@ -178,7 +183,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { t } = useTranslation();
-  const { toasts, setToasts, addToast, removeToast } = useToast();
+  const { setToasts, addToast, removeToast } = useToast();
   const {
     vehicles,
     setVehicles,
@@ -1878,6 +1883,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         }
 
         // Reload inbox threads after auth is ready (fixes empty seller/customer messages on login).
+        // Credentials were already rehydrated above — do not await rehydrate again (adds seconds).
         if (
           isSubscribed &&
           currentUser?.email &&
@@ -1885,8 +1891,6 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         ) {
           try {
             const inboxEmail = currentUser.email.toLowerCase().trim();
-            const { rehydrateApiCredentials } = await import('../utils/validatePersistedSession.js');
-            await rehydrateApiCredentials();
             const { getConversationsFromSupabase } = await import('../services/conversationService');
             const convResult =
               currentUser.role === 'seller'
@@ -1898,8 +1902,11 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
                 customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
               }));
-              setConversations(normalized);
-              saveConversations(normalized);
+              setConversations((prev) => {
+                const merged = mergeConversationLists(prev, normalized);
+                saveConversations(merged);
+                return merged;
+              });
             }
           } catch (convErr) {
             logWarn('Failed to sync conversations after login:', convErr);
@@ -2206,14 +2213,17 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     }
   }, [supportTickets]);
 
-  // Keep admin support queue in near real-time sync with backend updates
+  // Keep admin support queue in near real-time sync with backend updates.
+  // Defer first fetch until idle so catalog/home paint isn't competing for network.
   useEffect(() => {
     if (!currentUser?.email) return;
     const role = currentUser.role;
     const email = currentUser.email;
 
     let isMounted = true;
+    let interval: ReturnType<typeof setInterval> | null = null;
     const refreshSupportTickets = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       try {
         const tickets = await fetchSupportTicketsFromSupabase(role === 'admin' ? undefined : email);
         if (isMounted) {
@@ -2224,12 +2234,27 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       }
     };
 
-    refreshSupportTickets();
-    const interval = setInterval(refreshSupportTickets, CLIENT_POLL_INTERVALS_MS.supportTickets);
+    const start = () => {
+      if (!isMounted) return;
+      void refreshSupportTickets();
+      interval = setInterval(refreshSupportTickets, CLIENT_POLL_INTERVALS_MS.supportTickets);
+    };
+
+    let idleId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(() => start(), { timeout: 8000 });
+    } else {
+      timeoutId = setTimeout(start, 4000);
+    }
 
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
+      if (timeoutId) clearTimeout(timeoutId);
+      if (idleId != null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleId);
+      }
     };
   }, [currentUser?.email, currentUser?.role]);
 
@@ -3403,10 +3428,12 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     sellerRatings,
     wishlist,
     conversations,
-    toasts,
+    // Toast UI / typing-presence live in dedicated contexts — stable stubs here
+    // so those updates do not recreate AppContext and re-render the tree.
+    toasts: EMPTY_TOASTS,
     forgotPasswordRole,
-    typingStatus,
-    chatPeerOnlineByConversationId,
+    typingStatus: null,
+    chatPeerOnlineByConversationId: EMPTY_PEER_ONLINE,
     selectedCategory,
     publicSellerProfile,
     activeChat,
@@ -3422,7 +3449,8 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     vehicleData,
     faqItems,
     supportTickets,
-    notifications,
+    // Notification UI reads NotificationContext — keep a stable empty array here.
+    notifications: EMPTY_NOTIFICATIONS,
 
     // Actions
     setCurrentView,
@@ -5528,11 +5556,11 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }, [
     currentView, previousView, selectedVehicle, vehicles, isLoading, vehiclesCatalogReady,
     sellerInventory, sellerInventoryReady, currentUser,
-    comparisonList, comparisonCategory, ratings, sellerRatings, wishlist, conversations, toasts,
-    forgotPasswordRole, typingStatus, chatPeerOnlineByConversationId, selectedCategory, publicSellerProfile,
+    comparisonList, comparisonCategory, ratings, sellerRatings, wishlist, conversations,
+    forgotPasswordRole, selectedCategory, publicSellerProfile,
     activeChat, isAnnouncementVisible, recommendations, initialSearchQuery,
     isCommandPaletteOpen, userLocation, selectedCity, users, platformSettings,
-    auditLog, vehicleData, faqItems, supportTickets, notifications,
+    auditLog, vehicleData, faqItems, supportTickets,
     setCurrentView, setPreviousView, setSelectedVehicle, setVehicles, setSellerInventory, setIsLoading,
     setCurrentUser, setComparisonList, setWishlist, setConversations, setToasts,
     setForgotPasswordRole, setTypingStatus, setSelectedCategory, setPublicSellerProfile,
