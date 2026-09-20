@@ -2586,7 +2586,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     <p className="text-gray-600 text-sm mb-4">{t('listings.loadErrorHint')}</p>
                     <button
                       type="button"
-                      onClick={() => onRetryLoadVehicles()}
+                      onClick={() => void onRetryLoadVehicles?.()}
                       className="px-5 py-2.5 rounded-xl font-semibold text-white transition-all active:scale-95"
                       style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}
                     >
@@ -2892,7 +2892,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     <p className="text-reride-text dark:text-reride-text mt-2">{t('listings.loadErrorHint')}</p>
                     <button
                       type="button"
-                      onClick={() => onRetryLoadVehicles()}
+                      onClick={() => void onRetryLoadVehicles?.()}
                       className="mt-4 px-5 py-2.5 rounded-xl font-semibold text-white transition-all hover:opacity-90"
                       style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}
                     >

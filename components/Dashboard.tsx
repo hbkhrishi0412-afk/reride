@@ -37,9 +37,9 @@ import {
 import { authenticatedFetch } from '../utils/authenticatedFetch';
 import {
   conversationBelongsToSeller,
-  countInquiriesForVehicle,
   countInquiriesForVehicles,
 } from '../utils/conversationParticipants';
+import { aggregateListingStats } from '../services/listingService';
 import { dashboardNotify, type DashboardNotifyFn } from './dashboard/notify';
 import { VehicleForm } from './dashboard/VehicleForm';
 
@@ -601,8 +601,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           },
           {
             label: 'Inquiries',
-            data: safeFilteredPublishedListings.map(v =>
-              countInquiriesForVehicle(v, safeConversations, seller?.email, seller?.id),
+            data: safeFilteredPublishedListings.map((v) =>
+              v ? aggregateListingStats(v, safeConversations).chatStarts : 0,
             ),
             backgroundColor: 'rgba(30, 136, 229, 0.5)',
             borderColor: 'rgba(30, 136, 229, 1)',
@@ -1458,39 +1458,12 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 </div>
               </NavItem>
               
-              <NavItem view="analytics">
-                <div className="flex items-center gap-3">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-                  </svg>
-                  <span>{t('sellerDashboard.nav.analytics')}</span>
-                </div>
-              </NavItem>
-              
               <NavItem view="listings">
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                   </svg>
                   <span>{t('sellerDashboard.nav.myListings')}</span>
-                </div>
-              </NavItem>
-              
-              <NavItem view="reports" count={reportedCount}>
-                <div className="flex items-center gap-3">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                  </svg>
-                  <span>{t('sellerDashboard.nav.reports')}</span>
-                </div>
-              </NavItem>
-              
-              <NavItem view="salesHistory">
-                <div className="flex items-center gap-3">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
-                  </svg>
-                  <span>{t('sellerDashboard.nav.salesHistory')}</span>
                 </div>
               </NavItem>
               
@@ -1513,6 +1486,40 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 </div>
               </NavItem>
 
+              <details
+                className="pt-3"
+                {...( ['analytics', 'reports', 'salesHistory', 'notifications', 'settings'].includes(activeView)
+                  ? { open: true }
+                  : {})}
+              >
+                <summary className="cursor-pointer list-none px-3.5 py-2.5 rounded-xl text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-400 hover:bg-orange-50 hover:text-orange-800">
+                  {t('nav.more')}
+                </summary>
+                <div className="mt-1 space-y-1">
+              <NavItem view="analytics">
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                  </svg>
+                  <span>{t('sellerDashboard.nav.analytics')}</span>
+                </div>
+              </NavItem>
+              <NavItem view="reports" count={reportedCount}>
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                  <span>{t('sellerDashboard.nav.reports')}</span>
+                </div>
+              </NavItem>
+              <NavItem view="salesHistory">
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
+                  </svg>
+                  <span>{t('sellerDashboard.nav.salesHistory')}</span>
+                </div>
+              </NavItem>
               <NavItem view="notifications" count={unreadNotificationCount}>
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1521,7 +1528,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   <span>Notifications</span>
                 </div>
               </NavItem>
-              
               <NavItem view="settings">
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -1531,6 +1537,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   <span>{t('sellerDashboard.nav.settings')}</span>
                 </div>
               </NavItem>
+                </div>
+              </details>
             </nav>
           </aside>
           

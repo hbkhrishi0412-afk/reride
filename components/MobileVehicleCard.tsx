@@ -4,7 +4,7 @@ import type { Vehicle } from '../types';
 import { getFirstValidImage, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder } from '../utils/imageUtils';
 import { showVerifiedListingBadge } from '../utils/listingTrust';
 import { ListingStockBadge } from './ListingStockBadge';
-import { ListingTrustChips } from './ListingTrustChips';
+import { ListingTrustRail } from './ListingTrustRail';
 import { useTranslatedFields, useTranslatedArray } from '../hooks/useTranslatedText';
 import { isEffectivelyFeatured } from '../utils/listingPromotion';
 
@@ -348,7 +348,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
           </div>
         )}
 
-        <ListingTrustChips vehicle={vehicle} compact className="mb-2" />
+        <ListingTrustRail vehicle={vehicle} className="mb-2" />
 
         {/* Features Preview */}
         {translatedFeatures && translatedFeatures.length > 0 && (

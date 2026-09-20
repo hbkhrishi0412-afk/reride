@@ -14,16 +14,16 @@ import { isPublicBuyListing } from '../services/listingLifecycleService';
 import { showVerifiedListingBadge } from '../utils/listingTrust';
 import {
   getHomeDesktopCityStyle,
-  getHomeMobileCityAccent,
-  getHomeMobileCityGradient,
   HOME_DISCOVERY_CATEGORIES,
   HOME_DISCOVERY_CITY_ORDER,
+  HOME_HERO_SURFACE,
   HOME_SECTION_BG,
   HOME_SECTION_FADE,
   HOME_LISTING_CARD,
 } from '../constants/homeDiscovery';
-import CityMonument from './CityMonument';
-import VehicleCategoryIcon from './VehicleCategoryIcon';
+import DealRoomHeroPreview from './DealRoomHeroPreview';
+import { HomeCategoryTiles } from './home/HomeCategoryTiles';
+import { HomeCityGrid } from './home/HomeCityGrid';
 import {
   RECENTLY_VIEWED_CHANGED_EVENT,
   getLocalRecentIds,
@@ -272,9 +272,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         const apiCount = storefrontAgg?.categories[category.id];
         return {
           name: category.name,
-          icon: category.icon,
           id: category.id,
-          mobileCardGradient: category.mobileCardGradient,
           count: apiCount !== undefined ? apiCount : client,
         };
       }),
@@ -460,8 +458,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       <div
         className="relative pt-5 pb-8 px-4 overflow-hidden bg-[#0B1020]"
         style={{
-          background:
-            'radial-gradient(600px 380px at -10% -10%, rgba(255,107,53,0.22) 0%, transparent 60%), radial-gradient(520px 380px at 110% 10%, rgba(124,58,237,0.26) 0%, transparent 60%), radial-gradient(720px 480px at 50% 120%, rgba(59,130,246,0.18) 0%, transparent 60%), linear-gradient(135deg, #0B1020 0%, #111834 50%, #1A1240 100%)',
+          background: HOME_HERO_SURFACE,
         }}
       >
         {/* Subtle grid texture (purely decorative) */}
@@ -498,7 +495,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         <div
           aria-hidden="true"
           className="absolute -bottom-16 -right-10 w-52 h-52 rounded-full blur-3xl opacity-50 animate-orb-b pointer-events-none"
-          style={{ background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)' }}
+          style={{ background: 'radial-gradient(circle, #FF6B35 0%, transparent 70%)' }}
         />
 
         <div className="relative">
@@ -519,6 +516,9 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           <p className="text-white/85 text-[13px] text-center mb-5 px-2 leading-snug hero-rise hero-rise-3">
             {t('mobile.home.heroSub')}
           </p>
+          <div className="mb-5 hero-rise hero-rise-3">
+            <DealRoomHeroPreview compact />
+          </div>
 
           {/* Search Bar */}
           <div
@@ -644,45 +644,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               className="pointer-events-none absolute right-0 top-0 bottom-0 w-8"
               style={{ background: 'linear-gradient(to left, rgba(11,16,32,0.95), rgba(11,16,32,0))' }}
             />
-          </div>
-
-          {/* Feature Pills — tap targets mirror desktop hero cards (Safety Center + browse). */}
-          <div className="grid grid-cols-4 gap-2 mt-5 hero-rise hero-rise-6">
-            {[
-              {
-                icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
-                label: t('mobile.hero.checksPill'),
-                view: ViewEnum.SAFETY_CENTER,
-              },
-              {
-                icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-                label: t('mobile.hero.fixedPrice'),
-                view: ViewEnum.USED_CARS,
-              },
-              {
-                icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
-                label: t('mobile.hero.moneyBack'),
-                view: ViewEnum.USED_CARS,
-              },
-              {
-                icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
-                label: t('mobile.hero.freeRc'),
-                view: ViewEnum.SAFETY_CENTER,
-              },
-            ].map((pill, index) => (
-              <button
-                key={pill.label}
-                type="button"
-                onClick={() => onNavigate(pill.view)}
-                className={`home-glass-card home-glass-card-${index + 1} rounded-xl p-2.5 text-center active:scale-95 active:bg-white/20 transition-transform touch-manipulation`}
-                aria-label={pill.label}
-              >
-                <svg className="w-5 h-5 text-white mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={pill.icon} />
-                </svg>
-                <p className="text-white text-[10px] font-medium leading-tight">{pill.label}</p>
-              </button>
-            ))}
           </div>
         </div>
       </div>
@@ -1100,70 +1061,11 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             </svg>
           </button>
         </div>
-        <div
-          className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide snap-x snap-mandatory scroll-pl-1"
-          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
-        >
-          {categories.map((category, index) => {
-            const gradient = category.mobileCardGradient;
-            const hasVehicles = category.count > 0;
-
-            return (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => {
-                  // onSelectCategory already navigates to USED_CARS with { category }.
-                  // A bare onNavigate(USED_CARS) would clear category back to ALL.
-                  onSelectCategory(category.id);
-                }}
-                className="vc-tile group relative flex-shrink-0 flex flex-col items-center gap-2.5 p-3 bg-white rounded-2xl shadow-sm border border-gray-100 active:scale-95 transition-all duration-300 hover:shadow-lg w-[112px] snap-start motion-reduce:transition-none motion-reduce:active:scale-100 motion-reduce:hover:shadow-sm"
-                style={{
-                  animationDelay: `${index * 50}ms`,
-                  minHeight: '96px',
-                }}
-              >
-                <div
-                  className={`absolute inset-0 bg-gradient-to-br ${gradient} rounded-2xl opacity-0 group-active:opacity-5 group-hover:opacity-10 transition-opacity duration-300 motion-reduce:transition-none`}
-                />
-
-                {/* Icon plate — a gradient-tinted square holding the sketch-SVG
-                    vehicle. `vc-plate` gives it a subtle 3D tilt on hover;
-                    the SVG itself drives the wheel/body animations via the
-                    `vc-wheel` / `vc-body` classes defined in index.css. */}
-                <div
-                  className={`vc-plate relative w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow duration-300`}
-                >
-                  <VehicleCategoryIcon category={category.id} className="relative z-10 w-9 h-9 drop-shadow-sm" />
-                  {/* Glossy sheen — adds the "toy car" 3D highlight on top. */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-white/35 via-white/0 to-transparent rounded-xl pointer-events-none" />
-                  {/* Bottom inner shadow for weight/grounding. */}
-                  <div
-                    className="absolute inset-x-1 bottom-0 h-1.5 rounded-b-xl pointer-events-none"
-                    style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.18), transparent)' }}
-                  />
-                </div>
-
-                <span className="text-[11px] font-bold text-gray-900 text-center leading-tight group-hover:text-orange-600 transition-colors duration-300 motion-reduce:transition-none">
-                  {category.name}
-                </span>
-
-                <div
-                  className={`flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all duration-300 motion-reduce:transition-none ${
-                    hasVehicles
-                      ? 'bg-orange-100 text-orange-600 group-hover:bg-orange-200'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  <span>{category.count}</span>
-                  <span className="ml-0.5">{t('mobile.home.carsSuffix')}</span>
-                </div>
-
-                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 motion-reduce:transition-none" />
-              </button>
-            );
-          })}
-        </div>
+        <HomeCategoryTiles
+          categories={categories}
+          onSelectCategory={onSelectCategory}
+          variant="mobile"
+        />
       </section>
 
       {/* Cities Section — Premium "Skyline" location cards.
@@ -1178,23 +1080,9 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       >
         <div className="flex items-end justify-between mb-4">
           <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-2 text-purple-600 text-[10px] font-semibold uppercase tracking-[0.14em]">
-              {/* Signature icon: map-pin inside a soft radar.
-                  Instantly reads as "discover nearby" and ties the whole
-                  section together as a single brand moment. */}
-              <span
-                className="relative inline-flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 via-fuchsia-500 to-pink-500 shadow-[0_4px_12px_-2px_rgba(168,85,247,0.55)]"
-                aria-hidden="true"
-              >
-                <span className="absolute inset-0 rounded-full border border-purple-400/60 mc-header-radar" />
-                <svg className="relative w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 21s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z" fill="currentColor" stroke="none" />
-                  <circle cx="12" cy="9" r="2.4" fill="#fff" />
-                </svg>
-              </span>
-              <span className="mc-eyebrow-accent font-bold">
-                {t('mobile.home.exploreLocation')}
-              </span>
+            <div className="inline-flex items-center gap-2 text-orange-600 text-[10px] font-semibold uppercase tracking-[0.14em]">
+              <span className="h-px w-4 bg-orange-300" />
+              {t('mobile.home.exploreLocation')}
             </div>
             <h2
               id="mobile-home-locations-heading"
@@ -1215,157 +1103,11 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             </svg>
           </button>
         </div>
-        <div
-          className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-hide snap-x snap-mandatory scroll-pl-4"
-          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
-        >
-          {cities.filter((city) => city.total > 0).map((city, index) => {
-            const accent = getHomeMobileCityAccent(city.name);
-
-            return (
-              <button
-                key={city.name}
-                type="button"
-                aria-label={t('mobile.home.cityAria', { name: city.name, count: city.total })}
-                onClick={() => handleCityCardClick(city)}
-                className="mc-card group relative flex-shrink-0 w-[156px] h-[184px] rounded-3xl bg-white overflow-hidden snap-start text-left transition-all duration-300 active:scale-[0.97] hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                style={{
-                  border: `1px solid ${accent.ring}`,
-                  boxShadow:
-                    '0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -8px rgba(15, 23, 42, 0.16)',
-                  // Cascading entrance delay: 0ms, 80ms, 160ms, ...
-                  ['--mc-delay' as string]: `${index * 80}ms`,
-                }}
-              >
-                {/* Gradient header — carries city identity.
-                    Light pastel background by design, so the monument and
-                    abbreviation can render in the city's dark accent colour
-                    for maximum postcard-style legibility. */}
-                <div
-                  className="mc-gradient relative h-[108px] w-full overflow-hidden"
-                  style={{ background: getHomeMobileCityGradient(city.name) }}
-                >
-                  {/* Soft decorative blobs (purely visual) */}
-                  <div className="absolute inset-0 opacity-50 motion-reduce:hidden" aria-hidden="true">
-                    <div
-                      className="absolute -top-6 -right-4 w-24 h-24 rounded-full blur-2xl"
-                      style={{ backgroundColor: accent.soft }}
-                    />
-                    <div
-                      className="absolute -bottom-8 -left-6 w-20 h-20 rounded-full blur-2xl"
-                      style={{ backgroundColor: accent.soft }}
-                    />
-                  </div>
-                  {/* Subtle dotted texture for depth — dots in the accent
-                      colour so they stay visible on the pastel background. */}
-                  <div
-                    className="absolute inset-0 opacity-[0.10] motion-reduce:hidden"
-                    aria-hidden="true"
-                    style={{
-                      backgroundImage: `radial-gradient(circle at 1px 1px, ${accent.solid} 1px, transparent 0)`,
-                      backgroundSize: '12px 12px',
-                    }}
-                  />
-
-                  {/* Iconic monument silhouette — dark accent on pastel so it
-                      reads as a classic postcard silhouette. */}
-                  <CityMonument city={city.name} className="mc-monument" color={accent.solid} />
-
-                  {/* Pin badge with radar-ping rings — "live listings here".
-                      Rings + chip use the city's accent colour so they stay
-                      visible on the pastel background. */}
-                  <div className="absolute top-2.5 right-2.5" aria-hidden="true">
-                    <span className="relative flex w-7 h-7 items-center justify-center">
-                      <span
-                        className="mc-radar-ring absolute inset-0 rounded-full"
-                        style={{ backgroundColor: accent.solid, opacity: 0.22 }}
-                      />
-                      <span
-                        className="mc-radar-ring mc-radar-ring-2 absolute inset-0 rounded-full"
-                        style={{ backgroundColor: accent.solid, opacity: 0.22 }}
-                      />
-                      <span
-                        className="relative w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md"
-                        style={{
-                          backgroundColor: 'rgba(255,255,255,0.75)',
-                          border: `1px solid ${accent.ring}`,
-                        }}
-                      >
-                        <svg
-                          className="w-3.5 h-3.5"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          style={{ color: accent.solid }}
-                        >
-                          <path d="M12 22s7-6.3 7-12a7 7 0 10-14 0c0 5.7 7 12 7 12z" />
-                          <circle cx="12" cy="10" r="2.6" fill="#fff" />
-                        </svg>
-                      </span>
-                    </span>
-                  </div>
-
-                  {/* Big city abbreviation — bold dark text on pastel for
-                      travel-poster contrast. */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span
-                      className="mc-abbr text-[44px] leading-none font-black tracking-tight"
-                      style={{
-                        color: accent.solid,
-                        fontFeatureSettings: '"tnum"',
-                        textShadow: '0 1px 0 rgba(255,255,255,0.35)',
-                      }}
-                    >
-                      {city.abbr}
-                    </span>
-                  </div>
-
-                  {/* Hover sheen sweeping across */}
-                  <div
-                    className="absolute inset-0 bg-gradient-to-br from-white/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 motion-reduce:hidden"
-                    aria-hidden="true"
-                  />
-                </div>
-
-                {/* Footer — clean white surface for legible data */}
-                <div className="px-3.5 pt-2.5 pb-3 flex flex-col gap-1.5">
-                  <div className="flex items-start justify-between gap-1">
-                    <h3 className="text-[14.5px] font-bold text-gray-900 leading-tight tracking-tight truncate">
-                      {city.name}
-                    </h3>
-                    <svg
-                      className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5 group-hover:text-gray-500 group-hover:translate-x-1 transition-all duration-300 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-
-                  {city.total > 0 ? (
-                    <span
-                      className="inline-flex items-center gap-1 self-start px-2 py-0.5 rounded-full text-[11px] font-bold"
-                      style={{ backgroundColor: accent.soft, color: accent.solid }}
-                    >
-                      <span
-                        className="mc-live-dot w-1.5 h-1.5 rounded-full"
-                        style={{ backgroundColor: accent.solid }}
-                        aria-hidden="true"
-                      />
-                      {t('mobile.home.cityAvailable', { count: city.total })}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 self-start px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-500">
-                      <span className="w-1.5 h-1.5 rounded-full bg-gray-400" aria-hidden="true" />
-                      {t('mobile.home.cityComingSoon')}
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        <HomeCityGrid
+          cities={cities}
+          onSelectCity={handleCityCardClick}
+          variant="mobile"
+        />
       </section>
 
       {/* Recommendations */}
@@ -1373,8 +1115,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         <div ref={recsRef} className={`reveal-on-scroll px-4 py-6 ${HOME_SECTION_BG.recommendations}`}>
           <div className="flex items-end justify-between mb-4">
             <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 text-pink-600 text-[10px] font-semibold uppercase tracking-wider">
-                <span className="h-px w-4 bg-pink-300" />
+              <div className="inline-flex items-center gap-1.5 text-orange-600 text-[10px] font-semibold uppercase tracking-wider">
+                <span className="h-px w-4 bg-orange-300" />
                 For You
               </div>
               <h2 className="text-[20px] font-bold text-gray-900 tracking-tight leading-tight">{t('mobile.home.recommended')}</h2>
@@ -1410,7 +1152,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       <div ref={sellRef} className="reveal-on-scroll px-4 pt-6 pb-4">
         <div
           className="relative overflow-hidden rounded-2xl p-5 text-white border border-white/10"
-          style={{ background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #C026D3 100%)' }}
+          style={{ background: HOME_HERO_SURFACE }}
         >
           {/* Decorative orbs */}
           <div aria-hidden="true" className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
@@ -1479,7 +1221,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           />
           <div
             className="absolute -bottom-20 -left-10 w-52 h-52 rounded-full blur-3xl opacity-40"
-            style={{ background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)' }}
+            style={{ background: 'radial-gradient(circle, #FF6B35 0%, transparent 70%)' }}
           />
         </div>
         <div className="relative text-center">

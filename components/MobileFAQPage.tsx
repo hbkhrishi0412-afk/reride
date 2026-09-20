@@ -16,7 +16,7 @@ interface MobileFAQPageProps {
 export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
-  const [openItem, setOpenItem] = useState<number | null>(null);
+  const [openItem, setOpenItem] = useState<number | string | null>(null);
 
   const filteredAndGroupedFAQs = useMemo(() => {
     const filtered = faqItems.filter(
@@ -35,7 +35,7 @@ export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
     }, {} as Record<string, FAQItem[]>);
   }, [faqItems, searchTerm]);
 
-  const toggleItem = (id: number) => {
+  const toggleItem = (id: number | string) => {
     setOpenItem(openItem === id ? null : id);
   };
 

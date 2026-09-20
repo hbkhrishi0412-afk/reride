@@ -12,7 +12,7 @@ interface FAQPageProps {
 const FAQPage: React.FC<FAQPageProps> = ({ faqItems }) => {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
-  const [openItem, setOpenItem] = useState<number | null>(null);
+  const [openItem, setOpenItem] = useState<number | string | null>(null);
 
   const filteredAndGroupedFAQs = useMemo(() => {
     const filtered = faqItems.filter(
@@ -31,7 +31,7 @@ const FAQPage: React.FC<FAQPageProps> = ({ faqItems }) => {
     }, {} as Record<string, FAQItem[]>);
   }, [faqItems, searchTerm]);
 
-  const toggleItem = (id: number) => {
+  const toggleItem = (id: number | string) => {
     setOpenItem(openItem === id ? null : id);
   };
 

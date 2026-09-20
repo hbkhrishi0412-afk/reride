@@ -2,9 +2,11 @@ import type { Vehicle } from '../types';
 import {
   evaluateTrustSignal,
   getListingDisclosureScore,
+  getListingTrustRail,
   getListingTrustSignalStatuses,
   showVerifiedListingBadge,
   vehicleHasRcOnListing,
+  vehicleHasVerifiedSeller,
   vehicleIsDealReady,
   vehicleIsSingleOwner,
   vehicleMatchesTrustFilter,
@@ -159,5 +161,27 @@ describe('getListingDisclosureScore', () => {
       vahanVerifiedAt: '2026-01-01T00:00:00.000Z',
     } as Vehicle);
     expect(rich).toBeGreaterThan(basic);
+  });
+});
+
+describe('getListingTrustRail', () => {
+  it('always returns RC, seller, and deal slots', () => {
+    const rail = getListingTrustRail(baseVehicle);
+    expect(rail.map((s) => s.id)).toEqual(['rc', 'seller', 'deal']);
+    expect(rail.every((s) => typeof s.met === 'boolean')).toBe(true);
+  });
+
+  it('marks RC and seller when evidence exists', () => {
+    const v = {
+      ...baseVehicle,
+      sellerBadges: [{ type: 'verified', label: 'Verified', description: '' }],
+      sellerDisclosureChecklist: {
+        items: [{ id: 'core.docs.rc_photo', photoUrl: 'https://cdn/rc.jpg', status: 'pass' }],
+      },
+    } as Vehicle;
+    const rail = getListingTrustRail(v);
+    expect(rail.find((s) => s.id === 'rc')?.met).toBe(true);
+    expect(rail.find((s) => s.id === 'seller')?.met).toBe(true);
+    expect(vehicleHasVerifiedSeller(v)).toBe(true);
   });
 });

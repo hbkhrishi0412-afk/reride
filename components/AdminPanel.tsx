@@ -227,7 +227,7 @@ interface AdminPanelProps {
     faqItems: FAQItem[];
     onAddFaq: (faq: Omit<FAQItem, 'id'>) => void;
     onUpdateFaq: (faq: FAQItem) => void;
-    onDeleteFaq: (id: number) => void;
+    onDeleteFaq: (id: FAQItem['id']) => void;
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => void;
 }
 
@@ -3384,7 +3384,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             }
         };
 
-        const handleDeleteFaq = (id: number) => {
+        const handleDeleteFaq = (id: FAQItem['id']) => {
             void runIfConfirmed('Are you sure you want to delete this FAQ?', () => {
                 onDeleteFaq(id);
             }, { variant: 'danger', title: 'Delete FAQ' });

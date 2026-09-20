@@ -11,6 +11,7 @@ import { useIsMobileApp } from '../hooks/useIsMobileApp';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 import { useApp } from './AppProvider';
 import { CLIENT_POLL_INTERVALS_MS } from '../utils/clientPolling.js';
+import { mergeServiceCatalogPackages } from '../utils/serviceCartCatalog.js';
 
 type ServicePackage = {
     id: string;
@@ -172,17 +173,6 @@ type Props = {
     customerUserId?: string | null;
 };
 
-const mockServicePackages: ServicePackage[] = [
-    { id: 'pkg-comprehensive', name: 'Comprehensive Service Package', price: 6099, warrantyMonths: 3, description: '3 months warranty' },
-    { id: 'pkg-standard', name: 'Standard Service Package', price: 2599, warrantyMonths: 3, description: '3 months warranty' },
-    { id: 'pkg-care-plus', name: 'Care Plus', price: 0, warrantyMonths: 0, description: 'Custom quote', isCustom: true },
-];
-
-const mockAddresses: Address[] = [
-    { id: 'addr-1', label: 'Home', line1: '12, Jubilee Hills Road No. 36', city: 'Hyderabad', state: 'Telangana', pincode: '500033' },
-    { id: 'addr-2', label: 'Office', line1: 'Plot 45, HITEC City, Madhapur', city: 'Hyderabad', state: 'Telangana', pincode: '500081' },
-];
-
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const formatLocalYmd = (d: Date) => {
@@ -205,7 +195,8 @@ const resolveStoredBookingDate = (raw: string | undefined) => {
     return raw;
 };
 
-const mockSlots: TimeSlot[] = [
+/** Fixed visit windows — not fetched from DB. */
+const DEFAULT_BOOKING_TIME_SLOTS: TimeSlot[] = [
     { id: 'slot-0', label: '08:00 - 10:00' },
     { id: 'slot-1', label: '10:00 - 12:00' },
     { id: 'slot-2', label: '12:00 - 14:00' },
@@ -218,22 +209,6 @@ const defaultSlotIdForList = (slots: TimeSlot[]) =>
 
 const includedLinePackageId = (serviceType: string, includedId: string) =>
     `line-${serviceType.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${includedId.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-
-const mockProviders: ServiceProvider[] = [
-    { id: 'sp-1', name: 'ReRide Auto Care', city: 'Hyderabad', distanceKm: 4.2, rating: 4.7, reviewCount: 128, completedJobs: 340, isVerified: true },
-    { id: 'sp-2', name: 'Prime Garage Hyderabad', city: 'Hyderabad', distanceKm: 6.8, rating: 4.5, reviewCount: 86, completedJobs: 210, isVerified: true },
-];
-
-const mockCoupons: Coupon[] = [
-    { code: 'SAVE200', label: 'Flat ₹200 off', amountOff: 200 },
-    { code: 'SAVE10', label: '10% off up to ₹500', amountOff: 500 }, // capped; simplified as flat for mock
-];
-
-const SERVICE_PACKAGE_TO_CATEGORY: Record<string, string> = {
-    'pkg-comprehensive': 'Essential Service',
-    'pkg-standard': 'Deep Detailing',
-    'pkg-care-plus': 'Care Plus',
-};
 
 /** Shared booking-flow surfaces — matches CarServices grid warmth */
 const BOOKING_SURFACE =
@@ -319,11 +294,11 @@ const ServiceCart: React.FC<Props> = ({
     isLoggedIn,
     onLogin,
     onSubmitRequest,
-    servicePackages = mockServicePackages,
-    addresses: initialAddresses = mockAddresses,
-    timeSlots = mockSlots,
-    serviceProviders = mockProviders,
-    coupons = mockCoupons,
+    servicePackages = [],
+    addresses: initialAddresses = [],
+    timeSlots = DEFAULT_BOOKING_TIME_SLOTS,
+    serviceProviders = [],
+    coupons = [],
     onUseMyLocation,
     isLocating = false,
     locationError,
@@ -475,22 +450,7 @@ const ServiceCart: React.FC<Props> = ({
                     ...Array.from(includedLineMap.values()),
                 ];
                 
-                // Merge dynamic packages with existing packages (including mock and prefill packages)
-                setAvailableServicePackages(prev => {
-                    const existingIds = new Set(prev.map(p => p.id));
-                    const newPackages = dynamicPackages.filter(p => !existingIds.has(p.id));
-                    // Merge: keep existing packages (mock, prefill) and add new API packages
-                    const merged = [...prev, ...newPackages];
-                    // Also update existing packages if they match by name (for API updates)
-                    return merged.map(pkg => {
-                        const apiMatch = dynamicPackages.find(api => api.name === pkg.name && api.id !== pkg.id);
-                        // Only update if it's not a prefill package (prefill packages have service- prefix)
-                        if (apiMatch && !pkg.id.startsWith('service-')) {
-                            return { ...pkg, price: apiMatch.price, description: apiMatch.description };
-                        }
-                        return pkg;
-                    });
-                });
+                setAvailableServicePackages((prev) => mergeServiceCatalogPackages(prev, dynamicPackages));
                 
             } catch (error) {
                 console.error('Error fetching provider services:', error);
@@ -752,7 +712,7 @@ const ServiceCart: React.FC<Props> = ({
     const [addressForm, setAddressForm] = useState<Partial<Address>>({});
 
     // Hydrate cart from localStorage before the persist effect runs; otherwise the first
-    // persist write would overwrite storage with default mock addresses and deletions
+    // persist write would overwrite storage with default addresses and deletions
     // would "come back" after refresh.
     useLayoutEffect(() => {
         let hasPrefill: string | null = null;
@@ -1069,10 +1029,8 @@ const ServiceCart: React.FC<Props> = ({
     const selectedServiceCategories = useMemo(() => {
         const list = items
             .map((item) => {
-                const category = SERVICE_PACKAGE_TO_CATEGORY[item.serviceId];
-                if (category) return category;
                 const svcMeta = availableServicePackages.find((s) => s.id === item.serviceId);
-                return svcMeta?.name || item.serviceId;
+                return svcMeta?.parentServiceType || svcMeta?.name || item.serviceId;
             })
             .filter(Boolean);
         return Array.from(new Set(list));

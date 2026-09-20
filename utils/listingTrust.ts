@@ -201,6 +201,63 @@ export function getListingTrustChips(
   return chips;
 }
 
+export type ListingTrustRailSlotId = 'rc' | 'seller' | 'deal';
+
+export type ListingTrustRailSlot = {
+  id: ListingTrustRailSlotId;
+  met: boolean;
+  labelKey: string;
+  defaultLabel: string;
+};
+
+/** Seller verification for card rails — listing badges or live seller record. */
+export function vehicleHasVerifiedSeller(
+  vehicle: Vehicle | null | undefined,
+  seller?: User | null,
+): boolean {
+  if (seller?.phoneVerified) return true;
+  if (seller?.verificationStatus?.phoneVerified) return true;
+  if (seller?.govtIdVerified) return true;
+  if (vehicle?.sellerBadges?.some((badge) => badge.type === 'verified')) return true;
+  return false;
+}
+
+/**
+ * Always-on three-slot trust rail for listing cards: RC, seller, deal.
+ * Unmet slots stay visible — hiding them is how trust theater fails.
+ */
+export function getListingTrustRail(
+  vehicle: Vehicle | null | undefined,
+  seller?: User | null,
+  dealStageLabel?: string | null,
+): ListingTrustRailSlot[] {
+  const rc = vehicleHasRcOnListing(vehicle);
+  const sellerOk = vehicleHasVerifiedSeller(vehicle, seller);
+  const dealReady = vehicleIsDealReady(vehicle);
+  const customDeal = Boolean(dealStageLabel?.trim());
+
+  return [
+    {
+      id: 'rc',
+      met: rc,
+      labelKey: rc ? 'trust.rail.rcOn' : 'trust.rail.rcPending',
+      defaultLabel: rc ? 'RC on file' : 'RC pending',
+    },
+    {
+      id: 'seller',
+      met: sellerOk,
+      labelKey: sellerOk ? 'trust.rail.sellerVerified' : 'trust.rail.sellerUnverified',
+      defaultLabel: sellerOk ? 'Seller verified' : 'Seller unverified',
+    },
+    {
+      id: 'deal',
+      met: customDeal || dealReady,
+      labelKey: customDeal ? 'trust.rail.dealStage' : dealReady ? 'trust.rail.dealReady' : 'trust.rail.dealListing',
+      defaultLabel: customDeal ? dealStageLabel!.trim() : dealReady ? 'Deal-ready' : 'Open listing',
+    },
+  ];
+}
+
 export function vehicleMatchesTrustFilter(
   vehicle: Vehicle,
   filter: TrustFilterValue,

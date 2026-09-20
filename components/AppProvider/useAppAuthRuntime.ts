@@ -17,6 +17,11 @@ import { clearRememberMeState } from '../../utils/rememberMe';
 import { persistCurrentUserMirrorSync, whenNativeSessionReady } from '../../utils/nativeSessionMirror';
 import { currentUserForLocalSessionJson } from '../../utils/userLocalStorageSnapshot';
 import {
+  pathToView,
+  POST_LOGIN_PATH_KEY,
+  sanitizePostLoginPath,
+} from '../../utils/appNavigation';
+import {
   clearPersistedUserSession,
   isPersistedSessionAuthenticated,
   readPersistedUser,
@@ -432,6 +437,7 @@ export function useAppAuthRuntime({
         // Directly set view since we've already validated the user
         // The navigate function will validate again, but we know the user is valid
         let postLoginView = View.HOME;
+        let postLoginPath: string | null = null;
         if (userForSession.role === 'admin') {
           postLoginView = View.ADMIN_PANEL;
           setCurrentView(View.ADMIN_PANEL);
@@ -461,12 +467,17 @@ export function useAppAuthRuntime({
         } else if (userForSession.role === 'finance_partner') {
           postLoginView = View.HOME;
           setCurrentView(View.HOME);
+          addToast('Finance partner portal is not available yet. Contact admin for access.', 'info');
         } else if (userForSession.role === 'customer') {
           let customerView = View.HOME;
           try {
+            postLoginPath = sanitizePostLoginPath(sessionStorage.getItem(POST_LOGIN_PATH_KEY));
+            sessionStorage.removeItem(POST_LOGIN_PATH_KEY);
             const returnView = sessionStorage.getItem('reride.postLoginView');
             sessionStorage.removeItem('reride.postLoginView');
-            if (returnView === View.DETAIL || returnView === 'DETAIL') {
+            if (postLoginPath) {
+              customerView = pathToView(postLoginPath.split(/[?#]/, 1)[0] || '/');
+            } else if (returnView === View.DETAIL || returnView === 'DETAIL') {
               customerView = View.DETAIL;
             }
           } catch {
@@ -489,7 +500,7 @@ export function useAppAuthRuntime({
                   ? '/car-services/dashboard'
                   : userForSession.role === 'finance_partner'
                     ? '/'
-                    : '/';
+                    : postLoginPath || '/';
           routerNavigate(pathByRole, {
             state: {
               view: postLoginView,

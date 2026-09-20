@@ -115,6 +115,7 @@ export interface AppContextType {
       category?: VehicleCategory | 'ALL';
       sellerEmail?: string;
       detailVehicle?: Vehicle;
+      dealId?: string | null;
       unblockPopstateSync?: boolean;
     },
   ) => void;
@@ -141,7 +142,7 @@ export interface AppContextType {
   onUpdateSupportTicket: (ticket: SupportTicket) => void;
   onAddFaq: (faq: Omit<FAQItem, 'id'>) => void;
   onUpdateFaq: (faq: FAQItem) => void;
-  onDeleteFaq: (id: number) => void;
+  onDeleteFaq: (id: FAQItem['id']) => void;
   onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => void;
 
   addRating: (vehicleId: number, rating: number) => void;

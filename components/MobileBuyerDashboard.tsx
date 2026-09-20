@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import type { User, Vehicle, Conversation } from '../types';
 import { View as ViewEnum } from '../types';
 import { getFirstValidImage, swapToPlaceholderOnError } from '../utils/imageUtils';
@@ -52,12 +53,22 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
 }) => {
   const { t } = useTranslation();
   const { setActiveChat, addToast } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'deals' | 'overview' | 'searches' | 'activity' | 'alerts' | 'serviceTrack'>('deals');
-  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const selectedDealId = searchParams.get('deal');
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
   const [savedSearches, setSavedSearches] = useState(() =>
     buyerService.getSavedSearches(currentUser?.email || '')
   );
+
+  const setSelectedDealId = useCallback((leadId: string | null) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (leadId) next.set('deal', leadId);
+      else next.delete('deal');
+      return next;
+    });
+  }, [setSearchParams]);
 
   useEffect(() => {
     setSavedSearches(buyerService.getSavedSearches(currentUser?.email || ''));
@@ -141,13 +152,22 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
     () =>
       [
         { id: 'deals' as const, label: t('buyerDashboard.tab.myDeals', { defaultValue: 'My Deals' }) },
-        { id: 'overview' as const, label: t('buyerDashboard.mobile.tab.overview') },
         { id: 'searches' as const, label: t('buyerDashboard.mobile.tab.searches') },
-        { id: 'activity' as const, label: t('buyerDashboard.mobile.tab.activity') },
         { id: 'alerts' as const, label: t('buyerDashboard.tab.alerts') },
+        { id: 'overview' as const, label: t('buyerDashboard.mobile.tab.overview') },
+        { id: 'activity' as const, label: t('buyerDashboard.mobile.tab.activity') },
         { id: 'serviceTrack' as const, label: t('buyerDashboard.mobile.tab.trackRequests') },
       ],
     [t]
+  );
+  const buyerPrimaryTabIds = useMemo(() => new Set(['deals', 'searches', 'alerts']), []);
+  const [showBuyerMore, setShowBuyerMore] = useState(false);
+  const visibleBuyerTabs = useMemo(
+    () =>
+      mobileTabs.filter(
+        (tab) => showBuyerMore || buyerPrimaryTabIds.has(tab.id) || tab.id === activeTab,
+      ),
+    [mobileTabs, showBuyerMore, buyerPrimaryTabIds, activeTab],
   );
 
   if (selectedDealId) {
@@ -278,7 +298,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
         aria-label={t('nav.dashboard') || 'Buyer dashboard'}
         className="bg-white border-b border-gray-200 mt-4 flex overflow-x-auto no-scrollbar"
       >
-        {mobileTabs.map(({ id, label }, i) => {
+        {visibleBuyerTabs.map(({ id, label }, i) => {
           const isActive = activeTab === id;
           return (
             <button
@@ -294,8 +314,8 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                 e.preventDefault();
                 const next =
                   e.key === 'ArrowRight'
-                    ? mobileTabs[(i + 1) % mobileTabs.length]
-                    : mobileTabs[(i - 1 + mobileTabs.length) % mobileTabs.length];
+                    ? visibleBuyerTabs[(i + 1) % visibleBuyerTabs.length]
+                    : visibleBuyerTabs[(i - 1 + visibleBuyerTabs.length) % visibleBuyerTabs.length];
                 if (next) setActiveTab(next.id);
               }}
               onClick={() => setActiveTab(id)}
@@ -309,6 +329,13 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setShowBuyerMore((open) => !open)}
+          className="flex-1 min-w-[16%] py-3 text-sm font-semibold text-stone-500"
+        >
+          {showBuyerMore ? t('common.close', { defaultValue: 'Less' }) : t('nav.more')}
+        </button>
       </div>
 
       {/* Content */}

@@ -4,7 +4,7 @@ import type { Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
 import LazyImage from './LazyImage';
 import StarRating from './StarRating';
-import { ListingTrustChips } from './ListingTrustChips';
+import { ListingTrustRail } from './ListingTrustRail';
 import { useTranslatedFields } from '../hooks/useTranslatedText';
 
 interface VehicleTileProps {
@@ -83,7 +83,7 @@ const VehicleTile: React.FC<VehicleTileProps> = ({ vehicle, onSelect, onToggleCo
           </div>
         </div>
 
-        <ListingTrustChips vehicle={vehicle} compact className="mb-2" />
+        <ListingTrustRail vehicle={vehicle} className="mb-2" />
 
         <div className="mt-auto pt-2 border-t border-gray-200">
           <div className="flex items-baseline justify-between gap-2 mb-1">

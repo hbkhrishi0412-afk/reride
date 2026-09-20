@@ -8,16 +8,16 @@ import LazyImage from './LazyImage';
 import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
 import {
     getHomeDesktopCityStyle,
-    getHomeMobileCityAccent,
-    getHomeMobileCityGradient,
     HOME_DISCOVERY_CATEGORIES,
     HOME_DISCOVERY_CITY_ORDER,
+    HOME_HERO_SURFACE,
     HOME_SECTION_BG,
     HOME_SECTION_FADE,
     HOME_LISTING_CARD,
 } from '../constants/homeDiscovery';
-import CityMonument from './CityMonument';
-import VehicleCategoryIcon from './VehicleCategoryIcon';
+import DealRoomHeroPreview from './DealRoomHeroPreview';
+import { HomeCategoryTiles } from './home/HomeCategoryTiles';
+import { HomeCityGrid } from './home/HomeCityGrid';
 import { showVerifiedListingBadge } from '../utils/listingTrust';
 import {
     getLocalRecentIds,
@@ -205,11 +205,8 @@ const Home: React.FC<HomeProps> = ({
                 const vehicles = apiCount !== undefined ? apiCount : clientCount;
                 return {
                     name: category.name,
-                    icon: category.icon,
                     id: category.id,
-                    gradient: category.gradient,
-                    mobileCardGradient: category.mobileCardGradient,
-                    vehicles,
+                    count: vehicles,
                 };
             }),
         [categoryCounts, storefrontAgg?.categories]
@@ -419,22 +416,19 @@ const Home: React.FC<HomeProps> = ({
                 title: t('home.sell.step1Title'),
                 desc: t('home.sell.step1Desc'),
                 cta: t('home.sell.step1Cta'),
-                accent: 'from-blue-500 to-cyan-500',
-                emoji: '📝',
+                n: '01',
             },
             {
                 title: t('home.sell.step2Title'),
                 desc: t('home.sell.step2Desc'),
                 cta: t('home.sell.step2Cta'),
-                accent: 'from-purple-500 to-pink-500',
-                emoji: '💬',
+                n: '02',
             },
             {
                 title: t('home.sell.step3Title'),
                 desc: t('home.sell.step3Desc'),
                 cta: t('home.sell.step3Cta'),
-                accent: 'from-emerald-500 to-teal-500',
-                emoji: '✅',
+                n: '03',
             },
         ],
         [t, i18n.language]
@@ -522,8 +516,7 @@ const Home: React.FC<HomeProps> = ({
                 onMouseLeave={onHeroMouseLeave}
                 className="relative pt-0 pb-16 md:pt-4 md:pb-24 px-4 overflow-hidden bg-[#0B1020]"
                 style={{
-                    background:
-                        'radial-gradient(1000px 600px at -10% -10%, rgba(255,107,53,0.18) 0%, transparent 60%), radial-gradient(900px 600px at 110% 10%, rgba(124,58,237,0.22) 0%, transparent 60%), radial-gradient(1200px 800px at 50% 120%, rgba(59,130,246,0.18) 0%, transparent 60%), linear-gradient(135deg, #0B1020 0%, #111834 50%, #1A1240 100%)',
+                    background: HOME_HERO_SURFACE,
                     fontFamily: "'Poppins', sans-serif"
                 }}
             >
@@ -557,8 +550,8 @@ const Home: React.FC<HomeProps> = ({
                         style={{ background: 'radial-gradient(circle, #FF6B35 0%, transparent 70%)' }}
                     ></div>
                     <div
-                        className="absolute -bottom-40 -left-24 w-[32rem] h-[32rem] rounded-full blur-3xl opacity-40 animate-orb-b"
-                        style={{ background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)' }}
+                        className="absolute -bottom-40 -left-24 w-[32rem] h-[32rem] rounded-full blur-3xl opacity-25 animate-orb-b"
+                        style={{ background: 'radial-gradient(circle, #FF6B35 0%, transparent 70%)' }}
                     ></div>
                     {/* Cursor-follow spotlight (only when mouse is over hero) */}
                     <div
@@ -574,12 +567,13 @@ const Home: React.FC<HomeProps> = ({
                     ></div>
                 </div>
 
-                <div className="relative max-w-5xl mx-auto text-center">
+                <div className="relative max-w-6xl mx-auto grid lg:grid-cols-[1.05fr_0.95fr] gap-10 lg:gap-12 items-center">
+                <div className="text-center lg:text-left">
                     {/* Trust Badge */}
                     <div 
                         className="home-trust-badge hero-rise hero-rise-1 inline-flex items-center gap-2 px-5 py-2 rounded-full mb-4 shadow-lg"
                         style={{
-                            background: 'rgba(159, 122, 234, 0.3)',
+                            background: 'rgba(255, 107, 53, 0.18)',
                             backdropFilter: 'blur(10px)',
                             WebkitBackdropFilter: 'blur(10px)'
                         }}
@@ -615,7 +609,7 @@ const Home: React.FC<HomeProps> = ({
                     
                     {/* Subheading */}
                     <p 
-                        className="hero-rise hero-rise-3 mb-10 max-w-2xl mx-auto"
+                        className="hero-rise hero-rise-3 mb-8 max-w-2xl mx-auto lg:mx-0"
                         style={{
                             fontSize: 'clamp(14px, 1.45vw, 16px)',
                             fontWeight: 400,
@@ -627,9 +621,13 @@ const Home: React.FC<HomeProps> = ({
                         {t('home.marketingSubhead')}
                     </p>
 
+                    <div className="hero-rise hero-rise-3 mb-8 lg:hidden">
+                        <DealRoomHeroPreview compact />
+                    </div>
+
                     {/* Search Bar */}
                     <div 
-                        className="home-search-glow hero-rise hero-rise-4 flex flex-col md:flex-row items-stretch md:items-center bg-white mb-6 max-w-3xl mx-auto overflow-hidden"
+                        className="home-search-glow hero-rise hero-rise-4 flex flex-col md:flex-row items-stretch md:items-center bg-white mb-6 max-w-3xl mx-auto lg:mx-0 overflow-hidden"
                         style={{
                             borderRadius: '20px',
                         }}
@@ -753,196 +751,10 @@ const Home: React.FC<HomeProps> = ({
                         ))}
                     </div>
 
-                    {/* Feature Cards */}
-                    <div className="hero-rise hero-rise-6 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 max-w-5xl mx-auto">
-                        {/* Card 1: Full listing details */}
-                        <button
-                            type="button"
-                            onClick={() => onNavigate(ViewEnum.SAFETY_CENTER)}
-                            className="home-glass-card home-glass-card-1 p-5 md:p-6 cursor-pointer text-left w-full"
-                            aria-label={`${t('home.card.qualityTitle')} - learn more`}
-                        >
-                            <div 
-                                className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
-                                style={{ 
-                                    background: 'linear-gradient(135deg, #4CAF50 0%, #45A049 100%)',
-                                    borderRadius: '16px',
-                                    boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)'
-                                }}
-                            >
-                                <svg className="w-6 h-6 md:w-7 md:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                </svg>
-                            </div>
-                            <h3 
-                                className="text-white mb-1.5 text-center"
-                                style={{
-                                    fontSize: '14px',
-                                    fontWeight: 600,
-                                    fontFamily: "'Poppins', sans-serif",
-                                    letterSpacing: '-0.01em',
-                                    lineHeight: '1.35'
-                                }}
-                            >
-                                {t('home.card.qualityTitle')}
-                            </h3>
-                            <p 
-                                className="text-center"
-                                style={{
-                                    fontSize: '12px',
-                                    fontWeight: 400,
-                                    fontFamily: "'Poppins', sans-serif",
-                                    color: 'rgba(255, 255, 255, 0.78)',
-                                    lineHeight: '1.5'
-                                }}
-                            >
-                                {t('home.card.qualityDesc')}
-                            </p>
-                        </button>
-
-                        {/* Card 2: Clear listing price */}
-                        <button
-                            type="button"
-                            onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                            className="home-glass-card home-glass-card-2 p-5 md:p-6 cursor-pointer text-left w-full"
-                            aria-label={`${t('home.card.fixedTitle')} - browse cars`}
-                        >
-                            <div 
-                                className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
-                                style={{ 
-                                    background: 'linear-gradient(135deg, #42A5F5 0%, #1E88E5 100%)',
-                                    borderRadius: '16px',
-                                    boxShadow: '0 4px 12px rgba(66, 165, 245, 0.3)'
-                                }}
-                            >
-                                <span 
-                                    className="text-white"
-                                    style={{
-                                        fontSize: '20px',
-                                        fontWeight: 700,
-                                        fontFamily: "'Poppins', sans-serif"
-                                    }}
-                                >
-                                    ₹
-                                </span>
-                            </div>
-                            <h3 
-                                className="text-white mb-1.5 text-center"
-                                style={{
-                                    fontSize: '14px',
-                                    fontWeight: 600,
-                                    fontFamily: "'Poppins', sans-serif",
-                                    letterSpacing: '-0.01em',
-                                    lineHeight: '1.35'
-                                }}
-                            >
-                                {t('home.card.fixedTitle')}
-                            </h3>
-                            <p 
-                                className="text-center"
-                                style={{
-                                    fontSize: '12px',
-                                    fontWeight: 400,
-                                    fontFamily: "'Poppins', sans-serif",
-                                    color: 'rgba(255, 255, 255, 0.78)',
-                                    lineHeight: '1.5'
-                                }}
-                            >
-                                {t('home.card.fixedDesc')}
-                            </p>
-                        </button>
-
-                        {/* Card 3: Contact sellers */}
-                        <button
-                            type="button"
-                            onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                            className="home-glass-card home-glass-card-3 p-5 md:p-6 cursor-pointer text-left w-full"
-                            aria-label={`${t('home.card.moneyTitle')} - browse listings`}
-                        >
-                            <div 
-                                className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
-                                style={{ 
-                                    background: 'linear-gradient(135deg, #FF7043 0%, #F4511E 100%)',
-                                    borderRadius: '16px',
-                                    boxShadow: '0 4px 12px rgba(255, 112, 67, 0.3)'
-                                }}
-                            >
-                                <svg className="w-6 h-6 md:w-7 md:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                            </div>
-                            <h3 
-                                className="text-white mb-1.5 text-center"
-                                style={{
-                                    fontSize: '14px',
-                                    fontWeight: 600,
-                                    fontFamily: "'Poppins', sans-serif",
-                                    letterSpacing: '-0.01em',
-                                    lineHeight: '1.35'
-                                }}
-                            >
-                                {t('home.card.moneyTitle')}
-                            </h3>
-                            <p 
-                                className="text-center"
-                                style={{
-                                    fontSize: '12px',
-                                    fontWeight: 400,
-                                    fontFamily: "'Poppins', sans-serif",
-                                    color: 'rgba(255, 255, 255, 0.78)',
-                                    lineHeight: '1.5'
-                                }}
-                            >
-                                {t('home.card.moneyDesc')}
-                            </p>
-                        </button>
-
-                        {/* Card 4: Inspect before you pay */}
-                        <button
-                            type="button"
-                            onClick={() => onNavigate(ViewEnum.SAFETY_CENTER)}
-                            className="home-glass-card home-glass-card-4 p-5 md:p-6 cursor-pointer text-left w-full"
-                            aria-label={`${t('home.card.rcTitle')} - safety tips`}
-                        >
-                            <div 
-                                className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
-                                style={{ 
-                                    background: 'linear-gradient(135deg, #AB47BC 0%, #8E24AA 100%)',
-                                    borderRadius: '16px',
-                                    boxShadow: '0 4px 12px rgba(171, 71, 188, 0.3)'
-                                }}
-                            >
-                                <svg className="w-6 h-6 md:w-7 md:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                            </div>
-                            <h3 
-                                className="text-white mb-1.5 text-center"
-                                style={{
-                                    fontSize: '14px',
-                                    fontWeight: 600,
-                                    fontFamily: "'Poppins', sans-serif",
-                                    letterSpacing: '-0.01em',
-                                    lineHeight: '1.35'
-                                }}
-                            >
-                                {t('home.card.rcTitle')}
-                            </h3>
-                            <p 
-                                className="text-center"
-                                style={{
-                                    fontSize: '12px',
-                                    fontWeight: 400,
-                                    fontFamily: "'Poppins', sans-serif",
-                                    color: 'rgba(255, 255, 255, 0.78)',
-                                    lineHeight: '1.5'
-                                }}
-                            >
-                                {t('home.card.rcDesc')}
-                            </p>
-                        </button>
                     </div>
-
+                    <div className="hidden lg:block hero-rise hero-rise-6 self-center w-full max-w-md lg:max-w-none mx-auto">
+                        <DealRoomHeroPreview />
+                    </div>
                 </div>
             </div>
 
@@ -1007,7 +819,7 @@ const Home: React.FC<HomeProps> = ({
                                             <div className="text-[12px] text-gray-500 truncate mt-0.5">
                                                 {vehicle.year} · {vehicle.city}
                                             </div>
-                                            <div className="text-[13px] font-bold text-purple-700 mt-1">
+                                            <div className="text-[13px] font-bold text-orange-700 mt-1">
                                                 ₹{Math.round(vehicle.price / 1000).toLocaleString('en-IN')}K
                                             </div>
                                         </div>
@@ -1025,7 +837,7 @@ const Home: React.FC<HomeProps> = ({
                     <div className="max-w-7xl mx-auto">
                         <div ref={featuredHeadRef} className="reveal-on-scroll flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10 md:mb-12">
                             <div className="space-y-3 text-center md:text-left">
-                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-purple-700">
+                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-orange-700">
                                     <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M13 10V3L4 14h7v7l9-11h-7z" />
                                     </svg>
@@ -1036,7 +848,7 @@ const Home: React.FC<HomeProps> = ({
                             </div>
                             <button
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                                className="self-center md:self-end inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full border border-gray-300 text-gray-800 font-medium text-sm hover:border-purple-600 hover:text-purple-700 transition-colors"
+                                className="self-center md:self-end inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full border border-gray-300 text-gray-800 font-medium text-sm hover:border-orange-600 hover:text-orange-700 transition-colors"
                             >
                                 {t('home.featured.viewAllVehicles')}
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1142,7 +954,7 @@ const Home: React.FC<HomeProps> = ({
                                                 <span>{vehicle.transmission || t('common.manual')}</span>
                                             </div>
                                             <div className="flex items-center gap-1.5 text-gray-700 pt-3 border-t border-gray-100">
-                                                <svg className="w-3.5 h-3.5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-3.5 h-3.5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                                 </svg>
@@ -1207,7 +1019,7 @@ const Home: React.FC<HomeProps> = ({
                             </div>
                             <button 
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                                className="self-center md:self-end inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full border border-gray-300 text-gray-800 font-medium text-sm hover:border-purple-600 hover:text-purple-700 transition-colors"
+                                className="self-center md:self-end inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full border border-gray-300 text-gray-800 font-medium text-sm hover:border-orange-600 hover:text-orange-700 transition-colors"
                             >
                                 {t('home.recent.viewAll')}
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1259,7 +1071,7 @@ const Home: React.FC<HomeProps> = ({
                                             <h3 className="font-semibold text-gray-900 text-[16px] leading-snug tracking-tight">
                                                 {vehicle.year} {vehicle.make} {vehicle.model}
                                             </h3>
-                                            <span className="text-[11px] px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-medium flex-shrink-0">
+                                            <span className="text-[11px] px-2 py-0.5 rounded-md bg-orange-50 text-orange-700 font-medium flex-shrink-0">
                                                 {vehicle.fuelType}
                                             </span>
                                         </div>
@@ -1272,7 +1084,7 @@ const Home: React.FC<HomeProps> = ({
                                             <span>{vehicle.transmission || t('common.manual')}</span>
                                         </div>
                                         <div className="flex items-center gap-1.5 text-gray-700 mt-3 pt-3 border-t border-gray-100">
-                                            <svg className="w-3.5 h-3.5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-3.5 h-3.5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                             </svg>
@@ -1302,18 +1114,9 @@ const Home: React.FC<HomeProps> = ({
                 <div className="max-w-7xl mx-auto">
                     <div ref={citiesHeadRef} className="reveal-on-scroll flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8 md:mb-10">
                         <div className="space-y-2">
-                            <div className="inline-flex items-center gap-2 text-purple-600 text-[11px] font-bold uppercase tracking-[0.14em]">
-                                <span
-                                    className="relative inline-flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 via-fuchsia-500 to-pink-500 shadow-[0_4px_12px_-2px_rgba(168,85,247,0.55)]"
-                                    aria-hidden="true"
-                                >
-                                    <span className="absolute inset-0 rounded-full border border-purple-400/60 mc-header-radar" />
-                                    <svg className="relative w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M12 21s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z" fill="currentColor" stroke="none" />
-                                        <circle cx="12" cy="9" r="2.4" fill="#fff" />
-                                    </svg>
-                                </span>
-                                <span className="mc-eyebrow-accent">{t('mobile.home.exploreLocation')}</span>
+                            <div className="inline-flex items-center gap-2 text-orange-600 text-[11px] font-bold uppercase tracking-[0.14em]">
+                                <span className="h-px w-5 bg-orange-300" />
+                                {t('mobile.home.exploreLocation')}
                             </div>
                             <h2 className="home-section-heading text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight leading-tight">
                               {t('home.popularCities.label', { defaultValue: 'Popular cities' })}
@@ -1332,144 +1135,12 @@ const Home: React.FC<HomeProps> = ({
                         </button>
                     </div>
 
-                    <div ref={citiesGridRef} className="reveal-on-scroll reveal-blur home-stagger-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
-                        {topCities.map((city, index) => {
-                            const accent = getHomeMobileCityAccent(city.name);
-
-                            return (
-                                <button
-                                    key={index}
-                                    type="button"
-                                    aria-label={t('mobile.home.cityAria', { name: city.name, count: city.total })}
-                                    onClick={() => handleCityCardClick(city)}
-                                    className="mc-card group relative rounded-3xl bg-white overflow-hidden text-left transition-all duration-300 active:scale-[0.98] hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                                    style={{
-                                        border: `1px solid ${accent.ring}`,
-                                        boxShadow:
-                                            '0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -8px rgba(15, 23, 42, 0.16)',
-                                        ['--mc-delay' as string]: `${index * 80}ms`,
-                                    }}
-                                >
-                                    {/* Gradient header — carries city identity */}
-                                    <div
-                                        className="mc-gradient relative h-[148px] w-full overflow-hidden"
-                                        style={{ background: getHomeMobileCityGradient(city.name) }}
-                                    >
-                                        {/* Decorative blobs */}
-                                        <div className="absolute inset-0 opacity-50 motion-reduce:hidden" aria-hidden="true">
-                                            <div
-                                                className="absolute -top-8 -right-6 w-32 h-32 rounded-full blur-2xl"
-                                                style={{ backgroundColor: accent.soft }}
-                                            />
-                                            <div
-                                                className="absolute -bottom-10 -left-8 w-28 h-28 rounded-full blur-2xl"
-                                                style={{ backgroundColor: accent.soft }}
-                                            />
-                                        </div>
-                                        {/* Dotted texture */}
-                                        <div
-                                            className="absolute inset-0 opacity-[0.10] motion-reduce:hidden"
-                                            aria-hidden="true"
-                                            style={{
-                                                backgroundImage: `radial-gradient(circle at 1px 1px, ${accent.solid} 1px, transparent 0)`,
-                                                backgroundSize: '12px 12px',
-                                            }}
-                                        />
-
-                                        {/* Monument silhouette */}
-                                        <CityMonument city={city.name} className="mc-monument" color={accent.solid} />
-
-                                        {/* Pin badge with radar-ping rings */}
-                                        <div className="absolute top-3 right-3" aria-hidden="true">
-                                            <span className="relative flex w-8 h-8 items-center justify-center">
-                                                <span
-                                                    className="mc-radar-ring absolute inset-0 rounded-full"
-                                                    style={{ backgroundColor: accent.solid, opacity: 0.22 }}
-                                                />
-                                                <span
-                                                    className="mc-radar-ring mc-radar-ring-2 absolute inset-0 rounded-full"
-                                                    style={{ backgroundColor: accent.solid, opacity: 0.22 }}
-                                                />
-                                                <span
-                                                    className="relative w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md"
-                                                    style={{
-                                                        backgroundColor: 'rgba(255,255,255,0.75)',
-                                                        border: `1px solid ${accent.ring}`,
-                                                    }}
-                                                >
-                                                    <svg
-                                                        className="w-4 h-4"
-                                                        viewBox="0 0 24 24"
-                                                        fill="currentColor"
-                                                        style={{ color: accent.solid }}
-                                                    >
-                                                        <path d="M12 22s7-6.3 7-12a7 7 0 10-14 0c0 5.7 7 12 7 12z" />
-                                                        <circle cx="12" cy="10" r="2.6" fill="#fff" />
-                                                    </svg>
-                                                </span>
-                                            </span>
-                                        </div>
-
-                                        {/* Big city abbreviation */}
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                            <span
-                                                className="mc-abbr text-[56px] leading-none font-black tracking-tight"
-                                                style={{
-                                                    color: accent.solid,
-                                                    fontFeatureSettings: '"tnum"',
-                                                    textShadow: '0 1px 0 rgba(255,255,255,0.35)',
-                                                }}
-                                            >
-                                                {city.abbr}
-                                            </span>
-                                        </div>
-
-                                        {/* Hover sheen */}
-                                        <div
-                                            className="absolute inset-0 bg-gradient-to-br from-white/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 motion-reduce:hidden"
-                                            aria-hidden="true"
-                                        />
-                                    </div>
-
-                                    {/* Footer */}
-                                    <div className="px-4 pt-3 pb-4 flex flex-col gap-2">
-                                        <div className="flex items-start justify-between gap-1">
-                                            <h3 className="text-[16px] font-bold text-gray-900 leading-tight tracking-tight truncate">
-                                                {city.name}
-                                            </h3>
-                                            <svg
-                                                className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5 group-hover:text-gray-500 group-hover:translate-x-1 transition-all duration-300 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                                aria-hidden="true"
-                                            >
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M9 5l7 7-7 7" />
-                                            </svg>
-                                        </div>
-
-                                        {city.total > 0 ? (
-                                            <span
-                                                className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full text-[12px] font-bold"
-                                                style={{ backgroundColor: accent.soft, color: accent.solid }}
-                                            >
-                                                <span
-                                                    className="mc-live-dot w-1.5 h-1.5 rounded-full"
-                                                    style={{ backgroundColor: accent.solid }}
-                                                    aria-hidden="true"
-                                                />
-                                                {t('mobile.home.cityAvailable', { count: city.total })}
-                                            </span>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full text-[12px] font-semibold bg-gray-100 text-gray-500">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-gray-400" aria-hidden="true" />
-                                                {t('mobile.home.cityComingSoon')}
-                                            </span>
-                                        )}
-                                    </div>
-                                </button>
-                            );
-                        })}
+                    <div ref={citiesGridRef} className="reveal-on-scroll reveal-blur">
+                        <HomeCityGrid
+                            cities={topCities}
+                            onSelectCity={handleCityCardClick}
+                            variant="desktop"
+                        />
                     </div>
                 </div>
             </div>
@@ -1478,10 +1149,10 @@ const Home: React.FC<HomeProps> = ({
             <div ref={testimonialsRef} className={`reveal-on-scroll py-16 md:py-20 px-4 ${HOME_SECTION_BG.testimonials}`}>
                 <div className="max-w-6xl mx-auto">
                     <div className="text-center mb-10 md:mb-12 space-y-3">
-                        <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-blue-700">
-                            <span className="h-px w-6 bg-blue-300" />
+                        <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-orange-700">
+                            <span className="h-px w-6 bg-orange-300" />
                             {t('home.dealJourney.badge')}
-                            <span className="h-px w-6 bg-blue-300" />
+                            <span className="h-px w-6 bg-orange-300" />
                         </span>
                         <h2 className="home-section-heading text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight">{t('home.testimonials.title')}</h2>
                         <p className="text-gray-600 text-base max-w-xl mx-auto leading-relaxed">{t('home.testimonials.subtitle')}</p>
@@ -1490,12 +1161,12 @@ const Home: React.FC<HomeProps> = ({
                         {testimonialItems.map((item, idx) => (
                             <div key={idx} className="home-listing-card rounded-xl p-6 transition-all duration-200 border border-gray-100">
                                 <div className="flex items-center gap-3 mb-4">
-                                    <div className="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                                    <div className="h-10 w-10 rounded-full bg-stone-900 text-white flex items-center justify-center font-bold text-sm">
                                         {idx + 1}
                                     </div>
                                     <div>
                                         <div className="font-semibold text-gray-900 text-sm tracking-tight">{item.name}</div>
-                                        <div className="text-[12px] text-blue-700 font-medium">{item.tag}</div>
+                                        <div className="text-[12px] text-orange-700 font-medium">{item.tag}</div>
                                     </div>
                                 </div>
                                 <p className="text-gray-700 text-[15px] leading-relaxed">{item.quote}</p>
@@ -1531,62 +1202,11 @@ const Home: React.FC<HomeProps> = ({
                         </button>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-5">
-                        {categoriesWithCounts.map((category, index) => {
-                            const gradient = category.mobileCardGradient;
-                            const hasVehicles = category.vehicles > 0;
-
-                            return (
-                                <button
-                                    key={category.id}
-                                    type="button"
-                                    onClick={() => {
-                                        // onSelectCategory already navigates to USED_CARS with { category }.
-                                        // A bare onNavigate(USED_CARS) would clear category back to ALL.
-                                        onSelectCategory(category.id);
-                                    }}
-                                    className="vc-tile group relative flex flex-col items-center gap-3 p-5 bg-white rounded-2xl shadow-sm border border-gray-100 active:scale-95 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:active:scale-100 motion-reduce:hover:translate-y-0"
-                                    style={{
-                                        animationDelay: `${index * 50}ms`,
-                                        minHeight: '160px',
-                                    }}
-                                >
-                                    <div
-                                        className={`absolute inset-0 bg-gradient-to-br ${gradient} rounded-2xl opacity-0 group-active:opacity-5 group-hover:opacity-10 transition-opacity duration-300 motion-reduce:transition-none`}
-                                    />
-
-                                    {/* Icon plate */}
-                                    <div
-                                        className={`vc-plate relative w-16 h-16 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow duration-300`}
-                                    >
-                                        <VehicleCategoryIcon category={category.id} className="relative z-10 w-12 h-12 drop-shadow-sm" />
-                                        <div className="absolute inset-0 bg-gradient-to-br from-white/35 via-white/0 to-transparent rounded-2xl pointer-events-none" />
-                                        <div
-                                            className="absolute inset-x-1 bottom-0 h-2 rounded-b-2xl pointer-events-none"
-                                            style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.18), transparent)' }}
-                                        />
-                                    </div>
-
-                                    <span className="text-[14px] font-bold text-gray-900 text-center leading-tight group-hover:text-orange-600 transition-colors duration-300 motion-reduce:transition-none">
-                                        {category.name}
-                                    </span>
-
-                                    <div
-                                        className={`flex items-center justify-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-all duration-300 motion-reduce:transition-none ${
-                                            hasVehicles
-                                                ? 'bg-orange-100 text-orange-600 group-hover:bg-orange-200'
-                                                : 'bg-gray-100 text-gray-500'
-                                        }`}
-                                    >
-                                        <span>{category.vehicles}</span>
-                                        <span className="ml-1">{t('mobile.home.carsSuffix')}</span>
-                                    </div>
-
-                                    <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 motion-reduce:transition-none" />
-                                </button>
-                            );
-                        })}
-                    </div>
+                    <HomeCategoryTiles
+                        categories={categoriesWithCounts}
+                        onSelectCategory={onSelectCategory}
+                        variant="desktop"
+                    />
                 </div>
             </div>
 
@@ -1599,9 +1219,9 @@ const Home: React.FC<HomeProps> = ({
                         {sellSteps.map((item, idx) => (
                             <div key={idx} className="flex flex-col items-center text-center gap-4">
                                 <div className="relative">
-                                    <div className={`h-32 w-32 rounded-full bg-gradient-to-br ${item.accent} opacity-30 blur-3xl absolute inset-0`} />
-                                    <div className="relative h-32 w-32 rounded-full bg-gradient-to-br from-white to-gray-50 border border-gray-200/80 shadow-sm flex items-center justify-center text-4xl">
-                                        <span role="img" aria-label={item.title}>{item.emoji}</span>
+                                    <div className="h-32 w-32 rounded-full bg-orange-100/80 blur-3xl absolute inset-0" />
+                                    <div className="relative h-32 w-32 rounded-full bg-gradient-to-br from-white to-gray-50 border border-gray-200/80 shadow-sm flex items-center justify-center">
+                                        <span className="text-3xl font-bold text-orange-600 tabular-nums">{item.n}</span>
                                     </div>
                                 </div>
                                 <div className="space-y-2 max-w-xs">
@@ -1610,7 +1230,7 @@ const Home: React.FC<HomeProps> = ({
                                 </div>
                                 <button
                                     onClick={() => onNavigate(idx === 1 ? ViewEnum.SELLER_DASHBOARD : ViewEnum.SELL_CAR)}
-                                    className="inline-flex items-center gap-1 text-purple-700 font-medium text-sm hover:gap-2 transition-all"
+                                    className="inline-flex items-center gap-1 text-orange-700 font-medium text-sm hover:gap-2 transition-all"
                                 >
                                     {item.cta}
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1633,7 +1253,7 @@ const Home: React.FC<HomeProps> = ({
                         </button>
                         <button
                             onClick={() => onNavigate(ViewEnum.ABOUT_US)}
-                            className="inline-flex items-center gap-2 px-6 py-3 rounded-full border border-gray-300 text-gray-800 font-medium text-sm hover:border-purple-500 hover:text-purple-700 transition-colors"
+                            className="inline-flex items-center gap-2 px-6 py-3 rounded-full border border-gray-300 text-gray-800 font-medium text-sm hover:border-orange-500 hover:text-orange-700 transition-colors"
                         >
                             {t('home.sell.learnMore')}
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

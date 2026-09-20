@@ -6,6 +6,7 @@ import type { VehicleCategory } from '../vehicle-category.js';
 import type { AppHistoryState } from '../utils/appNavigation.js';
 import {
   getAppPathFromRouter,
+  POST_LOGIN_PATH_KEY,
   viewToStaticPath,
 } from '../utils/appNavigation.js';
 import { getVehicleRouteId, vehicleIdsEqual } from '../utils/vehicleIdentity';
@@ -22,6 +23,7 @@ export type NavigateParams = {
   category?: VehicleCategory | 'ALL';
   sellerEmail?: string;
   detailVehicle?: Vehicle;
+  dealId?: string | null;
   unblockPopstateSync?: boolean;
 };
 
@@ -73,6 +75,14 @@ export function useAppNavigation(args: UseAppNavigationArgs) {
   const navigate = useCallback(
     (view: View, params?: NavigateParams) => {
       const detailVehicleParam = params?.detailVehicle;
+      if ([View.LOGIN_PORTAL, View.CUSTOMER_LOGIN, View.SELLER_LOGIN].includes(view)) {
+        try {
+          const returnPath = `${location.pathname || '/'}${location.search || ''}`;
+          if (!returnPath.startsWith('/login')) sessionStorage.setItem(POST_LOGIN_PATH_KEY, returnPath);
+        } catch {
+          /* ignore unavailable storage */
+        }
+      }
       if (params?.unblockPopstateSync) {
         isHandlingPopStateRef.current = false;
       }
@@ -126,7 +136,13 @@ export function useAppNavigation(args: UseAppNavigationArgs) {
         }
       }
 
-      if (view === currentView && !params?.city && view !== View.DETAIL && !params?.unblockPopstateSync) {
+      if (
+        view === currentView &&
+        !params?.city &&
+        params?.dealId === undefined &&
+        view !== View.DETAIL &&
+        !params?.unblockPopstateSync
+      ) {
         if (view === View.SELLER_PROFILE && params?.sellerEmail) {
           const norm = params.sellerEmail.toLowerCase().trim();
           const cur = publicSellerProfile?.email?.toLowerCase().trim();
@@ -335,6 +351,8 @@ export function useAppNavigation(args: UseAppNavigationArgs) {
           newPath = emailForPath ? `/seller/${encodeURIComponent(emailForPath)}` : '/seller';
         } else if (view === View.CITY_LANDING && params?.city) {
           newPath = `/city/${encodeURIComponent(params.city.toLowerCase().replace(/\s+/g, '-'))}`;
+        } else if (view === View.BUYER_DASHBOARD && params?.dealId) {
+          newPath = `/customer/dashboard?deal=${encodeURIComponent(params.dealId)}`;
         } else {
           newPath = viewToStaticPath(view);
         }
@@ -387,6 +405,8 @@ export function useAppNavigation(args: UseAppNavigationArgs) {
     [
       currentView,
       currentUser,
+      location.pathname,
+      location.search,
       previousView,
       selectedVehicle,
       publicSellerProfile,

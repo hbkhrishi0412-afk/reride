@@ -52,7 +52,7 @@ export const DealRoomSection: React.FC<DealRoomSectionProps> = ({
           type="button"
           onClick={() => void onStartDealRoom()}
           disabled={dealLeadLoading}
-          className="w-full px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-60"
+          className="w-full px-4 py-2 rounded-lg bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 disabled:opacity-60"
           data-testid="open-deal-room"
         >
           {dealLeadLoading

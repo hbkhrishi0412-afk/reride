@@ -305,7 +305,7 @@ interface Props {
 
 /**
  * Renders the sketch-style SVG illustration for the given vehicle category.
- * Returns null (so callers can fall back to an emoji) for unknown categories.
+ * Returns null for unknown categories.
  */
 const VehicleCategoryIcon: React.FC<Props> = ({ category, className }) => {
   const Icon = ICON_MAP[category];

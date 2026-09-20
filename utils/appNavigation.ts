@@ -8,6 +8,8 @@ export interface AppHistoryState {
   selectedVehicleDatabaseId?: string;
 }
 
+export const POST_LOGIN_PATH_KEY = 'reride.postLoginPath';
+
 /** React Router pathname for packaged WebView (`/index.html`) → logical app path. */
 export function normalizeRouterPath(path: string): string {
   if (path == null || typeof path !== 'string') return '/';
@@ -174,9 +176,26 @@ export function loginViewFromSearch(search: string | null | undefined): View | n
   return null;
 }
 
+export function dealIdFromSearch(search: string | null | undefined): string | null {
+  if (!search) return null;
+  try {
+    return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get('deal')?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function sanitizePostLoginPath(path: string | null | undefined): string | null {
+  if (!path) return null;
+  const normalized = path.trim();
+  if (!normalized.startsWith('/') || normalized.startsWith('//')) return null;
+  const pathname = normalized.split(/[?#]/, 1)[0] || '/';
+  return pathToView(pathname) === View.NOT_FOUND ? null : normalized;
+}
+
 export function resolveViewFromPathAndState(
   path: string,
-  routerState: AppHistoryState | null | undefined,
+  _routerState: AppHistoryState | null | undefined,
   search?: string | null,
 ): View {
   const pathView = pathToView(path);
@@ -186,19 +205,7 @@ export function resolveViewFromPathAndState(
     // URL is authoritative for /login — stale history.state.view must not show HOME on /login.
     return View.LOGIN_PORTAL;
   }
-  if (pathView === View.SELLER_PROFILE) return View.SELLER_PROFILE;
-  if (pathView === View.NOTIFICATIONS_CENTER) return View.NOTIFICATIONS_CENTER;
-  if (pathView !== View.DETAIL && routerState?.view === View.DETAIL) {
-    return pathView;
-  }
-  if (
-    pathView === View.ADMIN_PANEL ||
-    pathView === View.ADMIN_LOGIN ||
-    pathView === View.SELL_CAR_ADMIN
-  ) {
-    return pathView;
-  }
-  return routerState?.view ?? pathView;
+  return pathView;
 }
 
 export function readInitialAppViewFromBrowser(): View {

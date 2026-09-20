@@ -1805,8 +1805,7 @@ const AppContent: React.FC = () => {
         if (conversation && currentUser) {
           if (currentUser.role === 'customer') {
             handleCloseChat();
-            setInboxConversationIdToOpen(String(conversation.id));
-            navigate(ViewEnum.INBOX);
+            navigate(ViewEnum.BUYER_DASHBOARD, { dealId: notification.dealLeadId });
           } else if (currentUser.role === 'seller') {
             if (isMobileApp) {
               setInboxConversationIdToOpen(String(conversation.id));
@@ -1817,7 +1816,10 @@ const AppContent: React.FC = () => {
             }
           }
         } else {
-          navigate(currentUser?.role === 'seller' ? ViewEnum.SELLER_DASHBOARD : ViewEnum.INBOX);
+          navigate(
+            currentUser?.role === 'seller' ? ViewEnum.SELLER_DASHBOARD : ViewEnum.BUYER_DASHBOARD,
+            currentUser?.role === 'seller' ? undefined : { dealId: notification.dealLeadId },
+          );
         }
         return;
       }
@@ -1945,6 +1947,11 @@ const AppContent: React.FC = () => {
         return;
       }
 
+      if (data.type === 'deal' && data.leadId && currentUser?.role === 'customer') {
+        navigate(ViewEnum.BUYER_DASHBOARD, { dealId: data.leadId });
+        return;
+      }
+
       if (data.url) {
         applyNotificationDeepLinkUrl(data.url);
         return;
@@ -1973,6 +1980,7 @@ const AppContent: React.FC = () => {
   }, [
     handleNotificationClick,
     handleAcceptDealChat,
+    currentUser?.role,
     isMobileApp,
     navigate,
     notifications,

@@ -6,10 +6,14 @@
 
 import mongoose from 'mongoose';
 
-// MongoDB connection
-const MONGODB_URI = 'mongodb+srv://hbk_hrishi0412:Qaz%403755@cluster0.nmiwnl7.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+// MongoDB connection — set MONGODB_URI in env (never commit credentials)
+const MONGODB_URI = process.env.MONGODB_URI;
 
 async function connectToDatabase() {
+    if (!MONGODB_URI) {
+        console.error('Missing MONGODB_URI. Example: MONGODB_URI="mongodb+srv://..." node populate-local-from-mongodb.js');
+        process.exit(1);
+    }
     console.log('🔄 Connecting to MongoDB...');
     const mongooseInstance = await mongoose.connect(MONGODB_URI, {
         bufferCommands: false,

@@ -706,7 +706,7 @@ export interface SupportTicket {
 }
 
 export interface FAQItem {
-  id: number;
+  id: number | string;
   question: string;
   answer: string;
   category: string;

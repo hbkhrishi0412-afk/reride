@@ -24,7 +24,7 @@ const HelpCenterPage: React.FC<HelpCenterPageProps> = ({ faqItems, onNavigate })
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string>('all');
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | string | null>(null);
 
   const items = useMemo(() => {
     const source = faqItems.length > 0 ? faqItems : DEFAULT_PLATFORM_FAQS;

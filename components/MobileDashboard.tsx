@@ -821,6 +821,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     return sorted;
   }, [isSeller, safeConversations, messagesHubFilter]);
 
+  const [showMoreTabs, setShowMoreTabs] = useState(false);
+  const primaryTabIds = useMemo(
+    () => new Set<DashboardTab>(isSeller ? ['overview', 'listings', 'messages'] : ['overview', 'listings']),
+    [isSeller],
+  );
+
   const tabs = useMemo(() => {
     const row: { id: DashboardTab; label: string; icon: React.ReactNode; count: number | null }[] = [
       { id: 'overview', label: t('sellerDashboard.mobile.tab.overview'), icon: <IconChart size={15} stroke={2} />, count: null },
@@ -853,6 +859,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     );
     return row;
   }, [t, totalListings, soldListings, reportedCount, isSeller, unreadSellerThreads, hotLeadsBadgeCount]);
+
+  const visibleTabs = useMemo(
+    () =>
+      tabs.filter(
+        (tab) => showMoreTabs || primaryTabIds.has(tab.id) || tab.id === activeTab,
+      ),
+    [tabs, showMoreTabs, primaryTabIds, activeTab],
+  );
 
   const renderHotLeads = () => {
     if (selectedDealId) {
@@ -4777,7 +4791,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         }}
       >
         <div className="flex gap-1.5 overflow-x-auto scrollbar-hide py-3">
-          {tabs.map((tab) => {
+          {visibleTabs.map((tab) => {
             const active = activeTab === tab.id;
             return (
               <button
@@ -4810,6 +4824,18 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               </button>
             );
           })}
+          <button
+            type="button"
+            onClick={() => setShowMoreTabs((open) => !open)}
+            className="whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-semibold"
+            style={{
+              background: showMoreTabs ? '#0B0B0F' : 'rgba(15, 23, 42, 0.04)',
+              color: showMoreTabs ? '#FFFFFF' : '#475569',
+              border: showMoreTabs ? '1px solid #0B0B0F' : '1px solid rgba(15, 23, 42, 0.06)',
+            }}
+          >
+            {showMoreTabs ? t('common.close', { defaultValue: 'Less' }) : t('nav.more')}
+          </button>
         </div>
       </div>
 

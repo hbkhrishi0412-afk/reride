@@ -6,7 +6,7 @@ import { toastTa } from '../toastStrings.js';
 
 const ta: Record<string, string> = {
   'app.tagline': 'தரமான பயன்படுத்தப்பட்ட வாகனங்களை வாங்கவும் & விற்கவும்',
-  'home.hero.title': 'உங்கள் சரியான வாகனத்தை கண்டுபிடிக்கவும்',
+  'home.hero.title': 'அரட்டையிலிருந்து RC மாற்றம் வரை கண்காணிப்பு',
   'home.hero.subtitle':
     'RC விவரங்களுடன் பட்டியல்களை உலாவி விற்பனையாளர்களுடன் நேரடியாக இணைக.',
   'nav.usedCars': 'பயன்படுத்தப்பட்ட கார்கள்',

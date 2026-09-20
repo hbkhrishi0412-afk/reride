@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import type { User, Vehicle, SavedSearch, Conversation } from '../types';
 import { View } from '../types';
 import * as buyerService from '../services/buyerService';
@@ -42,13 +43,23 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
 }) => {
   const { t } = useTranslation();
   const { comparisonCategory, setActiveChat, addToast } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'deals' | 'overview' | 'searches' | 'activity' | 'alerts' | 'serviceTrack'>('deals');
-  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const selectedDealId = searchParams.get('deal');
   // Removed unused showSaveSearchModal state
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(
     () => buyerService.getSavedSearches(currentUser?.email || '')
   );
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
+
+  const setSelectedDealId = useCallback((leadId: string | null) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (leadId) next.set('deal', leadId);
+      else next.delete('deal');
+      return next;
+    });
+  }, [setSearchParams]);
 
   // Load recently viewed only when overview or activity tab is shown
   useEffect(() => {

@@ -13,6 +13,7 @@ import type {
 } from '../types';
 import { getConversations } from '../services/chatService';
 import { getFaqs } from '../services/faqService';
+import { DEFAULT_PLATFORM_FAQS } from '../constants/defaultFaqs.js';
 import {
   fetchSupportTicketsFromSupabase,
   getSupportTickets,
@@ -456,13 +457,13 @@ export function useAppBootstrap(args: UseAppBootstrapArgs) {
                   'faqs',
                   () => fetchFaqsFromSupabase().catch((error) => {
                     logWarn('Failed to load FAQs:', error);
-                    return [];
+                    return DEFAULT_PLATFORM_FAQS;
                   })
                 );
                 if (isMounted) setFaqItems(faqsData);
               } catch (error) {
                 const localFaqs = getFaqs();
-                if (isMounted) setFaqItems(localFaqs || []);
+                if (isMounted) setFaqItems(localFaqs?.length ? localFaqs : DEFAULT_PLATFORM_FAQS);
               }
             })(),
 

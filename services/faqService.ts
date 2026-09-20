@@ -1,49 +1,41 @@
 import type { FAQItem } from '../types.js';
-import { getSupabaseClient } from '../lib/supabase.js';
 import { DEFAULT_PLATFORM_FAQS } from '../constants/defaultFaqs.js';
+import { getSupabaseClient } from '../lib/supabase.js';
+import { authenticatedFetch } from '../utils/authenticatedFetch.js';
+import { faqIdQueryParam, normalizeFaqRow, sortFaqs } from '../utils/faqNormalize.js';
 
 const FAQ_STORAGE_KEY = 'reRideFaqs';
 
-// Fetch FAQs from Supabase
 export const fetchFaqsFromSupabase = async (): Promise<FAQItem[]> => {
   try {
     const supabase = getSupabaseClient();
-    
+
     const { data, error } = await supabase
       .from('faqs')
-      .select('*')
-      .order('id', { ascending: true });
-    
+      .select('*');
+
     if (error) {
       throw new Error(`Failed to fetch FAQs: ${error.message}`);
     }
-    
-    // Transform Supabase rows to FAQItem format
-    const faqs: FAQItem[] = (data || []).map((faq: any, index: number) => {
-      const faqItem: FAQItem = {
-        id: faq.id || index + 1,
-        question: faq.question || '',
-        answer: faq.answer || '',
-        category: faq.category || 'General'
-      };
-      return faqItem;
-    });
-    
-    // Save to localStorage as backup (client-side only)
+
+    const faqs: FAQItem[] = sortFaqs(
+      (data || []).map((row, index) =>
+        normalizeFaqRow(row as Record<string, unknown>, index),
+      ),
+    );
+
     if (faqs.length > 0 && typeof window !== 'undefined') {
       saveFaqs(faqs);
     }
-    
+
     return faqs.length > 0 ? faqs : DEFAULT_PLATFORM_FAQS;
   } catch (error) {
     console.error('Error fetching FAQs from Supabase:', error);
-    // Fallback to localStorage if Supabase fails
     const localFaqs = getFaqs();
-    return localFaqs?.length ? localFaqs : DEFAULT_PLATFORM_FAQS;
+    return localFaqs?.length ? sortFaqs(localFaqs) : DEFAULT_PLATFORM_FAQS;
   }
 };
 
-// Alias for backward compatibility
 export const fetchFaqsFromMongoDB = fetchFaqsFromSupabase;
 
 export const getFaqs = (): FAQItem[] | null => {
@@ -54,7 +46,7 @@ export const getFaqs = (): FAQItem[] | null => {
     const faqsJson = localStorage.getItem(FAQ_STORAGE_KEY);
     return faqsJson ? JSON.parse(faqsJson) : null;
   } catch (error) {
-    console.error("Failed to parse FAQs from localStorage", error);
+    console.error('Failed to parse FAQs from localStorage', error);
     return null;
   }
 };
@@ -66,105 +58,67 @@ export const saveFaqs = (faqs: FAQItem[]) => {
   try {
     localStorage.setItem(FAQ_STORAGE_KEY, JSON.stringify(faqs));
   } catch (error) {
-    console.error("Failed to save FAQs to localStorage", error);
+    console.error('Failed to save FAQs to localStorage', error);
   }
 };
 
-// Save FAQ to Supabase
+/** Admin mutations go through the API (service role) — anon client only has SELECT on faqs. */
 export const saveFaqToSupabase = async (faq: Omit<FAQItem, 'id'>): Promise<FAQItem | null> => {
   try {
-    const supabase = getSupabaseClient();
-    
-    const { data, error } = await supabase
-      .from('faqs')
-      .insert({
-        question: faq.question,
-        answer: faq.answer,
-        category: faq.category || 'General'
-      })
-      .select()
-      .single();
-    
-    if (error) {
-      throw new Error(`Failed to save FAQ: ${error.message}`);
+    const resp = await authenticatedFetch('/api/faqs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(faq),
+    });
+    if (!resp.ok) {
+      throw new Error(`Failed to save FAQ (${resp.status})`);
     }
-    
-    if (data) {
-      const savedFaq: FAQItem = {
-        id: data.id,
-        question: data.question || faq.question,
-        answer: data.answer || faq.answer,
-        category: data.category || faq.category || 'General'
-      };
-      return savedFaq;
-    }
-    return null;
+    const body = await resp.json();
+    const row = body?.faq as Record<string, unknown> | undefined;
+    return row ? normalizeFaqRow(row) : null;
   } catch (error) {
-    console.error('Error saving FAQ to Supabase:', error);
+    console.error('Error saving FAQ:', error);
     return null;
   }
 };
 
-// Alias for backward compatibility
 export const saveFaqToMongoDB = saveFaqToSupabase;
 
-// Update FAQ in Supabase
 export const updateFaqInSupabase = async (faq: FAQItem): Promise<boolean> => {
   try {
-    if (!faq.id) {
+    if (faq.id == null || faq.id === '') {
       throw new Error('FAQ ID is required for update');
     }
-    
-    const supabase = getSupabaseClient();
-    
-    const { error } = await supabase
-      .from('faqs')
-      .update({
+    const resp = await authenticatedFetch(`/api/faqs?id=${faqIdQueryParam(faq.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         question: faq.question,
         answer: faq.answer,
-        category: faq.category || 'General'
-      })
-      .eq('id', faq.id);
-    
-    if (error) {
-      throw new Error(`Failed to update FAQ: ${error.message}`);
-    }
-    
-    return true;
+        category: faq.category || 'General',
+      }),
+    });
+    return resp.ok;
   } catch (error) {
-    console.error('Error updating FAQ in Supabase:', error);
+    console.error('Error updating FAQ:', error);
     return false;
   }
 };
 
-// Alias for backward compatibility
-export const updateFaqInMongoDB = async (faq: FAQItem, _mongoId?: string): Promise<boolean> => {
-  return updateFaqInSupabase(faq);
-};
+export const updateFaqInMongoDB = async (faq: FAQItem, _mongoId?: string): Promise<boolean> =>
+  updateFaqInSupabase(faq);
 
-// Delete FAQ from Supabase
-export const deleteFaqFromSupabase = async (faqId: number): Promise<boolean> => {
+export const deleteFaqFromSupabase = async (faqId: FAQItem['id']): Promise<boolean> => {
   try {
-    const supabase = getSupabaseClient();
-    
-    const { error } = await supabase
-      .from('faqs')
-      .delete()
-      .eq('id', faqId);
-    
-    if (error) {
-      throw new Error(`Failed to delete FAQ: ${error.message}`);
-    }
-    
-    return true;
+    const resp = await authenticatedFetch(`/api/faqs?id=${faqIdQueryParam(faqId)}`, {
+      method: 'DELETE',
+    });
+    return resp.ok;
   } catch (error) {
-    console.error('Error deleting FAQ from Supabase:', error);
+    console.error('Error deleting FAQ:', error);
     return false;
   }
 };
 
-// Alias for backward compatibility
-export const deleteFaqFromMongoDB = async (faqId: string | number): Promise<boolean> => {
-  const id = typeof faqId === 'string' ? parseInt(faqId, 10) : faqId;
-  return deleteFaqFromSupabase(id);
-};
+export const deleteFaqFromMongoDB = async (faqId: string | number): Promise<boolean> =>
+  deleteFaqFromSupabase(faqId);

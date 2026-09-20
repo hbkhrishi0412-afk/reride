@@ -6,7 +6,7 @@ import { toastHi } from '../toastStrings.js';
 
 const hi: Record<string, string> = {
   'app.tagline': 'गुणवत्ता पूर्ण प्रयुक्त वाहन खरीदें और बेचें',
-  'home.hero.title': 'अपनी परफेक्ट राइड खोजें',
+  'home.hero.title': 'चैट से RC ट्रांसफर तक ट्रैक',
   'home.hero.subtitle':
     'RC विवरण के साथ लिस्टिंग देखें और सीधे विक्रेताओं से जुड़ें।',
   'nav.usedCars': 'प्रयुक्त कारें',

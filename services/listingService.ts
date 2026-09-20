@@ -1,4 +1,5 @@
-import type { Vehicle, ListingStats } from '../types.js';
+import type { Vehicle, ListingStats, Conversation } from '../types.js';
+import { conversationMatchesVehicle } from '../utils/conversationParticipants.js';
 
 // Listing expiry configuration (60 days)
 export const LISTING_EXPIRY_DAYS = 60;
@@ -211,19 +212,32 @@ export const getListingQualityLevel = (score: number): 'low' | 'medium' | 'high'
   return 'low';
 };
 
-// Listing stats aggregation
-export const aggregateListingStats = (vehicleId: number): ListingStats => {
+// Listing stats aggregation — uses server counters + optional live conversations.
+export const aggregateListingStats = (
+  vehicle: Vehicle,
+  conversations: Conversation[] = [],
+): ListingStats => {
+  const vehicleId = vehicle.id;
   const today = new Date().toISOString().split('T')[0];
-  
+  const chatFromConversations = conversations.filter((c) =>
+    conversationMatchesVehicle(c, vehicle),
+  ).length;
+  const chatStarts =
+    chatFromConversations > 0 ? chatFromConversations : (vehicle.inquiriesCount ?? 0);
+  const localPhone = getPhoneViews(vehicleId);
+  const serverPhone = vehicle.phoneViews ?? 0;
+
   return {
     vehicleId,
     date: today,
-    views: 0, // Would be tracked by the backend
-    uniqueViews: 0,
-    phoneViews: getPhoneViews(vehicleId),
-    chatStarts: 0, // Would be tracked from conversations
+    views: vehicle.views ?? 0,
+    // ponytail: no distinct unique-view counter on Vehicle; upgrade path: server uniqueViews
+    uniqueViews: vehicle.views ?? 0,
+    phoneViews: Math.max(localPhone, serverPhone),
+    chatStarts,
     shares: getShareCount(vehicleId),
-    favorites: 0, // Would be tracked from wishlists
+    // ponytail: wishlist is client-only today; upgrade path: server-side save counts per vehicle
+    favorites: 0,
   };
 };
 

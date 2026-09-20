@@ -6,7 +6,7 @@ import { toastTe } from '../toastStrings.js';
 
 const te: Record<string, string> = {
   'app.tagline': 'నాణ్యమైన వినియోగించిన వాహనాలు కొనండి & అమ్మండి',
-  'home.hero.title': 'మీ సరిపోయే వాహనాన్ని కనుగొనండి',
+  'home.hero.title': 'చాట్ నుంచి RC బదిలీ వరకు ట్రాక్',
   'home.hero.subtitle':
     'RC వివరాలతో లిస్టింగ్‌లను చూడండి మరియు విక్రేతలతో నేరుగా కనెక్ట్ అవ్వండి.',
   'nav.usedCars': 'వాడిన కార్లు',

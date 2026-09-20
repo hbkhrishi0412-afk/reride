@@ -995,7 +995,7 @@ export function useAdminPlatformActions(args: UseAdminPlatformActionsArgs) {
         throw error;
       }
     },
-    onDeleteFaq: async (id: number) => {
+    onDeleteFaq: async (id: FAQItem['id']) => {
       try {
         // CRITICAL FIX: Delete from Supabase FIRST (real-time), then sync to local state only on success
         const { deleteFaqFromSupabase } = await import('../services/faqService');
