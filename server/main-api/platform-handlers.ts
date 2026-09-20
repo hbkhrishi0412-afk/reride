@@ -1495,7 +1495,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         
         // Log for debugging in development
         if (process.env.NODE_ENV === 'development') {
-          console.log('ðŸ” API: Fetching conversations for seller', {
+          core.logInfo('ðŸ” API: Fetching conversations for seller', {
             originalSellerId: String(sellerId),
             normalizedSellerId,
             foundCount: conversations?.length || 0
@@ -1611,7 +1611,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       }
 
       try {
-        console.log('ðŸ’¾ API: Adding message to conversation:', { conversationId, messageId: message?.id });
+        core.logInfo('ðŸ’¾ API: Adding message to conversation:', { conversationId, messageId: message?.id });
         await core.conversationService.addMessage(String(conversationId), message);
         const updatedConversation = await core.conversationService.findById(String(conversationId));
         
@@ -1674,7 +1674,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           console.warn('âš ï¸ API: seller inquiry alerts failed (non-fatal):', mailErr);
         }
 
-        console.log('âœ… API: Message added successfully:', { conversationId, messageId: message?.id, messageCount: updatedConversation.messages?.length });
+        core.logInfo('âœ… API: Message added successfully:', { conversationId, messageId: message?.id, messageCount: updatedConversation.messages?.length });
         return res.status(200).json({ success: true, data: updatedConversation });
       } catch (error) {
         console.error('âŒ API: Error adding message:', {

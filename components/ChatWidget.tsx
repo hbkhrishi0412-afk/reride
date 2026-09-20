@@ -708,6 +708,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                       <div
                         className="absolute right-0 top-full mt-1 w-52 rounded-xl border border-gray-200 bg-white py-1 shadow-lg z-30"
                         role="menu"
+                        tabIndex={-1}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {onArchiveConversation && (

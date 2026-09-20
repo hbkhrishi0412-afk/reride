@@ -126,7 +126,7 @@ type ProfileEditFieldProps = {
 };
 
 /** Stable field row — must not be declared inside renderProfile or inputs lose focus on mobile. */
-const ProfileEditField = React.memo(function ProfileEditField({
+const ProfileEditField = React.memo(({
   label,
   name,
   value,
@@ -140,7 +140,7 @@ const ProfileEditField = React.memo(function ProfileEditField({
   maxLength,
   inputMode,
   hint,
-}: ProfileEditFieldProps) {
+}: ProfileEditFieldProps) => {
   const baseInput: React.CSSProperties = {
     width: '100%',
     padding: '12px 14px',

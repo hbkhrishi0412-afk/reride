@@ -48,7 +48,10 @@ export type VehicleListFilters = {
   q?: string;
 };
 
-function applyVehicleListFilters<T extends { or: Function; eq: Function; ilike: Function; gte: Function; lte: Function }>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- structural match for Supabase's PostgrestFilterBuilder chain methods
+type QueryChainMethod = (...args: any[]) => any;
+
+function applyVehicleListFilters<T extends { or: QueryChainMethod; eq: QueryChainMethod; ilike: QueryChainMethod; gte: QueryChainMethod; lte: QueryChainMethod }>(
   query: T,
   status: string,
   filters?: VehicleListFilters,

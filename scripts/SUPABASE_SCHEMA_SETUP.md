@@ -181,13 +181,12 @@ After running the schema:
    - Verify authentication works
 
 4. **Run Migration** (if migrating from Firebase)
-   - Use the migration script: `scripts/migrate-firebase-to-supabase.js`
+   - The one-time Firebase → Supabase migration has already been completed; see `MIGRATION_GUIDE.md` for historical reference
    - Verify data was migrated correctly
 
 ## 🔗 Related Files
 
 - `scripts/complete-supabase-schema-fix.sql` - Fixes for existing schema
-- `scripts/migrate-firebase-to-supabase.js` - Migration script
 - `MIGRATION_GUIDE.md` - Detailed migration guide
 
 ## 💡 Tips

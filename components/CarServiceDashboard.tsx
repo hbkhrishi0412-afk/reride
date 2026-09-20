@@ -20,6 +20,8 @@ import {
   primaryAdvanceButtonLabel,
 } from '../utils/serviceRequestStatusFlow';
 import { spApiFetch } from '../utils/spApiFetch';
+import { getServiceDashboardNextAction, isRealProfileValue } from '../utils/serviceDashboardOverview';
+import { EmptyState, SectionHeader, StatCard, StatCardGrid } from './dashboard/shared';
 import { useApp } from './AppProvider';
 
 interface Provider {
@@ -80,24 +82,28 @@ const PROFILE_CLOCK_ICON = (
   </svg>
 );
 
-const ServiceCategoriesExplainerBox: React.FC<{ className?: string }> = ({ className = 'mb-4' }) => (
-  <div className={`rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left ${className}`}>
-    <p className="text-xs font-semibold text-gray-900">What are service categories?</p>
-    <p className="text-[11px] text-gray-500 mt-0.5 mb-2">
-      These are <span className="text-gray-700">high-level groups</span>. Each group turns on a fixed set of service types
-      (bookable in Services &amp; Pricing). This is shown here so you do not have to open &ldquo;Choose
-      categories&rdquo; only to read what they mean.
-    </p>
-    <ul className="space-y-1.5 text-[11px] text-gray-600 border-t border-gray-100 pt-2">
-      {SERVICE_CATEGORIES.map((cat) => (
-        <li key={cat}>
-          <span className="font-medium text-gray-800">{cat}</span>
-          <span> — {SERVICE_CATEGORY_DESCRIPTIONS[cat]}</span>
-          <div className="text-gray-500 mt-0.5">Service types included: {(SERVICE_CATEGORY_MAP[cat] || []).join(', ')}.</div>
-        </li>
-      ))}
-    </ul>
-  </div>
+const ServiceCategoriesExplainerBox: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <details className={`group rounded-lg border border-gray-200 bg-white text-left ${className}`}>
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden">
+      <span>What are service categories?</span>
+      <svg className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    </summary>
+    <div className="border-t border-gray-100 px-3 pb-2.5 pt-2">
+      <p className="mb-2 text-[11px] text-gray-500">
+        High-level groups. Each one unlocks a set of bookable service types in Services &amp; Pricing.
+      </p>
+      <ul className="space-y-1.5 text-[11px] text-gray-600">
+        {SERVICE_CATEGORIES.map((cat) => (
+          <li key={cat}>
+            <span className="font-medium text-gray-800">{cat}</span>
+            <span> — {SERVICE_CATEGORY_DESCRIPTIONS[cat]}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </details>
 );
 
 const ServiceCategoryEditorPanel: React.FC<{
@@ -296,6 +302,10 @@ interface ServiceRequest {
 }
 
 type MatchReason = 'city_match' | 'service_match' | 'new_request';
+
+function hasCustomerDetails(req: ServiceRequest): boolean {
+  return Boolean(req.customerName || req.customerPhone || req.customerEmail || req.addressLine);
+}
 
 function ServiceRequestPackages({ services, total }: { services?: ServiceLineItem[]; total?: number }) {
   const lines = (services ?? []).filter(
@@ -564,6 +574,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
   const [serviceSearch, setServiceSearch] = useState('');
   const [serviceStatusFilter, setServiceStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [editingServiceType, setEditingServiceType] = useState<string | null>(null);
+  const [serviceFormOpen, setServiceFormOpen] = useState(false);
   const [editingSkills, setEditingSkills] = useState(false);
   const [editingWorkshops, setEditingWorkshops] = useState(false);
   const [editingCategories, setEditingCategories] = useState(false);
@@ -784,8 +795,8 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
     const hasSavedCategories = Boolean((localProvider?.serviceCategories || []).length);
     const hasPendingCategorySelection = editingCategories && selectedCategories.length > 0;
     const checks = [
-      Boolean((localProvider?.city || '').trim()),
-      Boolean((localProvider?.availability || '').trim()),
+      isRealProfileValue(localProvider?.city),
+      isRealProfileValue(localProvider?.availability),
       Boolean(localProvider?.skills?.length),
       Boolean(localProvider?.workshops?.length),
       activeProviderServices.length > 0,
@@ -849,21 +860,43 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
       }));
   }, [overviewRequests]);
 
-  const nextBestAction = useMemo(() => {
-    if (!(localProvider?.availability || '').trim()) {
-      return 'Set your availability to appear in more customer matches.';
+  const nextBestAction = useMemo(
+    () =>
+      getServiceDashboardNextAction({
+        city: localProvider?.city,
+        availability: localProvider?.availability,
+        skills: localProvider?.skills,
+        workshops: localProvider?.workshops,
+        activeServiceCount: activeProviderServices.length,
+        categories: localProvider?.serviceCategories,
+      }),
+    [activeProviderServices.length, localProvider],
+  );
+
+  const runNextBestAction = () => {
+    switch (nextBestAction.kind) {
+      case 'city':
+      case 'availability':
+        setActiveTab('profile');
+        setEditingProfile(true);
+        return;
+      case 'skills':
+        setEditingSkills(true);
+        return;
+      case 'workshops':
+        setEditingWorkshops(true);
+        return;
+      case 'categories':
+        setSelectedCategories(localProvider?.serviceCategories || recommendedCategories);
+        setEditingCategories(true);
+        return;
+      case 'services':
+        setActiveTab('services');
+        return;
+      default:
+        setActiveTab('open');
     }
-    if (activeProviderServices.length < 3) {
-      return 'Add or activate at least 3 services to increase discoverability.';
-    }
-    if (!(localProvider?.serviceCategories || []).length) {
-      return 'Select service categories so jobs are routed accurately.';
-    }
-    if (!(localProvider?.workshops || []).length) {
-      return 'Add workshop locations to improve local request targeting.';
-    }
-    return 'Great setup. Keep response time low to maximize acceptance rate.';
-  }, [activeProviderServices.length, localProvider]);
+  };
 
   const enrichedOpenRequests = useMemo(() => {
     const providerCity = (localProvider?.city || provider?.city || '').trim().toLowerCase();
@@ -981,12 +1014,12 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
   };
 
   const statusBadge = (status: RequestStatus) => {
-    const base = 'px-3 py-1.5 rounded-full text-xs font-bold border-2 shadow-sm';
-    if (status === 'open') return `${base} bg-gradient-to-r from-amber-50 to-amber-100 text-amber-800 border-amber-300`;
-    if (status === 'accepted') return `${base} bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 border-blue-300`;
-    if (status === 'in_progress') return `${base} bg-gradient-to-r from-indigo-50 to-indigo-100 text-indigo-800 border-indigo-300`;
-    if (status === 'cancelled') return `${base} bg-gradient-to-r from-red-50 to-red-100 text-red-800 border-red-300`;
-    return `${base} bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-800 border-emerald-300`;
+    const base = 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold';
+    if (status === 'open') return `${base} bg-amber-50 text-amber-800`;
+    if (status === 'accepted') return `${base} bg-blue-50 text-blue-800`;
+    if (status === 'in_progress') return `${base} bg-indigo-50 text-indigo-800`;
+    if (status === 'cancelled') return `${base} bg-red-50 text-red-800`;
+    return `${base} bg-emerald-50 text-emerald-800`;
   };
 
   // Dummy data helpers for quick UI checks (dev only)
@@ -1086,6 +1119,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onL
       
       // Reset form after successful save
       clearServiceForm();
+      setServiceFormOpen(false);
       
       // Dispatch event to notify admin panel of service update
       window.dispatchEvent(new CustomEvent('serviceProviderServicesUpdated', {
@@ -1153,6 +1187,7 @@ const body = { serviceType, active };
     includedServices?: IncludedServicePrice[];
   }) => {
     setEditingServiceType(service.serviceType);
+    setServiceFormOpen(true);
     const unit = pickEtaUnit(service.etaMinutes);
     setServiceForm({
       serviceType: service.serviceType,
@@ -1182,6 +1217,7 @@ const body = { serviceType, active };
 
   const applyServiceTemplate = (template: { serviceType: string; price: string; etaMinutes: string; description: string }) => {
     setEditingServiceType(null);
+    setServiceFormOpen(true);
     // Template ETA values are provided in minutes; pick a natural unit for display.
     const etaMin = template.etaMinutes ? Number(template.etaMinutes) : NaN;
     const unit = Number.isFinite(etaMin) ? pickEtaUnit(etaMin) : 'min';
@@ -1780,29 +1816,32 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-gray-50">
-      <header className="bg-gradient-to-r from-white via-blue-50/30 to-white shadow-md border-b border-gray-200">
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 flex items-center justify-center shadow-md">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
                 <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Service Dashboard</h1>
+              <div className="min-w-0">
+                <h1 className="text-xl font-bold text-gray-900 truncate">Service Dashboard</h1>
                 {(() => {
                   const rawCity = (localProvider?.city || '').trim();
-                  const hasRealCity = rawCity && rawCity.toLowerCase() !== 'pending setup';
+                  const hasRealCity = isRealProfileValue(rawCity);
+                  const displayName = (localProvider?.name || '').trim();
                   return (
-                    <p className="text-xs text-gray-600 flex items-center gap-1">
-                      <svg className="w-3 h-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <p className="text-xs text-gray-500 flex items-center gap-1.5 min-w-0">
+                      {displayName ? <span className="truncate">{displayName}</span> : null}
+                      {displayName ? <span className="text-gray-300">·</span> : null}
+                      <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
                       {hasRealCity ? (
-                        rawCity
+                        <span className="truncate">{rawCity}</span>
                       ) : (
                         <button
                           type="button"
@@ -1810,9 +1849,9 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                             setActiveTab('profile');
                             setEditingProfile(true);
                           }}
-                          className="text-amber-700 hover:text-amber-800 underline decoration-dotted underline-offset-2"
+                          className="text-blue-700 hover:text-blue-800 font-medium"
                         >
-                          Set your city
+                          Add city
                         </button>
                       )}
                     </p>
@@ -1825,7 +1864,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-800 text-sm font-semibold hover:bg-gray-50 dark:bg-white dark:border-gray-200 dark:hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm font-semibold hover:bg-gray-50 transition-colors"
                 >
                   Log out
                 </button>
@@ -1834,7 +1873,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                 type="button"
                 onClick={handleRefresh}
                 disabled={loading || openLoading}
-                className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white text-sm font-semibold hover:from-blue-700 hover:via-purple-700 hover:to-pink-700 disabled:opacity-60 shadow-md transition-all flex items-center gap-2"
+                className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-gray-800 text-sm font-semibold hover:bg-gray-50 disabled:opacity-60 transition-colors flex items-center gap-2"
               >
                 <svg className={`w-4 h-4 ${loading || openLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1848,10 +1887,10 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         {/* Enhanced Tab Navigation — semantic tablist with keyboard support */}
-        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-1.5">
+        <div className="mb-6 bg-white rounded-xl shadow-sm border border-gray-200 p-1.5">
           {(() => {
             const providerTabs: Array<{
-              id: 'overview' | 'services' | 'open' | 'my-requests';
+              id: 'overview' | 'profile' | 'services' | 'open' | 'my-requests';
               label: string;
               badge?: number;
               badgeColor?: string;
@@ -1894,6 +1933,15 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                 icon: (
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                ),
+              },
+              {
+                id: 'profile',
+                label: 'Profile',
+                icon: (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 ),
               },
@@ -1956,7 +2004,171 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
         {/* Tab Content */}
         <div className="space-y-6">
           {/* Overview Tab */}
-          {activeTab === 'overview' && (
+          {activeTab === 'overview' && (() => {
+            const setupIncomplete = profileReadiness.percent < 100;
+            const setupItems = [
+              {
+                label: 'City',
+                done: profileReadiness.checks[0],
+                value: localProvider?.city,
+                action: () => {
+                  setActiveTab('profile');
+                  setEditingProfile(true);
+                },
+                actionLabel: 'Set city',
+              },
+              {
+                label: 'Availability',
+                done: profileReadiness.checks[1],
+                value: localProvider?.availability,
+                action: () => {
+                  setActiveTab('profile');
+                  setEditingProfile(true);
+                },
+                actionLabel: 'Set availability',
+              },
+              {
+                label: 'Skills',
+                done: profileReadiness.checks[2],
+                value: localProvider?.skills?.join(', '),
+                action: () => setEditingSkills(true),
+                actionLabel: 'Add skills',
+              },
+              {
+                label: 'Workshops',
+                done: profileReadiness.checks[3],
+                value: localProvider?.workshops?.join(', '),
+                action: () => setEditingWorkshops(true),
+                actionLabel: 'Add workshop',
+              },
+              {
+                label: 'Active services',
+                done: profileReadiness.checks[4],
+                value: activeProviderServices.length ? `${activeProviderServices.length} active` : undefined,
+                action: () => setActiveTab('services'),
+                actionLabel: 'Add services',
+              },
+              {
+                label: 'Service categories',
+                done: profileReadiness.checks[5],
+                value: (editingCategories
+                  ? selectedCategories
+                  : localProvider?.serviceCategories || []
+                ).join(', '),
+                action: () => {
+                  setSelectedCategories(localProvider?.serviceCategories || recommendedCategories);
+                  setEditingCategories(true);
+                },
+                actionLabel: 'Choose categories',
+                alwaysShowAction: true,
+              },
+            ];
+            const nextIncompleteIdx = setupItems.findIndex((item) => !item.done);
+            const nextStepCard = (
+              <div className="rounded-xl border border-gray-200 bg-white p-5 flex flex-col h-full">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-600">Next step</p>
+                <h3 className="text-base font-semibold text-gray-900 mt-1">{nextBestAction.title}</h3>
+                <p className="text-sm text-gray-600 mt-1.5 flex-1">{nextBestAction.message}</p>
+                <button
+                  type="button"
+                  onClick={runNextBestAction}
+                  className="mt-4 w-full rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  {nextBestAction.label}
+                </button>
+                {overviewStats.cancelled > 0 && (
+                  <p className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500">
+                    Cancellation rate:{' '}
+                    <span className="font-semibold text-gray-800">
+                      {overviewStats.total ? Math.round((overviewStats.cancelled / overviewStats.total) * 100) : 0}%
+                    </span>
+                  </p>
+                )}
+              </div>
+            );
+            const setupEditors = (
+              <>
+                {editingSkills && (
+                  <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <label className="block text-xs font-semibold text-gray-700 mb-2">Skills (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={skillsInput}
+                      onChange={(e) => setSkillsInput(e.target.value)}
+                      placeholder="e.g. Engine repair, AC service, Detailing"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <div className="mt-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSkills(false);
+                          setSkillsInput(localProvider?.skills?.join(', ') || '');
+                        }}
+                        className="px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-md"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveSkills}
+                        disabled={savingProfile}
+                        className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
+                      >
+                        {savingProfile ? 'Saving...' : 'Save skills'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {editingWorkshops && (
+                  <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <label className="block text-xs font-semibold text-gray-700 mb-2">Workshop locations (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={workshopsInput}
+                      onChange={(e) => setWorkshopsInput(e.target.value)}
+                      placeholder="e.g. Koramangala, Indiranagar"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <div className="mt-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingWorkshops(false);
+                          setWorkshopsInput(localProvider?.workshops?.join(', ') || '');
+                        }}
+                        className="px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-md"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveWorkshops}
+                        disabled={savingProfile}
+                        className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
+                      >
+                        {savingProfile ? 'Saving...' : 'Save workshops'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {editingCategories && (
+                  <ServiceCategoryEditorPanel
+                    className="mt-4"
+                    selectedCategories={selectedCategories}
+                    setSelectedCategories={setSelectedCategories}
+                    recommendedCategories={recommendedCategories}
+                    savingProfile={savingProfile}
+                    onSave={saveCategories}
+                    onCancel={() => {
+                      setEditingCategories(false);
+                      setSelectedCategories(localProvider?.serviceCategories || []);
+                    }}
+                  />
+                )}
+              </>
+            );
+            return (
             <>
               {priorityAlerts.some((a) => a.level === 'critical') && (
                 <section className="mb-6">
@@ -1986,351 +2198,167 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                 </section>
               )}
 
-              {profileReadiness.percent < 100 && (
-                <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                  <div className="flex items-start justify-between gap-4 mb-4">
-                    <div>
-                      <h2 className="text-base font-semibold text-gray-900">Finish setting up your profile</h2>
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        {profileReadiness.completed} of {profileReadiness.total} steps complete · helps you get more requests
-                      </p>
+              {setupIncomplete && (
+                <section className="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                      <div>
+                        <h2 className="text-base font-semibold text-gray-900">Finish setting up</h2>
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          {profileReadiness.completed} of {profileReadiness.total} complete · helps you get more requests
+                        </p>
+                      </div>
+                      <span className="text-sm font-semibold text-gray-900 tabular-nums">{profileReadiness.percent}%</span>
                     </div>
-                    <span className="text-sm font-semibold text-gray-900">{profileReadiness.percent}%</span>
+                    <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden mb-4">
+                      <div
+                        className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                        style={{ width: `${profileReadiness.percent}%` }}
+                      />
+                    </div>
+                    <ul className="grid sm:grid-cols-2 gap-2">
+                      {setupItems.map((item, idx) => {
+                        const isNext = idx === nextIncompleteIdx;
+                        const showCta = !item.done || item.alwaysShowAction;
+                        const ctaLabel = item.alwaysShowAction && item.done ? 'Change' : item.actionLabel;
+                        return (
+                          <li
+                            key={item.label}
+                            className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
+                              isNext
+                                ? 'border-blue-300 bg-blue-50'
+                                : item.done
+                                  ? 'border-gray-100 bg-gray-50/70'
+                                  : 'border-gray-200 bg-white'
+                            }`}
+                          >
+                            <span
+                              className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                                item.done ? 'bg-emerald-500 text-white' : isNext ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+                              }`}
+                            >
+                              {item.done ? (
+                                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              ) : (
+                                idx + 1
+                              )}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-medium ${item.done ? 'text-gray-500' : 'text-gray-900'}`}>{item.label}</p>
+                              {item.done && item.value ? (
+                                <p className="text-xs text-gray-500 truncate">{item.value}</p>
+                              ) : null}
+                            </div>
+                            {showCta && (
+                              <button
+                                type="button"
+                                onClick={item.action}
+                                className={`flex-shrink-0 text-xs font-semibold ${
+                                  isNext ? 'text-blue-800' : 'text-blue-600 hover:text-blue-800'
+                                }`}
+                              >
+                                {ctaLabel}
+                              </button>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <ServiceCategoriesExplainerBox className="mt-3" />
+                    {setupEditors}
                   </div>
-                  <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden mb-5">
-                    <div
-                      className="h-full rounded-full bg-blue-600 transition-all duration-500"
-                      style={{ width: `${profileReadiness.percent}%` }}
-                    />
-                  </div>
-                  <ServiceCategoriesExplainerBox />
-                  <ul className="divide-y divide-gray-100">
-                    {[
-                      {
-                        label: 'City',
-                        done: profileReadiness.checks[0],
-                        value: localProvider?.city,
-                        action: () => {
-                          setActiveTab('profile');
-                          setEditingProfile(true);
-                        },
-                        actionLabel: 'Set city',
-                      },
-                      {
-                        label: 'Availability',
-                        done: profileReadiness.checks[1],
-                        value: localProvider?.availability,
-                        action: () => {
-                          setActiveTab('profile');
-                          setEditingProfile(true);
-                        },
-                        actionLabel: 'Set availability',
-                      },
-                      {
-                        label: 'Skills',
-                        done: profileReadiness.checks[2],
-                        value: localProvider?.skills?.join(', '),
-                        action: () => setEditingSkills(true),
-                        actionLabel: 'Add skills',
-                      },
-                      {
-                        label: 'Workshops',
-                        done: profileReadiness.checks[3],
-                        value: localProvider?.workshops?.join(', '),
-                        action: () => setEditingWorkshops(true),
-                        actionLabel: 'Add workshop',
-                      },
-                      {
-                        label: 'Active services',
-                        done: profileReadiness.checks[4],
-                        value: activeProviderServices.length ? `${activeProviderServices.length} active` : undefined,
-                        action: () => setActiveTab('services'),
-                        actionLabel: 'Add services',
-                      },
-                      {
-                        label: 'Service categories',
-                        done: profileReadiness.checks[5],
-                        value: (editingCategories
-                          ? selectedCategories
-                          : localProvider?.serviceCategories || []
-                        ).join(', '),
-                        action: () => {
-                          setSelectedCategories(localProvider?.serviceCategories || recommendedCategories);
-                          setEditingCategories(true);
-                        },
-                        actionLabel: 'Choose categories',
-                        /** Was hidden once "done"—users could not reopen the editor. */
-                        alwaysShowAction: true,
-                      },
-                    ].map((item) => {
-                      const showCta = !item.done || ('alwaysShowAction' in item && item.alwaysShowAction);
-                      const ctaLabel =
-                        'alwaysShowAction' in item && item.alwaysShowAction && item.done
-                          ? 'Change'
-                          : item.actionLabel;
-                      return (
-                      <li key={item.label} className="flex items-center gap-3 py-3">
-                        <span
-                          className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
-                            item.done ? 'bg-emerald-100 text-emerald-700' : 'border-2 border-gray-200 bg-white'
+                  {nextStepCard}
+                </section>
+              )}
+
+              <section className="mb-6">
+                <SectionHeader
+                  title="At a glance"
+                  subtitle="Your activity and performance"
+                  action={
+                    <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
+                      {(['today', '7d', '30d'] as const).map((range) => (
+                        <button
+                          key={range}
+                          type="button"
+                          onClick={() => setOverviewRange(range)}
+                          className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
+                            overviewRange === range
+                              ? 'bg-gray-900 text-white'
+                              : 'text-gray-600 hover:bg-gray-100'
                           }`}
                         >
-                          {item.done ? (
-                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                          ) : null}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium ${item.done ? 'text-gray-900' : 'text-gray-700'}`}>{item.label}</p>
-                          {item.done && item.value ? (
-                            <p className="text-xs text-gray-500 truncate">{item.value}</p>
-                          ) : null}
-                        </div>
-                        {showCta && (
-                          <button
-                            type="button"
-                            onClick={item.action}
-                            className="flex-shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                          >
-                            {ctaLabel}
-                          </button>
-                        )}
-                      </li>
-                    );
-                    })}
-                  </ul>
-
-                  {editingSkills && (
-                    <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                      <label className="block text-xs font-semibold text-gray-700 mb-2">Skills (comma-separated)</label>
-                      <input
-                        type="text"
-                        value={skillsInput}
-                        onChange={(e) => setSkillsInput(e.target.value)}
-                        placeholder="e.g. Engine repair, AC service, Detailing"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                      <div className="mt-2 flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingSkills(false);
-                            setSkillsInput(localProvider?.skills?.join(', ') || '');
-                          }}
-                          className="px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-md"
-                        >
-                          Cancel
+                          {range === 'today' ? 'Today' : range === '7d' ? '7 days' : '30 days'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={saveSkills}
-                          disabled={savingProfile}
-                          className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
-                        >
-                          {savingProfile ? 'Saving...' : 'Save skills'}
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  )}
-
-                  {editingWorkshops && (
-                    <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                      <label className="block text-xs font-semibold text-gray-700 mb-2">Workshop locations (comma-separated)</label>
-                      <input
-                        type="text"
-                        value={workshopsInput}
-                        onChange={(e) => setWorkshopsInput(e.target.value)}
-                        placeholder="e.g. Koramangala, Indiranagar"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                      <div className="mt-2 flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingWorkshops(false);
-                            setWorkshopsInput(localProvider?.workshops?.join(', ') || '');
-                          }}
-                          className="px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-md"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={saveWorkshops}
-                          disabled={savingProfile}
-                          className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
-                        >
-                          {savingProfile ? 'Saving...' : 'Save workshops'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {editingCategories && (
-                    <ServiceCategoryEditorPanel
-                      className="mt-4"
-                      selectedCategories={selectedCategories}
-                      setSelectedCategories={setSelectedCategories}
-                      recommendedCategories={recommendedCategories}
-                      savingProfile={savingProfile}
-                      onSave={saveCategories}
-                      onCancel={() => {
-                        setEditingCategories(false);
-                        setSelectedCategories(localProvider?.serviceCategories || []);
-                      }}
-                    />
-                  )}
-                </section>
-              )}
-
-              {profileReadiness.percent >= 100 && (
-                <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                  <div className="mb-1">
-                    <h2 className="text-base font-semibold text-gray-900">Service categories</h2>
-                    <p className="text-sm text-gray-500 mt-0.5">
-                      Review what each group includes, or change your selection. Same options as in profile setup.
-                    </p>
-                  </div>
-                  <ServiceCategoriesExplainerBox className="mb-3" />
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4 border-t border-gray-100 pt-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-gray-500">Your current selection</p>
-                      <p className="text-sm text-gray-900 break-words">
-                        {(localProvider?.serviceCategories || []).length
-                          ? (localProvider?.serviceCategories || []).join(', ')
-                          : 'None — choose categories to match your workshop.'}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedCategories(localProvider?.serviceCategories || recommendedCategories);
-                        setEditingCategories(true);
-                      }}
-                      className="flex-shrink-0 self-start rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                    >
-                      {editingCategories ? 'Editing…' : 'Change categories'}
-                    </button>
-                  </div>
-                  {editingCategories && (
-                    <ServiceCategoryEditorPanel
-                      className="mt-4"
-                      selectedCategories={selectedCategories}
-                      setSelectedCategories={setSelectedCategories}
-                      recommendedCategories={recommendedCategories}
-                      savingProfile={savingProfile}
-                      onSave={saveCategories}
-                      onCancel={() => {
-                        setEditingCategories(false);
-                        setSelectedCategories(localProvider?.serviceCategories || []);
-                      }}
-                    />
-                  )}
-                </section>
-              )}
-
-              {/* KPI Stats */}
-              <section className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="text-base font-semibold text-gray-900">At a glance</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Your activity and performance</p>
-                  </div>
-                  <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
-                    {(['today', '7d', '30d'] as const).map((range) => (
-                      <button
-                        key={range}
-                        type="button"
-                        onClick={() => setOverviewRange(range)}
-                        className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                          overviewRange === range
-                            ? 'bg-gray-900 text-white'
-                            : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                      >
-                        {range === 'today' ? 'Today' : range === '7d' ? '7 days' : '30 days'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <button
-                    type="button"
+                  }
+                />
+                <StatCardGrid cols={4}>
+                  <StatCard
+                    label="Open jobs"
+                    value={overviewStats.open}
+                    sublabel="Available to claim"
+                    accent="amber"
+                    iconGradient="from-amber-500 to-orange-500"
                     onClick={() => setActiveTab('open')}
-                    className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-amber-400 hover:shadow-sm transition-all"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Open jobs</span>
-                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-amber-50 text-amber-600">
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                      </span>
-                    </div>
-                    <p className="text-3xl font-bold text-gray-900 leading-none">{overviewStats.open}</p>
-                    <p className="text-xs text-gray-500 mt-2">Available to claim</p>
-                  </button>
-                  <button
-                    type="button"
+                    icon={
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    }
+                  />
+                  <StatCard
+                    label="Accepted"
+                    value={overviewStats.accepted}
+                    sublabel={`${overviewStats.inProgress} in progress`}
+                    accent="blue"
+                    iconGradient="from-blue-500 to-indigo-600"
                     onClick={() => {
                       setActiveTab('my-requests');
                       setStatusFilter('accepted');
                     }}
-                    className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-sm transition-all"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Accepted</span>
-                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </span>
-                    </div>
-                    <p className="text-3xl font-bold text-gray-900 leading-none">{overviewStats.accepted}</p>
-                    <p className="text-xs text-gray-500 mt-2">{overviewStats.inProgress} in progress</p>
-                  </button>
-                  <button
-                    type="button"
+                    icon={
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    }
+                  />
+                  <StatCard
+                    label="Completed"
+                    value={overviewStats.completed}
+                    sublabel={`${acceptanceRate}% completion rate`}
+                    accent="emerald"
+                    iconGradient="from-emerald-500 to-teal-600"
                     onClick={() => {
                       setActiveTab('my-requests');
                       setStatusFilter('completed');
                     }}
-                    className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-emerald-400 hover:shadow-sm transition-all"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Completed</span>
-                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-50 text-emerald-600">
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </span>
-                    </div>
-                    <p className="text-3xl font-bold text-gray-900 leading-none">{overviewStats.completed}</p>
-                    <p className="text-xs text-gray-500 mt-2">{acceptanceRate}% completion rate</p>
-                  </button>
-                  <div className="bg-white border border-gray-200 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Est. revenue</span>
-                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-violet-50 text-violet-600">
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </span>
-                    </div>
-                    <p className="text-3xl font-bold text-gray-900 leading-none">
-                      ₹{((avgServicePrice || 0) * overviewStats.completed).toLocaleString('en-IN')}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Avg job: {avgServicePrice ? `₹${avgServicePrice.toLocaleString('en-IN')}` : 'NA'}
-                    </p>
-                  </div>
-                </div>
+                    icon={
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    }
+                  />
+                  <StatCard
+                    label="Est. revenue"
+                    value={`₹${((avgServicePrice || 0) * overviewStats.completed).toLocaleString('en-IN')}`}
+                    sublabel={`Avg job: ${avgServicePrice ? `₹${avgServicePrice.toLocaleString('en-IN')}` : 'NA'}`}
+                    accent="purple"
+                    iconGradient="from-violet-500 to-purple-600"
+                    icon={
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    }
+                  />
+                </StatCardGrid>
               </section>
 
-              {/* Activity + Next action */}
-              <section className="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white">
+              <section className={`mb-6 grid grid-cols-1 gap-4 ${setupIncomplete ? '' : 'lg:grid-cols-3'}`}>
+                <div className={`rounded-xl border border-gray-200 bg-white ${setupIncomplete ? '' : 'lg:col-span-2'}`}>
                   <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                     <h3 className="text-sm font-semibold text-gray-900">Recent activity</h3>
                     <button
@@ -2342,15 +2370,13 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                     </button>
                   </div>
                   {recentActivity.length === 0 ? (
-                    <div className="px-5 py-10 text-center">
-                      <div className="mx-auto h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-                        <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <p className="text-sm text-gray-500">No activity yet</p>
-                      <p className="text-xs text-gray-400 mt-1">New requests will appear here</p>
-                    </div>
+                    <EmptyState
+                      dense
+                      className="m-4 border-0 bg-transparent"
+                      title="No activity yet"
+                      description="New requests will appear here."
+                      action={{ label: 'View open jobs', onClick: () => setActiveTab('open') }}
+                    />
                   ) : (
                     <ul className="divide-y divide-gray-100">
                       {recentActivity.map((item) => {
@@ -2380,45 +2406,51 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                     </ul>
                   )}
                 </div>
-
-                <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white">
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                    </span>
-                    <h3 className="text-sm font-semibold text-blue-900">Suggested next step</h3>
-                  </div>
-                  <p className="text-sm text-blue-900 mb-4">{nextBestAction}</p>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('services')}
-                    className="w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                  >
-                    Take action
-                  </button>
-                  {overviewStats.cancelled > 0 && (
-                    <p className="mt-4 pt-4 border-t border-blue-200 text-xs text-blue-800">
-                      Cancellation rate: <span className="font-semibold">{overviewStats.total ? Math.round((overviewStats.cancelled / overviewStats.total) * 100) : 0}%</span>
-                    </p>
-                  )}
-                </div>
+                {!setupIncomplete && nextStepCard}
               </section>
+
+              {!setupIncomplete && (
+                <section className="mb-6 rounded-xl border border-gray-200 bg-white px-5 py-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-gray-500">Service categories</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {(localProvider?.serviceCategories || []).length ? (
+                          (localProvider?.serviceCategories || []).map((cat) => (
+                            <span key={cat} className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-800">
+                              {cat}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-sm text-gray-500">None selected</span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategories(localProvider?.serviceCategories || recommendedCategories);
+                        setEditingCategories(true);
+                      }}
+                      className="flex-shrink-0 self-start text-xs font-semibold text-blue-600 hover:text-blue-800"
+                    >
+                      {editingCategories ? 'Editing…' : 'Change'}
+                    </button>
+                  </div>
+                  <ServiceCategoriesExplainerBox className="mt-3" />
+                  {setupEditors}
+                </section>
+              )}
             </>
-          )}
+            );
+          })()}
 
           {/* Profile Tab */}
           {activeTab === 'profile' && (() => {
             // Normalize placeholder values so "Pending setup" and "0000000000" are
             // treated as missing rather than real data.
-            const cleanValue = (raw?: string): string => {
-              const v = (raw || '').trim();
-              if (!v) return '';
-              if (v.toLowerCase() === 'pending setup') return '';
-              if (v === '0000000000') return '';
-              return v;
-            };
+            const cleanValue = (raw?: string): string =>
+              isRealProfileValue(raw) ? (raw || '').trim() : '';
             const cName = cleanValue(localProvider?.name);
             const cEmail = cleanValue(localProvider?.email);
             const cPhone = cleanValue(localProvider?.phone);
@@ -2784,6 +2816,24 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
           {/* Services & Pricing Tab */}
           {activeTab === 'services' && (
             <section className="space-y-5">
+              {!(serviceFormOpen || editingServiceType) && (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-5 py-3.5">
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-900">Services &amp; pricing</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {activeProviderServices.length} active · customers see these when matching
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setServiceFormOpen(true)}
+                    className="shrink-0 rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                  >
+                    Add a service
+                  </button>
+                </div>
+              )}
+              {(serviceFormOpen || editingServiceType) && (
               <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="flex items-start justify-between gap-3 mb-1">
                   <div>
@@ -2849,7 +2899,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                           type="button"
                           onClick={applySubServiceTotalAsBase}
                           title="Use the sum of active sub-service prices as the full service price"
-                          className="whitespace-nowrap rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                          className="whitespace-nowrap text-[11px] font-semibold text-blue-700 hover:text-blue-800"
                         >
                           Use ₹{subServiceTotal.toLocaleString('en-IN')}
                         </button>
@@ -2938,19 +2988,12 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                       No sub-services defined yet. Click "+ Add custom" to add one.
                     </div>
                   ) : (
-                    <div className="rounded-md border border-gray-200 divide-y divide-gray-100">
-                      <div className="hidden sm:grid grid-cols-[24px_1fr_110px_150px_80px] gap-2 px-3 py-2 bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                        <span></span>
-                        <span>Sub-service</span>
-                        <span>Price (₹)</span>
-                        <span>ETA</span>
-                        <span className="text-right">Remove</span>
-                      </div>
+                    <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
                       {serviceForm.includedServices.map((draft, idx) => (
                         <div
                           key={draft.id || `row-${idx}`}
-                          className={`grid grid-cols-1 sm:grid-cols-[24px_1fr_110px_150px_80px] gap-2 px-3 py-2 items-center ${
-                            draft.active ? '' : 'opacity-60'
+                          className={`grid grid-cols-1 sm:grid-cols-[24px_1fr_88px_128px_32px] gap-2 px-3 py-2 items-center ${
+                            draft.active ? '' : 'opacity-50'
                           }`}
                         >
                           <div className="flex items-center">
@@ -2967,17 +3010,18 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                             value={draft.name}
                             onChange={(e) => updateSubServiceDraft(idx, { name: e.target.value })}
                             placeholder="Sub-service name"
-                            className="w-full px-2.5 py-1.5 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-2.5 py-1.5 rounded-md border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           />
                           <input
                             type="number"
                             min="0"
                             value={draft.priceText}
                             onChange={(e) => updateSubServiceDraft(idx, { priceText: e.target.value })}
-                            placeholder="0"
-                            className="w-full px-2.5 py-1.5 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 tabular-nums"
+                            placeholder="₹"
+                            aria-label="Price"
+                            className="w-full px-2.5 py-1.5 rounded-md border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 tabular-nums"
                           />
-                          <div className="flex gap-1.5">
+                          <div className="flex gap-1">
                             <input
                               type="number"
                               min="0"
@@ -2985,14 +3029,15 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                               value={draft.etaText}
                               onChange={(e) => updateSubServiceDraft(idx, { etaText: e.target.value })}
                               placeholder={draft.etaUnit === 'day' ? '1' : draft.etaUnit === 'hr' ? '2' : '30'}
-                              className="w-full min-w-0 px-2.5 py-1.5 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 tabular-nums"
+                              aria-label="ETA"
+                              className="w-full min-w-0 px-2 py-1.5 rounded-md border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 tabular-nums"
                             />
                             <select
                               value={draft.etaUnit || 'min'}
                               onChange={(e) =>
                                 updateSubServiceDraft(idx, { etaUnit: e.target.value as EtaUnit })
                               }
-                              className="px-1.5 py-1.5 rounded-md border border-gray-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              className="px-1.5 py-1.5 rounded-md border border-gray-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                               aria-label="ETA unit"
                             >
                               <option value="min">min</option>
@@ -3000,22 +3045,23 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                               <option value="day">day</option>
                             </select>
                           </div>
-                          <div className="flex sm:justify-end">
-                            <button
-                              type="button"
-                              onClick={() => removeSubServiceDraft(idx)}
-                              className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-                              title="Remove this sub-service"
-                            >
-                              Remove
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeSubServiceDraft(idx)}
+                            className="rounded-md p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                            title="Remove this sub-service"
+                            aria-label="Remove sub-service"
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
                         </div>
                       ))}
                       {subServiceTotal > 0 && (
-                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 text-xs text-gray-700">
-                          <span>Sum of active sub-service prices</span>
-                          <span className="font-semibold tabular-nums">
+                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 text-xs text-gray-600">
+                          <span>Active sub-services total</span>
+                          <span className="font-semibold tabular-nums text-gray-900">
                             ₹{subServiceTotal.toLocaleString('en-IN')}
                           </span>
                         </div>
@@ -3034,15 +3080,16 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                     Active (visible to customers)
                   </label>
                   <div className="flex items-center gap-2">
-                    {editingServiceType && (
-                      <button
-                        type="button"
-                        onClick={clearServiceForm}
-                        className="px-3 py-2 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearServiceForm();
+                        setServiceFormOpen(false);
+                      }}
+                      className="px-3 py-2 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
                     <button
                       type="button"
                       onClick={upsertService}
@@ -3058,6 +3105,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                   </div>
                 </div>
               </div>
+              )}
 
               <div className="bg-white rounded-xl border border-gray-200">
                 <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-gray-100">
@@ -3088,110 +3136,80 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                     </select>
                   </div>
                 </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Service</th>
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Price</th>
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">ETA</th>
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Description</th>
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Included</th>
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Updated</th>
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Status</th>
-                  <th className="py-2.5 px-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wide">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
                 {servicesLoading ? (
-                  <tr>
-                    <td className="py-8 px-4 text-center text-gray-500" colSpan={8}>
-                      <div className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      Loading services...
-                      </div>
-                    </td>
-                  </tr>
+                  <div className="px-4 py-10 text-center text-sm text-gray-500">Loading services…</div>
                 ) : filteredProviderServices.length === 0 ? (
-                  <tr>
-                    <td className="py-12 px-4 text-center" colSpan={8}>
-                      <div className="flex flex-col items-center justify-center">
-                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                        </div>
-                        <p className="text-sm font-medium text-gray-700">No services added yet</p>
-                        <p className="text-xs text-gray-500 mt-1">Add your first service using the form above.</p>
-                      </div>
-                    </td>
-                  </tr>
+                  <EmptyState
+                    dense
+                    className="m-4"
+                    title={serviceSearch || serviceStatusFilter !== 'all' ? 'No matching services' : 'No services yet'}
+                    description={
+                      serviceSearch || serviceStatusFilter !== 'all'
+                        ? 'Try a different search or filter.'
+                        : 'Add a service so customers can book you.'
+                    }
+                    action={
+                      serviceSearch || serviceStatusFilter !== 'all'
+                        ? undefined
+                        : { label: 'Add a service', onClick: () => setServiceFormOpen(true) }
+                    }
+                  />
                 ) : (
-                  filteredProviderServices.map((svc) => (
-                    <tr key={svc.serviceType} className="hover:bg-gray-50">
-                      <td className="py-3 px-4 font-medium text-gray-900">{svc.serviceType}</td>
-                      <td className="py-3 px-4 text-gray-800 tabular-nums">{svc.price !== undefined && svc.price !== null ? `₹${svc.price.toLocaleString('en-IN')}` : <span className="text-gray-400 italic">NA</span>}</td>
-                      <td className="py-3 px-4 text-gray-700 tabular-nums">{svc.etaMinutes ? formatEtaReadable(svc.etaMinutes) : <span className="text-gray-400 italic">NA</span>}</td>
-                      <td className="py-3 px-4 text-gray-600 max-w-xs truncate">{svc.description && svc.description.trim() ? svc.description : <span className="text-gray-400 italic">NA</span>}</td>
-                      <td className="py-3 px-4 text-xs text-gray-600">
-                        {svc.includedServices && svc.includedServices.length > 0 ? (
-                          (() => {
-                            const actives = svc.includedServices.filter((line) => line.active !== false);
-                            const priced = actives.filter(
-                              (line) => line.price != null && Number.isFinite(line.price) && (line.price as number) > 0,
-                            ).length;
-                            return (
-                              <span title={`${priced} priced / ${actives.length} active`}>
-                                {actives.length} active · {priced} priced
-                              </span>
-                            );
-                          })()
-                        ) : (
-                          <span className="text-gray-400 italic">NA</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-xs text-gray-500">{svc.updatedAt ? formatDateTime(svc.updatedAt) : <span className="text-gray-400 italic">NA</span>}</td>
-                      <td className="py-3 px-4">
-                        <button
-                          type="button"
-                          onClick={() => toggleServiceActive(svc.serviceType, !(svc.active !== false))}
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            svc.active !== false
-                              ? 'bg-emerald-50 text-emerald-700'
-                              : 'bg-gray-100 text-gray-600'
-                          }`}
-                        >
-                          <span className={`h-1.5 w-1.5 rounded-full ${svc.active !== false ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-                          {svc.active !== false ? 'Active' : 'Inactive'}
-                        </button>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="inline-flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => startEditService(svc)}
-                            className="rounded-md px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteService(svc.serviceType)}
-                            className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  <ul className="grid sm:grid-cols-2 gap-3 p-4">
+                    {filteredProviderServices.map((svc) => {
+                      const actives = (svc.includedServices || []).filter((line) => line.active !== false);
+                      return (
+                        <li key={svc.serviceType} className="rounded-xl border border-gray-200 p-4 hover:border-gray-300">
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="text-sm font-semibold text-gray-900">{svc.serviceType}</h4>
+                            <button
+                              type="button"
+                              onClick={() => toggleServiceActive(svc.serviceType, !(svc.active !== false))}
+                              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                svc.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              <span className={`h-1.5 w-1.5 rounded-full ${svc.active !== false ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+                              {svc.active !== false ? 'Active' : 'Inactive'}
+                            </button>
+                          </div>
+                          <p className="mt-1 text-sm text-gray-800">
+                            {svc.price != null ? (
+                              <span className="font-semibold tabular-nums">₹{svc.price.toLocaleString('en-IN')}</span>
+                            ) : (
+                              <span className="text-gray-400">No price</span>
+                            )}
+                            {svc.etaMinutes ? (
+                              <span className="text-gray-500"> · {formatEtaReadable(svc.etaMinutes)}</span>
+                            ) : null}
+                          </p>
+                          {svc.description?.trim() ? (
+                            <p className="mt-1 text-xs text-gray-500 line-clamp-2">{svc.description}</p>
+                          ) : null}
+                          {actives.length > 0 ? (
+                            <p className="mt-1 text-xs text-gray-500">{actives.length} sub-service{actives.length === 1 ? '' : 's'}</p>
+                          ) : null}
+                          <div className="mt-3 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => startEditService(svc)}
+                              className="text-xs font-semibold text-blue-700 hover:text-blue-800"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteService(svc.serviceType)}
+                              className="text-xs font-semibold text-red-600 hover:text-red-700"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
-              </tbody>
-            </table>
-          </div>
         </div>
         </section>
           )}
@@ -3266,9 +3284,9 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                   !!openFilters.city || openFilters.serviceType !== 'all' || openFilters.last24h;
 
                 return (
-                  <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
-                    {/* City — text input + datalist so it's searchable AND a dropdown */}
-                    <div className="relative flex-1 min-w-[180px]">
+                  <div className="mb-4 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 min-w-[200px]">
                       <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -3285,46 +3303,19 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                             fetchOpenRequests();
                           }
                         }}
-                        placeholder="Any city — type or choose"
-                        className="w-full pl-8 pr-8 py-1.5 rounded-md border border-gray-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Any city"
+                        className="w-full pl-8 pr-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
-                      <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
                       <datalist id="open-city-suggestions">
                         {citySuggestions.map((c) => (
                           <option key={c} value={c} />
                         ))}
                       </datalist>
                     </div>
-
-                    {/* Quick city chips — fastest way to pick from known cities */}
-                    {citySuggestions.length > 0 && (
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {citySuggestions.slice(0, 3).map((c) => {
-                          const selected = openFilters.city.trim().toLowerCase() === c.toLowerCase();
-                          return (
-                            <button
-                              key={c}
-                              type="button"
-                              onClick={() => onCitySelect(selected ? '' : c)}
-                              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
-                                selected
-                                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                              }`}
-                            >
-                              {c}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
                     <select
                       value={openFilters.serviceType}
                       onChange={(e) => onServiceTypeChange(e.target.value)}
-                      className="px-3 py-1.5 rounded-md border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="all">All services</option>
                       {serviceOptions.map((opt) => (
@@ -3333,7 +3324,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                         </option>
                       ))}
                     </select>
-                    <label className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 cursor-pointer">
+                    <label className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={openFilters.last24h}
@@ -3349,7 +3340,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                           setOpenFilters({ city: '', serviceType: 'all', last24h: false });
                           window.setTimeout(fetchOpenRequests, 0);
                         }}
-                        className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-600 hover:bg-gray-200"
+                        className="px-3 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100"
                       >
                         Clear
                       </button>
@@ -3357,13 +3348,33 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                     <button
                       type="button"
                       onClick={fetchOpenRequests}
-                      className="ml-auto px-3 py-1.5 rounded-md bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 inline-flex items-center gap-1.5"
+                      className="ml-auto px-3 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800"
                     >
-                      <svg className={`w-3.5 h-3.5 ${openLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      {openLoading ? 'Applying...' : 'Apply'}
+                      {openLoading ? 'Applying…' : 'Apply'}
                     </button>
+                    </div>
+                    {citySuggestions.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] text-gray-400">Quick</span>
+                        {citySuggestions.slice(0, 4).map((c) => {
+                          const selected = openFilters.city.trim().toLowerCase() === c.toLowerCase();
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => onCitySelect(selected ? '' : c)}
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                                selected
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                              }`}
+                            >
+                              {c}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -3396,167 +3407,80 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                 </div>
               </div>
             ) : enrichedOpenRequests.length === 0 ? (
-              <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                <div className="flex flex-col items-center justify-center">
-                  <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center mb-3">
-                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <p className="text-sm font-medium text-gray-800 mb-1">No open requests right now</p>
-                  <p className="text-xs text-gray-500 mb-4">Try clearing filters or check back soon.</p>
-                  <div className="flex flex-wrap items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setOpenFilters({ city: '', serviceType: 'all', last24h: false })}
-                      className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Clear filters
-                    </button>
-                    <button
-                      type="button"
-                      onClick={loadSampleOpenRequests}
-                      className="text-xs font-medium text-blue-700 hover:text-blue-800 hover:underline"
-                    >
-                      Load sample requests
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <EmptyState
+                dense
+                title="No open requests right now"
+                description="Try another city or check back soon."
+                action={{
+                  label: 'Clear filters',
+                  onClick: () => {
+                    setOpenFilters({ city: '', serviceType: 'all', last24h: false });
+                    window.setTimeout(fetchOpenRequests, 0);
+                  },
+                }}
+                secondaryAction={
+                  import.meta.env.DEV
+                    ? { label: 'Load sample requests', onClick: loadSampleOpenRequests }
+                    : undefined
+                }
+              />
             ) : (
-              enrichedOpenRequests.map((req) => (
+              enrichedOpenRequests.map((req) => {
+                const vehicle = vehicleDisplay(req);
+                const showServiceChip = req.serviceType && req.serviceType !== req.title;
+                const extra = Boolean(req.services?.length || req.notes || hasCustomerDetails(req));
+                return (
                 <div
                   key={req.id}
-                  className="rounded-xl border border-gray-200 bg-white p-5 hover:border-blue-300 hover:shadow-sm transition-all"
+                  className="rounded-xl border border-gray-200 bg-white p-4 hover:border-blue-300 transition-colors"
                 >
-                  <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="truncate text-lg font-bold text-gray-900">{req.title}</h3>
+                        <h3 className="truncate text-sm font-semibold text-gray-900">{req.title}</h3>
                         <span className={statusBadge(req.status)}>
                           {statusOptions.find((s) => s.value === req.status)?.label || req.status}
                         </span>
+                        {req._matchReasons.includes('city_match') && (
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">City match</span>
+                        )}
+                        {req._matchReasons.includes('new_request') && (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">New</span>
+                        )}
                       </div>
                       <p className="mt-1 text-xs text-gray-500">
-                        Raised {formatRelative(req.createdAt)} · {formatDateTime(req.createdAt)}
+                        {formatRelative(req.createdAt)}
+                        {showServiceChip ? ` · ${req.serviceType}` : ''}
+                        {req.city ? ` · ${req.city}` : ''}
+                        {vehicle ? ` · ${vehicle}` : ''}
+                        {formatSlaRemaining(req.createdAt) ? ` · ${formatSlaRemaining(req.createdAt)}` : ''}
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => claimRequest(req.id)}
                       disabled={claimingId === req.id}
-                      className="inline-flex items-center gap-2 whitespace-nowrap rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
                     >
-                      {claimingId === req.id ? (
-                        <>
-                          <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Claiming...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Claim
-                        </>
-                      )}
+                      {claimingId === req.id ? 'Claiming…' : 'Claim'}
                     </button>
                   </div>
-
-                  <div className="mb-4 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
-                      {req.serviceType || 'General'}
-                    </span>
-                    {req._matchReasons.includes('city_match') && (
-                      <span className="rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
-                        City match
-                      </span>
-                    )}
-                    {req._matchReasons.includes('service_match') && (
-                      <span className="rounded-full border border-indigo-200 bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-800">
-                        Service match
-                      </span>
-                    )}
-                    {req._matchReasons.includes('new_request') && (
-                      <span className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
-                        New request
-                      </span>
-                    )}
-                    <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                      Score {req._matchScore}
-                    </span>
-                    {req.city && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        {req.city}
-                      </span>
-                    )}
-                    {vehicleDisplay(req) && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        {vehicleDisplay(req)}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-                    <div className="space-y-3">
+                  {extra && (
+                    <div className="mt-3 space-y-2">
                       <ServiceRequestPackages services={req.services} total={req.total} />
                       {req.notes && (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-2">
-                          <p className="flex items-start gap-2 text-xs font-medium text-amber-800">
-                            <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                            <span>Notes: {req.notes}</span>
-                          </p>
-                        </div>
+                        <p className="text-xs text-amber-800">Notes: {req.notes}</p>
+                      )}
+                      {hasCustomerDetails(req) && (
+                        <p className="text-xs text-gray-600">
+                          {[req.customerName, req.customerPhone, req.addressLine].filter(Boolean).join(' · ')}
+                        </p>
                       )}
                     </div>
-                    <div className="rounded-lg border border-gray-200 bg-white p-3">
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Customer & Visit Details</p>
-                      <div className="space-y-2">
-                        {formatSlaRemaining(req.createdAt) && (
-                          <p className="text-xs font-semibold text-amber-700">Claim window: {formatSlaRemaining(req.createdAt)}</p>
-                        )}
-                        {req.customerName && (
-                          <p className="flex items-center gap-2 text-sm text-gray-700">
-                            <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                            <span className="font-medium">{req.customerName}</span>
-                          </p>
-                        )}
-                        {req.customerPhone && <p className="text-xs text-gray-600">Phone: {req.customerPhone}</p>}
-                        {req.customerEmail && <p className="text-xs text-gray-600">Email: {req.customerEmail}</p>}
-                        {req.addressLine && (
-                          <p className="flex items-start gap-2 text-xs text-gray-600">
-                            <svg className="mt-0.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            <span>{req.addressLine}{req.pincode ? `, ${req.pincode}` : ''}</span>
-                          </p>
-                        )}
-                        {vehicleDisplay(req) && (
-                          <p className="text-xs text-gray-600">Vehicle: {vehicleDisplay(req)}</p>
-                        )}
-                        {req.scheduledAt && (
-                          <p className="text-xs text-gray-600">Scheduled: {formatDateTime(req.scheduledAt)}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>
@@ -3632,74 +3556,57 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                 </div>
               </div>
             ) : filteredRequests.length === 0 ? (
-              <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                <div className="flex flex-col items-center justify-center">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mb-3">
-                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                  </div>
-                  <p className="text-sm font-medium text-gray-800 mb-1">
-                    {statusFilter === 'all'
-                      ? 'No requests yet'
-                      : statusFilter === 'due_today'
+              <EmptyState
+                dense
+                title={
+                  statusFilter === 'all'
+                    ? 'No requests yet'
+                    : statusFilter === 'due_today'
                       ? 'No requests due today'
                       : statusFilter === 'overdue'
-                      ? 'No overdue requests'
-                      : `No ${String(statusFilter).replace('_', ' ')} requests`}
-                  </p>
-                  <p className="text-xs text-gray-500 mb-4">
-                    {statusFilter === 'all'
-                      ? 'Claim requests from the open pool to get started.'
-                      : 'Try another filter or view all requests.'}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    {statusFilter !== 'all' && (
-                      <button
-                        type="button"
-                        onClick={() => setStatusFilter('all')}
-                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        View all
-                      </button>
-                    )}
-                    {statusFilter === 'all' && (
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('open')}
-                        className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-                      >
-                        Browse open requests
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={loadSampleMyRequests}
-                      className="text-xs font-medium text-gray-500 hover:text-gray-700 hover:underline"
-                    >
-                      Load samples
-                    </button>
-                  </div>
-                </div>
-              </div>
+                        ? 'No overdue requests'
+                        : `No ${String(statusFilter).replace('_', ' ')} requests`
+                }
+                description={
+                  statusFilter === 'all'
+                    ? 'Claim jobs from Open Requests to get started.'
+                    : 'Try another filter or view all requests.'
+                }
+                action={
+                  statusFilter === 'all'
+                    ? { label: 'Browse open requests', onClick: () => setActiveTab('open') }
+                    : { label: 'View all', onClick: () => setStatusFilter('all') }
+                }
+                secondaryAction={
+                  import.meta.env.DEV
+                    ? { label: 'Load samples', onClick: loadSampleMyRequests }
+                    : undefined
+                }
+              />
             ) : (
-              filteredRequests.map((req) => (
-                <div key={req.id} className="rounded-xl border border-gray-200 bg-white p-5 hover:border-blue-300 hover:shadow-sm transition-all">
-                  <div className="mb-3 flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-3">
+              filteredRequests.map((req) => {
+                const vehicle = vehicleDisplay(req);
+                const extra = Boolean(req.services?.length || req.notes || hasCustomerDetails(req));
+                return (
+                <div key={req.id} className="rounded-xl border border-gray-200 bg-white p-4 hover:border-gray-300">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="truncate text-lg font-bold text-gray-900">{req.title}</h3>
+                        <h3 className="truncate text-sm font-semibold text-gray-900">{req.title}</h3>
                         <span className={statusBadge(req.status)}>
                           {statusOptions.find((s) => s.value === req.status)?.label || req.status}
                         </span>
                         {isOverdueRequest(req) && (
-                          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-red-700">
+                          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
                             Overdue
                           </span>
                         )}
                       </div>
                       <p className="mt-1 text-xs text-gray-500">
-                        Created {formatRelative(req.createdAt)} {req.createdAt ? `(${formatDateTime(req.createdAt)})` : ''}
+                        {formatRelative(req.createdAt)}
+                        {req.city ? ` · ${req.city}` : ''}
+                        {vehicle ? ` · ${vehicle}` : ''}
+                        {req.scheduledAt ? ` · ${formatDateTime(req.scheduledAt)}` : ''}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -3707,7 +3614,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                         <button
                           type="button"
                           onClick={() => updateStatus(req.id, nextPrimaryStatus(req.status)!)}
-                          className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
                         >
                           {primaryAdvanceButtonLabel(req.status)}
                         </button>
@@ -3717,7 +3624,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                           type="button"
                           onClick={() => deleteCancelledRequest(req.id)}
                           disabled={deletingId === req.id}
-                          className="rounded-md px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                          className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
                         >
                           {deletingId === req.id ? 'Deleting…' : 'Delete'}
                         </button>
@@ -3727,7 +3634,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                           value={req.status}
                           onChange={(e) => updateStatus(req.id, e.target.value as RequestStatus)}
                           disabled={deletingId === req.id}
-                          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+                          className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
                           aria-label="Set request status"
                         >
                           {allowedManualStatusOptions(req.status).map((value) => {
@@ -3742,76 +3649,20 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                       )}
                     </div>
                   </div>
-
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
-                      {req.serviceType || 'General'}
-                    </span>
-                    {req.city && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        {req.city}
-                      </span>
-                    )}
-                    {vehicleDisplay(req) && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        {vehicleDisplay(req)}
-                      </span>
-                    )}
-                    {req.scheduledAt && (
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-                        Scheduled {formatDateTime(req.scheduledAt)}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-                    <div className="space-y-3">
+                  {extra && (
+                    <div className="mt-3 space-y-2">
                       <ServiceRequestPackages services={req.services} total={req.total} />
-                      {req.notes && (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-2">
-                          <p className="flex items-start gap-2 text-xs font-medium text-amber-800">
-                            <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                            <span>Notes: {req.notes}</span>
-                          </p>
-                        </div>
+                      {req.notes && <p className="text-xs text-amber-800">Notes: {req.notes}</p>}
+                      {hasCustomerDetails(req) && (
+                        <p className="text-xs text-gray-600">
+                          {[req.customerName, req.customerPhone, req.addressLine].filter(Boolean).join(' · ')}
+                        </p>
                       )}
                     </div>
-                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Customer Details</p>
-                      <div className="space-y-2">
-                        {req.customerName && (
-                          <p className="flex items-center gap-2 text-sm text-gray-700">
-                            <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                            <span className="font-medium">{req.customerName}</span>
-                          </p>
-                        )}
-                        {req.customerPhone && <p className="text-xs text-gray-600">Phone: {req.customerPhone}</p>}
-                        {req.customerEmail && <p className="text-xs text-gray-600">Email: {req.customerEmail}</p>}
-                        {req.addressLine && (
-                          <p className="text-xs text-gray-600">
-                            Address: {req.addressLine}
-                            {req.pincode ? `, ${req.pincode}` : ''}
-                          </p>
-                        )}
-                        {vehicleDisplay(req) && (
-                          <p className="text-xs text-gray-600">Vehicle: {vehicleDisplay(req)}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>

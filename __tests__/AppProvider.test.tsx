@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AppProvider, useApp } from '../components/AppProvider';
+import { useToast } from '../contexts/ToastContext';
 import { View } from '../types';
 
 function renderWithRouter(ui: React.ReactElement) {
@@ -100,7 +101,10 @@ jest.mock('../components/vehicleData', () => ({
 
 // Test component that uses the AppProvider
 const TestComponent: React.FC = () => {
-  const { addToast, currentView, navigate, toasts } = useApp();
+  const { addToast, currentView, navigate } = useApp();
+  // Toast state lives in the dedicated ToastContext (AppProvider re-exposes only a
+  // stable empty stub for `toasts` to avoid re-rendering the whole app tree).
+  const { toasts } = useToast();
   
   return (
     <div>

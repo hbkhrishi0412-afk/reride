@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View as ViewEnum, VehicleCategory, type Vehicle } from '../types';
-import { getFirstValidImage } from '../utils/imageUtils';
+import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
 import { matchesLocation } from '../utils/cityMapping';
 import { countCityVehicles } from '../utils/storefrontDiscoveryCounts';
 import MobileVehicleCard from './MobileVehicleCard';
@@ -447,6 +447,17 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
     [featuredVehicles, publishedVehicles, allVehicles]
   );
 
+  // Cinematic hero backdrop — a real listing photo behind the hero panel,
+  // heavily scrimmed so headline/search stay the star. Reuses whatever the
+  // featured carousel will show first, so it's never a broken/empty image.
+  const heroImage = useMemo(() => {
+    const firstVehicle = displayedFeaturedVehicles[0];
+    if (!firstVehicle) return null;
+    const firstImage = getFirstValidImage(firstVehicle.images, firstVehicle.id);
+    if (!firstImage || firstImage.startsWith('data:')) return null;
+    return optimizeImageUrl(firstImage, 700, 80);
+  }, [displayedFeaturedVehicles]);
+
   const showCatalogLoadError =
     !isCatalogLoading &&
     displayedFeaturedVehicles.length === 0 &&
@@ -461,6 +472,12 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           background: HOME_HERO_SURFACE,
         }}
       >
+        {/* Cinematic backdrop — real listing photo, heavily scrimmed */}
+        {heroImage && (
+          <div className="home-hero-photo-bg" aria-hidden="true">
+            <LazyImage src={heroImage} alt="" className="w-full h-full object-cover" width={700} quality={80} eager fetchPriority="high" />
+          </div>
+        )}
         {/* Subtle grid texture (purely decorative) */}
         <div
           aria-hidden="true"
@@ -664,8 +681,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         >
           <div className="flex items-end justify-between mb-3">
             <div className="space-y-0.5">
-              <div className="inline-flex items-center gap-1.5 text-indigo-600 text-[10px] font-semibold uppercase tracking-wider">
-                <span className="h-px w-4 bg-indigo-300" />
+              <div className="inline-flex items-center gap-1.5 text-orange-600 text-[10px] font-semibold uppercase tracking-wider">
+                <span className="h-px w-4 bg-orange-300" />
                 {t('mobile.home.continue.subtitle')}
               </div>
               <h2 className="text-[18px] font-bold text-gray-900 tracking-tight leading-tight">
@@ -736,8 +753,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         <div ref={featuredRef} className={`reveal-on-scroll px-4 py-6 ${HOME_SECTION_BG.featured}`}>
           <div className="flex items-end justify-between mb-4">
             <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 text-purple-700 text-[10px] font-semibold uppercase tracking-wider">
-                <span className="h-px w-4 bg-purple-300" />
+              <div className="inline-flex items-center gap-1.5 text-orange-700 text-[10px] font-semibold uppercase tracking-wider">
+                <span className="h-px w-4 bg-orange-300" />
                 {t('home.featured.badge')}
               </div>
               <h2 className="home-section-heading text-[22px] font-bold text-gray-900 tracking-tight leading-tight">{t('home.featured.title')}</h2>
@@ -746,7 +763,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             <button
               type="button"
               onClick={() => onNavigate(ViewEnum.USED_CARS)}
-              className="flex-shrink-0 inline-flex items-center gap-1 text-purple-700 font-semibold text-[12px] px-2 py-1 active:scale-95 transition-transform"
+              className="flex-shrink-0 inline-flex items-center gap-1 text-orange-700 font-semibold text-[12px] px-2 py-1 active:scale-95 transition-transform"
             >
               {t('home.recent.viewAll')}
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1156,7 +1173,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         >
           {/* Decorative orbs */}
           <div aria-hidden="true" className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
-          <div aria-hidden="true" className="absolute -bottom-12 -left-8 w-28 h-28 bg-pink-300/20 rounded-full blur-2xl" />
+          <div aria-hidden="true" className="absolute -bottom-12 -left-8 w-28 h-28 bg-orange-300/20 rounded-full blur-2xl" />
           <div className="relative">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 backdrop-blur-sm text-[10px] font-semibold uppercase tracking-wider mb-2 border border-white/20">
               <span className="w-1 h-1 bg-green-400 rounded-full sparkle-pulse" />
@@ -1166,7 +1183,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             <p className="text-white/85 text-[13px] leading-snug mb-4">{t('mobile.home.listVehicle')}</p>
             <button
               onClick={() => onNavigate(ViewEnum.SELL_CAR)}
-              className="w-full bg-white text-purple-700 py-3 rounded-xl font-semibold active:scale-[0.98] transition-transform text-[14px] hero-cta-glow"
+              className="w-full bg-white text-orange-600 py-3 rounded-xl font-semibold active:scale-[0.98] transition-transform text-[14px] hero-cta-glow"
               style={{ minHeight: '48px' }}
             >
               {t('nav.sellCar')}
@@ -1209,10 +1226,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       <div
         ref={serviceRef}
         className="reveal-on-scroll relative mx-4 mb-8 py-8 px-4 text-white overflow-hidden rounded-2xl"
-        style={{
-          background:
-            'radial-gradient(600px 400px at -10% -10%, rgba(255,107,53,0.18) 0%, transparent 60%), radial-gradient(500px 400px at 110% 10%, rgba(124,58,237,0.22) 0%, transparent 60%), linear-gradient(135deg, #0B1020 0%, #111834 50%, #1A1240 100%)',
-        }}
+        style={{ background: HOME_HERO_SURFACE }}
       >
         <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
           <div
@@ -1252,7 +1266,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               },
               {
                 icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-                color: 'bg-pink-500',
+                color: 'bg-orange-500',
                 title: t('home.service.card3Title'),
                 desc: t('home.service.card3Desc'),
               },

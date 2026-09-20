@@ -105,7 +105,7 @@ const MDP_STYLES = `
   .mdp-stat-dot { width: 6px; height: 6px; border-radius: 9999px; display: inline-block; }
 
   /* ===== Search & controls ===== */
-  .mdp-search, .mdp-map-search {
+  .mdp-search {
     position: relative;
     display: flex; align-items: center;
     background: #ffffff;
@@ -115,7 +115,7 @@ const MDP_STYLES = `
     box-shadow: 0 1px 0 rgba(255,255,255,.8) inset, 0 1px 2px rgba(15,23,42,.04);
     min-height: 48px;
   }
-  .mdp-search:focus-within, .mdp-map-search:focus-within {
+  .mdp-search:focus-within {
     border-color: #6366f1;
     box-shadow: 0 0 0 4px rgba(99,102,241,.15), 0 10px 22px -12px rgba(79,70,229,.35);
   }
@@ -627,7 +627,6 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
     : '1.5rem';
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [mapSearchQuery, setMapSearchQuery] = useState('');
   const [companyTypeFilter, setCompanyTypeFilter] = useState<CompanyType>('all');
   const [sellers, setSellers] = useState<User[]>(propSellers || []);
   const [isLoadingSellers, setIsLoadingSellers] = useState(!propSellers || propSellers.length === 0);
@@ -713,20 +712,8 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
         return (
           (seller.dealershipName || seller.name || '').toLowerCase().includes(q) ||
           (seller.location || '').toLowerCase().includes(q) ||
-          (seller.email || '').toLowerCase().includes(q) ||
-          pinMatch
-        );
-      });
-    }
-    if (mapSearchQuery.trim()) {
-      const q = mapSearchQuery.toLowerCase();
-      const qDigits = q.replace(/\D/g, '');
-      filtered = filtered.filter(seller => {
-        const pin = normalizeIndianPincode(seller.pincode);
-        const pinMatch = qDigits.length >= 3 && pin.includes(qDigits);
-        return (
-          (seller.location || '').toLowerCase().includes(q) ||
           (seller.address || '').toLowerCase().includes(q) ||
+          (seller.email || '').toLowerCase().includes(q) ||
           pinMatch
         );
       });
@@ -741,7 +728,7 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
       filtered = filtered.filter((seller) => sellerMatchesHeaderRegion(seller, userLocation));
     }
     return filtered;
-  }, [sellers, searchQuery, mapSearchQuery, companyTypeFilter, userLocation]);
+  }, [sellers, searchQuery, companyTypeFilter, userLocation]);
 
   const filteredSellersWithCoords = useMemo(
     () => sellersWithCoords.filter(item => filteredSellers.some(s => s.email === item.seller.email)),
@@ -868,7 +855,7 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
           </svg>
           <input
             type="search"
-            placeholder="Search dealers by name or PIN…"
+            placeholder="Search by name, city, area, or PIN…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             aria-label="Search dealers"
@@ -879,34 +866,6 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
               type="button"
               onClick={() => setSearchQuery('')}
               aria-label="Clear search"
-              className="mdp-search-clear"
-            >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
-        </div>
-
-        {/* Filter by city */}
-        <div className="mdp-map-search">
-          <svg className="mdp-search-ic w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          <input
-            type="search"
-            placeholder="Filter by city or area"
-            value={mapSearchQuery}
-            onChange={(e) => setMapSearchQuery(e.target.value)}
-            aria-label="Filter by city"
-            className="mdp-search-input"
-          />
-          {mapSearchQuery && (
-            <button
-              type="button"
-              onClick={() => setMapSearchQuery('')}
-              aria-label="Clear filter"
               className="mdp-search-clear"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -977,12 +936,12 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
               </svg>
             </div>
             <p className="text-slate-900 font-bold">
-              {searchQuery || mapSearchQuery || companyTypeFilter !== 'all'
+              {searchQuery || companyTypeFilter !== 'all'
                 ? 'No matching dealers'
                 : 'No dealers yet'}
             </p>
             <p className="text-xs text-slate-500 mt-1 max-w-xs">
-              {searchQuery || mapSearchQuery
+              {searchQuery
                 ? 'Try a different search or filter'
                 : 'Check back later for dealers in this region'}
             </p>

@@ -24,6 +24,7 @@ import {
     RECENTLY_VIEWED_CHANGED_EVENT,
 } from '../utils/recentlyViewed';
 import { getPopularMakes } from '../utils/popularListings';
+import { formatIndianPrice } from '../utils/vehiclePricing';
 import { PopularCitiesChips } from './PopularCitiesChips.js';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 import FloatingWhatsApp from './FloatingWhatsApp';
@@ -89,26 +90,29 @@ const Home: React.FC<HomeProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const { data: storefrontAgg } = useStorefrontAggregates();
 
-    // Preload the first featured vehicle image (LCP element) for better performance
-    useEffect(() => {
-        if (featuredVehicles.length > 0) {
-            const firstVehicle = featuredVehicles[0];
-            const firstImage = getFirstValidImage(firstVehicle.images, firstVehicle.id);
-            if (firstImage && !firstImage.startsWith('data:')) {
-                const optimizedImage = optimizeImageUrl(firstImage, 800, 85);
-                // Check if preload link already exists to avoid duplicates
-                const existingLink = document.querySelector(`link[rel="preload"][as="image"][href="${optimizedImage}"]`);
-                if (!existingLink) {
-                    const link = document.createElement('link');
-                    link.rel = 'preload';
-                    link.as = 'image';
-                    link.href = optimizedImage;
-                    link.setAttribute('fetchpriority', 'high');
-                    document.head.appendChild(link);
-                }
-            }
-        }
+    // Cinematic hero visual — the real first featured listing photo, also
+    // used as the LCP element (preloaded below) since it now renders above
+    // the fold instead of only later in the featured carousel.
+    const heroImage = useMemo(() => {
+        const firstVehicle = featuredVehicles[0];
+        if (!firstVehicle) return null;
+        const firstImage = getFirstValidImage(firstVehicle.images, firstVehicle.id);
+        if (!firstImage || firstImage.startsWith('data:')) return null;
+        return optimizeImageUrl(firstImage, 900, 85);
     }, [featuredVehicles]);
+
+    useEffect(() => {
+        if (!heroImage) return;
+        const existingLink = document.querySelector(`link[rel="preload"][as="image"][href="${heroImage}"]`);
+        if (!existingLink) {
+            const link = document.createElement('link');
+            link.rel = 'preload';
+            link.as = 'image';
+            link.href = heroImage;
+            link.setAttribute('fetchpriority', 'high');
+            document.head.appendChild(link);
+        }
+    }, [heroImage]);
 
     const activeLocationFilter =
         selectedCity.trim() && !/^all of india$/i.test(selectedCity.trim()) ? selectedCity.trim() : '';
@@ -598,7 +602,7 @@ const Home: React.FC<HomeProps> = ({
                     <h1 
                         className="hero-rise hero-rise-2 hero-gradient-text mb-5 leading-[1.1]"
                         style={{
-                            fontSize: 'clamp(30px, 4.25vw, 46px)',
+                            fontSize: 'clamp(32px, 4.8vw, 56px)',
                             fontWeight: 700,
                             fontFamily: "'Poppins', sans-serif",
                             letterSpacing: '-0.025em'
@@ -752,8 +756,28 @@ const Home: React.FC<HomeProps> = ({
                     </div>
 
                     </div>
-                    <div className="hidden lg:block hero-rise hero-rise-6 self-center w-full max-w-md lg:max-w-none mx-auto">
-                        <DealRoomHeroPreview />
+                    <div className="hidden lg:block hero-rise hero-rise-6 self-stretch w-full max-w-md lg:max-w-none mx-auto">
+                        <div className="home-hero-visual relative h-full min-h-[460px]" aria-hidden="true">
+                            {heroImage ? (
+                                <LazyImage
+                                    src={heroImage}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                    width={900}
+                                    quality={85}
+                                    eager
+                                    fetchPriority="high"
+                                />
+                            ) : (
+                                <div
+                                    className="w-full h-full"
+                                    style={{ background: 'linear-gradient(160deg, #1A130E 0%, #0B1020 100%)' }}
+                                />
+                            )}
+                            <div className="home-hero-visual-float">
+                                <DealRoomHeroPreview />
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -820,7 +844,7 @@ const Home: React.FC<HomeProps> = ({
                                                 {vehicle.year} · {vehicle.city}
                                             </div>
                                             <div className="text-[13px] font-bold text-orange-700 mt-1">
-                                                ₹{Math.round(vehicle.price / 1000).toLocaleString('en-IN')}K
+                                                {formatIndianPrice(vehicle.price)}
                                             </div>
                                         </div>
                                     </button>

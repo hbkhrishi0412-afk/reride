@@ -286,10 +286,10 @@ const Header: React.FC<HeaderProps> = memo(({
                                 />
                                 <button 
                                     type="button"
-                                    onClick={() => handleNavigate(ViewEnum.ABOUT_US)} 
+                                    onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} 
                                     className="inline-flex h-10 shrink-0 items-center whitespace-nowrap rounded-xl px-3 xl:px-4 font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange transition-all duration-300 hover:-translate-y-0.5 text-[14px] xl:text-[15px]"
                                 >
-                                    {t('nav.howDealsWork')}
+                                    {t('nav.carServices')}
                                 </button>
                                 <button 
                                     type="button"
@@ -331,10 +331,10 @@ const Header: React.FC<HeaderProps> = memo(({
                                             <button
                                                 type="button"
                                                 role="menuitem"
-                                                onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)}
+                                                onClick={() => handleNavigate(ViewEnum.ABOUT_US)}
                                                 className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:bg-orange-50 hover:text-reride-orange"
                                             >
-                                                {t('nav.carServices')}
+                                                {t('nav.howDealsWork')}
                                             </button>
                                             {HELP_NAV_ITEMS.map((item) => (
                                                 <button
@@ -549,7 +549,6 @@ const Header: React.FC<HeaderProps> = memo(({
                             <LanguageSwitcher variant="inline" onSelect={() => setIsMobileMenuOpen(false)} className="!px-0 !py-2 border-b border-gray-100 mb-2" />
                             <button onClick={() => handleNavigate(ViewEnum.USED_CARS)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.buyCar')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.SELLER_LOGIN)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.sellCar')}</button>
-                            <button onClick={() => handleNavigate(ViewEnum.ABOUT_US)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.howDealsWork')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.carServices')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.dealers')}</button>
                             <div className="rounded-lg border border-gray-100 overflow-hidden">
@@ -572,6 +571,12 @@ const Header: React.FC<HeaderProps> = memo(({
                                 </button>
                                 {isMobileMoreOpen && (
                                     <div className="border-t border-gray-100 bg-gray-50/80">
+                                        <button
+                                            onClick={() => handleNavigate(ViewEnum.ABOUT_US)}
+                                            className="block w-full text-left text-sm font-semibold text-reride-text-dark py-3 px-6 min-h-[44px] hover:bg-white"
+                                        >
+                                            {t('nav.howDealsWork')}
+                                        </button>
                                         {HELP_NAV_ITEMS.map((item) => (
                                             <button
                                                 key={item.view}

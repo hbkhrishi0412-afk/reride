@@ -183,7 +183,7 @@ html {
 
 .home-section--featured {
   background:
-    radial-gradient(ellipse 78% 62% at 90% -8%, rgba(124, 58, 237, 0.07) 0%, transparent 58%),
+    radial-gradient(ellipse 78% 62% at 90% -8%, rgba(28, 25, 23, 0.05) 0%, transparent 58%),
     radial-gradient(ellipse 52% 48% at 4% 100%, rgba(255, 107, 53, 0.04) 0%, transparent 52%),
     linear-gradient(178deg, #fdfcfa 0%, #f4f2ef 48%, #ebe8e4 100%);
 }
@@ -196,13 +196,13 @@ html {
 
 .home-section--cities {
   background:
-    radial-gradient(ellipse 68% 52% at 6% 96%, rgba(124, 58, 237, 0.045) 0%, transparent 56%),
+    radial-gradient(ellipse 68% 52% at 6% 96%, rgba(28, 25, 23, 0.04) 0%, transparent 56%),
     linear-gradient(180deg, #f7f6f4 0%, #fbfaf9 46%, #efedea 100%);
 }
 
 .home-section--testimonials {
   background:
-    radial-gradient(ellipse 62% 52% at 50% -5%, rgba(236, 72, 153, 0.05) 0%, transparent 62%),
+    radial-gradient(ellipse 62% 52% at 50% -5%, rgba(255, 107, 53, 0.05) 0%, transparent 62%),
     linear-gradient(180deg, #ffffff 0%, #f7f6f4 100%);
 }
 
@@ -218,7 +218,7 @@ html {
 
 .home-section--recommendations {
   background:
-    radial-gradient(ellipse 66% 56% at 0% 52%, rgba(124, 58, 237, 0.05) 0%, transparent 58%),
+    radial-gradient(ellipse 66% 56% at 0% 52%, rgba(28, 25, 23, 0.045) 0%, transparent 58%),
     linear-gradient(180deg, #f9f8f6 0%, #f1efec 100%);
 }
 
@@ -267,7 +267,7 @@ html {
   100% { background-position: 0% 50%; }
 }
 .hero-gradient-text {
-  background: linear-gradient(90deg, #ffffff 0%, #ffd6f3 25%, #ffffff 50%, #e0d4ff 75%, #ffffff 100%);
+  background: linear-gradient(90deg, #ffffff 0%, #ffd9b8 25%, #ffffff 50%, #ffb199 75%, #ffffff 100%);
   background-size: 220% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -346,6 +346,68 @@ html {
 .hero-rise-4 { animation-delay: 440ms; }
 .hero-rise-5 { animation-delay: 560ms; }
 .hero-rise-6 { animation-delay: 680ms; }
+
+/* Cinematic hero visual — a real listing photo as the hero's "full-bleed"
+   backdrop, always scrimmed so headline/search stay readable and stay the
+   star. Shared drift keyframe; desktop frames it in a card, mobile lets it
+   fill the whole panel behind the content. */
+@keyframes hero-photo-drift {
+  0%   { transform: scale(1.02) translate(0, 0); }
+  100% { transform: scale(1.1) translate(-1.5%, -1.5%); }
+}
+.home-hero-visual {
+  position: relative;
+  border-radius: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 107, 53, 0.08);
+}
+.home-hero-visual img {
+  animation: hero-photo-drift 16s ease-in-out infinite alternate;
+}
+.home-hero-visual::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(11, 16, 32, 0) 42%, rgba(11, 16, 32, 0.94) 100%),
+    linear-gradient(90deg, rgba(11, 16, 32, 0.4) 0%, rgba(11, 16, 32, 0) 38%);
+  pointer-events: none;
+}
+.home-hero-visual-float {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1;
+}
+.home-hero-photo-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.home-hero-photo-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.34;
+  animation: hero-photo-drift 18s ease-in-out infinite alternate;
+}
+.home-hero-photo-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11, 16, 32, 0.55) 0%, rgba(11, 16, 32, 0.88) 60%, rgba(11, 16, 32, 0.98) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-visual img,
+  .home-hero-photo-bg img {
+    animation: none;
+  }
+}
 
 /* ===== Futuristic Home Enhancements ===== */
 
@@ -456,7 +518,7 @@ html {
   bottom: -6px;
   height: 3px;
   width: 100%;
-  background: linear-gradient(90deg, #FF6B35, #7C3AED, #3B82F6);
+  background: linear-gradient(90deg, #FF6B35, #FFB199, #FF6B35);
   background-size: 200% 100%;
   animation: hero-gradient-text 3.5s ease-in-out infinite;
   border-radius: 2px;
