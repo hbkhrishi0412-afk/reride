@@ -39,6 +39,7 @@ import {
   isSellerPlanExpired,
   computeListingExpiresAtForSeller,
 } from './utils/listingPlanRules.ts';
+import { hashPassword } from './utils/security.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -2335,22 +2336,39 @@ app.post('/api/service-providers/register', async (req, res) => {
       });
     }
 
-    const { error: insUser } = await supabase.from('users').insert({
-      id: emailKey,
+    // Store a bcrypt hash so the login handler's password check (public.users.password)
+    // succeeds afterwards — this row is separate from the Supabase Auth password set above.
+    // NOTE: auth.admin.createUser() above fires the `on_auth_user_created` DB trigger,
+    // which already inserts a public.users row keyed by the auth UID (ON CONFLICT (email)
+    // DO UPDATE). So a row for this email already exists by the time we get here — blindly
+    // `.insert()`-ing a second row with a different id always fails the email unique
+    // constraint (silently, since the error was only warned on), leaving that row without a
+    // password/role and permanently locking the new provider out of login. Update the
+    // trigger-created row instead.
+    const hashedPassword = await hashPassword(password);
+    const userRow = {
       email,
       name,
+      password: hashedPassword,
       mobile: phone,
       role: 'service_provider',
       status: 'active',
       auth_provider: 'email',
       location: city,
       firebase_uid: uid,
-      created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    });
+    };
+    const { data: existingUserRow } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+    const { error: userSyncError } = existingUserRow
+      ? await supabase.from('users').update(userRow).eq('id', existingUserRow.id)
+      : await supabase.from('users').insert({ id: emailKey, created_at: new Date().toISOString(), ...userRow });
 
-    if (insUser) {
-      console.warn('service provider register: users insert failed (non-fatal):', insUser.message);
+    if (userSyncError) {
+      console.warn('service provider register: users sync failed (non-fatal):', userSyncError.message);
     }
 
     return res.status(201).json({ success: true, uid });
