@@ -1028,6 +1028,35 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         }
       } else {
         core.logInfo('✅ OAuth login - Existing user found:', sanitizedData.email);
+
+        // The `handle_new_user` DB trigger inserts a stub `public.users` row (role
+        // defaults to 'customer') the instant Supabase Auth creates the account —
+        // this runs before this endpoint is ever called, so a brand-new Google
+        // *registration* always lands here instead of the `!user` branch above,
+        // silently discarding the role/mobile/location the user picked on the
+        // Register form. Detect that untouched stub (created moments ago, still
+        // default role, never edited) and apply the requested profile once.
+        const stubAgeMs = Date.now() - new Date(user.createdAt).getTime();
+        const isFreshUntouchedStub =
+          stubAgeMs >= 0 &&
+          stubAgeMs < 5 * 60 * 1000 &&
+          user.createdAt === user.updatedAt;
+        if (isFreshUntouchedStub) {
+          const roleUpdate: Partial<core.UserType> = {};
+          if (sanitizedData.role !== user.role) {
+            roleUpdate.role = sanitizedData.role as core.UserType['role'];
+          }
+          if (mobile && !user.mobile) roleUpdate.mobile = mobile;
+          if (location && !user.location) roleUpdate.location = location;
+          if (Object.keys(roleUpdate).length > 0) {
+            core.logInfo('🔧 OAuth registration - applying picked role to trigger-created stub:', {
+              email: sanitizedData.email,
+              role: roleUpdate.role || user.role,
+            });
+            await core.userService.update(normalizedEmail, roleUpdate);
+            user = (await core.userService.findByEmail(normalizedEmail)) || user;
+          }
+        }
       }
 
       // Generate JWT tokens for OAuth users

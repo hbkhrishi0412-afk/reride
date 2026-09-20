@@ -1,4 +1,9 @@
-import { HOME_DISCOVERY_CATEGORIES, HOME_CITY_ACCENT, getHomeMobileCityAccent } from '../constants/homeDiscovery';
+import {
+  HOME_DISCOVERY_CATEGORIES,
+  HOME_CITY_ACCENT,
+  HOME_CITY_ACCENTS,
+  getHomeMobileCityAccent,
+} from '../constants/homeDiscovery';
 
 describe('home discovery brand system', () => {
   it('has no emoji category icons', () => {
@@ -9,8 +14,10 @@ describe('home discovery brand system', () => {
     }
   });
 
-  it('uses one city accent for every metro', () => {
-    expect(getHomeMobileCityAccent('Mumbai')).toEqual(HOME_CITY_ACCENT);
-    expect(getHomeMobileCityAccent('Hyderabad').solid).toBe(HOME_CITY_ACCENT.solid);
+  it('gives each metro its own accent (fallback for unknown)', () => {
+    expect(getHomeMobileCityAccent('Mumbai').pin).toBe(HOME_CITY_ACCENTS.Mumbai.pin);
+    expect(getHomeMobileCityAccent('Hyderabad').pin).toBe(HOME_CITY_ACCENTS.Hyderabad.pin);
+    expect(getHomeMobileCityAccent('Mumbai').pin).not.toBe(getHomeMobileCityAccent('Hyderabad').pin);
+    expect(getHomeMobileCityAccent('Unknown City')).toEqual(HOME_CITY_ACCENT);
   });
 });

@@ -347,39 +347,12 @@ html {
 .hero-rise-5 { animation-delay: 560ms; }
 .hero-rise-6 { animation-delay: 680ms; }
 
-/* Cinematic hero visual — a real listing photo as the hero's "full-bleed"
-   backdrop, always scrimmed so headline/search stay readable and stay the
-   star. Shared drift keyframe; desktop frames it in a card, mobile lets it
-   fill the whole panel behind the content. */
+/* Cinematic hero backdrop — a real listing photo behind the mobile hero
+   panel, always scrimmed so headline/search stay readable and stay the
+   star. */
 @keyframes hero-photo-drift {
   0%   { transform: scale(1.02) translate(0, 0); }
   100% { transform: scale(1.1) translate(-1.5%, -1.5%); }
-}
-.home-hero-visual {
-  position: relative;
-  border-radius: 28px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 107, 53, 0.08);
-}
-.home-hero-visual img {
-  animation: hero-photo-drift 16s ease-in-out infinite alternate;
-}
-.home-hero-visual::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(180deg, rgba(11, 16, 32, 0) 42%, rgba(11, 16, 32, 0.94) 100%),
-    linear-gradient(90deg, rgba(11, 16, 32, 0.4) 0%, rgba(11, 16, 32, 0) 38%);
-  pointer-events: none;
-}
-.home-hero-visual-float {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
-  z-index: 1;
 }
 .home-hero-photo-bg {
   position: absolute;
@@ -403,7 +376,6 @@ html {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-hero-visual img,
   .home-hero-photo-bg img {
     animation: none;
   }

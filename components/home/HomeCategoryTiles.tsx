@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { VehicleCategory } from '../../types';
-import { HOME_CATEGORY_PLATE } from '../../constants/homeDiscovery';
+import { HOME_CATEGORY_COLOR } from '../../constants/homeDiscovery';
 import VehicleCategoryIcon from '../VehicleCategoryIcon';
 
 export type HomeCategoryTile = {
@@ -47,7 +47,7 @@ export const HomeCategoryTiles: React.FC<HomeCategoryTilesProps> = ({
             style={{ minHeight: isMobile ? 96 : 160 }}
           >
             <div
-              className={`vc-plate relative ${isMobile ? 'w-11 h-11 rounded-xl' : 'w-16 h-16 rounded-2xl'} bg-gradient-to-br ${HOME_CATEGORY_PLATE} flex items-center justify-center`}
+              className={`vc-plate relative ${isMobile ? 'w-11 h-11 rounded-xl' : 'w-16 h-16 rounded-2xl'} bg-gradient-to-br ${HOME_CATEGORY_COLOR[category.id]} flex items-center justify-center`}
             >
               <VehicleCategoryIcon
                 category={category.id}
