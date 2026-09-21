@@ -250,7 +250,7 @@ type TabId = 'overview' | 'open' | 'mine' | 'services' | 'profile';
 
 const TAB_ORDER: { id: TabId; label: string; short: string }[] = [
   { id: 'overview', label: 'Overview', short: 'Overview' },
-  { id: 'open', label: 'Open Pool', short: 'Pool' },
+  { id: 'open', label: 'Incoming', short: 'Orders' },
   { id: 'mine', label: 'My Jobs', short: 'Jobs' },
   { id: 'services', label: 'Services', short: 'Services' },
   { id: 'profile', label: 'Profile', short: 'Profile' },
@@ -595,24 +595,48 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       try {
       const resp = await spApiFetch('/api/service-requests', {
           method: 'PATCH',
-          body: JSON.stringify({ id, action: 'claim' }),
+        body: JSON.stringify({ id, action: 'accept' }),
         });
         if (!resp.ok) {
           const data = await resp.json().catch(() => ({}));
-          throw new Error(data.error || 'Failed to claim request');
+          throw new Error(data.error || 'Failed to accept order');
         }
         const updated = normalizeRequest((await resp.json()) as ServiceRequest);
         setRequests((prev) => [updated, ...prev.filter((r) => r.id !== id)]);
         setOpenRequests((prev) => prev.filter((r) => r.id !== id));
-        flashInfo('Request claimed - moved to My Jobs');
+        flashInfo('Order accepted');
         setActiveTab('mine');
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to claim request');
+        setError(err instanceof Error ? err.message : 'Failed to accept order');
       } finally {
         setClaimingId(null);
       }
     },
-    [ flashInfo],
+    [flashInfo],
+  );
+
+  const declineRequest = useCallback(
+    async (id: string) => {
+      setClaimingId(id);
+      setError(null);
+      try {
+        const resp = await spApiFetch('/api/service-requests', {
+          method: 'PATCH',
+          body: JSON.stringify({ id, action: 'decline' }),
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          throw new Error(data.error || 'Failed to decline order');
+        }
+        setOpenRequests((prev) => prev.filter((r) => r.id !== id));
+        flashInfo('Order declined');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to decline order');
+      } finally {
+        setClaimingId(null);
+      }
+    },
+    [flashInfo],
   );
 
   const updateStatus = useCallback(
@@ -955,14 +979,24 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
 
         <div className="mt-3 flex flex-wrap gap-2">
           {isOpenPool ? (
+            <>
             <button
               type="button"
               onClick={() => claimRequest(req.id)}
               disabled={claimingId === req.id}
               className="flex-1 min-w-[120px] rounded-xl bg-blue-600 text-white text-sm font-semibold py-2.5 active:scale-[0.98] disabled:opacity-60 transition"
             >
-              {claimingId === req.id ? 'Claiming…' : 'Claim job'}
+              {claimingId === req.id ? 'Updating…' : 'Accept'}
             </button>
+            <button
+              type="button"
+              onClick={() => declineRequest(req.id)}
+              disabled={claimingId === req.id}
+              className="rounded-xl border border-red-200 text-red-700 bg-red-50 text-sm font-semibold px-3 py-2.5 disabled:opacity-60"
+            >
+              Decline
+            </button>
+            </>
           ) : (
             <>
               {!isLocked && nextPrimary && (
@@ -975,16 +1009,6 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
                   {updatingId === req.id
                     ? 'Updating…'
                     : primaryAdvanceButtonLabel(req.status as RequestStatus) ?? 'Continue'}
-                </button>
-              )}
-              {!isLocked && (
-                <button
-                  type="button"
-                  onClick={() => updateStatus(req.id, 'cancelled')}
-                  disabled={updatingId === req.id}
-                  className="rounded-xl border border-red-200 text-red-700 bg-red-50 text-sm font-semibold px-3 py-2.5 disabled:opacity-60"
-                >
-                  Cancel
                 </button>
               )}
               {req.status === 'cancelled' && (
@@ -1039,7 +1063,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
-        <StatCard label="Open pool" value={stats.open} tone="amber" />
+        <StatCard label="Incoming" value={stats.open} tone="amber" />
         <StatCard label="Accepted" value={stats.accepted} tone="blue" />
         <StatCard label="In progress" value={stats.inProgress} tone="indigo" />
         <StatCard label="Completed" value={stats.completed} tone="green" />
@@ -1214,7 +1238,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
       ) : filteredMine.length === 0 ? (
         <div className="rounded-2xl bg-white border border-gray-200 p-6 text-center">
           <p className="text-sm font-semibold text-gray-700">No jobs in this list</p>
-          <p className="mt-1 text-[12px] text-gray-500">Claim a request from the Open Pool to get started.</p>
+          <p className="mt-1 text-[12px] text-gray-500">Accept an incoming order to get started.</p>
           <button
             type="button"
             onClick={() => setActiveTab('open')}

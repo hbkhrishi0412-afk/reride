@@ -24,13 +24,6 @@ interface Service {
   };
 }
 
-type SelectedIncludedService = {
-  id: string;
-  name: string;
-  price?: number;
-};
-
-// Service definitions with icons - shared between components
 const getServiceIcon = (title: string): React.ReactNode => {
   const icons: Record<string, React.ReactNode> = {
     'Car Diagnostics': (
@@ -318,26 +311,12 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
   const handleAddToCart = () => {
     if (!selectedService) return;
 
-    // Store service in cart prefill
-    const serviceId = `service-${selectedService.title.toLowerCase().replace(/\s+/g, '-')}`;
-    const pricing = servicePricingData[selectedService.title] || { basePrice: 0, customQuote: false };
-    const includedServices: SelectedIncludedService[] = selectedService.services
-      .map((service) => ({
-        id: service.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        name: service,
-        price: undefined,
-      }))
-      .filter((service) => Boolean(service.name));
+    const serviceId = `pkg-${selectedService.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
     sessionStorage.setItem('service_cart_prefill', JSON.stringify({
       serviceId,
       serviceName: selectedService.title,
-      price: 0,
-      customQuote: true,
-      estimatedPriceRange: pricing.priceRange,
-      includedServices,
     }));
 
-    // Navigate to cart
     onNavigate?.(ViewEnum.SERVICE_CART);
   };
 

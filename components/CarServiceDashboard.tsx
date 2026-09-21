@@ -1398,7 +1398,7 @@ const params = new URLSearchParams();
       const normalized = Array.isArray(data) ? data.map((req) => normalizeServiceRequest(req as ServiceRequest)) : [];
       setOpenRequests(normalized);
       setLastOpenRefreshAt(new Date().toISOString());
-      setRefreshNotice(`Open requests refreshed (${normalized.length})`);
+      setRefreshNotice(`Incoming orders (${normalized.length})`);
       window.setTimeout(() => setRefreshNotice(null), 2200);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load open requests');
@@ -1485,17 +1485,37 @@ const params = new URLSearchParams();
     try {
       const resp = await spApiFetch('/api/service-requests', {
         method: 'PATCH',
-body: JSON.stringify({ id, action: 'claim' }),
+        body: JSON.stringify({ id, action: 'accept' }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to claim request');
+        throw new Error(data.error || 'Failed to accept order');
       }
       const updated = normalizeServiceRequest(await resp.json());
-      setRequests((prev) => [updated, ...prev]);
+      setRequests((prev) => [updated, ...prev.filter((r) => r.id !== id)]);
       setOpenRequests((prev) => prev.filter((req) => req.id !== id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to claim request');
+      setError(err instanceof Error ? err.message : 'Failed to accept order');
+    } finally {
+      setClaimingId(null);
+    }
+  };
+
+  const declineRequest = async (id: string) => {
+    setClaimingId(id);
+    setError(null);
+    try {
+      const resp = await spApiFetch('/api/service-requests', {
+        method: 'PATCH',
+        body: JSON.stringify({ id, action: 'decline' }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to decline order');
+      }
+      setOpenRequests((prev) => prev.filter((req) => req.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to decline order');
     } finally {
       setClaimingId(null);
     }
@@ -1916,7 +1936,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
               },
               {
                 id: 'open',
-                label: 'Open Requests',
+                label: 'Incoming',
                 badge: stats.open,
                 badgeColor: 'bg-amber-500',
                 icon: (
@@ -2375,7 +2395,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                       className="m-4 border-0 bg-transparent"
                       title="No activity yet"
                       description="New requests will appear here."
-                      action={{ label: 'View open jobs', onClick: () => setActiveTab('open') }}
+                      action={{ label: 'View incoming', onClick: () => setActiveTab('open') }}
                     />
                   ) : (
                     <ul className="divide-y divide-gray-100">
@@ -3219,7 +3239,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
             <section className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex flex-col gap-1 mb-4">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-base font-semibold text-gray-900">Open requests</h2>
+                  <h2 className="text-base font-semibold text-gray-900">Incoming orders</h2>
                   <div className="flex items-center gap-3 text-xs text-gray-500">
                     <span className="hidden sm:inline">
                       <span className="font-semibold text-gray-900">{openRequestInsights.total}</span> total
@@ -3240,7 +3260,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                   </div>
                 </div>
                 <p className="text-xs text-gray-500">
-                  Jobs you can claim · last refreshed {lastOpenRefreshAt ? formatRelative(lastOpenRefreshAt) : 'not yet'}
+                  Orders waiting for you to accept · last refreshed {lastOpenRefreshAt ? formatRelative(lastOpenRefreshAt) : 'not yet'}
                   {refreshNotice && <span className="ml-2 text-emerald-700 font-medium">· {refreshNotice}</span>}
                 </p>
               </div>
@@ -3409,8 +3429,8 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
             ) : enrichedOpenRequests.length === 0 ? (
               <EmptyState
                 dense
-                title="No open requests right now"
-                description="Try another city or check back soon."
+                title="No incoming orders"
+                description="New customer bookings for your workshop will show up here."
                 action={{
                   label: 'Clear filters',
                   onClick: () => {
@@ -3456,14 +3476,24 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                         {formatSlaRemaining(req.createdAt) ? ` · ${formatSlaRemaining(req.createdAt)}` : ''}
                       </p>
                     </div>
+                    <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => claimRequest(req.id)}
                       disabled={claimingId === req.id}
                       className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
                     >
-                      {claimingId === req.id ? 'Claiming…' : 'Claim'}
+                      {claimingId === req.id ? 'Updating…' : 'Accept'}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => declineRequest(req.id)}
+                      disabled={claimingId === req.id}
+                      className="inline-flex items-center whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
+                    >
+                      Decline
+                    </button>
+                    </div>
                   </div>
                   {extra && (
                     <div className="mt-3 space-y-2">
@@ -3569,12 +3599,12 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                 }
                 description={
                   statusFilter === 'all'
-                    ? 'Claim jobs from Open Requests to get started.'
+                    ? 'Incoming orders will show here when a customer books your workshop.'
                     : 'Try another filter or view all requests.'
                 }
                 action={
                   statusFilter === 'all'
-                    ? { label: 'Browse open requests', onClick: () => setActiveTab('open') }
+                    ? { label: 'View incoming', onClick: () => setActiveTab('open') }
                     : { label: 'View all', onClick: () => setStatusFilter('all') }
                 }
                 secondaryAction={

@@ -354,7 +354,7 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
             name: payload.name,
             email: payload.email,
             mobile: payload.phone,
-            role: 'seller', // reuse seller slot for providers in admin panel
+            role: 'service_provider',
             location: payload.city,
             status: 'active',
             authProvider: 'email',

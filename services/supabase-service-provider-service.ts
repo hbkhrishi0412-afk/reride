@@ -1,5 +1,6 @@
 import { resolveSupabaseClient } from '../lib/resolveSupabaseClient.js';
 import { randomAlphanumeric } from '../utils/secureRandom.js';
+import { catalogHasPricedMenu, catalogStartingFrom } from '../utils/workshopBooking.js';
 
 // Detect if we're in a server context (serverless function)
 const isServerSide = typeof window === 'undefined';
@@ -17,6 +18,8 @@ export interface ServiceProviderPayload extends Record<string, unknown> {
   serviceCategories?: string[];
   /** Aggregated from customer reviews (1–5), optional */
   rating?: number | null;
+  hasPricedMenu?: boolean;
+  startingFrom?: number;
 }
 
 // Helper to convert Supabase row to ServiceProviderPayload
@@ -40,6 +43,8 @@ function supabaseRowToServiceProvider(row: any): ServiceProviderPayload {
       const n = typeof r === 'number' ? r : Number(r);
       return Number.isFinite(n) ? n : null;
     })(),
+    hasPricedMenu: catalogHasPricedMenu(metadata.services),
+    startingFrom: catalogStartingFrom(metadata.services),
   };
 }
 

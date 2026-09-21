@@ -4,6 +4,10 @@ import i18n from '../lib/i18n';
 import { View as ViewEnum } from '../types';
 import { supportTelHref } from '../utils/whatsappShare.js';
 import { useIsMobileApp } from '../hooks/useIsMobileApp';
+import {
+  fetchPublicServiceProviderDirectory,
+  type ServiceProviderDirectoryEntry,
+} from '../utils/serviceProviderDirectory';
 
 interface CarServicesProps {
   onNavigate?: (view: ViewEnum) => void;
@@ -197,8 +201,23 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
     ? 'calc(56px + env(safe-area-inset-bottom, 0px))'
     : '5rem';
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const [workshops, setWorkshops] = useState<ServiceProviderDirectoryEntry[]>([]);
   const servicesSectionRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchPublicServiceProviderDirectory()
+      .then((list) => {
+        if (!cancelled) setWorkshops(list.slice(0, 8));
+      })
+      .catch(() => {
+        if (!cancelled) setWorkshops([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Subtle mouse parallax on hero illustration (desktop only)
   useEffect(() => {
@@ -291,9 +310,16 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
   };
 
   const handleBookService = () => {
-    if (onNavigate) {
-      onNavigate(ViewEnum.SERVICE_CART);
+    onNavigate?.(ViewEnum.SERVICE_CART);
+  };
+
+  const handleBookWorkshop = (workshopId: string) => {
+    try {
+      sessionStorage.setItem('service_cart_prefill', JSON.stringify({ providerId: workshopId }));
+    } catch {
+      /* ignore */
     }
+    onNavigate?.(ViewEnum.SERVICE_CART);
   };
 
   return (
@@ -896,6 +922,48 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
           </div>
         </div>
       </section>
+
+      {workshops.length > 0 && (
+      <section className="px-4 sm:px-6 lg:px-8 py-10 lg:py-16 bg-white">
+        <div className="max-w-md lg:max-w-7xl mx-auto">
+          <div className="mb-6 lg:mb-10 text-center lg:text-left">
+            <span className="cs-eyebrow mb-3">Workshops</span>
+            <h2 className="text-2xl lg:text-4xl font-black text-slate-900 mt-3">Workshops near you</h2>
+            <p className="text-slate-500 text-sm mt-2">Open a menu, add services, and the order goes to that workshop.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {workshops.map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                onClick={() => handleBookWorkshop(w.id)}
+                className="text-left rounded-2xl border border-slate-200 bg-white p-4 hover:border-indigo-300 hover:shadow-md transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-black text-slate-900 truncate">{w.name}</div>
+                    <div className="text-xs text-slate-500 mt-1">{w.city}</div>
+                  </div>
+                  {w.rating != null && (
+                    <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-black text-amber-700">
+                      ★ {Number(w.rating).toFixed(1)}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                  {w.startingFrom != null && (
+                    <span className="font-bold text-indigo-700">From ₹{w.startingFrom.toLocaleString('en-IN')}</span>
+                  )}
+                  {w.completedJobs != null && w.completedJobs > 0 && (
+                    <span>{w.completedJobs.toLocaleString('en-IN')} jobs</span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+      )}
 
       {/* ===== HOW IT WORKS ===== */}
       <section className="px-4 sm:px-6 lg:px-8 py-10 lg:py-16 bg-slate-50">

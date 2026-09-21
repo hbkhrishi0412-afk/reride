@@ -6,12 +6,17 @@ import {
     supportWhatsAppHref,
     PLATFORM_SUPPORT_PHONE_E164,
 } from '../utils/whatsappShare.js';
-import { CAR_SERVICE_OPTIONS } from '../constants/serviceProviderCatalog.js';
+import { CAR_SERVICE_OPTIONS, SERVICE_TEMPLATE_PRESETS } from '../constants/serviceProviderCatalog.js';
 import { useIsMobileApp } from '../hooks/useIsMobileApp';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 import { useApp } from './AppProvider';
 import { CLIENT_POLL_INTERVALS_MS } from '../utils/clientPolling.js';
 import { lowestPublishedPrices, mergeServiceCatalogPackages } from '../utils/serviceCartCatalog.js';
+import {
+    assignedWorkshopId,
+    workshopHasAnyActiveService,
+    workshopOffersAllTypes,
+} from '../utils/workshopBooking.js';
 
 type ServicePackage = {
     id: string;
@@ -90,6 +95,7 @@ type CustomerServiceRequest = {
     title: string;
     serviceType?: string;
     providerId?: string | null;
+    candidateProviderIds?: string[];
     status: 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
     city?: string;
     scheduledAt?: string;
@@ -128,6 +134,7 @@ type ServiceCartPrefill = {
     serviceName?: string;
     price?: number;
     customQuote?: boolean;
+    providerId?: string;
     carDetails?: CarDetails;
     includedServices?: Array<{ id: string; name: string; price?: number }>;
 };
@@ -236,10 +243,10 @@ const REQUEST_STATUS_STYLES: Record<CustomerServiceRequest['status'], string> = 
 };
 
 const TRACKING_STEPS = [
-    { key: 'raised', label: 'Raised' },
-    { key: 'accepted', label: 'Accepted' },
-    { key: 'in_progress', label: 'In Progress' },
-    { key: 'completed', label: 'Completed' },
+    { key: 'raised', label: 'Placed' },
+    { key: 'accepted', label: 'Confirmed' },
+    { key: 'in_progress', label: 'In progress' },
+    { key: 'completed', label: 'Done' },
 ] as const;
 
 /** Worst-case ETA across selected line items (parallel jobs at the workshop). */
@@ -907,6 +914,10 @@ const ServiceCart: React.FC<Props> = ({
                     });
                 }
             }
+
+            if (parsed.providerId) {
+                setSelectedProviders([parsed.providerId]);
+            }
             
             if (parsed.carDetails) {
                 setCarDetails(parsed.carDetails);
@@ -1025,18 +1036,6 @@ const ServiceCart: React.FC<Props> = ({
         return 'Good availability';
     }, [selectedSlot, timeSlots]);
 
-    // Get service categories from selected items
-    const selectedServiceCategories = useMemo(() => {
-        const list = items
-            .map((item) => {
-                const svcMeta = availableServicePackages.find((s) => s.id === item.serviceId);
-                return svcMeta?.parentServiceType || svcMeta?.name || item.serviceId;
-            })
-            .filter(Boolean);
-        return Array.from(new Set(list));
-    }, [items, availableServicePackages]);
-
-    // Get service types from selected items (for backward compatibility)
     const selectedServiceTypes = useMemo(() => {
         const fromItems = items
             .map((item) => {
@@ -1074,14 +1073,20 @@ const ServiceCart: React.FC<Props> = ({
         });
     }, [parentServicePackages]);
 
-    /** Lowest price among listed nearby workshops. Guests never see "From ₹" catalog/template amounts. */
+    /** Lowest published price among listed workshops; guests see live From ₹ too. */
     const serviceStartingPrices = useMemo(() => {
-        if (!isLoggedIn) return {};
-        return lowestPublishedPrices(
+        const live = lowestPublishedPrices(
             providerServices,
             serviceProviders.map((p) => p.id),
         );
-    }, [isLoggedIn, providerServices, serviceProviders]);
+        if (Object.keys(live).length > 0) return live;
+        const fallback: Record<string, number> = {};
+        for (const name of CAR_SERVICE_OPTIONS) {
+            const n = Number(SERVICE_TEMPLATE_PRESETS[name]?.price);
+            if (Number.isFinite(n) && n > 0) fallback[name] = n;
+        }
+        return fallback;
+    }, [providerServices, serviceProviders]);
 
     /** Parent package is in cart as full-service line and/or has sub-service lines selected. */
     const isParentPackageInCart = useCallback(
@@ -1169,29 +1174,16 @@ const ServiceCart: React.FC<Props> = ({
 
     // Filter providers: only after the user has chosen at least one service (or is configuring one)
     const availableProviders = useMemo(() => {
+        const bookable = serviceProviders.filter((p) =>
+            workshopHasAnyActiveService(providerServices[p.id]),
+        );
         if (selectedServiceTypes.length === 0) {
-            return [];
+            return bookable.length > 0 ? bookable : serviceProviders;
         }
-
-        return serviceProviders.filter(p => {
-            // First check if provider has matching categories
-            const providerCategories = p.serviceCategories || [];
-            const hasMatchingCategory = selectedServiceCategories.some(category => 
-                providerCategories.includes(category)
-            );
-            
-            if (hasMatchingCategory) return true;
-            
-            // Fallback: check individual services
-            const services = providerServices[p.id] || [];
-            return selectedServiceTypes.every((serviceType) => {
-                return services.some(s => 
-                    s.serviceType === serviceType && 
-                    s.active !== false
-                );
-            });
-        });
-    }, [providerServices, selectedServiceTypes, selectedServiceCategories, serviceProviders]);
+        return bookable.filter((p) =>
+            workshopOffersAllTypes(providerServices[p.id], selectedServiceTypes),
+        );
+    }, [providerServices, selectedServiceTypes, serviceProviders]);
 
     // Clear provider if they no longer offer the current service selection
     useEffect(() => {
@@ -1257,6 +1249,50 @@ const ServiceCart: React.FC<Props> = ({
     }, [selectedProviders, sortedAvailableProviders]);
 
     const selectedProviderId = selectedProviders[0];
+
+    const menuServicePackages = useMemo(() => {
+        if (!selectedProviderId) return websiteServicePackages;
+        const offered = new Set(
+            (providerServices[selectedProviderId] || [])
+                .filter((s) => s.active !== false)
+                .map((s) => String(s.serviceType || '').trim().toLowerCase())
+                .filter(Boolean),
+        );
+        if (offered.size === 0) return websiteServicePackages;
+        return websiteServicePackages.filter((pkg) =>
+            offered.has(String(pkg.parentServiceType || pkg.name).trim().toLowerCase()),
+        );
+    }, [websiteServicePackages, selectedProviderId, providerServices]);
+
+    const chooseWorkshop = useCallback(
+        (id: string) => {
+            if (selectedProviders[0] && selectedProviders[0] !== id && items.length > 0) {
+                const ok =
+                    typeof window === 'undefined' ||
+                    window.confirm('Switch workshop? Items they do not offer will be removed from your cart.');
+                if (!ok) return;
+            }
+            setSelectedProviders([id]);
+        },
+        [selectedProviders, items.length],
+    );
+
+    useEffect(() => {
+        if (!selectedProviderId) return;
+        const offered = new Set(
+            (providerServices[selectedProviderId] || [])
+                .filter((s) => s.active !== false)
+                .map((s) => String(s.serviceType || '').trim().toLowerCase()),
+        );
+        if (offered.size === 0) return;
+        setItems((prev) =>
+            prev.filter((item) => {
+                const meta = availableServicePackages.find((p) => p.id === item.serviceId);
+                const type = String(meta?.parentServiceType || meta?.name || '').trim().toLowerCase();
+                return !type || offered.has(type);
+            }),
+        );
+    }, [selectedProviderId, providerServices, availableServicePackages]);
     const activeWebsitePackage = useMemo(
         () => websiteServicePackages.find((p) => p.id === activeServicePackageId),
         [websiteServicePackages, activeServicePackageId],
@@ -1443,12 +1479,10 @@ const ServiceCart: React.FC<Props> = ({
         }
         
         // Ensure we have at least one provider selected or available
-        const providersToNotify = selectedProviders.length > 0 
-            ? selectedProviders 
-            : availableProviders.map(p => p.id);
+        const providersToNotify = selectedProviders.length > 0 ? selectedProviders : [];
         
         if (providersToNotify.length === 0) {
-            setCarFormError('No service providers available for the selected services. Please try different services.');
+            setCarFormError('Choose a workshop to place this order.');
             return;
         }
         
@@ -1507,6 +1541,9 @@ const ServiceCart: React.FC<Props> = ({
                     }),
                 ),
             );
+            setItems([]);
+            setSelectedProviders([]);
+            setBookingFlowStep(1);
             setActiveTab('track');
             await loadCustomerRequests('after-submit');
         } catch (error) {
@@ -1631,11 +1668,18 @@ const ServiceCart: React.FC<Props> = ({
                                         </span>
                                     </div>
                                 </div>
-                                {req.providerId && (
-                                    <div className="mt-2 text-xs text-blue-700">
-                                        Assigned provider: {providerNameById[req.providerId] || req.providerId}
-                                    </div>
-                                )}
+                                {(() => {
+                                    const workshopId = assignedWorkshopId(req);
+                                    const name = workshopId ? providerNameById[workshopId] || workshopId : '';
+                                    if (!name) return null;
+                                    return (
+                                        <div className="mt-2 text-xs text-blue-700">
+                                            {req.status === 'open'
+                                                ? `Waiting for ${name} to confirm`
+                                                : `Workshop: ${name}`}
+                                        </div>
+                                    );
+                                })()}
                                 <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
                                     <div className="text-xs font-semibold text-gray-700 mb-2">Progress Timeline</div>
                                     <div className="mb-3">
@@ -1814,7 +1858,7 @@ const ServiceCart: React.FC<Props> = ({
                             </div>
                             <div>
                                 <h1 className="text-xl sm:text-2xl font-black leading-tight text-slate-900">Book a service</h1>
-                                <p className="text-slate-500 mt-0.5 text-xs sm:text-sm">Pick service → workshop → done</p>
+                                <p className="text-slate-500 mt-0.5 text-xs sm:text-sm">Pick a workshop → add services → confirm</p>
                             </div>
                         </div>
                         {!isLoggedIn && (
@@ -1822,7 +1866,7 @@ const ServiceCart: React.FC<Props> = ({
                                 onClick={onLogin}
                                 className="w-full sm:w-auto px-6 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors text-sm sm:text-base touch-manipulation min-h-[44px]"
                             >
-                                Proceed to login
+                                Sign in to place order
                             </button>
                         )}
                         {isLoggedIn && (
@@ -1844,16 +1888,16 @@ const ServiceCart: React.FC<Props> = ({
                         {[
                             {
                                 n: 1,
-                                title: 'Services & workshop',
-                                desc: 'Pick and go',
+                                title: 'Workshop & services',
+                                desc: 'Pick and add',
                                 done: canProceedToStep2 && bookingFlowStep === 2,
                                 active: bookingFlowStep === 1,
                                 disabled: false,
                             },
                             {
                                 n: 2,
-                                title: 'Time & checkout',
-                                desc: 'Address and pay',
+                                title: 'Schedule & confirm',
+                                desc: 'Address and slot',
                                 done: false,
                                 active: bookingFlowStep === 2,
                                 disabled: !canProceedToStep2,
@@ -2122,7 +2166,7 @@ const ServiceCart: React.FC<Props> = ({
                                 </div>
                             )}
                             <div className="space-y-2.5">
-                                {websiteServicePackages.map((pkg) => {
+                                {menuServicePackages.map((pkg) => {
                                     const inCart = isParentPackageInCart(pkg.id, items);
                                     const isConfiguringThis =
                                         hasExplicitServiceSelection && activeServicePackageId === pkg.id;
@@ -2208,8 +2252,8 @@ const ServiceCart: React.FC<Props> = ({
                                         </h2>
                                         <p className="text-xs text-slate-500 mt-1">
                                             {selectedServiceTypes.length === 0
-                                                ? 'Choose a service first'
-                                                : `${sortedAvailableProviders.length} ${sortedAvailableProviders.length === 1 ? 'workshop' : 'workshops'} can do all your services`}
+                                                ? `${sortedAvailableProviders.length} workshops nearby`
+                                                : `${sortedAvailableProviders.length} ${sortedAvailableProviders.length === 1 ? 'workshop' : 'workshops'} for your services`}
                                         </p>
                                     </div>
                                 </div>
@@ -2228,14 +2272,18 @@ const ServiceCart: React.FC<Props> = ({
                                     </button>
                                 )}
                             </header>
-                            {selectedServiceTypes.length === 0 ? (
+                            {sortedAvailableProviders.length === 0 ? (
                                 <div className="rounded-[16px] px-4 py-10 text-center ring-1 ring-dashed ring-slate-200 bg-slate-50/50">
                                     <svg className="mx-auto w-10 h-10 text-indigo-200 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                     </svg>
-                                    <p className="text-sm font-bold text-gray-700">No workshops yet</p>
+                                    <p className="text-sm font-bold text-gray-700">
+                                        {selectedServiceTypes.length === 0 ? 'No workshops yet' : 'No workshops match'}
+                                    </p>
                                     <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto">
-                                        Select at least one service above to see trusted workshops in your area.
+                                        {selectedServiceTypes.length === 0
+                                            ? 'Workshops appear here once they list a priced service in your area.'
+                                            : 'No single workshop offers all selected services. Try a different mix.'}
                                     </p>
                                 </div>
                             ) : (
@@ -2267,7 +2315,7 @@ const ServiceCart: React.FC<Props> = ({
                                                     name="service-booking-provider"
                                                     className="h-4 w-4 mt-1 text-indigo-600 focus:ring-2 focus:ring-indigo-500 shrink-0"
                                                     checked={isChosen}
-                                                    onChange={() => setSelectedProviders([p.id])}
+                                                    onChange={() => chooseWorkshop(p.id)}
                                                 />
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
@@ -2327,16 +2375,6 @@ const ServiceCart: React.FC<Props> = ({
                                             </label>
                                         );
                                     })}
-                                    {availableProviders.length === 0 && (
-                                        <div className="rounded-[16px] px-4 py-8 text-center ring-1 ring-amber-200/80 bg-amber-50/50">
-                                            <p className="text-sm font-bold text-amber-800">No workshops match</p>
-                                            <p className="text-xs text-amber-700 mt-1 max-w-sm mx-auto">
-                                                {selectedServiceTypes.length > 1
-                                                    ? 'No single workshop offers all selected services. Try a different mix.'
-                                                    : 'No workshops available for this service yet.'}
-                                            </p>
-                                        </div>
-                                    )}
                                     {locationError && (
                                         <div className="text-xs text-red-700 p-2.5 bg-red-50 rounded-lg border border-red-200">
                                             {locationError}
@@ -2556,7 +2594,7 @@ const ServiceCart: React.FC<Props> = ({
                                 disabled={!canProceedToStep2}
                                 className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3.5 text-sm font-black text-white shadow-lg shadow-indigo-500/30 transition hover:from-indigo-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none min-h-[44px]"
                             >
-                                Continue to time &amp; place →
+                                Continue →
                             </button>
                         </div>
                         </>
@@ -2849,7 +2887,7 @@ const ServiceCart: React.FC<Props> = ({
                             </div>
                         </section>
 
-                        {/* Card 3 — Coupon */}
+                        {coupons.length > 0 && (
                         <section className={BOOKING_SURFACE}>
                             <header className="flex items-start justify-between gap-3 mb-4">
                                 <div className="flex items-start gap-3 min-w-0">
@@ -2943,8 +2981,8 @@ const ServiceCart: React.FC<Props> = ({
                                 </div>
                             )}
                         </section>
-                        </>
                         )}
+                        </>
                     </div>
 
                     <aside className="order-2 flex flex-col gap-4 min-w-0 w-full lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
@@ -3035,7 +3073,7 @@ const ServiceCart: React.FC<Props> = ({
                                 disabled={!canProceedToStep2}
                                 className="mt-5 w-full rounded-xl bg-white text-indigo-900 hover:bg-indigo-50 px-4 py-3 text-sm font-black transition-colors disabled:cursor-not-allowed disabled:bg-white disabled:text-slate-400 min-h-[44px]"
                             >
-                                Continue to time & place →
+                                Continue →
                             </button>
                             {!canProceedToStep2 && (
                                 <p className="mt-2 text-[11px] text-amber-300/90 text-center">
@@ -3146,7 +3184,7 @@ const ServiceCart: React.FC<Props> = ({
                             className={`scroll-mt-4 ${BOOKING_SURFACE}`}
                         >
                             <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700">Payment</h3>
+                                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700">Bill estimate</h3>
                                 {selectedCoupon && totals.discount > 0 && (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
@@ -3212,7 +3250,7 @@ const ServiceCart: React.FC<Props> = ({
                                 className="max-lg:hidden mt-4 w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-500/25 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                                 disabled={checkoutReadiness.length > 0}
                             >
-                                Place service request
+                                Place order
                             </button>
                             {selectedCoupon && totals.discount > 0 && (
                                 <p className="mt-2 text-[11px] text-emerald-700 font-semibold text-center">
@@ -3221,7 +3259,7 @@ const ServiceCart: React.FC<Props> = ({
                             )}
                             <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                                <span>Cancel within 5 mins</span>
+                                <span>Pay at workshop · Cancel while waiting</span>
                             </div>
                         </section>
                         </>
@@ -3257,7 +3295,7 @@ const ServiceCart: React.FC<Props> = ({
                             disabled={checkoutReadiness.length > 0}
                             className="shrink-0 min-w-[7.5rem] rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-indigo-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            Book
+                            {isLoggedIn ? 'Place order' : 'Sign in'}
                         </button>
                     </div>
                 </div>

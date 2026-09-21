@@ -13,7 +13,7 @@ export function nextPrimaryStatus(s: ServiceRequestStatus): ServiceRequestStatus
 
 /** Label for the primary advance button; null = no primary action (terminal states). */
 export function primaryAdvanceButtonLabel(s: ServiceRequestStatus): string | null {
-    if (s === 'open') return 'Accept';
+    if (s === 'open') return 'Accept order';
     if (s === 'accepted') return 'Start job';
     if (s === 'in_progress') return 'Mark complete';
     return null;
@@ -25,11 +25,11 @@ export function primaryAdvanceButtonLabel(s: ServiceRequestStatus): string | nul
 export function allowedManualStatusOptions(s: ServiceRequestStatus): ServiceRequestStatus[] {
     switch (s) {
         case 'open':
-            return ['open', 'accepted', 'cancelled'];
+            return ['open', 'accepted'];
         case 'accepted':
-            return ['accepted', 'in_progress', 'cancelled'];
+            return ['accepted', 'in_progress'];
         case 'in_progress':
-            return ['in_progress', 'completed', 'cancelled'];
+            return ['in_progress', 'completed'];
         case 'completed':
             return ['completed'];
         case 'cancelled':

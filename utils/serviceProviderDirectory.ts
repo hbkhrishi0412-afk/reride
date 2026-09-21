@@ -11,6 +11,7 @@ export interface ServiceProviderDirectoryEntry {
   rating?: number;
   reviewCount?: number;
   completedJobs?: number;
+  startingFrom?: number;
   isVerified?: boolean;
 }
 
@@ -55,6 +56,9 @@ function mapApiProvider(raw: Record<string, unknown>): ServiceProviderDirectoryE
     ...(rating != null ? { rating } : {}),
     ...(reviewCount != null ? { reviewCount } : {}),
     ...(completedJobs != null ? { completedJobs } : {}),
+    ...(typeof raw.startingFrom === 'number' && Number.isFinite(raw.startingFrom)
+      ? { startingFrom: raw.startingFrom }
+      : {}),
     ...(isVerified ? { isVerified: true } : {}),
   };
 }

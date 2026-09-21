@@ -1,5 +1,6 @@
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import { supabaseServiceProviderService } from './supabase-service-provider-service.js';
+import { workshopIsListed } from '../utils/workshopBooking.js';
 
 export type ProviderTrustStats = {
   rating: number | null;
@@ -90,7 +91,16 @@ export async function enrichPublicServiceProviderUsers<T extends object>(
   let ratingByProviderId: Record<string, number | null> = {};
   const providerIdByEmail = new Map<string, string>();
 
-  const providerMetaById = new Map<string, { serviceCategories?: string[]; city?: string; name?: string }>();
+  const providerMetaById = new Map<
+    string,
+    {
+      serviceCategories?: string[];
+      city?: string;
+      name?: string;
+      hasPricedMenu?: boolean;
+      startingFrom?: number;
+    }
+  >();
 
   try {
     const [trustStats, providerRows] = await Promise.all([
@@ -108,13 +118,16 @@ export async function enrichPublicServiceProviderUsers<T extends object>(
         ...(Array.isArray(categories) && categories.length > 0 ? { serviceCategories: categories } : {}),
         city: row.city,
         name: row.name,
+        hasPricedMenu: Boolean(row.hasPricedMenu),
+        ...(typeof row.startingFrom === 'number' ? { startingFrom: row.startingFrom } : {}),
       });
     }
   } catch (err) {
     console.warn('Provider trust enrichment unavailable:', err);
   }
 
-  return users.map((user) => {
+  return users
+    .map((user) => {
     const raw = user as Record<string, unknown>;
     const email = typeof raw.email === 'string' ? raw.email.toLowerCase().trim() : '';
     const authId = resolveProviderAuthId(raw);
@@ -122,6 +135,9 @@ export async function enrichPublicServiceProviderUsers<T extends object>(
     const stats = providerId ? trustByProviderId[providerId] : undefined;
     const columnRating = providerId ? ratingByProviderId[providerId] : null;
     const spMeta = providerId ? providerMetaById.get(providerId) : undefined;
+    if (!spMeta || !workshopIsListed({ city: spMeta.city, hasPricedMenu: Boolean(spMeta.hasPricedMenu) })) {
+      return null;
+    }
 
     const rating =
       stats?.rating ??
@@ -141,12 +157,14 @@ export async function enrichPublicServiceProviderUsers<T extends object>(
       ...(spMeta?.name && !raw.name ? { name: spMeta.name } : {}),
       ...(spMeta?.city ? { city: spMeta.city, location: spMeta.city } : {}),
       ...(spMeta?.serviceCategories ? { serviceCategories: spMeta.serviceCategories } : {}),
+      ...(typeof spMeta?.startingFrom === 'number' ? { startingFrom: spMeta.startingFrom } : {}),
       ...(rating != null && Number.isFinite(rating) ? { rating, averageRating: rating } : {}),
       ...(reviewCount != null && reviewCount > 0 ? { reviewCount } : {}),
       ...(completedJobs != null && completedJobs > 0 ? { completedJobs } : {}),
       ...(raw.isVerified ? { isVerified: true } : {}),
     };
-  });
+  })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
 }
 
 /** Persist aggregated trust stats onto service_providers.rating + metadata cache. */

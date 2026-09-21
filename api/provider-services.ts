@@ -87,8 +87,23 @@ function devFallbackProviderId(req: VercelRequest): string | null {
 async function resolveProviderId(req: VercelRequest, allowDevFallback = false): Promise<string> {
   try {
     const auth = await authenticateRequestDual(req);
-    if (auth.isValid && auth.user?.userId) {
-      return auth.user.userId;
+    if (auth.isValid && auth.user) {
+      const uid = auth.user.userId;
+      const email = String(auth.user.email || '').toLowerCase().trim();
+      if (uid) {
+        const supabase = getSupabaseAdminClient();
+        const { data: byId } = await supabase.from('service_providers').select('id').eq('id', uid).maybeSingle();
+        if (byId?.id) return String(byId.id);
+        if (email) {
+          const { data: byEmail } = await supabase
+            .from('service_providers')
+            .select('id')
+            .eq('email', email)
+            .maybeSingle();
+          if (byEmail?.id) return String(byEmail.id);
+        }
+        return uid;
+      }
     }
     throw new Error(auth.error || 'Authentication required');
   } catch (err) {
@@ -149,7 +164,9 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
       
       const result = allProviders.flatMap((provider) => {
         const services = (provider.metadata?.services as Record<string, ProviderService>) || {};
-        return Object.entries(services).map(([serviceType, payload]) => {
+        const activeEntries = Object.entries(services).filter(([, payload]) => payload && payload.active !== false);
+        if (activeEntries.length === 0) return [];
+        return activeEntries.map(([serviceType, payload]) => {
           return {
             providerId: provider.id,
             ...toPublicProviderService(serviceType, payload),
@@ -161,6 +178,10 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
 
     if (req.method === 'POST' || req.method === 'PATCH') {
       if (!uid) return res.status(401).json({ error: 'Not authenticated' });
+      const auth = await authenticateRequestDual(req);
+      if (auth.isValid && auth.user?.role && auth.user.role !== 'service_provider' && auth.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Service provider sign-in only for this resource.' });
+      }
       const { serviceType, price, description, etaMinutes, active = true, includedServices } = req.body as Partial<ProviderService> & {
         serviceType?: string;
       };

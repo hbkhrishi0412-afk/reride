@@ -87,8 +87,8 @@ export function getServiceDashboardNextAction(input: {
   }
   return {
     title: 'You are set',
-    message: 'Keep response times low to win more jobs from the open pool.',
-    label: 'View open jobs',
+    message: 'Keep response times low so customers get a confirmation quickly.',
+    label: 'View incoming orders',
     kind: 'open',
   };
 }

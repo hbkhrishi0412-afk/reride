@@ -13,12 +13,12 @@ describe('serviceRequestStatusFlow', () => {
   });
 
   it('returns button labels for active states', () => {
-    expect(primaryAdvanceButtonLabel('open')).toBe('Accept');
+    expect(primaryAdvanceButtonLabel('open')).toBe('Accept order');
     expect(primaryAdvanceButtonLabel('cancelled')).toBeNull();
   });
 
   it('allows realistic manual transitions', () => {
-    expect(allowedManualStatusOptions('open')).toEqual(['open', 'accepted', 'cancelled']);
+    expect(allowedManualStatusOptions('open')).toEqual(['open', 'accepted']);
     expect(allowedManualStatusOptions('completed')).toEqual(['completed']);
   });
 });

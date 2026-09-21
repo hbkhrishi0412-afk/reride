@@ -263,12 +263,18 @@ export const supabaseServiceRequestService = {
 
   // Find service requests by provider ID
   async findByProviderId(providerId: string): Promise<(ServiceRequestPayload & { id: string })[]> {
+    return this.findByProviderIds([providerId]);
+  },
+
+  async findByProviderIds(providerIds: string[]): Promise<(ServiceRequestPayload & { id: string })[]> {
+    const ids = [...new Set(providerIds.map((id) => String(id || '').trim()).filter(Boolean))];
+    if (ids.length === 0) return [];
     const supabase = await resolveSupabaseClient();
 
     const { data, error } = await supabase
       .from('service_requests')
       .select('*')
-      .eq('provider_id', providerId);
+      .in('provider_id', ids);
 
     if (error) {
       throw new Error(`Failed to fetch service requests by provider: ${error.message}`);
@@ -350,6 +356,49 @@ export const supabaseServiceRequestService = {
     if (error) {
       throw new Error(`Failed to update service request: ${error.message}`);
     }
+  },
+
+  /**
+   * Conditional update used for Accept (open → accepted). Returns false if 0 rows matched
+   * so two workshops cannot both win the same order.
+   */
+  async updateIfOpen(
+    id: string,
+    updates: Partial<ServiceRequestPayload>,
+    matchProviderId: string | null,
+  ): Promise<boolean> {
+    const supabase = await resolveSupabaseClient();
+    const { data: existingRequest, error: fetchError } = await supabase
+      .from('service_requests')
+      .select('metadata')
+      .eq('id', id)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      throw new Error(`Failed to fetch existing service request: ${fetchError.message}`);
+    }
+
+    const row = serviceRequestToSupabaseRow({
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
+    delete row.id;
+    if (row.metadata && existingRequest?.metadata) {
+      row.metadata = { ...(existingRequest.metadata || {}), ...(row.metadata || {}) };
+    } else if (!row.metadata && existingRequest?.metadata) {
+      row.metadata = existingRequest.metadata;
+    }
+    if (row.metadata && Object.keys(row.metadata).length === 0) {
+      delete row.metadata;
+    }
+
+    let query = supabase.from('service_requests').update(row).eq('id', id).eq('status', 'open');
+    query = matchProviderId == null ? query.is('provider_id', null) : query.eq('provider_id', matchProviderId);
+    const { data, error } = await query.select('id').maybeSingle();
+    if (error) {
+      throw new Error(`Failed to update service request: ${error.message}`);
+    }
+    return Boolean(data);
   },
 
   // Delete service request

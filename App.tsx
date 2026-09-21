@@ -1127,6 +1127,13 @@ const AppContent: React.FC = () => {
         throw new Error('Please log in to submit a service request.');
       }
 
+      const assignedWorkshop =
+        payload.providerId || payload.candidateProviderIds?.[0] || null;
+      if (!assignedWorkshop) {
+        addToast('Choose a workshop to place the order.', 'error');
+        throw new Error('Choose a workshop to place the order.');
+      }
+
       const firstItem = payload.items?.[0];
       const serviceName =
         payload.servicePackages?.find(s => s.id === firstItem?.serviceId)?.name ||
@@ -1172,8 +1179,8 @@ const AppContent: React.FC = () => {
             ? `${payload.scheduledDate} • ${payload.slotTimeLabel}`
             : payload.slotId || '',
         notes: payload.note || '',
-        providerId: null,
-        candidateProviderIds: payload.candidateProviderIds ?? [],
+        providerId: assignedWorkshop,
+        candidateProviderIds: [assignedWorkshop],
         services,
         addressId: payload.addressId,
         slotId: payload.slotId,
@@ -1362,7 +1369,7 @@ const AppContent: React.FC = () => {
 
       if (cancelled) return;
       const fallback: ServiceProviderDirectoryEntry[] = (users || [])
-        .filter((u) => u.role === 'seller' || u.role === 'service_provider')
+        .filter((u) => u.role === 'service_provider')
         .flatMap((u) => {
           const id = u.id || u.email || u.name;
           const name = u.dealershipName || u.name;
