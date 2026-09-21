@@ -29,6 +29,7 @@ import { SellerNotificationsView } from './seller-dashboard/SellerNotificationsV
 import SellerPremiumPanel, {
   sellerPremiumGhostBtnStyle,
 } from './seller-dashboard/SellerPremiumShell';
+import Logo from './Logo';
 import {
   validateListingRenewal,
   isListingLimitReached,
@@ -88,12 +89,14 @@ interface DashboardProps {
   notifications?: Notification[];
   onNotificationClick?: (notification: Notification) => void;
   onMarkNotificationsAsRead?: (ids: number[]) => void;
+  /** Clears seller session (workspace chrome — site header is hidden on this view). */
+  onLogout?: () => void;
 }
 
 type DashboardView = 'overview' | 'listings' | 'form' | 'messages' | 'analytics' | 'salesHistory' | 'reports' | 'settings' | 'notifications';
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onDeleteConversation, onArchiveConversation, onUpdateSellerProfile, vehicleData, onFeatureListing, onBoostListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat, onNotify, notifications = [], onNotificationClick, onMarkNotificationsAsRead }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onDeleteConversation, onArchiveConversation, onUpdateSellerProfile, vehicleData, onFeatureListing, onBoostListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat, onNotify, notifications = [], onNotificationClick, onMarkNotificationsAsRead, onLogout }) => {
   const notify = useCallback(
     (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') =>
       dashboardNotify(onNotify, message, type),
@@ -1427,23 +1430,28 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 backdropFilter: 'blur(16px)',
               }}
             >
-              <div className="mb-4 flex items-center gap-3">
-                <div
-                  className="flex h-10 w-10 items-center justify-center rounded-xl text-white"
-                  style={{ background: 'linear-gradient(135deg, #FF8456 0%, #E85A2A 100%)' }}
-                >
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                    <path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/>
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-400">Seller</p>
-                  <h3
-                    className="text-lg font-bold text-stone-900"
-                    style={{ fontFamily: "'Nunito Sans', Poppins, sans-serif", letterSpacing: '-0.02em' }}
-                  >
-                    {t('nav.dashboard')}
-                  </h3>
+              <div className="mb-4 space-y-3">
+                <Logo
+                  size="sm"
+                  showText
+                  className="shrink-0"
+                  onClick={() => onNavigate(View.HOME)}
+                />
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-400">Seller</p>
+                    <h3
+                      className="text-lg font-bold text-stone-900 truncate"
+                      style={{ fontFamily: "'Nunito Sans', Poppins, sans-serif", letterSpacing: '-0.02em' }}
+                    >
+                      {t('nav.dashboard')}
+                    </h3>
+                    {(seller.dealershipName || seller.name) ? (
+                      <p className="text-xs text-stone-500 truncate mt-0.5">
+                        {seller.dealershipName || seller.name}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 
@@ -1539,6 +1547,18 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               </NavItem>
                 </div>
               </details>
+
+              {onLogout ? (
+                <div className="mt-4 pt-3 border-t border-stone-200/80">
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="w-full px-3.5 py-2.5 rounded-xl text-left text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors"
+                  >
+                    {t('nav.logout')}
+                  </button>
+                </div>
+              ) : null}
             </nav>
           </aside>
           

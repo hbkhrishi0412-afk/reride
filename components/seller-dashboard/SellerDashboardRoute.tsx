@@ -164,6 +164,7 @@ const SellerDashboardContent: React.FC<SellerDashboardContentProps> = ({
           notifications={handlers.sellerNotifications}
           onNotificationClick={handlers.handleNotificationClick}
           onMarkNotificationsAsRead={handlers.handleMarkNotificationsAsRead}
+          onLogout={handlers.handleLogoutAll}
         />
       </Suspense>
     </DashboardErrorBoundary>

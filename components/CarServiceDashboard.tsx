@@ -19,9 +19,11 @@ import {
   nextPrimaryStatus,
   primaryAdvanceButtonLabel,
 } from '../utils/serviceRequestStatusFlow';
+import { View as ViewEnum } from '../types';
 import { spApiFetch } from '../utils/spApiFetch';
 import { getServiceDashboardNextAction, isRealProfileValue } from '../utils/serviceDashboardOverview';
 import { EmptyState, SectionHeader, StatCard, StatCardGrid } from './dashboard/shared';
+import Logo from './Logo';
 import { useApp } from './AppProvider';
 
 interface Provider {
@@ -532,7 +534,7 @@ const includedDraftsToPayload = (drafts: IncludedServiceDraft[]): IncludedServic
     .filter((entry): entry is IncludedServicePrice => entry !== null);
 
 const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onLogout }) => {
-  const { runIfConfirmed } = useApp();
+  const { runIfConfirmed, navigate } = useApp();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [openRequests, setOpenRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1837,70 +1839,71 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold text-gray-900 truncate">Service Dashboard</h1>
-                {(() => {
-                  const rawCity = (localProvider?.city || '').trim();
-                  const hasRealCity = isRealProfileValue(rawCity);
-                  const displayName = (localProvider?.name || '').trim();
-                  return (
-                    <p className="text-xs text-gray-500 flex items-center gap-1.5 min-w-0">
-                      {displayName ? <span className="truncate">{displayName}</span> : null}
-                      {displayName ? <span className="text-gray-300">·</span> : null}
-                      <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      {hasRealCity ? (
-                        <span className="truncate">{rawCity}</span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveTab('profile');
-                            setEditingProfile(true);
-                          }}
-                          className="text-blue-700 hover:text-blue-800 font-medium"
-                        >
-                          Add city
-                        </button>
-                      )}
-                    </p>
-                  );
-                })()}
-              </div>
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <Logo
+              size="sm"
+              showText
+              className="shrink-0"
+              onClick={() => navigate(ViewEnum.HOME)}
+            />
+            <div className="hidden sm:block h-6 w-px bg-gray-200 shrink-0" aria-hidden />
+            <div className="min-w-0">
+              <h1 className="text-sm font-semibold text-gray-900 truncate">Service Dashboard</h1>
+              {(() => {
+                const rawCity = (localProvider?.city || '').trim();
+                const hasRealCity = isRealProfileValue(rawCity);
+                const displayName = (localProvider?.name || '').trim();
+                return (
+                  <p className="text-xs text-gray-500 flex items-center gap-1.5 min-w-0">
+                    {displayName ? <span className="truncate">{displayName}</span> : null}
+                    {displayName ? <span className="text-gray-300">·</span> : null}
+                    <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    {hasRealCity ? (
+                      <span className="truncate">{rawCity}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('profile');
+                          setEditingProfile(true);
+                        }}
+                        className="text-reride-orange hover:underline font-medium"
+                      >
+                        Add city
+                      </button>
+                    )}
+                  </p>
+                );
+              })()}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {onLogout && (
-                <button
-                  type="button"
-                  onClick={onLogout}
-                  className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm font-semibold hover:bg-gray-50 transition-colors"
-                >
-                  Log out
-                </button>
-              )}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={loading || openLoading}
+              aria-label={loading || openLoading ? 'Refreshing' : 'Refresh'}
+              title={loading || openLoading ? 'Refreshing…' : 'Refresh'}
+              className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50 transition-colors"
+            >
+              <svg className={`w-[18px] h-[18px] ${loading || openLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+            {onLogout && (
               <button
                 type="button"
-                onClick={handleRefresh}
-                disabled={loading || openLoading}
-                className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-gray-800 text-sm font-semibold hover:bg-gray-50 disabled:opacity-60 transition-colors flex items-center gap-2"
+                onClick={onLogout}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
               >
-                <svg className={`w-4 h-4 ${loading || openLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {loading || openLoading ? 'Refreshing...' : 'Refresh'}
+                Log out
               </button>
-            </div>
+            )}
           </div>
         </div>
       </header>

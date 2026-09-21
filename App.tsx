@@ -2283,6 +2283,11 @@ const AppContent: React.FC = () => {
   // Render Desktop/Website Layout
   /** When true, hide site footer (admin ops area); header is always shown on desktop, including on /admin. */
   const isDesktopAdminNoFooter = currentView === ViewEnum.ADMIN_PANEL && userHasAdminRole(currentUser);
+  /** Role dashboards own their chrome — hide marketplace header + footer. */
+  const isDesktopRoleWorkspace =
+    currentView === ViewEnum.CAR_SERVICE_DASHBOARD ||
+    currentView === ViewEnum.SELLER_DASHBOARD;
+  const hideDesktopFooter = isDesktopAdminNoFooter || isDesktopRoleWorkspace;
 
   return (
     <>
@@ -2304,33 +2309,39 @@ const AppContent: React.FC = () => {
       />
       <OfflineIndicator />
       <div className={`min-h-screen ${isDesktopAdminNoFooter ? 'bg-slate-100' : 'bg-gray-50'}`}>
-        <Header 
-          onNavigate={navigate}
-          currentUser={currentUser}
-          serviceProvider={serviceProvider}
-          onLogout={handleLogoutAll}
-          compareCount={comparisonList.length}
-          wishlistCount={wishlist.length}
-          inboxCount={unreadMessagesCount}
-          isHomePage={currentView === ViewEnum.HOME}
-          onOpenMessages={handleOpenMessages}
-          notifications={notifications.filter(n => {
-            if (!n.recipientEmail || !currentUser?.email) return false;
-            return n.recipientEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-          })}
-          onNotificationClick={handleNotificationClick}
-          onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
-          onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
-          onOpenCommandPalette={handleOpenCommandPalette}
-          userLocation={userLocation}
-          onLocationChange={setUserLocation}
-          addToast={addToast}
-          allVehicles={vehicles}
-          selectedCity={selectedCity}
-          onBrowseAllIndia={handleBrowseAllIndia}
-          onUseMyLocation={handleHomeUseMyLocation}
-        />
-        <main id="main-content" className="min-h-[calc(100vh-140px)]" tabIndex={-1}>
+        {!isDesktopRoleWorkspace && (
+          <Header 
+            onNavigate={navigate}
+            currentUser={currentUser}
+            serviceProvider={serviceProvider}
+            onLogout={handleLogoutAll}
+            compareCount={comparisonList.length}
+            wishlistCount={wishlist.length}
+            inboxCount={unreadMessagesCount}
+            isHomePage={currentView === ViewEnum.HOME}
+            onOpenMessages={handleOpenMessages}
+            notifications={notifications.filter(n => {
+              if (!n.recipientEmail || !currentUser?.email) return false;
+              return n.recipientEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+            })}
+            onNotificationClick={handleNotificationClick}
+            onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
+            onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
+            onOpenCommandPalette={handleOpenCommandPalette}
+            userLocation={userLocation}
+            onLocationChange={setUserLocation}
+            addToast={addToast}
+            allVehicles={vehicles}
+            selectedCity={selectedCity}
+            onBrowseAllIndia={handleBrowseAllIndia}
+            onUseMyLocation={handleHomeUseMyLocation}
+          />
+        )}
+        <main
+          id="main-content"
+          className={isDesktopRoleWorkspace ? 'min-h-screen' : 'min-h-[calc(100vh-140px)]'}
+          tabIndex={-1}
+        >
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
               <PageTransition currentView={currentView}>
@@ -2339,7 +2350,7 @@ const AppContent: React.FC = () => {
             </Suspense>
           </ErrorBoundary>
         </main>
-        {!isDesktopAdminNoFooter && <Footer onNavigate={navigate} />}
+        {!hideDesktopFooter && <Footer onNavigate={navigate} />}
         
         {/* Desktop Global Components */}
         <PWAInstallPrompt />
