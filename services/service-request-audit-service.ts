@@ -3,6 +3,7 @@ import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 export type ServiceRequestAuditAction =
   | 'request_created'
   | 'request_claimed'
+  | 'request_declined'
   | 'status_changed'
   | 'request_cancelled'
   | 'request_deleted'
@@ -43,4 +44,3 @@ export const serviceRequestAuditService = {
     }
   },
 };
-

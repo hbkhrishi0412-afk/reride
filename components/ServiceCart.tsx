@@ -2983,6 +2983,7 @@ const ServiceCart: React.FC<Props> = ({
                         </section>
                         )}
                         </>
+                        )}
                     </div>
 
                     <aside className="order-2 flex flex-col gap-4 min-w-0 w-full lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
