@@ -4,6 +4,8 @@ import { View as ViewEnum } from '../types';
 import LanguageSwitcher from './LanguageSwitcher';
 import Logo from './Logo';
 import { primaryLocationLabel } from '../utils/cityMapping';
+import { homeViewForActor } from '../utils/serviceProviderAccess.js';
+import type { User } from '../types';
 
 interface MobileBrandTopBarProps {
   onNavigate: (view: ViewEnum) => void;
@@ -15,6 +17,8 @@ interface MobileBrandTopBarProps {
   showLogin?: boolean;
   userLocation?: string;
   selectedCity?: string;
+  currentUser?: User | null;
+  serviceProvider?: { name?: string; email?: string } | null;
 }
 
 /**
@@ -30,8 +34,11 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
   showLogin = false,
   userLocation = '',
   selectedCity = '',
+  currentUser = null,
+  serviceProvider = null,
 }) => {
   const { t } = useTranslation();
+  const homeView = homeViewForActor(currentUser, serviceProvider);
 
   const locationDisplay = (() => {
     const raw = selectedCity.trim() || userLocation.trim();
@@ -85,7 +92,7 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
           <Logo
             size="sm"
             showText
-            onClick={() => onNavigate(ViewEnum.HOME)}
+            onClick={() => onNavigate(homeView)}
             className="shrink-0 transition-transform active:scale-[0.98] [&_span]:whitespace-nowrap"
             aria-label={t('nav.home')}
           />

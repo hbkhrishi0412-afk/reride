@@ -127,6 +127,25 @@ export function matchesLocation(
 }
 
 /**
+ * Match a vehicle against a state filter value that may be a code ("MH") or
+ * full name ("Maharashtra") — listings store either form.
+ */
+export function matchesStateFilter(
+  vehicleCity: string | undefined,
+  vehicleState: string | undefined,
+  stateFilter: string | undefined,
+): boolean {
+  const f = (stateFilter ?? '').trim();
+  if (!f) return true;
+  const state =
+    INDIAN_STATES.find((s) => s.code.toLowerCase() === f.toLowerCase()) ||
+    INDIAN_STATES.find((s) => s.name.toLowerCase() === f.toLowerCase());
+  if (state) return vehicleInStateCatalog(vehicleCity, vehicleState, state);
+  const vs = (vehicleState ?? '').trim();
+  return vs === f || vs.toLowerCase() === f.toLowerCase();
+}
+
+/**
  * Get the display name for a given city name
  * Useful for showing the correct display name when a vehicle city is known
  */

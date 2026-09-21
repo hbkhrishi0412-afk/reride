@@ -7,9 +7,11 @@ import {
   resolveModelFromVehicles,
   normalizeParsedOwnership,
   matchesVehicleFilters,
+  urlChipFiltersApplyToServerFetch,
   VEHICLE_LIST_MIN_PRICE,
   type VehicleListFilterSnapshot,
 } from '../utils/vehicleListFilters.js';
+import { matchesStateFilter } from '../utils/cityMapping.js';
 
 const vehicle = {
   id: 1,
@@ -76,5 +78,20 @@ describe('vehicleListFilters', () => {
     expect(
       matchesVehicleFilters(vehicle, { ...defaultSnap, selectedFeatures: ['Sunroof', 'ABS'] }, ''),
     ).toBe(false);
+  });
+
+  it('applies URL chip make/model to server fetch only while category still matches', () => {
+    expect(urlChipFiltersApplyToServerFetch('ALL', undefined)).toBe(true);
+    expect(urlChipFiltersApplyToServerFetch('ALL', 'four-wheeler')).toBe(true);
+    expect(urlChipFiltersApplyToServerFetch('four-wheeler', 'four-wheeler')).toBe(true);
+    expect(urlChipFiltersApplyToServerFetch('three-wheeler', undefined)).toBe(false);
+    expect(urlChipFiltersApplyToServerFetch('three-wheeler', 'four-wheeler')).toBe(false);
+  });
+
+  it('matches state filter by code or full name', () => {
+    expect(matchesStateFilter('Pune', 'MH', 'MH')).toBe(true);
+    expect(matchesStateFilter('Pune', 'MH', 'Maharashtra')).toBe(true);
+    expect(matchesStateFilter('Pune', 'Maharashtra', 'MH')).toBe(true);
+    expect(matchesStateFilter('Pune', 'MH', 'TS')).toBe(false);
   });
 });

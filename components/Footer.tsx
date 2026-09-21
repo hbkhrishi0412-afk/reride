@@ -83,7 +83,9 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
             <div>
               <p className="text-gray-400">{t('footer.copyright', { year: new Date().getFullYear() })}</p>
-              <p className="text-gray-500 text-xs mt-1 max-w-xl">{registeredAddressIndia}</p>
+              {registeredAddressIndia ? (
+                <p className="text-gray-500 text-xs mt-1 max-w-xl">{registeredAddressIndia}</p>
+              ) : null}
             </div>
             <span className="text-gray-400 text-sm">{t('footer.madeInIndia')}</span>
           </div>

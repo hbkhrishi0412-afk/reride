@@ -122,6 +122,8 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
           onLogin={() => onNavigate(ViewEnum.LOGIN_PORTAL)}
           userLocation={userLocation}
           selectedCity={selectedCity}
+          currentUser={currentUser}
+          serviceProvider={serviceProvider}
         />
       )}
       {shouldRenderHeader && (
@@ -166,6 +168,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
           wishlistCount={wishlistCount}
           inboxCount={inboxCount}
           onToggleMenu={() => setShowMenu(!showMenu)}
+          serviceProvider={serviceProvider}
         />
       )}
     </div>

@@ -137,3 +137,25 @@ export function matchesVehicleFilters(
 }
 
 export const ALL_VEHICLE_CATEGORIES: VehicleCategory[] = Object.values(CategoryEnum);
+
+/**
+ * Home chips encode make/model in the URL. The sidebar clears make/model when
+ * the buyer changes Category — but the URL params stick. Use this before
+ * sending URL make/model to the published-catalog refetch so we don't AND a
+ * stale chip make against the newly selected category (empty result set while
+ * the sidebar shows "Any Make").
+ */
+export function urlChipFiltersApplyToServerFetch(
+  currentCategory: string | 'ALL' | undefined | null,
+  urlCategory: string | undefined | null,
+): boolean {
+  const cur = String(currentCategory ?? 'ALL').trim() || 'ALL';
+  if (cur === 'ALL' || cur.toUpperCase() === 'ALL') return true;
+
+  const urlCat = String(urlCategory ?? '').trim();
+  const urlCatReal = urlCat !== '' && urlCat.toUpperCase() !== 'ALL';
+  if (!urlCatReal) return false;
+
+  const norm = (c: string) => c.toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+  return norm(cur) === norm(urlCat);
+}

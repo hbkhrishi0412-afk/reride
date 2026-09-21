@@ -12,6 +12,7 @@ import { supportTelHref } from '../utils/whatsappShare.js';
 import { useIsMdUp } from '../hooks/useIsMdUp';
 import { primaryLocationLabel } from '../utils/cityMapping';
 import { HELP_NAV_ITEMS } from '../constants/helpLegalNav.js';
+import { homeViewForActor, isServiceProviderActor } from '../utils/serviceProviderAccess.js';
 
 const LocationModal = lazy(() => import('./LocationModal'));
 
@@ -69,6 +70,7 @@ const Header: React.FC<HeaderProps> = memo(({
 }) => {
     const { t } = useTranslation();
     const isMdUp = useIsMdUp();
+    const hideMarketplaceNav = isServiceProviderActor(currentUser, serviceProvider);
     const showHomeLocationActions = Boolean(isHomePage && onBrowseAllIndia && onUseMyLocation);
     const locationDisplay = (() => {
         const raw = selectedCity.trim() || userLocation.trim();
@@ -242,7 +244,7 @@ const Header: React.FC<HeaderProps> = memo(({
                             {/* Logo + location */}
                             <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
                                 <Logo 
-                                    onClick={() => handleNavigate(ViewEnum.HOME)}
+                                    onClick={() => handleNavigate(homeViewForActor(currentUser, serviceProvider))}
                                     className="cursor-pointer hover:scale-105 transition-transform duration-300 shrink-0"
                                     size="md"
                                     showText
@@ -252,6 +254,7 @@ const Header: React.FC<HeaderProps> = memo(({
 
                             {/* Premium Navigation — flows after logo; right actions use ml-auto */}
                             <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 shrink-0">
+                                {!hideMarketplaceNav && (
                                 <CityDropdown 
                                     allVehicles={allVehicles}
                                     onCitySelect={(city) => {
@@ -270,6 +273,8 @@ const Header: React.FC<HeaderProps> = memo(({
                                         onNavigate(ViewEnum.USED_CARS, { city: '' });
                                     }}
                                 />
+                                )}
+                                {!hideMarketplaceNav && (
                                 <SellerDropdown 
                                     allVehicles={allVehicles}
                                     onCitySelect={(city) => {
@@ -284,6 +289,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                         // You can add scrap car specific logic here
                                     }}
                                 />
+                                )}
                                 <button 
                                     type="button"
                                     onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} 
@@ -291,6 +297,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                 >
                                     {t('nav.carServices')}
                                 </button>
+                                {!hideMarketplaceNav && (
                                 <button 
                                     type="button"
                                     onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} 
@@ -298,6 +305,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                 >
                                     {t('nav.dealers')}
                                 </button>
+                                )}
                                 <div
                                     className="relative"
                                     ref={moreMenuRef}
@@ -362,6 +370,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                     </svg>
                                 </button>
                                 
+                                {!hideMarketplaceNav && (
                                 <button onClick={() => handleNavigate(ViewEnum.WISHLIST)} className="relative p-2 rounded-full transition-colors" style={{ backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(30, 136, 229, 0.1)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'} aria-label={t('nav.myWishlist')}>
                                     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#1A1A1A' }}>
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z" />
@@ -372,7 +381,9 @@ const Header: React.FC<HeaderProps> = memo(({
                                         </span>
                                     )}
                                 </button>
+                                )}
 
+                                {!hideMarketplaceNav && (
                                 <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="relative p-2 rounded-full transition-colors" style={{ backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(30, 136, 229, 0.1)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'} aria-label={t('nav.compare')}>
                                     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#1A1A1A' }}>
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -383,6 +394,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                         </span>
                                     )}
                                 </button>
+                                )}
 
                                 {currentUser && (
                                     <div className="relative" ref={notificationsRef}>
@@ -547,10 +559,16 @@ const Header: React.FC<HeaderProps> = memo(({
                     <div ref={mobileMenuRef} className="lg:hidden absolute top-full left-0 w-full bg-white shadow-lg animate-fade-in z-40 max-h-[min(70vh,32rem)] overflow-y-auto overscroll-contain">
                         <nav className="p-4 space-y-1">
                             <LanguageSwitcher variant="inline" onSelect={() => setIsMobileMenuOpen(false)} className="!px-0 !py-2 border-b border-gray-100 mb-2" />
-                            <button onClick={() => handleNavigate(ViewEnum.USED_CARS)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.buyCar')}</button>
-                            <button onClick={() => handleNavigate(ViewEnum.SELLER_LOGIN)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.sellCar')}</button>
+                            {!hideMarketplaceNav && (
+                              <>
+                                <button onClick={() => handleNavigate(ViewEnum.USED_CARS)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.buyCar')}</button>
+                                <button onClick={() => handleNavigate(ViewEnum.SELLER_LOGIN)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.sellCar')}</button>
+                              </>
+                            )}
                             <button onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.carServices')}</button>
+                            {!hideMarketplaceNav && (
                             <button onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.dealers')}</button>
+                            )}
                             <div className="rounded-lg border border-gray-100 overflow-hidden">
                                 <button
                                     type="button"
@@ -590,8 +608,12 @@ const Header: React.FC<HeaderProps> = memo(({
                                 )}
                             </div>
                             <hr className="border-gray-200"/>
-                            <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.compareCount', { count: compareCount })}</button>
-                            <button onClick={() => handleNavigate(ViewEnum.WISHLIST)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.wishlistCount', { count: wishlistCount })}</button>
+                            {!hideMarketplaceNav && (
+                              <>
+                                <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.compareCount', { count: compareCount })}</button>
+                                <button onClick={() => handleNavigate(ViewEnum.WISHLIST)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.wishlistCount', { count: wishlistCount })}</button>
+                              </>
+                            )}
                             {(currentUser && currentUser.role === 'customer') && (
                                 <>
                                     <button onClick={() => handleNavigate(ViewEnum.BUYER_DASHBOARD)} className="block w-full text-left font-semibold text-reride-text-dark py-3 px-4 min-h-[44px] rounded-lg hover:bg-white">{t('nav.myDashboard')}</button>

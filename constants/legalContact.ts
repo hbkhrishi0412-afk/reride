@@ -7,10 +7,7 @@ const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.
 
 export const legalEntityName = (env.VITE_LEGAL_ENTITY_NAME || 'ReRide').trim();
 
-export const registeredAddressIndia = (
-  env.VITE_REGISTERED_ADDRESS_INDIA ||
-  'India — replace VITE_REGISTERED_ADDRESS_INDIA with your full registered business address.'
-).trim();
+export const registeredAddressIndia = (env.VITE_REGISTERED_ADDRESS_INDIA || '').trim();
 
 export const grievanceEmail = (env.VITE_GRIEVANCE_EMAIL || 'grievance@reride.co.in').trim();
 

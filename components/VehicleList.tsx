@@ -20,7 +20,7 @@ import CompareListBanner from './CompareListBanner.js';
 import { saveSearch as saveBuyerSearch } from '../services/buyerService.js';
 import { getVehicleData } from '../services/vehicleDataService.js';
 import { logInfo, logError } from '../utils/logger.js';
-import { matchesLocation } from '../utils/cityMapping.js';
+import { matchesLocation, matchesStateFilter } from '../utils/cityMapping.js';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import { analyzeVehiclePricing, findSimilarVehicles } from '../utils/vehiclePricing.js';
 import type { BuyerVisibleDealLabel } from '../utils/vehiclePricing.js';
@@ -28,9 +28,9 @@ import type { VehicleData } from '../types.js';
 import type { VehicleMake, VehicleModel } from '../vehicleDataTypes.js';
 import ListingTrustFilterBar from './ListingTrustFilterBar.js';
 import { useApp } from './AppProvider';
-import { hasActiveBoost, isEffectivelyFeatured } from '../utils/listingPromotion.js';
+import { compareVehiclesForListingSort } from '../utils/vehicleListSort.js';
 import type { TrustFilterValue } from '../utils/listingTrust.js';
-import { vehicleMatchesTrustFilter, getListingDisclosureScore } from '../utils/listingTrust.js';
+import { vehicleMatchesTrustFilter } from '../utils/listingTrust.js';
 // Lazy load location data when needed
 
 interface VehicleListProps {
@@ -321,7 +321,7 @@ function matchesVehicleFilters(vehicle: Vehicle, snap: VehicleListFilterSnapshot
   if (cityScopeActive) {
     if (!matchesLocation(vehicle.city, vehicle.state, snap.selectedCity)) return false;
   } else if (snap.stateFilter && snap.stateFilter.trim() !== '' && snap.isStateFilterUserSet) {
-    if (vehicle.state?.trim() !== snap.stateFilter.trim()) return false;
+    if (!matchesStateFilter(vehicle.city, vehicle.state, snap.stateFilter)) return false;
   }
   if (snap.transmissionFilter && snap.transmissionFilter.trim() !== '') {
     if (vehicle.transmission?.toLowerCase().trim() !== snap.transmissionFilter.toLowerCase().trim()) return false;
@@ -527,7 +527,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       DISCLOSURE_DESC: t('listings.sort.disclosureDesc'),
       PRICE_ASC: t('listings.sort.priceAsc'),
       PRICE_DESC: t('listings.sort.priceDesc'),
-      MILEAGE_ASC: t('listings.sort.mileageAsc'),
     }),
     [t]
   );
@@ -985,6 +984,13 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     if (initialFilters.ownership) {
       setOwnershipFilter(initialFilters.ownership as OwnershipFilterValue);
     }
+    if (initialFilters.location) {
+      const loc = String(initialFilters.location).trim();
+      if (loc) {
+        setStateFilter(loc);
+        setIsStateFilterUserSet(true);
+      }
+    }
     if (initialFilters.year != null && Number.isFinite(initialFilters.year)) {
       setYearFilter(String(Math.round(initialFilters.year)));
       setYearBounds({ min: null, max: null });
@@ -1022,11 +1028,19 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   // a *real* category deep-link. `category=ALL` (or omitting category) means
   // clear: Home brand/budget chips rely on this so make/price aren't ANDed
   // with a leftover Home category.
+  //
+  // When the URL carries make/model/etc without a category, force ALL only
+  // when that URL payload changes — not when `initialCategory` later moves
+  // because the buyer picked a category in the sidebar (that would wipe their
+  // pick while leaving parent `selectedCategory` set, so the catalog refetch
+  // and the client filter disagree).
   useEffect(() => {
-    if (!initialFilters) {
-      setCategoryFilter(initialCategory);
-      return;
-    }
+    if (initialFilters) return;
+    setCategoryFilter(initialCategory);
+  }, [initialCategory, initialFilters]);
+
+  useEffect(() => {
+    if (!initialFilters) return;
     const urlCatRaw = initialFilters.category;
     const urlCat = urlCatRaw != null ? String(urlCatRaw).trim() : '';
     const urlCatIsReal = urlCat !== '' && urlCat.toUpperCase() !== 'ALL';
@@ -1049,11 +1063,10 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       setCategoryFilter(initialCategory);
       return;
     }
-    if (urlCatIsReal) {
-      return;
-    }
+    if (urlCatIsReal) return;
     setCategoryFilter('ALL');
-  }, [initialCategory, initialFiltersKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when URL filter payload changes
+  }, [initialFiltersKey]);
 
   // Load location and fuel data when component mounts
   useEffect(() => {
@@ -1347,11 +1360,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     }
   };
 
-  // Reset model filter when make filter changes
-  useEffect(() => {
-    setModelFilter('');
-  }, [makeFilter]);
-
   const handleSaveSearch = () => {
     if (!currentUser) {
       addToast(t('listings.loginToSaveSearch'), 'error');
@@ -1450,45 +1458,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       });
     }
 
-    return [...filtered].sort((a, b) => {
-        // Priority 1: Homepage Spotlight (highest priority)
-        const aHasSpotlight = hasActiveBoost(a, ['homepage_spotlight']);
-        const bHasSpotlight = hasActiveBoost(b, ['homepage_spotlight']);
-        if (aHasSpotlight && !bHasSpotlight) return -1;
-        if (!aHasSpotlight && bHasSpotlight) return 1;
-        
-        // Priority 2: Top Search Boost
-        const aHasTopSearch = hasActiveBoost(a, ['top_search']);
-        const bHasTopSearch = hasActiveBoost(b, ['top_search']);
-        if (aHasTopSearch && !bHasTopSearch) return -1;
-        if (!aHasTopSearch && bHasTopSearch) return 1;
-        
-        // Priority 3: Featured / Standout Badge Boost (active only — no sticky isFeatured)
-        const aHasFeaturedBadge = isEffectivelyFeatured(a);
-        const bHasFeaturedBadge = isEffectivelyFeatured(b);
-        if (aHasFeaturedBadge && !bHasFeaturedBadge) return -1;
-        if (!aHasFeaturedBadge && bHasFeaturedBadge) return 1;
-        
-        // Priority 4: Premium Listing
-        if (a.isPremiumListing && !b.isPremiumListing) return -1;
-        if (!a.isPremiumListing && b.isPremiumListing) return 1;
-        
-        // Priority 5: Any active boost
-        const aHasAnyBoost = hasActiveBoost(a);
-        const bHasAnyBoost = hasActiveBoost(b);
-        if (aHasAnyBoost && !bHasAnyBoost) return -1;
-        if (!aHasAnyBoost && bHasAnyBoost) return 1;
-        
-        // Then apply regular sorting
-        switch (sortOrder) {
-            case 'RATING_DESC': return (b.averageRating || 0) - (a.averageRating || 0);
-            case 'DISCLOSURE_DESC': return getListingDisclosureScore(b) - getListingDisclosureScore(a);
-            case 'PRICE_ASC': return a.price - b.price;
-            case 'PRICE_DESC': return b.price - a.price;
-            case 'MILEAGE_ASC': return a.mileage - b.mileage;
-            default: return b.year - a.year;
-        }
-    });
+    return [...filtered].sort((a, b) => compareVehiclesForListingSort(a, b, sortOrder));
   }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, selectedPriceBuckets, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, trustFilter, yearFilter, yearBounds, sortOrder, isWishlistMode, wishlist, stateFilter, isStateFilterUserSet, selectedCity, searchQuery]);
   
   const committedFilterCategoryMap = useMemo(
@@ -2680,7 +2650,10 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           isOpen={isSortSheetOpen}
           onClose={() => setIsSortSheetOpen(false)}
           sortOrder={sortOrder}
-          onSortChange={setSortOrder}
+          onSortChange={(value) => {
+            setSortOrder(value);
+            setCurrentPage(1);
+          }}
           options={sortOptions}
           t={t}
         />
@@ -2784,7 +2757,16 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M2 4a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zM2 9a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zM2 14a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1z" /></svg>
                   </button>
                 </div>
-                <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className={`${formElementClass} text-xs py-1.5 px-2 w-auto lg:w-auto flex-shrink-0`} style={{ fontSize: '13px' }}>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => {
+                    setSortOrder(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className={`${formElementClass} text-xs py-1.5 px-2 w-auto lg:w-auto flex-shrink-0`}
+                  style={{ fontSize: '13px' }}
+                  aria-label={t('listings.sortLabel', { defaultValue: 'Sort listings' })}
+                >
                     {Object.entries(sortOptions).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
                 </select>
               </div>
@@ -2792,8 +2774,10 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           </div>
 
           <div 
+            key={`vehicle-results-${sortOrder}`}
             className={isMobileApp ? "flex flex-col gap-3" : viewMode === 'grid' ? "grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4" : "flex flex-col gap-3 lg:gap-4"}
             data-testid="vehicle-results"
+            data-sort={sortOrder}
             style={isMobileApp ? { paddingTop: '0.5rem' } : {}}
           >
             {isLoading ? (

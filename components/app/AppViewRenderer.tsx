@@ -13,6 +13,7 @@ import { filterVehiclesBySellerEmail } from '../../utils/sellerVehicleFilter';
 import { findVehicleByIdentity } from '../../utils/vehicleIdentity';
 import { mergeVehicleCatalog } from '../../utils/mergeVehicleCatalog';
 import { matchesLocation } from '../../utils/cityMapping';
+import { urlChipFiltersApplyToServerFetch } from '../../utils/vehicleListFilters';
 import { buildVehicleMutationBody } from '../../utils/vehicleIdentity';
 import { addSellerListing, addSellerListingsBulk, assertSellerCanPublishListing } from '../../utils/sellerAddListing.js';
 import { computeListingExpiresAtForSeller } from '../../utils/listingPlanRules.js';
@@ -305,11 +306,15 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     const { fetchNextPublishedVehiclePage } = await import('../../services/dataService');
     const serverFilters: Record<string, string | number | undefined> = {};
     if (selectedCity?.trim()) serverFilters.city = selectedCity.trim();
-    if (filtersFromUrl?.make) serverFilters.make = String(filtersFromUrl.make);
-    if (filtersFromUrl?.model) serverFilters.model = String(filtersFromUrl.model);
-    if (filtersFromUrl?.fuelType) serverFilters.fuelType = String(filtersFromUrl.fuelType);
-    if (filtersFromUrl?.minPrice != null) serverFilters.minPrice = Number(filtersFromUrl.minPrice);
-    if (filtersFromUrl?.maxPrice != null) serverFilters.maxPrice = Number(filtersFromUrl.maxPrice);
+    const applyUrlChips = urlChipFiltersApplyToServerFetch(
+      currentCategory,
+      filtersFromUrl?.category != null ? String(filtersFromUrl.category) : undefined,
+    );
+    if (applyUrlChips && filtersFromUrl?.make) serverFilters.make = String(filtersFromUrl.make);
+    if (applyUrlChips && filtersFromUrl?.model) serverFilters.model = String(filtersFromUrl.model);
+    if (applyUrlChips && filtersFromUrl?.fuelType) serverFilters.fuelType = String(filtersFromUrl.fuelType);
+    if (applyUrlChips && filtersFromUrl?.minPrice != null) serverFilters.minPrice = Number(filtersFromUrl.minPrice);
+    if (applyUrlChips && filtersFromUrl?.maxPrice != null) serverFilters.maxPrice = Number(filtersFromUrl.maxPrice);
     if (currentCategory && currentCategory !== 'ALL') serverFilters.category = String(currentCategory);
 
     const { vehicles: pageVehicles, hasMore, reset, total } = await fetchNextPublishedVehiclePage(
@@ -326,6 +331,7 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     return !!hasMore;
   }, [
     selectedCity,
+    filtersFromUrl?.category,
     filtersFromUrl?.make,
     filtersFromUrl?.model,
     filtersFromUrl?.fuelType,
@@ -345,11 +351,15 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
       const { fetchPublishedVehiclesWithFilters } = await import('../../services/dataService');
       const serverFilters: Record<string, string | number | undefined> = {};
       if (selectedCity?.trim()) serverFilters.city = selectedCity.trim();
-      if (filtersFromUrl?.make) serverFilters.make = String(filtersFromUrl.make);
-      if (filtersFromUrl?.model) serverFilters.model = String(filtersFromUrl.model);
-      if (filtersFromUrl?.fuelType) serverFilters.fuelType = String(filtersFromUrl.fuelType);
-      if (filtersFromUrl?.minPrice != null) serverFilters.minPrice = Number(filtersFromUrl.minPrice);
-      if (filtersFromUrl?.maxPrice != null) serverFilters.maxPrice = Number(filtersFromUrl.maxPrice);
+      const applyUrlChips = urlChipFiltersApplyToServerFetch(
+        currentCategory,
+        filtersFromUrl?.category != null ? String(filtersFromUrl.category) : undefined,
+      );
+      if (applyUrlChips && filtersFromUrl?.make) serverFilters.make = String(filtersFromUrl.make);
+      if (applyUrlChips && filtersFromUrl?.model) serverFilters.model = String(filtersFromUrl.model);
+      if (applyUrlChips && filtersFromUrl?.fuelType) serverFilters.fuelType = String(filtersFromUrl.fuelType);
+      if (applyUrlChips && filtersFromUrl?.minPrice != null) serverFilters.minPrice = Number(filtersFromUrl.minPrice);
+      if (applyUrlChips && filtersFromUrl?.maxPrice != null) serverFilters.maxPrice = Number(filtersFromUrl.maxPrice);
       if (currentCategory && currentCategory !== 'ALL') {
         serverFilters.category = String(currentCategory);
       }
@@ -371,6 +381,7 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     currentView,
     currentCategory,
     selectedCity,
+    filtersFromUrl?.category,
     filtersFromUrl?.make,
     filtersFromUrl?.model,
     filtersFromUrl?.fuelType,

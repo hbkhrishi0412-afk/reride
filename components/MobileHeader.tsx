@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
 import { HELP_NAV_ITEMS } from '../constants/helpLegalNav.js';
+import { homeViewForActor, isServiceProviderActor } from '../utils/serviceProviderAccess.js';
 
 interface MobileHeaderProps {
   onNavigate: (view: ViewEnum) => void;
@@ -77,6 +78,8 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
     else setInternalShowMenu((prev) => !prev);
   };
   const isAuthed = Boolean(currentUser) || Boolean(serviceProvider);
+  const isProviderActor = isServiceProviderActor(currentUser, serviceProvider);
+  const homeView = homeViewForActor(currentUser, serviceProvider);
   const displayName =
     currentUser?.name || serviceProvider?.name || (isAuthed ? 'Account' : 'Guest');
   const displaySubtitle =
@@ -104,21 +107,23 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
 
   const exploreItems: MenuItemConfig[] = useMemo(
     () => [
-      { icon: <HomeIcon />, label: t('nav.home'), view: ViewEnum.HOME, tint: '#334155' },
-      { icon: <CarIcon />, label: t('nav.buyCar'), view: ViewEnum.USED_CARS, tint: '#334155' },
+      { icon: <HomeIcon />, label: t('nav.home'), view: homeView, tint: '#334155' },
+      { icon: <CarIcon />, label: t('nav.buyCar'), view: ViewEnum.USED_CARS, tint: '#334155', hidden: isProviderActor },
       {
         icon: <SellCarIcon />,
         label: t('nav.sellCar'),
         view: currentUser?.role === 'seller' ? ViewEnum.SELL_CAR : ViewEnum.SELLER_LOGIN,
         tint: '#334155',
+        hidden: isProviderActor,
       },
       {
         icon: <DealFlowIcon />,
         label: t('nav.howDealsWork'),
         view: ViewEnum.ABOUT_US,
         tint: '#475569',
+        hidden: isProviderActor,
       },
-      { icon: <DealerIcon />, label: t('nav.dealers'), view: ViewEnum.DEALER_PROFILES, tint: '#475569' },
+      { icon: <DealerIcon />, label: t('nav.dealers'), view: ViewEnum.DEALER_PROFILES, tint: '#475569', hidden: isProviderActor },
       { icon: <ServiceIcon />, label: t('nav.carServices'), view: ViewEnum.CAR_SERVICES, tint: '#475569' },
       {
         icon: <CompareIcon />,
@@ -126,15 +131,17 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
         view: ViewEnum.COMPARISON,
         badge: compareCount > 0 ? compareCount : undefined,
         tint: '#334155',
+        hidden: isProviderActor,
       },
       {
         icon: <PricingIcon />,
         label: t('nav.pricing', { defaultValue: 'Pricing' }),
         view: ViewEnum.PRICING,
         tint: '#475569',
+        hidden: isProviderActor,
       },
     ],
-    [t, currentUser?.role, compareCount],
+    [t, currentUser?.role, compareCount, homeView, isProviderActor],
   );
 
   const accountItems: MenuItemConfig[] = useMemo(() => {

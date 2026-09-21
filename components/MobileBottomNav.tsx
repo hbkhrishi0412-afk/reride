@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
 import { triggerSelectionHaptic } from '../utils/haptics';
+import { homeViewForActor } from '../utils/serviceProviderAccess.js';
 
 interface MobileBottomNavProps {
   currentView: ViewEnum;
@@ -11,6 +12,7 @@ interface MobileBottomNavProps {
   wishlistCount?: number;
   inboxCount?: number;
   onToggleMenu?: () => void;
+  serviceProvider?: { name?: string; email?: string } | null;
 }
 
 /**
@@ -24,16 +26,18 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
   currentUser,
   wishlistCount = 0,
   inboxCount = 0,
-  onToggleMenu
+  onToggleMenu,
+  serviceProvider = null,
 }) => {
   const { t, i18n } = useTranslation();
+  const homeView = homeViewForActor(currentUser, serviceProvider);
   const navItems = useMemo(() => {
     const isCustomer = currentUser?.role === 'customer';
     const items = [
     {
       id: 'home',
       label: t('nav.home'),
-      view: ViewEnum.HOME,
+      view: homeView,
       icon: (active: boolean) => (
         <svg className="w-6 h-6" fill={active ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={active ? 0 : 2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -102,7 +106,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
     }
   ];
     return items;
-  }, [t, i18n.language, inboxCount, wishlistCount, currentUser?.role]);
+  }, [t, i18n.language, inboxCount, wishlistCount, currentUser?.role, homeView]);
 
   return (
     <>

@@ -19,7 +19,6 @@ import {
   nextPrimaryStatus,
   primaryAdvanceButtonLabel,
 } from '../utils/serviceRequestStatusFlow';
-import { View as ViewEnum } from '../types';
 import { spApiFetch } from '../utils/spApiFetch';
 import { getServiceDashboardNextAction, isRealProfileValue } from '../utils/serviceDashboardOverview';
 import { EmptyState, SectionHeader, StatCard, StatCardGrid } from './dashboard/shared';
@@ -534,7 +533,7 @@ const includedDraftsToPayload = (drafts: IncludedServiceDraft[]): IncludedServic
     .filter((entry): entry is IncludedServicePrice => entry !== null);
 
 const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider, onLogout }) => {
-  const { runIfConfirmed, navigate } = useApp();
+  const { runIfConfirmed } = useApp();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [openRequests, setOpenRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1846,7 +1845,8 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
               size="sm"
               showText
               className="shrink-0"
-              onClick={() => navigate(ViewEnum.HOME)}
+              onClick={() => setActiveTab('overview')}
+              aria-label="Service dashboard home"
             />
             <div className="hidden sm:block h-6 w-px bg-gray-200 shrink-0" aria-hidden />
             <div className="min-w-0">
