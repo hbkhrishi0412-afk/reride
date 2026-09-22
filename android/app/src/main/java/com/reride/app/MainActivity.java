@@ -1,7 +1,9 @@
 package com.reride.app;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -15,6 +17,7 @@ import androidx.core.splashscreen.SplashScreen;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
+import java.io.File;
 import java.lang.reflect.Method;
 
 public class MainActivity extends BridgeActivity {
@@ -26,6 +29,8 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Must run before super.onCreate(): Capacitor loads the WebView inside it.
+        dropStaleWebViewCachesBeforeBridge();
         ensureFirebaseInitialized();
         registerPlugin(OAuthExternalBrowserPlugin.class);
         SplashScreen.installSplashScreen(this);
@@ -33,6 +38,66 @@ public class MainActivity extends BridgeActivity {
         // Bridge / WebView is often still null here; without a later install, renderer OOM/crash
         // on heavy views (e.g. login) closes the whole activity. Retry on the next frames.
         scheduleRenderProcessGoneRecovery();
+    }
+
+    /**
+     * Capacitor calls {@code webView.loadUrl} inside {@code super.onCreate()}. A leftover
+     * HTTP cache or service worker then serves the previous bundle. Debug reinstalls often
+     * keep the same versionCode, so clear on every debug start; release clears when the
+     * version changes. localStorage sits next to these folders and is left in place.
+     */
+    private void dropStaleWebViewCachesBeforeBridge() {
+        try {
+            boolean debug = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+            int version = currentVersionCode();
+            SharedPreferences prefs = getSharedPreferences("reride_webview_cache", MODE_PRIVATE);
+            int seen = prefs.getInt("versionCode", -1);
+            if (!debug && seen == version) return;
+
+            deleteRecursively(new File(getCacheDir(), "WebView"));
+            deleteRecursively(new File(getCacheDir(), "webview"));
+            File[] cacheKids = getCacheDir().listFiles();
+            if (cacheKids != null) {
+                for (File kid : cacheKids) {
+                    if (kid.getName().startsWith("org.chromium")) deleteRecursively(kid);
+                }
+            }
+            File webviewDefault = new File(getApplicationInfo().dataDir, "app_webview/Default");
+            deleteRecursively(new File(webviewDefault, "Cache"));
+            deleteRecursively(new File(webviewDefault, "Code Cache"));
+            deleteRecursively(new File(webviewDefault, "Service Worker"));
+            if (version >= 0) {
+                prefs.edit().putInt("versionCode", version).apply();
+            }
+        } catch (Exception err) {
+            Log.w(TAG, "dropStaleWebViewCachesBeforeBridge failed", err);
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private int currentVersionCode() {
+        try {
+            PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                return (int) info.getLongVersionCode();
+            }
+            return info.versionCode;
+        } catch (Exception err) {
+            Log.w(TAG, "currentVersionCode failed", err);
+            return -1;
+        }
+    }
+
+    private static void deleteRecursively(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) deleteRecursively(child);
+            }
+        }
+        //noinspection ResultOfMethodCallIgnored
+        file.delete();
     }
 
     /**
@@ -210,10 +275,9 @@ public class MainActivity extends BridgeActivity {
             if (getBridge() != null && getBridge().getWebView() != null) {
                 WebView webView = getBridge().getWebView();
                 webView.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-                // Debuggable APK: avoid stale WebView HTTP cache after `cap sync` / live reload URL changes.
-                if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
-                    webView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
-                }
+                // Bundled assets are local. HTTP cache (and a leftover service worker) kept
+                // serving the previous JS after cap sync / APK update.
+                webView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
             }
         } catch (Exception ignored) {
             // WebView not ready yet; next resume will retry.

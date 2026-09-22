@@ -54,7 +54,18 @@ export default defineConfig(({ mode }) => {
         const tag = `<script>window.__RERIDE_API_ORIGIN__=${JSON.stringify(
           capacitor || mobileLocalDev ? injectedApiOrigin : '',
         )};</script>`
-        return html.replace('<script src="/reride-boot.js"></script>', `${tag}\n    <script src="/reride-boot.js"></script>`)
+        let next = html.replace(
+          '<script src="/reride-boot.js"></script>',
+          `${tag}\n    <script src="/reride-boot.js"></script>`,
+        )
+        // WebView honors this meta and will keep the previous index.html for an hour.
+        if (capacitor) {
+          next = next.replace(
+            'content="public, max-age=3600, must-revalidate"',
+            'content="no-cache, no-store, must-revalidate"',
+          )
+        }
+        return next
       },
     },
     {
