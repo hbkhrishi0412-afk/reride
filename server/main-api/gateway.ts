@@ -34,6 +34,9 @@ import { verifyProductionSecurityReadiness } from '../production-security.js';
 
 export type ApiBundle = 'marketplace' | 'platform';
 
+const HEALTH_PATHS = new Set(['/api/health', '/health', '/api/db-health', '/db-health']);
+const LOGIN_PATHS = new Set(['/api/login', '/login', '/api/admin/login', '/admin/login']);
+
 function resolvePathname(req: VercelRequest): string {
   let pathname = '/';
   try {
@@ -104,29 +107,27 @@ async function runApiCore(
     return res.status(200).json({ token });
   }
 
-  const isHealthEndpoint =
-    pathname.includes('/db-health') ||
-    pathname.includes('/health') ||
-    pathname.endsWith('/db-health') ||
-    pathname.endsWith('/health');
+  // Exact matches only: routing is substring-based, so `/api/users/health` must not skip limits/CSRF.
+  const isHealthEndpoint = HEALTH_PATHS.has(pathname);
 
   if (!isHealthEndpoint) {
     try {
       const securityReadiness = await verifyProductionSecurityReadiness();
       if (!securityReadiness.ok) {
-        return res.status(503).json({
-          success: false,
-          reason: 'Production security prerequisites are not satisfied.',
+        logError('❌ Production security prerequisites not satisfied:', {
           issues: securityReadiness.issues,
           requiredActions: securityReadiness.requiredActions,
+        });
+        return res.status(503).json({
+          success: false,
+          reason: 'Service temporarily unavailable.',
         });
       }
     } catch (securityError) {
       logError('❌ Production security readiness check threw:', securityError);
       return res.status(503).json({
         success: false,
-        reason: 'Production security check failed. Please try again shortly.',
-        error: errorToPublicMessage(securityError),
+        reason: 'Service temporarily unavailable.',
       });
     }
 
@@ -156,7 +157,9 @@ async function runApiCore(
         });
         rateLimitResult = { allowed: resolved.allowed, remaining: resolved.remaining };
       } catch {
-        rateLimitResult = { allowed: true, remaining: rateDecision.maxRequests };
+        // Fail open for reads/authenticated writes; fail closed where abuse costs money or enables brute force
+        const failClosed = rateDecision.tier === 'auth-sensitive' || rateDecision.tier === 'anonymous-write';
+        rateLimitResult = { allowed: !failClosed, remaining: failClosed ? 0 : rateDecision.maxRequests };
       }
       if (!rateLimitResult.allowed) {
         const retryAfter = rateLimitRetryAfterSeconds(rateDecision.windowMs);
@@ -201,10 +204,8 @@ async function runApiCore(
       bodyAction === 'logout' ||
       bodyAction === '');
   const isCsrfExempt =
-    pathname.includes('/login') ||
-    pathname.includes('/csrf-token') ||
-    pathname.includes('/health') ||
-    pathname.includes('/db-health') ||
+    LOGIN_PATHS.has(pathname) ||
+    isHealthEndpoint ||
     isUsersAuthAction ||
     skipCsrfForCapacitorNative;
 

@@ -154,7 +154,13 @@ import {
   rotateRefreshToken,
   type TokenPayload
 } from '../../utils/security.js';
-import { isRefreshTokenRevoked, revokeRefreshToken } from '../../lib/token-revocation.js';
+import {
+  isRefreshTokenRevoked,
+  isTokenRevokedForUser,
+  revokeAllUserSessions,
+  revokeRefreshToken,
+  SESSION_REVOKED_ERROR,
+} from '../../lib/token-revocation.js';
 import { getSecurityConfig } from '../../utils/security-config.js';
 import { attachApiCors } from '../../utils/attach-api-cors.js';
 import { shouldSkipCsrfForCapacitorNative } from '../../utils/csrfCapacitorExempt.js';
@@ -345,12 +351,19 @@ const requireAuth = async (
 /** App JWT (reRideAccessToken) or Supabase access_token in Authorization header. */
 const authenticateRequestDual = async (req: VercelRequest): Promise<AuthResult> => {
   const legacy = authenticateRequest(req);
-  if (legacy.isValid) return legacy;
+  if (legacy.isValid) {
+    return (await isTokenRevokedForUser(req.headers.authorization, legacy.user?.email))
+      ? { isValid: false, error: SESSION_REVOKED_ERROR }
+      : legacy;
+  }
   try {
     const sb = await verifySupabaseToken(req.headers.authorization);
     const email = (sb.email || '').toLowerCase().trim();
     if (!email) {
       return { isValid: false, error: 'Invalid Supabase token' };
+    }
+    if (await isTokenRevokedForUser(req.headers.authorization, email)) {
+      return { isValid: false, error: SESSION_REVOKED_ERROR };
     }
     const meta = sb.user?.app_metadata as Record<string, unknown> | undefined;
     const appMetaRole = typeof meta?.role === 'string' ? meta.role : undefined;
@@ -644,7 +657,7 @@ export {
   hashPassword, validatePassword, generateAccessToken, generateRefreshToken,
   generatePasswordResetToken, verifyPasswordResetToken, validateUserInput, validatePasswordStrength, sanitizeObject,
   sanitizeString, validateEmail, verifyToken, rotateRefreshToken, isRefreshTokenRevoked,
-  revokeRefreshToken, getSecurityConfig, attachApiCors, shouldSkipCsrfForCapacitorNative,
+  revokeRefreshToken, isTokenRevokedForUser, revokeAllUserSessions, getSecurityConfig, attachApiCors, shouldSkipCsrfForCapacitorNative,
   logInfo, logWarn, logError, logSecurity, generateCsrfToken, validateCsrfToken,
   getCsrfCookieName, getPublicAppOriginForPasswordReset, sendPasswordResetEmail,
   checkUpstashRateLimit, checkLoginAllowed, recordFailedLogin, clearLoginLockout,

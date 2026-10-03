@@ -40,7 +40,11 @@ export async function updateProfilePassword(
   }
 
   try {
-    await deps.updateUser(currentUser.email, { password: passwords.new });
+    // Server re-verifies currentPassword; AppProvider.updateUser keeps it out of local state.
+    await deps.updateUser(currentUser.email, {
+      password: passwords.new,
+      ...(passwords.current ? { currentPassword: passwords.current } : {}),
+    } as Partial<User>);
     return true;
   } catch (updateError) {
     deps.logError('Failed to update password:', updateError);

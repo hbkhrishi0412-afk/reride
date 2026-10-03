@@ -272,11 +272,12 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         try {
-            if (getBridge() != null && getBridge().getWebView() != null) {
+            // Debug only: live-reload dev server is plain HTTP, and cap sync can leave stale JS
+            // in the HTTP cache. Release builds ship content-hashed assets over HTTPS.
+            boolean debuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+            if (debuggable && getBridge() != null && getBridge().getWebView() != null) {
                 WebView webView = getBridge().getWebView();
                 webView.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-                // Bundled assets are local. HTTP cache (and a leftover service worker) kept
-                // serving the previous JS after cap sync / APK update.
                 webView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
             }
         } catch (Exception ignored) {

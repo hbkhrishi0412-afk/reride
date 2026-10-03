@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as core from './shared.js';
+import type { ChatMessage, Conversation } from '../../types.js';
+import { claimRazorpayPayment, createRazorpayOrder, verifyRazorpayPayment } from '../../lib/razorpay.js';
 
 async function handleAI(req: VercelRequest, res: VercelResponse, _options: core.HandlerOptions) {
   return res.status(410).json({
@@ -889,23 +891,13 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
         const orderAuth = await core.requireAuth(req, res, 'Create Razorpay order');
         if (!orderAuth) return;
 
-        const keyId = process.env.RAZORPAY_KEY_ID;
-        const keySecret = process.env.RAZORPAY_KEY_SECRET;
-        if (!keyId || !keySecret) {
-          return res.status(503).json({
-            success: false,
-            reason: 'Online payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET on the server.',
-          });
-        }
-
         const b = (req.body || {}) as Record<string, unknown>;
-        const amountPaise = b.amountPaise;
         const planId = b.planId;
         const sellerEmail = b.sellerEmail;
-        if (amountPaise == null || !planId || !sellerEmail) {
+        if (!planId || !sellerEmail) {
           return res.status(400).json({
             success: false,
-            reason: 'amountPaise, planId, and sellerEmail are required',
+            reason: 'planId and sellerEmail are required',
           });
         }
 
@@ -915,36 +907,17 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           return res.status(403).json({ success: false, reason: 'You can only create orders for your own account.' });
         }
 
-        const orderBody = JSON.stringify({
-          amount: Math.round(Number(amountPaise)),
-          currency: 'INR',
-          receipt: `reride_${Date.now()}`,
-          notes: { planId: String(planId), sellerEmail: String(sellerEmail) },
-        });
-
-        const rzRes = await fetch('https://api.razorpay.com/v1/orders', {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
-            'Content-Type': 'application/json',
-          },
-          body: orderBody,
-        });
-        const rzJson = (await rzRes.json().catch(() => ({}))) as Record<string, unknown>;
-        if (!rzRes.ok) {
-          const msg =
-            (rzJson.description as string) ||
-            (rzJson.error as { description?: string } | undefined)?.description ||
-            'Razorpay order failed';
-          return res.status(502).json({ success: false, reason: msg });
+        const order = await createRazorpayOrder(String(planId), normSeller);
+        if (!order.ok) {
+          return res.status(order.status).json({ success: false, reason: order.reason });
         }
 
         return res.status(200).json({
           success: true,
-          orderId: rzJson.id,
-          amount: rzJson.amount,
-          currency: rzJson.currency,
-          keyId,
+          orderId: order.orderId,
+          amount: order.amount,
+          currency: order.currency,
+          keyId: order.keyId,
         });
       } catch (error) {
         return res.status(500).json({
@@ -962,18 +935,12 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
         const confirmAuth = await core.requireAuth(req, res, 'Confirm Razorpay payment');
         if (!confirmAuth) return;
 
-        const keySecret = process.env.RAZORPAY_KEY_SECRET;
-        if (!keySecret) {
-          return res.status(503).json({ success: false, reason: 'Online payments are not configured.' });
-        }
-
         const b = (req.body || {}) as Record<string, unknown>;
         const razorpay_order_id = b.razorpay_order_id;
         const razorpay_payment_id = b.razorpay_payment_id;
         const razorpay_signature = b.razorpay_signature;
         const planId = b.planId;
         const sellerEmail = b.sellerEmail;
-        const amount = b.amount;
 
         if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !planId || !sellerEmail) {
           return res.status(400).json({
@@ -988,19 +955,23 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           return res.status(403).json({ success: false, reason: 'Forbidden' });
         }
 
-        const sigPayload = `${String(razorpay_order_id)}|${String(razorpay_payment_id)}`;
-        const expectedSig = core.createHmac('sha256', keySecret).update(sigPayload).digest('hex');
-        if (expectedSig !== String(razorpay_signature)) {
-          return res.status(400).json({ success: false, reason: 'Invalid payment signature' });
+        const planStr = String(planId);
+        const verified = await verifyRazorpayPayment({
+          orderId: String(razorpay_order_id),
+          paymentId: String(razorpay_payment_id),
+          signature: String(razorpay_signature),
+          productId: planStr,
+          payerEmail: normSeller,
+        });
+        if (!verified.ok) {
+          return res.status(verified.status).json({ success: false, reason: verified.reason });
         }
 
         const now = new Date().toISOString();
-        const id = `payment_rzp_${Date.now()}`;
-        const planStr = String(planId);
         const paymentRequest = {
-          id,
-          sellerEmail: String(sellerEmail),
-          amount: Number(amount) || 0,
+          id: `payment_rzp_${String(razorpay_payment_id)}`,
+          sellerEmail: normSeller,
+          amount: verified.amountPaise / 100,
           plan: planStr,
           planId: planStr,
           status: 'approved',
@@ -1014,7 +985,9 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           notes: 'Verified via Razorpay',
         };
 
-        await core.adminCreate(paymentRequestsPath, paymentRequest, String(id));
+        if (!(await claimRazorpayPayment(paymentRequest))) {
+          return res.status(409).json({ success: false, reason: 'This payment has already been applied.' });
+        }
 
         // Upgrade the seller's subscription plan immediately after a verified payment.
         // Previously this only happened after an admin manually approved the payment_requests row,
@@ -1038,11 +1011,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
             : null;
           if (existingUser) {
             const planLower = normalizedPlanCandidate;
-            // Resolve plan duration â€“ default to 30 days. Callers can override with `durationDays`.
-            const requestedDays = Number((b as Record<string, unknown>).durationDays);
-            const planDurationDays = Number.isFinite(requestedDays) && requestedDays > 0
-              ? Math.min(365, Math.floor(requestedDays))
-              : 30;
+            const planDurationDays = verified.durationDays ?? 30;
             const expiry = new Date();
             expiry.setDate(expiry.getDate() + planDurationDays);
 
@@ -1402,6 +1371,41 @@ async function insertConversationMessageNotification(params: {
   }
 }
 
+/**
+ * Non-admin POST updates may only flip read flags and respond to existing offers.
+ * Participants, names, flags and message authorship stay as stored; new messages go through PUT.
+ */
+function restrictParticipantConversationUpdate(
+  existing: Conversation,
+  body: Record<string, unknown>,
+): Partial<Conversation> {
+  const updates: Partial<Conversation> = {};
+  if (typeof body.isReadBySeller === 'boolean') updates.isReadBySeller = body.isReadBySeller;
+  if (typeof body.isReadByCustomer === 'boolean') updates.isReadByCustomer = body.isReadByCustomer;
+  if (Array.isArray(body.messages)) {
+    const incoming = new Map(
+      (body.messages as Array<Partial<ChatMessage> | null>)
+        .filter((m): m is Partial<ChatMessage> => !!m && m.id != null)
+        .map((m) => [String(m.id), m]),
+    );
+    updates.messages = (existing.messages || []).map((m) => {
+      const next = incoming.get(String(m.id));
+      if (!next) return m;
+      const payload =
+        m.type === 'offer' && next.payload
+          ? {
+              ...m.payload,
+              ...(next.payload.status !== undefined ? { status: next.payload.status } : {}),
+              ...(next.payload.offerPrice !== undefined ? { offerPrice: next.payload.offerPrice } : {}),
+              ...(next.payload.counterPrice !== undefined ? { counterPrice: next.payload.counterPrice } : {}),
+            }
+          : m.payload;
+      return { ...m, isRead: typeof next.isRead === 'boolean' ? next.isRead : m.isRead, payload };
+    });
+  }
+  return updates;
+}
+
 async function handleConversations(req: VercelRequest, res: VercelResponse, _options: core.HandlerOptions) {
   try {
     if (!core.USE_SUPABASE) {
@@ -1550,10 +1554,25 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         );
       }
       if (existing) {
-        await core.conversationService.update(existing.id, conversationData);
+        // Authorize against the stored participants, never the request body.
+        const storedCustomer = String(existing.customerId || '').toLowerCase().trim();
+        const storedSeller = String(existing.sellerId || '').toLowerCase().trim();
+        if (!isAdmin && !isAuthParticipant(storedCustomer) && !isAuthParticipant(storedSeller)) {
+          return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
+        }
+        const updates = isAdmin
+          ? conversationData
+          : restrictParticipantConversationUpdate(existing, conversationData);
+        await core.conversationService.update(existing.id, updates);
         const updated = await core.conversationService.findById(existing.id);
         return res.status(200).json({ success: true, data: updated });
       } else {
+        if (!isAdmin && Array.isArray(conversationData.messages)) {
+          const ownSender = isAuthParticipant(normalizedCustomerId) ? 'user' : 'seller';
+          conversationData.messages = conversationData.messages.filter(
+            (m: { sender?: string } | null) => m?.sender === ownSender,
+          );
+        }
         const conversation = await core.conversationService.create(conversationData);
 
         if (conversationData.vehicleId != null) {
@@ -1602,8 +1621,17 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
       }
 
-      if (!message) {
+      if (!message || typeof message !== 'object') {
         return res.status(400).json({ success: false, reason: 'Conversation ID and message are required' });
+      }
+
+      // Sender is derived from the authenticated participant, never trusted from the client.
+      if (isAuthParticipant(normalizedCustomerId)) {
+        message.sender = 'user';
+      } else if (isAuthParticipant(normalizedSellerId)) {
+        message.sender = 'seller';
+      } else {
+        message.sender = 'system';
       }
 
       if (typeof message.text === 'string') {

@@ -4,6 +4,34 @@ import { trackViewBodySchema, loginBodySchema, registerBodySchema } from '../../
 import { verifyViewTrackToken } from '../../utils/view-track-token.js';
 import { BOOST_PACKAGES, CREDIT_FEATURED_PACKAGE_ID } from '../../constants/boost.js';
 import { isEffectivelyFeatured } from '../../utils/listingPromotion.js';
+import { claimRazorpayPayment, verifyRazorpayPayment } from '../../lib/razorpay.js';
+import type { User as AuthUser } from '@supabase/supabase-js';
+import { passwordFingerprint } from '../../utils/security.js';
+import { resolveRateLimit } from '../../lib/rate-limit-resolver.js';
+
+// listUsers() without paging only returns the first 50 auth users.
+// ponytail: O(n) scan of auth.users per call; store the auth uid on public.users when this gets slow.
+async function listAllAuthUsers(supabaseAdmin: ReturnType<typeof core.getSupabaseAdminClient>) {
+  const users: AuthUser[] = [];
+  for (let page = 1; ; page++) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) return { data: { users }, error };
+    users.push(...data.users);
+    if (data.users.length < 1000) return { data: { users }, error: null };
+  }
+}
+
+/** Per-phone OTP SMS caps (SMS pumping / toll fraud). Fails closed if the limiter is down. */
+async function otpSendAllowed(phone: string): Promise<boolean> {
+  try {
+    const burst = await resolveRateLimit('otp-send-phone', phone, { maxRequests: 3, windowMs: 15 * 60 * 1000 });
+    if (!burst.allowed) return false;
+    const daily = await resolveRateLimit('otp-send-phone-daily', phone, { maxRequests: 10, windowMs: 24 * 60 * 60 * 1000 });
+    return daily.allowed;
+  } catch {
+    return false;
+  }
+}
 
 async function handleUsers(req: VercelRequest, res: VercelResponse, _options: core.HandlerOptions) {
   try {
@@ -139,6 +167,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           message: 'If an account exists for this email, a reset link was sent.',
         } as const;
 
+        // Per-email cap stops reset-mail bombing; fail closed (still generic 200)
+        const perEmail = await resolveRateLimit('pwd-reset-email', normalizedEmail, {
+          maxRequests: 3,
+          windowMs: 60 * 60 * 1000,
+        }).catch(() => ({ allowed: false }));
+        if (!perEmail.allowed) {
+          return res.status(200).json(genericOk);
+        }
+
         let userRow: Awaited<ReturnType<typeof core.userService.findByEmail>> = null;
         try {
           userRow = await core.userService.findByEmail(normalizedEmail);
@@ -151,7 +188,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
 
         let token: string;
         try {
-          token = core.generatePasswordResetToken(normalizedEmail);
+          token = core.generatePasswordResetToken(normalizedEmail, userRow.password);
         } catch (tokErr) {
           core.logError('Password reset token generation failed:', tokErr);
           return res.status(503).json({
@@ -166,14 +203,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         try {
           await core.sendPasswordResetEmail(normalizedEmail, resetUrl);
         } catch (sendErr) {
+          // Don't reveal (via a different status) that the account exists
           core.logError('Failed to send password reset email:', sendErr);
-          return res.status(503).json({
-            success: false,
-            reason:
-              sendErr instanceof Error
-                ? sendErr.message
-                : 'Could not send reset email. Try again or contact support.',
-          });
         }
 
         return res.status(200).json(genericOk);
@@ -200,18 +231,21 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
             errors: passwordValidation.errors,
           });
         }
+        const invalidLink = {
+          success: false,
+          reason: 'This reset link is invalid or has expired. Request a new one.',
+        } as const;
         let emailFromToken: string;
+        let tokenFingerprint: string | undefined;
         try {
-          emailFromToken = core.verifyPasswordResetToken(resetToken.trim()).email;
+          ({ email: emailFromToken, pf: tokenFingerprint } = core.verifyPasswordResetToken(resetToken.trim()));
         } catch {
-          return res.status(400).json({
-            success: false,
-            reason: 'This reset link is invalid or has expired. Request a new one.',
-          });
+          return res.status(400).json(invalidLink);
         }
         const userRow = await core.userService.findByEmail(emailFromToken);
-        if (!userRow) {
-          return res.status(400).json({ success: false, reason: 'No account found for this reset link.' });
+        // Fingerprint mismatch = password already changed since the link was issued (link reuse)
+        if (!userRow || tokenFingerprint !== passwordFingerprint(userRow.password)) {
+          return res.status(400).json(invalidLink);
         }
         const hashed = await core.hashPassword(newPassword);
         try {
@@ -223,10 +257,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           core.logError('complete-password-reset: DB update failed:', upErr);
           return res.status(500).json({ success: false, reason: 'Could not update password. Try again later.' });
         }
+        await core.revokeAllUserSessions(emailFromToken);
         // Sync Supabase Auth when an auth user exists (same as PUT /users)
         try {
           const supabaseAdmin = core.getSupabaseAdminClient();
-          const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+          const { data: authUsers, error: listError } = await listAllAuthUsers(supabaseAdmin);
           if (!listError && authUsers?.users?.length) {
             const authUser = authUsers.users.find(
               (u) => (u.email || '').toLowerCase().trim() === emailFromToken,
@@ -1270,6 +1305,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
             error: 'refresh_token_missing_email',
           });
         }
+        if (await core.isTokenRevokedForUser(incomingRefreshToken, refreshEmail)) {
+          core.clearRefreshTokenCookie(res);
+          return res.status(401).json({
+            success: false,
+            reason: 'Session was signed out (password changed). Please log in again.',
+            error: 'refresh_token_revoked',
+          });
+        }
         const refreshUser = await core.userService.findByEmail(refreshEmail);
         if (!refreshUser || refreshUser.status === 'inactive') {
           core.logSecurity('🚨 Refresh denied for missing/inactive user', {
@@ -1284,7 +1327,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           });
         }
 
-        const rotated = core.rotateRefreshToken(incomingRefreshToken);
+        const rotated = core.rotateRefreshToken(incomingRefreshToken, refreshUser.role);
         // Immediately revoke the old jti so it cannot be used again even if it leaked.
         await core.revokeRefreshToken(rotated.oldJti, rotated.oldTtlSeconds);
 
@@ -1329,7 +1372,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         await core.userService.delete(normalizedEmail);
         try {
           const supabaseAdmin = core.getSupabaseAdminClient();
-          const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+          const { data: authUsers, error: listError } = await listAllAuthUsers(supabaseAdmin);
           if (!listError) {
             const authUser = authUsers.users.find(
               (u) => u.email?.toLowerCase().trim() === normalizedEmail,
@@ -1458,6 +1501,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
           cleanedNumber = `+91${cleanedNumber}`;
         }
+        if (!(await otpSendAllowed(cleanedNumber))) {
+          return res.status(429).json({ success: false, reason: 'Too many OTP requests. Please try again later.' });
+        }
 
         // Generate 6-digit OTP (crypto; max is exclusive)
         const otp = core.randomInt(100_000, 1_000_000).toString();
@@ -1482,8 +1528,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
             phone: cleanedNumber,
             otp_hash: otpHash,
             expires_at: expiresAt,
-            attempt_count: 0,
-            locked_until: null,
             created_at: new Date().toISOString(),
           }, {
             onConflict: 'phone'
@@ -1523,101 +1567,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       }
     }
 
-    // KARIX OTP - Verify OTP (uses Supabase verification)
-    if (action === 'verify-otp-karix') {
-      const { phoneNumber, otp } = req.body;
-      
-      if (!phoneNumber || !otp) {
-        return res.status(400).json({ 
-          success: false, 
-          reason: 'Phone number and OTP are required.' 
-        });
-      }
-
-      try {
-        const supabase = core.getSupabaseAdminClient();
-        
-        // Format phone number
-        let cleanedNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
-        if (!cleanedNumber.startsWith('+')) {
-          cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
-          cleanedNumber = `+91${cleanedNumber}`;
-        }
-
-        // Verify OTP using Supabase
-        const { data, error } = await supabase.auth.verifyOtp({
-          phone: cleanedNumber,
-          token: otp,
-          type: 'sms',
-        });
-
-        if (error) {
-          core.logError('❌ OTP verification failed:', error.message);
-          return res.status(400).json({ 
-            success: false, 
-            reason: error.message || 'Invalid OTP' 
-          });
-        }
-
-        if (!data.user) {
-          return res.status(400).json({ 
-            success: false, 
-            reason: 'OTP verification failed' 
-          });
-        }
-
-        // Get or create user in our database
-        const userEmail = data.user.email || `${cleanedNumber.replace('+', '')}@phone.reride.co.in`;
-        let user = await core.userService.findByEmail(userEmail);
-        
-        if (!user) {
-          // Create user from phone auth
-          const userData: Omit<core.UserType, 'id'> = {
-            email: userEmail,
-            name: `User ${cleanedNumber}`,
-            mobile: cleanedNumber,
-            role: req.body.role || 'customer',
-            location: '', // Required field, can be updated later
-            authProvider: 'phone',
-            status: 'active' as const,
-            isVerified: true,
-            subscriptionPlan: 'free' as const,
-            featuredCredits: 0,
-            usedCertifications: 0,
-            createdAt: new Date().toISOString()
-          };
-          user = await core.userService.create(userData);
-        }
-
-        // Generate JWT tokens
-        const accessToken = core.generateAccessToken(user);
-        const refreshToken = core.generateRefreshToken(user);
-        const normalizedUser = core.normalizeUser(user);
-
-        const rtMaxPhone = core.refreshCookieMaxAgeSeconds();
-        if (!core.isCapacitorAppClient(req)) {
-          core.appendRefreshTokenCookie(res, refreshToken, rtMaxPhone);
-          return res.status(200).json({
-            success: true,
-            user: normalizedUser,
-            accessToken,
-          });
-        }
-        return res.status(200).json({
-          success: true,
-          user: normalizedUser,
-          accessToken,
-          refreshToken,
-        });
-      } catch (error: any) {
-        core.logError('❌ OTP verification error:', error);
-        return res.status(500).json({ 
-          success: false, 
-          reason: error.message || 'Failed to verify OTP' 
-        });
-      }
-    }
-
     // MESSAGEBOT OTP — send via MessageBot SMS API, verify against hashed row in otp_verifications
     if (action === 'send-otp-messagebot') {
       const { phoneNumber } = req.body;
@@ -1646,6 +1595,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
           cleanedNumber = `+91${cleanedNumber}`;
         }
+        if (!(await otpSendAllowed(cleanedNumber))) {
+          return res.status(429).json({ success: false, reason: 'Too many OTP requests. Please try again later.' });
+        }
 
         const otp = core.randomInt(100_000, 1_000_000).toString();
 
@@ -1664,10 +1616,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           .upsert(
             {
               phone: cleanedNumber,
+              // attempt_count / locked_until deliberately not reset: resending must not clear a brute-force lockout
               otp_hash: otpHash,
               expires_at: expiresAt,
-              attempt_count: 0,
-              locked_until: null,
               created_at: new Date().toISOString(),
             },
             { onConflict: 'phone' },
@@ -1701,7 +1652,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       }
     }
 
-    if (action === 'verify-otp-messagebot') {
+    // Karix and MessageBot both store sha256(otp + JWT secret) in otp_verifications, so they share verification.
+    if (action === 'verify-otp-messagebot' || action === 'verify-otp-karix') {
       const { phoneNumber, otp } = req.body;
       const requestedRole = (req.body.role as string) || 'customer';
 
@@ -2176,27 +2128,18 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
     }
     try {
       // Supabase connection is handled automatically
-      const { email, ...updateData } = req.body;
+      const { email, currentPassword, ...updateData } = req.body;
 
-      // Non-admins cannot self-elevate or mutate privileged fields
+      // Non-admins may only edit their own profile fields (allowlist; plan/verification/credits are server-owned)
       if (auth.user?.role !== 'admin') {
-        const privilegedKeys = [
-          'role',
-          'status',
-          'isVerified',
-          'subscriptionPlan',
-          'featuredCredits',
-          'usedCertifications',
-          'trustScore',
-          'authProvider',
-          'firebaseUid',
-          'phoneVerified',
-          'emailVerified',
-          'govtIdVerified',
-          'id',
-        ] as const;
-        for (const key of privilegedKeys) {
-          if (key in updateData) {
+        const SELF_EDITABLE_USER_FIELDS = new Set([
+          'name', 'mobile', 'avatarUrl', 'dealershipName', 'bio', 'logoUrl',
+          'location', 'address', 'pincode', 'alternatePhone', 'preferredContactHours',
+          'showEmailPublicly', 'partnerBanks', 'notificationMuteKeys',
+          'aadharCard', 'panCard', 'password',
+        ]);
+        for (const key of Object.keys(updateData)) {
+          if (!SELF_EDITABLE_USER_FIELDS.has(key)) {
             delete (updateData as Record<string, unknown>)[key];
           }
         }
@@ -2395,6 +2338,36 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         return res.status(404).json({ success: false, reason: 'User not found.' });
       }
 
+      if (auth.user.role !== 'admin') {
+        // Accounts that already have a password must prove it before changing it
+        if (plainTextPassword && existingUser.password) {
+          const ok =
+            typeof currentPassword === 'string' &&
+            (await core.validatePassword(currentPassword, existingUser.password).catch(() => false));
+          if (!ok) {
+            return res.status(403).json({ success: false, reason: 'Current password is incorrect.' });
+          }
+        }
+        // KYC documents: users may upload numbers/images, but only admins set verification
+        for (const doc of ['aadharCard', 'panCard'] as const) {
+          const incoming = supabaseUpdates[doc];
+          if (incoming && typeof incoming === 'object') {
+            const prev = existingUser[doc];
+            supabaseUpdates[doc] = {
+              ...(incoming as Record<string, unknown>),
+              isVerified: prev?.isVerified ?? false,
+              verifiedAt: prev?.verifiedAt,
+              verifiedBy: prev?.verifiedBy,
+            };
+          }
+        }
+        // Reverse-sync above always adds verificationStatus; never let a self-edit overwrite it
+        delete supabaseUpdates.verificationStatus;
+        if (Object.keys(supabaseUpdates).length === 0) {
+          return res.status(400).json({ success: false, reason: 'No fields to update.' });
+        }
+      }
+
       core.logInfo('📝 Found user, applying update operation...');
       
       // Update user in Supabase
@@ -2436,7 +2409,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
             
             // Get the user's auth ID from Supabase Auth by email
             // Use listUsers with pagination to find the user efficiently
-            const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+            const { data: authUsers, error: listError } = await listAllAuthUsers(supabaseAdmin);
             
             if (listError) {
               core.logWarn('⚠️ Could not list auth users to sync password:', listError.message);
@@ -2545,6 +2518,17 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         if (updateFields.password) {
           res.setHeader('X-Password-Updated', 'true');
           core.logInfo('🔐 Password update completed - frontend should clear cache');
+          // Sign out every other session; the caller (if it is this user) gets fresh tokens below.
+          await core.revokeAllUserSessions(normalizedEmail);
+          if (normalizedAuthEmail === normalizedEmail) {
+            const accessToken = core.generateAccessToken(updatedUser);
+            const refreshToken = core.generateRefreshToken(updatedUser);
+            if (!core.isCapacitorAppClient(req)) {
+              core.appendRefreshTokenCookie(res, refreshToken, core.refreshCookieMaxAgeSeconds());
+              return res.status(200).json({ success: true, user: normalizedUpdatedUser, accessToken });
+            }
+            return res.status(200).json({ success: true, user: normalizedUpdatedUser, accessToken, refreshToken });
+          }
         }
         
         return res.status(200).json({ success: true, user: normalizedUpdatedUser });
@@ -2625,7 +2609,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         const supabaseAdmin = core.getSupabaseAdminClient();
         
         // Get the user's auth ID from Supabase Auth by email
-        const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+        const { data: authUsers, error: listError } = await listAllAuthUsers(supabaseAdmin);
         
         if (listError) {
           core.logWarn('⚠️ Could not list auth users to delete:', listError.message);
@@ -3219,8 +3203,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           : '';
         if (
           resolveAuth.user?.role !== 'admin' &&
-          normalizedVehicleSellerEmail &&
-          normalizedAuthEmail !== normalizedVehicleSellerEmail
+          (!normalizedVehicleSellerEmail || normalizedAuthEmail !== normalizedVehicleSellerEmail)
         ) {
           return res.status(403).json({ success: false, reason: 'Unauthorized' });
         }
@@ -3932,7 +3915,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       // SECURITY: Only the vehicle's seller (or admin) may boost it.
       const sellerEmailLower = String(vehicle.sellerEmail || '').toLowerCase().trim();
       const authedEmailLower = core.normalizeAuthActorEmail(auth);
-      if (auth.user?.role !== 'admin' && sellerEmailLower && authedEmailLower !== sellerEmailLower) {
+      if (auth.user?.role !== 'admin' && (!sellerEmailLower || authedEmailLower !== sellerEmailLower)) {
         return res.status(403).json({ success: false, reason: 'You can only boost your own listings.' });
       }
 
@@ -4007,11 +3990,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           remainingCredits = credits;
         }
       } else if (auth.user?.role !== 'admin') {
-        // REVENUE GATE: Require a verified Razorpay payment for paid boosts.
-        const keySecret = process.env.RAZORPAY_KEY_SECRET;
-        if (!keySecret) {
-          return res.status(503).json({ success: false, reason: 'Boost payments are not configured. Please contact support.' });
-        }
+        // REVENUE GATE: Require a verified, unused Razorpay payment for this exact package.
         if (!boostOrderId || !boostPaymentId || !boostSignature) {
           return res.status(402).json({
             success: false,
@@ -4019,11 +3998,36 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             requiresPayment: true,
           });
         }
-        const expectedBoostSig = core.createHmac('sha256', keySecret)
-          .update(`${String(boostOrderId)}|${String(boostPaymentId)}`)
-          .digest('hex');
-        if (expectedBoostSig !== String(boostSignature)) {
-          return res.status(400).json({ success: false, reason: 'Invalid Razorpay signature for boost payment.' });
+        const payerEmail = sellerEmailLower || authedEmailLower;
+        const verified = await verifyRazorpayPayment({
+          orderId: String(boostOrderId),
+          paymentId: String(boostPaymentId),
+          signature: String(boostSignature),
+          productId: `boost:${pkg.id}`,
+          payerEmail,
+        });
+        if (!verified.ok) {
+          return res.status(verified.status).json({ success: false, reason: verified.reason });
+        }
+        const nowIso = new Date().toISOString();
+        const claimed = await claimRazorpayPayment({
+          sellerEmail: payerEmail,
+          amount: verified.amountPaise / 100,
+          plan: 'boost',
+          planId: pkg.id,
+          packageId: pkg.id,
+          status: 'approved',
+          paymentMethod: 'razorpay',
+          transactionId: String(boostPaymentId),
+          razorpayOrderId: String(boostOrderId),
+          createdAt: nowIso,
+          requestedAt: nowIso,
+          updatedAt: nowIso,
+          reviewedAt: nowIso,
+          notes: `Boost for vehicle ${vehicleIdNum} (${pkg.type}, ${pkg.durationDays}d)`,
+        });
+        if (!claimed) {
+          return res.status(409).json({ success: false, reason: 'This payment has already been used.' });
         }
       }
 
@@ -4061,35 +4065,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         isFeatured: shouldFeature,
         ...(shouldFeature ? { featuredAt: now.toISOString() } : {}),
       });
-
-      // Record the boost payment (if any) so admins have a full audit trail.
-      if (!wantsCredit && boostPaymentId && boostOrderId) {
-        try {
-          const nowIso = new Date().toISOString();
-          const prId = `payment_boost_${Date.now()}`;
-          await core.adminCreate('payment_requests', {
-            id: prId,
-            sellerEmail: sellerEmailLower || authedEmailLower,
-            amount: Number(req.body.amount) || 0,
-            plan: 'boost',
-            planId: packageId || 'boost',
-            status: 'approved',
-            paymentMethod: 'razorpay',
-            transactionId: String(boostPaymentId),
-            razorpayOrderId: String(boostOrderId),
-            createdAt: nowIso,
-            requestedAt: nowIso,
-            updatedAt: nowIso,
-            reviewedAt: nowIso,
-            notes: `Boost for vehicle ${vehicleIdNum} (${boostType}, ${boostDuration}d)`,
-            vehicleId: vehicleIdNum,
-            boostType,
-            boostDuration,
-          }, String(prId));
-        } catch (paymentLogErr) {
-          core.logWarn('Failed to log boost payment:', paymentLogErr);
-        }
-      }
 
       return res.status(200).json({
         success: true,
@@ -4608,13 +4583,15 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
       
-      // Normalize images to always be an array
+      // Normalize images to always be an array; reject inline base64 (must be storage URLs).
       if (updateData.images !== undefined) {
-        updateData.images = Array.isArray(updateData.images) 
-          ? updateData.images 
-          : typeof updateData.images === 'string' 
-            ? [updateData.images] 
-            : [];
+        updateData.images = core.sanitizeVehicleMediaUrls(
+          Array.isArray(updateData.images)
+            ? updateData.images
+            : typeof updateData.images === 'string'
+              ? [updateData.images]
+              : [],
+        ).slice(0, 10);
       }
 
       // SECURITY: Field allowlist for vehicle PUT — prevent non-admins from tampering with
@@ -4633,13 +4610,13 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         'tags', 'title', 'engine', 'engineCc', 'fuelEfficiency',
         'kmDriven', 'variant', 'listingType', 'negotiable',
         'rto', 'displacement', 'groundClearance', 'bootSpace', 'documents',
-        'images', 'status', 'listingStatus', 'soldAt',
-        // Moderation / metadata (stored in vehicles.metadata via supabase-vehicle-service)
-        'isFlagged', 'flagReason', 'flaggedAt',
+        'images', 'status', 'soldAt',
       ] as const;
       const ADMIN_ONLY_UPDATE_FIELDS = [
         'isFeatured', 'certificationStatus', 'trustScore', 'activeBoosts',
-        'views', 'inquiriesCount', 'sellerEmail', 'listingExpiresAt'
+        'views', 'inquiriesCount', 'sellerEmail', 'listingExpiresAt',
+        // Moderation / metadata (stored in vehicles.metadata via supabase-vehicle-service)
+        'listingStatus', 'isFlagged', 'flagReason', 'flaggedAt',
       ] as const;
       const rawUpdate = updateData as Record<string, unknown>;
       const sanitizedUpdate: Record<string, unknown> = {};
@@ -4673,6 +4650,14 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
 
       const nextStatus = sanitizedUpdate.status as string | undefined;
+      if (
+        nextStatus === 'published' &&
+        existingVehicle.status !== 'published' &&
+        auth.user?.role !== 'admin' &&
+        existingVehicle.listingStatus === 'suspended'
+      ) {
+        return res.status(403).json({ success: false, reason: 'This listing is under review and cannot be republished.' });
+      }
       if (nextStatus === 'published' && existingVehicle.status !== 'published' && normalizedVehicleSellerEmail) {
         const seller = await core.userService.findByEmail(normalizedVehicleSellerEmail);
         if (!seller) {
@@ -4704,6 +4689,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         }
       } else if (nextStatus === 'unpublished' && existingVehicle.status === 'published') {
         sanitizedUpdate.listingStatus = 'draft';
+      } else if (nextStatus === 'sold') {
+        sanitizedUpdate.listingStatus = 'sold';
       }
 
       const updatedVehicle = await core.vehicleService.update(rowPk, sanitizedUpdate);

@@ -12,18 +12,20 @@ type SecurityCheckResult =
 
 const RLS_PROBE_CACHE_MS = 5 * 60 * 1000;
 const UPSTASH_PROBE_CACHE_MS = 2 * 60 * 1000;
-const HIBP_PLAN_PROBE_CACHE_MS = 24 * 60 * 60 * 1000;
 /** Compensating control when Supabase HIBP is unavailable on Free tier. */
 const FREE_TIER_MIN_PASSWORD_LENGTH = 8;
 let rlsProbeCache: { verified: boolean; checkedAt: number } | null = null;
 let upstashProbeCache: { verified: boolean; checkedAt: number } | null = null;
-let hibpPlanProbeCache: { blockedByPlan: boolean; checkedAt: number } | null = null;
+/** Whole-check cache: avoids Management API / Upstash / PostgREST round-trips on every request. */
+const READINESS_OK_CACHE_MS = 5 * 60 * 1000;
+const READINESS_FAIL_CACHE_MS = 30 * 1000;
+let readinessCache: { result: SecurityCheckResult; checkedAt: number } | null = null;
 
 /** @internal test helper */
 export function resetProductionSecurityProbeCachesForTests(): void {
   rlsProbeCache = null;
   upstashProbeCache = null;
-  hibpPlanProbeCache = null;
+  readinessCache = null;
 }
 
 function isProdDeployment(): boolean {
@@ -184,8 +186,9 @@ async function probeUpstashConnectivity(): Promise<boolean> {
   }
 }
 
-function isHibpPlanBlockResponse(status: number, bodyText: string): boolean {
-  return status === 402 || /pro plan/i.test(bodyText) || /plan or higher/i.test(bodyText);
+/** HIBP needs Supabase Pro. Free tier is declared (SUPABASE_PLAN=free), never probed with a config write. */
+function isSupabaseFreePlan(): boolean {
+  return String(process.env.SUPABASE_PLAN || '').trim().toLowerCase() === 'free';
 }
 
 function isFreeTierPasswordPolicyReady(config: unknown): boolean {
@@ -211,39 +214,6 @@ async function fetchSupabaseAuthConfig(): Promise<Record<string, unknown> | null
   }
 }
 
-async function isHibpBlockedBySupabasePlan(): Promise<boolean> {
-  const now = Date.now();
-  if (hibpPlanProbeCache && now - hibpPlanProbeCache.checkedAt < HIBP_PLAN_PROBE_CACHE_MS) {
-    return hibpPlanProbeCache.blockedByPlan;
-  }
-
-  const accessToken = process.env.SUPABASE_ACCESS_TOKEN?.trim();
-  const projectRef = deriveSupabaseProjectRef();
-  if (!accessToken || !projectRef) {
-    hibpPlanProbeCache = { blockedByPlan: false, checkedAt: now };
-    return false;
-  }
-
-  try {
-    const response = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/config/auth`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({ password_hibp_enabled: true }),
-    });
-    const bodyText = await response.text();
-    const blockedByPlan = isHibpPlanBlockResponse(response.status, bodyText);
-    hibpPlanProbeCache = { blockedByPlan, checkedAt: now };
-    return blockedByPlan;
-  } catch {
-    hibpPlanProbeCache = { blockedByPlan: false, checkedAt: now };
-    return false;
-  }
-}
-
 async function isLeakedPasswordProtectionReady(): Promise<boolean> {
   if (parseBooleanEnv(process.env.SUPABASE_LEAKED_PASSWORD_PROTECTION_VERIFIED)) {
     return true;
@@ -256,15 +226,8 @@ async function isLeakedPasswordProtectionReady(): Promise<boolean> {
     return true;
   }
 
-  if (config.password_hibp_enabled === false) {
-    const planBlocked = await isHibpBlockedBySupabasePlan();
-    if (planBlocked) {
-      // Free tier: HIBP is unavailable — require compensating password policy instead.
-      return isFreeTierPasswordPolicyReady(config);
-    }
-  }
-
-  return false;
+  // Free tier: HIBP is unavailable — require compensating password policy instead.
+  return isSupabaseFreePlan() && isFreeTierPasswordPolicyReady(config);
 }
 
 /**
@@ -272,7 +235,19 @@ async function isLeakedPasswordProtectionReady(): Promise<boolean> {
  */
 export async function verifyProductionSecurityReadiness(): Promise<SecurityCheckResult> {
   if (!isProdDeployment()) return { ok: true };
+  const now = Date.now();
+  if (
+    readinessCache &&
+    now - readinessCache.checkedAt < (readinessCache.result.ok ? READINESS_OK_CACHE_MS : READINESS_FAIL_CACHE_MS)
+  ) {
+    return readinessCache.result;
+  }
+  const result = await computeProductionSecurityReadiness();
+  readinessCache = { result, checkedAt: now };
+  return result;
+}
 
+async function computeProductionSecurityReadiness(): Promise<SecurityCheckResult> {
   const issues: string[] = [];
   const requiredActions: string[] = [];
 
@@ -309,10 +284,7 @@ export async function verifyProductionSecurityReadiness(): Promise<SecurityCheck
 
   const leakedPasswordReady = await isLeakedPasswordProtectionReady();
   if (!leakedPasswordReady) {
-    const config = await fetchSupabaseAuthConfig();
-    const onFreeTier =
-      config?.password_hibp_enabled === false && (await isHibpBlockedBySupabasePlan());
-    if (onFreeTier && config && !isFreeTierPasswordPolicyReady(config)) {
+    if (isSupabaseFreePlan()) {
       issues.push(
         `Supabase Free tier: password_min_length must be at least ${FREE_TIER_MIN_PASSWORD_LENGTH} (HIBP unavailable on Free).`,
       );
@@ -322,7 +294,7 @@ export async function verifyProductionSecurityReadiness(): Promise<SecurityCheck
     } else {
       issues.push('Supabase leaked-password protection (HaveIBeenPwned) is not enabled.');
       requiredActions.push(
-        'Run npm run security:enable-compromised-password-protection (needs Supabase Pro for HIBP). On Free tier, run npm run security:configure-free-tier-auth instead.',
+        'Run npm run security:enable-compromised-password-protection (needs Supabase Pro for HIBP). On Free tier, set SUPABASE_PLAN=free in Vercel and run npm run security:configure-free-tier-auth instead.',
       );
     }
   }
@@ -337,9 +309,7 @@ export {
   FREE_TIER_MIN_PASSWORD_LENGTH,
   hasLeakedPasswordProtectionEnabled,
   isFreeTierPasswordPolicyReady,
-  isHibpPlanBlockResponse,
   probeUpstashConnectivity,
-  isHibpBlockedBySupabasePlan,
   isLeakedPasswordProtectionReady,
   isDistributedSecurityReady,
 };

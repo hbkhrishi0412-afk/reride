@@ -1,5 +1,5 @@
-import { createHmac } from 'crypto';
 import { getSupabaseAdminClient } from '../../handler-shared.js';
+import { claimRazorpayPayment, verifyRazorpayPayment } from '../../../lib/razorpay.js';
 import type {
   AssistanceFulfillmentStatus,
   AssistanceQueueItem,
@@ -146,24 +146,9 @@ export const handleAssistance: DealActionHandler = async (ctx) => {
     const razorpay_order_id = String(body.razorpay_order_id || '');
     const razorpay_payment_id = String(body.razorpay_payment_id || '');
     const razorpay_signature = String(body.razorpay_signature || '');
-    const amount = Number(body.amount || 0);
 
     if (!leadId || !packageId || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       res.status(400).json({ success: false, reason: 'Missing payment or package fields' });
-      return true;
-    }
-
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
-    if (!keySecret) {
-      res.status(503).json({ success: false, reason: 'Online payments are not configured' });
-      return true;
-    }
-
-    const expectedSig = createHmac('sha256', keySecret)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-      .digest('hex');
-    if (expectedSig !== razorpay_signature) {
-      res.status(400).json({ success: false, reason: 'Invalid payment signature' });
       return true;
     }
 
@@ -182,6 +167,40 @@ export const handleAssistance: DealActionHandler = async (ctx) => {
     const sellerEmail = normalizeEmail(String(row.seller_email));
     if (auth.email !== buyerEmail && auth.email !== sellerEmail && auth.role !== 'admin') {
       res.status(403).json({ success: false, reason: 'Not authorized' });
+      return true;
+    }
+
+    const verified = await verifyRazorpayPayment({
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature,
+      productId: `deal_assist:${packageId}`,
+      payerEmail: auth.email,
+    });
+    if (!verified.ok) {
+      res.status(verified.status).json({ success: false, reason: verified.reason });
+      return true;
+    }
+    const amount = verified.amountPaise / 100;
+    const nowIso = new Date().toISOString();
+    const claimed = await claimRazorpayPayment({
+      sellerEmail: auth.email,
+      amount,
+      plan: 'deal_assist',
+      planId: packageId,
+      packageId,
+      status: 'approved',
+      paymentMethod: 'razorpay',
+      transactionId: razorpay_payment_id,
+      razorpayOrderId: razorpay_order_id,
+      createdAt: nowIso,
+      requestedAt: nowIso,
+      updatedAt: nowIso,
+      reviewedAt: nowIso,
+      notes: `Deal assistance for lead ${leadId}`,
+    });
+    if (!claimed) {
+      res.status(409).json({ success: false, reason: 'This payment has already been used.' });
       return true;
     }
 

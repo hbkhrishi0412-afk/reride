@@ -37,6 +37,10 @@ export async function verifySupabaseToken(
     if (error || !user) {
       throw new Error('Invalid or expired token');
     }
+    // App accounts are keyed by email; an unconfirmed email must not map onto someone else's account
+    if (user.email && !user.email_confirmed_at) {
+      throw new Error('Email not confirmed');
+    }
 
     return {
       uid: user.id,

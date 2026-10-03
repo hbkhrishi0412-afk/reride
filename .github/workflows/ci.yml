@@ -109,6 +109,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -122,13 +124,9 @@ jobs:
       - name: Run npm audit
         run: npm audit --production
       
-      - name: Check for secrets
-        run: |
-          # Check for common secret patterns
-          if grep -r "SUPABASE_SERVICE_ROLE_KEY" --include="*.ts" --include="*.tsx" --include="*.js" --exclude-dir=node_modules --exclude-dir=dist .; then
-            echo "ERROR: Potential secret found in code"
-            exit 1
-          fi
+      # Scans file contents and full git history for real key material (not env var names).
+      - name: Scan for committed secrets (gitleaks)
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 detect --source /repo --redact --verbose
 
 
 

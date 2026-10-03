@@ -35,8 +35,11 @@ async function getAuthEmail(req: VercelRequest): Promise<string | null> {
 
   try {
     const { verifyToken } = await import('../../utils/security.js');
+    const { isTokenRevokedForUser } = await import('../../lib/token-revocation.js');
     const payload = verifyToken(authHeader.slice(7));
-    if (payload?.email) return normalizeEmail(payload.email);
+    if (payload?.email) {
+      return (await isTokenRevokedForUser(authHeader, payload.email)) ? null : normalizeEmail(payload.email);
+    }
   } catch {
     // Fall through — client may send a Supabase access_token instead of app JWT.
   }
@@ -45,7 +48,9 @@ async function getAuthEmail(req: VercelRequest): Promise<string | null> {
     const { verifySupabaseToken } = await import('../supabase-auth.js');
     const sb = await verifySupabaseToken(authHeader);
     const email = (sb.email || '').toLowerCase().trim();
-    return email || null;
+    if (!email) return null;
+    const { isTokenRevokedForUser } = await import('../../lib/token-revocation.js');
+    return (await isTokenRevokedForUser(authHeader, email)) ? null : email;
   } catch {
     return null;
   }

@@ -2,7 +2,6 @@ import {
   FREE_TIER_MIN_PASSWORD_LENGTH,
   hasLeakedPasswordProtectionEnabled,
   isFreeTierPasswordPolicyReady,
-  isHibpPlanBlockResponse,
   resetProductionSecurityProbeCachesForTests,
   verifyProductionSecurityReadiness,
 } from '../server/production-security.js';
@@ -48,12 +47,6 @@ describe('production-security', () => {
         true,
       );
     }
-  });
-
-  it('detects Supabase plan-block responses for HIBP', () => {
-    expect(isHibpPlanBlockResponse(402, '{}')).toBe(true);
-    expect(isHibpPlanBlockResponse(400, 'Requires a Pro plan or higher')).toBe(true);
-    expect(isHibpPlanBlockResponse(200, 'ok')).toBe(false);
   });
 
   it('requires stronger min length for free-tier compensating controls', () => {

@@ -235,7 +235,8 @@ async function upsertMessageRow(
         is_read: !!message.isRead,
         created_at: message.timestamp || new Date().toISOString(),
       },
-      { onConflict: 'id' },
+      // Client-supplied ids must never overwrite an existing row (possibly in another conversation).
+      { onConflict: 'id', ignoreDuplicates: true },
     );
   } catch (err) {
     console.warn('messages upsert skipped:', err);

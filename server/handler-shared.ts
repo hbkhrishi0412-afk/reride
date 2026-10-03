@@ -15,6 +15,7 @@ import { supabaseUserService } from '../services/supabase-user-service.js';
 import { supabaseVehicleService } from '../services/supabase-vehicle-service.js';
 import { supabaseConversationService } from '../services/supabase-conversation-service.js';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
+import { isTokenRevokedForUser, SESSION_REVOKED_ERROR } from '../lib/token-revocation.js';
 import {
   adminRead,
   adminReadAll,
@@ -33,7 +34,6 @@ import {
   sanitizeObject,
   sanitizeString,
   validateEmail,
-  refreshAccessToken,
 } from '../utils/security.js';
 
 // ── Re-exports for handler convenience ──────────────────────────────────────
@@ -54,7 +54,6 @@ export {
   sanitizeObject,
   sanitizeString,
   validateEmail,
-  refreshAccessToken,
   supabaseUserService,
   supabaseVehicleService,
   supabaseConversationService,
@@ -158,7 +157,11 @@ export const authenticateRequest = (req: VercelRequest): AuthResult => {
 /** App JWT (reRideAccessToken) or Supabase access_token in Authorization header. */
 export const authenticateRequestDual = async (req: VercelRequest): Promise<AuthResult> => {
   const legacy = authenticateRequest(req);
-  if (legacy.isValid) return legacy;
+  if (legacy.isValid) {
+    return (await isTokenRevokedForUser(req.headers.authorization, legacy.user?.email))
+      ? { isValid: false, error: SESSION_REVOKED_ERROR }
+      : legacy;
+  }
 
   try {
     const { verifySupabaseToken } = await import('./supabase-auth.js');
@@ -166,6 +169,9 @@ export const authenticateRequestDual = async (req: VercelRequest): Promise<AuthR
     const email = (sb.email || '').toLowerCase().trim();
     if (!email) {
       return { isValid: false, error: 'Invalid Supabase token' };
+    }
+    if (await isTokenRevokedForUser(req.headers.authorization, email)) {
+      return { isValid: false, error: SESSION_REVOKED_ERROR };
     }
     const meta = sb.user?.app_metadata as Record<string, unknown> | undefined;
     const appMetaRole = typeof meta?.role === 'string' ? meta.role : undefined;

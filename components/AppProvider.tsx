@@ -1531,7 +1531,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
     updateUser: async (email: string, updates: Partial<User>, options: UserUpdateOptions = {}) => {
       try {
         // CRITICAL: Never allow role to be updated via this function (security)
-        const safeUpdates = { ...updates };
+        const { currentPassword, ...safeUpdates } = updates as Partial<User> & { currentPassword?: string };
         delete safeUpdates.role; // Prevent role changes through profile updates
         const normalizedTargetEmail = String(email || '').toLowerCase().trim();
         
@@ -1570,6 +1570,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
             body: JSON.stringify({
               email,
               ...safeUpdates,
+              ...(currentPassword ? { currentPassword } : {}),
             }),
           });
           
@@ -1619,6 +1620,11 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
           
           const result = apiResult.data || {};
           logInfo('✅ User updated in Supabase successfully:', { success: result?.success, hasUser: !!result?.user });
+          // Password change signs out all sessions server-side; keep this one alive with the fresh tokens.
+          if (typeof result?.accessToken === 'string') {
+            const { storeTokens } = await import('../services/userService');
+            await storeTokens(result.accessToken, result.refreshToken);
+          }
           
           // Supabase update succeeded - NOW update local state and localStorage
           if (result?.user) {
@@ -1716,11 +1722,15 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
             }
           }
           
-          // Also update the localStorage users array after Supabase success
+          // Also update the localStorage users array after Supabase success.
+          // Never cache the password locally (or re-send it without currentPassword).
+          const { password: _password, ...localUpdates } = safeUpdates;
           try {
-            const { updateUser: updateUserService } = await import('../services/userService');
-            await updateUserService({ email, ...safeUpdates });
-            logInfo('✅ User updated in localStorage users array (after Supabase success)');
+            if (Object.keys(localUpdates).length > 0) {
+              const { updateUser: updateUserService } = await import('../services/userService');
+              await updateUserService({ email, ...localUpdates });
+              logInfo('✅ User updated in localStorage users array (after Supabase success)');
+            }
           } catch (localError) {
             logWarn('⚠️ Failed to update user in localStorage users array:', localError);
             // Try manual update as fallback
@@ -1730,7 +1740,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 const users = JSON.parse(usersJson);
                 const updatedUsers = users.map((user: User) => 
                   String(user.email || '').toLowerCase().trim() === normalizedTargetEmail
-                    ? { ...user, ...safeUpdates }
+                    ? { ...user, ...localUpdates }
                     : user
                 );
                 localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
@@ -1742,7 +1752,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
           }
 
           // Keep all known users caches in sync immediately.
-          syncUserCachesByEmail(email, safeUpdates);
+          syncUserCachesByEmail(email, localUpdates);
           
           // Show success message (skip for silent metadata sync after another primary action)
           if (!options.skipToast) {

@@ -48,7 +48,7 @@ const getAuthHeader = (): Record<string, string> => {
   }
 };
 
-const storeTokens = async (accessToken: string, refreshToken?: string): Promise<void> => {
+export const storeTokens = async (accessToken: string, refreshToken?: string): Promise<void> => {
   if (typeof window === 'undefined') {
     return;
   }

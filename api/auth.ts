@@ -3,6 +3,7 @@ import { verifyToken } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
 import { verifySupabaseToken } from '../server/supabase-auth.js';
 import { resolveAuthRoleFromEmail } from '../utils/resolveAuthRole.js';
+import { isTokenRevokedForUser, SESSION_REVOKED_ERROR } from '../lib/token-revocation.js';
 
 // Authentication middleware
 export interface AuthResult {
@@ -45,13 +46,20 @@ export const authenticateRequest = (req: VercelRequest): AuthResult => {
 /** App JWT (reRideAccessToken) or Supabase access_token in Authorization header. */
 export const authenticateRequestDual = async (req: VercelRequest): Promise<AuthResult> => {
   const legacy = authenticateRequest(req);
-  if (legacy.isValid) return legacy;
+  if (legacy.isValid) {
+    return (await isTokenRevokedForUser(req.headers.authorization, legacy.user?.email))
+      ? { isValid: false, error: SESSION_REVOKED_ERROR }
+      : legacy;
+  }
 
   try {
     const sb = await verifySupabaseToken(req.headers.authorization);
     const email = (sb.email || '').toLowerCase().trim();
     if (!email) {
       return { isValid: false, error: 'Invalid Supabase token' };
+    }
+    if (await isTokenRevokedForUser(req.headers.authorization, email)) {
+      return { isValid: false, error: SESSION_REVOKED_ERROR };
     }
     const meta = sb.user?.app_metadata as Record<string, unknown> | undefined;
     const appMetaRole = typeof meta?.role === 'string' ? meta.role : undefined;

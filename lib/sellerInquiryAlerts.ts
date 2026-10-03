@@ -13,6 +13,7 @@ import {
   sendMessageBotTransactionalSMS,
 } from '../services/messagebotService.js';
 import { supabaseUserService } from '../services/supabase-user-service.js';
+import { resolveRateLimit } from './rate-limit-resolver.js';
 
 export interface SellerInquiryAlertParams {
   sellerEmail: string;
@@ -205,12 +206,32 @@ async function sendSmsAlert(sellerEmail: string, smsText: string): Promise<void>
   }
 }
 
+/** Paid SMS: at most one per conversation per 15 min and 20 per seller per day (fails closed). */
+async function sellerSmsAllowed(params: SellerInquiryAlertParams): Promise<boolean> {
+  try {
+    const perThread = await resolveRateLimit('seller-alert-sms', params.conversationId, {
+      maxRequests: 1,
+      windowMs: 15 * 60 * 1000,
+    });
+    if (!perThread.allowed) return false;
+    const perSeller = await resolveRateLimit('seller-alert-sms-daily', normalizeEmail(params.sellerEmail), {
+      maxRequests: 20,
+      windowMs: 24 * 60 * 60 * 1000,
+    });
+    return perSeller.allowed;
+  } catch {
+    return false;
+  }
+}
+
 /** Fire-and-forget SMS + push (FCM + PWA) for seller inquiries (never throws). */
 export function notifySellerInquiryChannels(params: SellerInquiryAlertParams): void {
   const { title, body, smsText } = buildAlertCopy(params);
-  void sendSmsAlert(params.sellerEmail, smsText).catch((err) => {
-    console.warn('⚠️ Seller SMS alert error (non-fatal):', err);
-  });
+  void sellerSmsAllowed(params)
+    .then((allowed) => (allowed ? sendSmsAlert(params.sellerEmail, smsText) : undefined))
+    .catch((err) => {
+      console.warn('⚠️ Seller SMS alert error (non-fatal):', err);
+    });
   void sendNativePushAlert(params.sellerEmail, title, body, params.conversationId).catch((err) => {
     console.warn('⚠️ Seller native push alert error (non-fatal):', err);
   });

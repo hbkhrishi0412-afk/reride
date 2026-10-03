@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { hashPassword, validatePassword, generateAccessToken, verifyToken, sanitizeString, validateUserInput } from '../utils/security';
+import { hashPassword, validatePassword, generateAccessToken, verifyToken, sanitizeString, validateUserInput, generatePasswordResetToken, verifyPasswordResetToken, passwordFingerprint } from '../utils/security';
 import { jwt } from '../utils/jwt-loader';
 import type { User } from '../types';
 
@@ -108,6 +108,12 @@ describe('Security Utilities', () => {
         expect.objectContaining({ clockTolerance: expect.any(Number) }),
       );
       spy.mockRestore();
+    });
+
+    it('password reset token is bound to the password hash (dies after reset)', () => {
+      const { pf } = verifyPasswordResetToken(generatePasswordResetToken('A@x.com', '$2a$old'));
+      expect(pf).toBe(passwordFingerprint('$2a$old'));
+      expect(pf).not.toBe(passwordFingerprint('$2a$new'));
     });
   });
 

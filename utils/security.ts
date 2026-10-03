@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import validator from 'validator';
 import type { User } from '../types.js';
 import { getSecurityConfig } from './security-config.js';
@@ -188,13 +188,17 @@ export const PASSWORD_RESET_JWT_AUDIENCE = 'reride-password-reset';
 /**
  * State-signed token for one-hour password reset; updates `public.users.password` (bcrypt).
  */
-export const generatePasswordResetToken = (email: string): string => {
+/** Binds a reset token to the current password hash, so it dies once the password changes (single use). */
+export const passwordFingerprint = (passwordHash: string | undefined | null): string =>
+  createHash('sha256').update(String(passwordHash || '')).digest('base64url').slice(0, 16);
+
+export const generatePasswordResetToken = (email: string, currentPasswordHash?: string | null): string => {
   const secret = config.JWT.SECRET;
   if (!secret) {
     throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
   }
   return jwt.sign(
-    { email: email.toLowerCase().trim(), typ: 'pwd_reset' },
+    { email: email.toLowerCase().trim(), typ: 'pwd_reset', pf: passwordFingerprint(currentPasswordHash) },
     secret,
     {
       expiresIn: '1h',
@@ -204,7 +208,7 @@ export const generatePasswordResetToken = (email: string): string => {
   );
 };
 
-export const verifyPasswordResetToken = (token: string): { email: string } => {
+export const verifyPasswordResetToken = (token: string): { email: string; pf?: string } => {
   const secret = config.JWT.SECRET;
   if (!secret) {
     throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
@@ -214,11 +218,11 @@ export const verifyPasswordResetToken = (token: string): { email: string } => {
     issuer: config.JWT.ISSUER,
     audience: PASSWORD_RESET_JWT_AUDIENCE,
     clockTolerance: toleranceSeconds,
-  }) as { email?: string; typ?: string };
+  }) as { email?: string; typ?: string; pf?: string };
   if (decoded.typ !== 'pwd_reset' || !decoded.email || typeof decoded.email !== 'string') {
     throw new Error('Invalid reset token');
   }
-  return { email: decoded.email.toLowerCase().trim() };
+  return { email: decoded.email.toLowerCase().trim(), pf: decoded.pf };
 };
 
 export const verifyToken = (token: string): TokenPayload => {
@@ -275,29 +279,15 @@ export const verifyToken = (token: string): TokenPayload => {
   }
 };
 
-export const refreshAccessToken = (refreshToken: string): string => {
-  const decoded = verifyToken(refreshToken);
-  
-  if (decoded.type !== 'refresh') {
-    throw new Error('Invalid token type');
-  }
-  
-  const user: Partial<User> = {
-    id: decoded.userId as string,
-    email: decoded.email as string,
-    role: (decoded.role as 'customer' | 'seller' | 'admin') || 'customer' // Use role from token or default
-  };
-  
-  return generateAccessToken(user as User);
-};
-
 /**
  * Rotate a refresh token: verify the old one, return a new access+refresh pair plus the
  * old token's jti + remaining TTL (seconds) so callers can add it to a revocation list.
  * Throws if the token is invalid, the wrong type, or expired.
+ * `currentRole` must come from the database so demotions take effect on the next refresh.
  */
 export const rotateRefreshToken = (
   oldRefreshToken: string,
+  currentRole: User['role'],
 ): { accessToken: string; refreshToken: string; oldJti?: string; oldTtlSeconds: number } => {
   const decoded = verifyToken(oldRefreshToken);
   if (decoded.type !== 'refresh') {
@@ -306,7 +296,7 @@ export const rotateRefreshToken = (
   const user: Partial<User> = {
     id: decoded.userId as string,
     email: decoded.email as string,
-    role: (decoded.role as 'customer' | 'seller' | 'admin') || 'customer',
+    role: currentRole,
   };
   const accessToken = generateAccessToken(user as User);
   const refreshToken = generateRefreshToken(user as User);
