@@ -413,10 +413,24 @@ export const sendOTP = async (
       confirmationResult: { phone: formattedNumber },
     };
   } catch (error: unknown) {
+    const code = (error as { code?: string })?.code;
     const message =
-      error instanceof Error ? error.message : 'Failed to send OTP';
+      (code && FIREBASE_OTP_ERRORS[code]) ||
+      (error instanceof Error ? error.message : 'Failed to send OTP');
     return { success: false, reason: message };
   }
+};
+
+const FIREBASE_OTP_ERRORS: Record<string, string> = {
+  'auth/billing-not-enabled': 'SMS OTP is temporarily unavailable. Please sign in with Google or email.',
+  'auth/operation-not-allowed': 'SMS OTP is temporarily unavailable. Please sign in with Google or email.',
+  'auth/invalid-phone-number': 'Invalid phone number format. Please enter a valid 10-digit Indian mobile number.',
+  'auth/too-many-requests': 'Too many requests. Please wait a moment and try again.',
+  'auth/quota-exceeded': 'Too many requests. Please wait a moment and try again.',
+  'auth/network-request-failed': 'Network error. Check your connection and try again.',
+  'auth/captcha-check-failed': 'Verification failed. Please refresh the page and try again.',
+  'auth/invalid-verification-code': 'Invalid OTP',
+  'auth/code-expired': 'OTP expired. Please request a new one.',
 };
 
 /**
@@ -496,8 +510,10 @@ export const verifyOTP = async (
       firebaseUser: data.user as unknown as Record<string, unknown>,
     };
   } catch (error: unknown) {
+    const code = (error as { code?: string })?.code;
     const message =
-      error instanceof Error ? error.message : 'Invalid OTP';
+      (code && FIREBASE_OTP_ERRORS[code]) ||
+      (error instanceof Error ? error.message : 'Invalid OTP');
     return { success: false, reason: message };
   }
 };

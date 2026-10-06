@@ -1,4 +1,4 @@
-import { logInfo } from '../utils/logger.js';
+import { logError, logInfo } from '../utils/logger.js';
 /**
  * SMS + push alerts (native FCM + PWA web push) when a buyer messages or books a test drive.
  * Email is handled separately in lib/email.ts.
@@ -74,7 +74,8 @@ let firebaseAdminApp: App | null | undefined;
 
 export function getFirebaseAdminApp(): App | null {
   if (firebaseAdminApp !== undefined) return firebaseAdminApp;
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim();
+  // Dashboards often keep the quotes copied from .env files, which breaks JSON.parse.
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim().replace(/^'([\s\S]*)'$/, '$1');
   if (!raw) {
     firebaseAdminApp = null;
     return null;
@@ -87,7 +88,8 @@ export function getFirebaseAdminApp(): App | null {
       firebaseAdminApp = getApps()[0]!;
     }
     return firebaseAdminApp;
-  } catch {
+  } catch (e) {
+    logError('FIREBASE_SERVICE_ACCOUNT_KEY is set but invalid:', e instanceof Error ? e.message : e);
     firebaseAdminApp = null;
     return null;
   }

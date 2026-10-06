@@ -152,6 +152,18 @@ describe('authService (Supabase)', () => {
         }),
       );
     });
+
+    it('Firebase: maps auth error codes to a readable reason', async () => {
+      globalThis.__IMPORT_META__.env.VITE_OTP_SMS_PROVIDER = 'firebase';
+      mockSignInWithPhoneNumber.mockRejectedValue(
+        Object.assign(new Error('Firebase: Error (auth/billing-not-enabled).'), { code: 'auth/billing-not-enabled' }),
+      );
+
+      const result = await sendOTP('9876543210');
+
+      expect(result.success).toBe(false);
+      expect(result.reason).toMatch(/temporarily unavailable/);
+    });
   });
 
   describe('verifyOTP', () => {
