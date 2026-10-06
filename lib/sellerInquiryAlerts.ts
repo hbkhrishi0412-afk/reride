@@ -72,7 +72,7 @@ function toE164Indian(mobile: string): string | null {
 
 let firebaseAdminApp: App | null | undefined;
 
-function getFirebaseAdminApp(): App | null {
+export function getFirebaseAdminApp(): App | null {
   if (firebaseAdminApp !== undefined) return firebaseAdminApp;
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim();
   if (!raw) {

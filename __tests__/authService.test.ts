@@ -23,6 +23,23 @@ jest.mock('../utils/authenticatedFetch', () => ({
   authenticatedFetch: jest.fn(),
 }));
 
+jest.mock('../services/userService', () => ({
+  establishSessionFromBackendAuth: jest.fn(),
+}));
+
+const mockConfirm = jest.fn();
+const mockSignInWithPhoneNumber = jest.fn();
+jest.mock('firebase/app', () => ({
+  getApps: () => [],
+  initializeApp: jest.fn(() => ({})),
+}));
+jest.mock('firebase/auth', () => ({
+  getAuth: jest.fn(() => ({})),
+  RecaptchaVerifier: jest.fn().mockImplementation(() => ({ clear: jest.fn() })),
+  signInWithPhoneNumber: (...args: unknown[]) => mockSignInWithPhoneNumber(...args),
+  signOut: jest.fn().mockResolvedValue(undefined),
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const authService = require('../services/authService') as typeof import('../services/authService');
 const {
@@ -142,6 +159,34 @@ describe('authService (Supabase)', () => {
       const result = await verifyOTP(null, '123456');
       expect(result.success).toBe(false);
       expect(result.reason).toBe('Phone number not found. Please request OTP again.');
+    });
+
+    it('Firebase: confirms code, sends ID token to server, stores session without refresh token (web)', async () => {
+      globalThis.__IMPORT_META__.env.VITE_OTP_SMS_PROVIDER = 'firebase';
+      mockConfirm.mockResolvedValue({ user: { getIdToken: async () => 'fb-id-token' } });
+      mockSignInWithPhoneNumber.mockResolvedValue({ confirm: mockConfirm });
+      authenticatedFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, user: { email: 'p@x' }, accessToken: 'at' }),
+      } as Response);
+
+      const sent = await sendOTP('9876543210');
+      expect(sent).toEqual({ success: true, confirmationResult: { phone: '+919876543210' } });
+      expect(mockSignInWithPhoneNumber).toHaveBeenCalledWith(expect.anything(), '+919876543210', expect.anything());
+
+      const result = await verifyOTP(sent.confirmationResult!, '123456', 'seller');
+
+      expect(mockConfirm).toHaveBeenCalledWith('123456');
+      expect(JSON.parse(authenticatedFetch.mock.calls[0][1].body)).toEqual({
+        action: 'verify-otp-firebase',
+        idToken: 'fb-id-token',
+        role: 'seller',
+      });
+      expect(result).toEqual({ success: true, sessionComplete: true, appUser: { email: 'p@x' } });
+      const { establishSessionFromBackendAuth } = jest.requireMock('../services/userService');
+      expect(establishSessionFromBackendAuth).toHaveBeenCalledWith(
+        expect.objectContaining({ accessToken: 'at', refreshToken: undefined }),
+      );
     });
   });
 

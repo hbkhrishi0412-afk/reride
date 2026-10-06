@@ -209,9 +209,14 @@ export async function runGoogleSignInButtonFlow(
 /** In-memory only (not persisted) — avoids storing the phone number in sessionStorage. */
 let pendingOtpPhoneForVerification: string | null = null;
 
+let firebaseRecaptcha: import('firebase/auth').RecaptchaVerifier | null = null;
+let firebaseConfirmation: import('firebase/auth').ConfirmationResult | null = null;
+
 /** @internal Resets module OTP state between unit tests. */
 export function resetOtpSessionForTests(): void {
   pendingOtpPhoneForVerification = null;
+  firebaseRecaptcha = null;
+  firebaseConfirmation = null;
 }
 
 function isMessageBotOtpEnabled(): boolean {
@@ -220,6 +225,66 @@ function isMessageBotOtpEnabled(): boolean {
   } catch {
     return false;
   }
+}
+
+function isFirebaseOtpEnabled(): boolean {
+  try {
+    return import.meta.env.VITE_OTP_SMS_PROVIDER === 'firebase';
+  } catch {
+    return false;
+  }
+}
+
+async function getFirebaseAuth() {
+  const [{ initializeApp, getApps }, authMod] = await Promise.all([
+    import('firebase/app'),
+    import('firebase/auth'),
+  ]);
+  const app =
+    getApps()[0] ??
+    initializeApp({
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+      appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    });
+  return { auth: authMod.getAuth(app), authMod };
+}
+
+/** POST a server-side OTP verification and store the returned app session. */
+async function completeServerOtpLogin(body: Record<string, unknown>): Promise<{
+  success: boolean;
+  reason?: string;
+  sessionComplete?: boolean;
+  appUser?: User;
+}> {
+  const response = await authenticatedFetch('/api/users', {
+    method: 'POST',
+    skipAuth: true,
+    body: JSON.stringify(body),
+  });
+  const data = (await response.json().catch(() => ({}))) as {
+    success?: boolean;
+    reason?: string;
+    user?: User;
+    accessToken?: string;
+    refreshToken?: string;
+  };
+  if (!response.ok || !data.success) {
+    return { success: false, reason: data.reason || 'Invalid OTP' };
+  }
+  // Web gets the refresh token as an httpOnly cookie, so only the native app receives it in JSON.
+  if (!data.user || !data.accessToken) {
+    return { success: false, reason: 'Invalid response from server.' };
+  }
+  const { establishSessionFromBackendAuth } = await import('./userService');
+  establishSessionFromBackendAuth({
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    user: data.user,
+  });
+  pendingOtpPhoneForVerification = null;
+  return { success: true, sessionComplete: true, appUser: data.user };
 }
 
 // ── Google Sign-In ──────────────────────────────────────────────────────────
@@ -259,6 +324,22 @@ export const sendOTP = async (
     const formattedNumber = phoneNumber.startsWith('+')
       ? phoneNumber
       : `+91${phoneNumber}`;
+
+    if (isFirebaseOtpEnabled()) {
+      const { auth, authMod } = await getFirebaseAuth();
+      // A fresh invisible verifier per send; reusing one after a send/failure makes Firebase reject it.
+      firebaseRecaptcha?.clear();
+      firebaseRecaptcha = new authMod.RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
+      try {
+        firebaseConfirmation = await authMod.signInWithPhoneNumber(auth, formattedNumber, firebaseRecaptcha);
+      } catch (error) {
+        firebaseRecaptcha.clear();
+        firebaseRecaptcha = null;
+        throw error;
+      }
+      pendingOtpPhoneForVerification = formattedNumber;
+      return { success: true, confirmationResult: { phone: formattedNumber } };
+    }
 
     if (isMessageBotOtpEnabled()) {
       const response = await authenticatedFetch('/api/users', {
@@ -365,46 +446,26 @@ export const verifyOTP = async (
       };
     }
 
+    if (isFirebaseOtpEnabled()) {
+      if (!firebaseConfirmation) {
+        return { success: false, reason: 'Please request OTP again.' };
+      }
+      const { auth, authMod } = await getFirebaseAuth();
+      const credential = await firebaseConfirmation.confirm(otp);
+      const idToken = await credential.user.getIdToken();
+      // Only the app session is kept; the Firebase session exists just to mint this token.
+      await authMod.signOut(auth).catch(() => {});
+      firebaseConfirmation = null;
+      return completeServerOtpLogin({ action: 'verify-otp-firebase', idToken, role });
+    }
+
     if (isMessageBotOtpEnabled()) {
-      const response = await authenticatedFetch('/api/users', {
-        method: 'POST',
-        skipAuth: true,
-        body: JSON.stringify({
-          action: 'verify-otp-messagebot',
-          phoneNumber: phone,
-          otp,
-          role,
-        }),
+      return completeServerOtpLogin({
+        action: 'verify-otp-messagebot',
+        phoneNumber: phone,
+        otp,
+        role,
       });
-      const data = (await response.json().catch(() => ({}))) as {
-        success?: boolean;
-        reason?: string;
-        user?: User;
-        accessToken?: string;
-        refreshToken?: string;
-        detectedRole?: string;
-      };
-      if (!response.ok || !data.success) {
-        return {
-          success: false,
-          reason: data.reason || 'Invalid OTP',
-        };
-      }
-      if (!data.user || !data.accessToken || !data.refreshToken) {
-        return { success: false, reason: 'Invalid response from server.' };
-      }
-      const { establishSessionFromOtpAuth } = await import('./userService');
-      establishSessionFromOtpAuth({
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
-        user: data.user,
-      });
-      pendingOtpPhoneForVerification = null;
-      return {
-        success: true,
-        sessionComplete: true,
-        appUser: data.user,
-      };
     }
 
     const supabase = getSupabaseClient();
@@ -448,8 +509,11 @@ export const initializeRecaptcha = (
   _containerId: string = 'recaptcha-container',
 ): null => null;
 
-/** No-op — nothing to clean up. */
-export const cleanupRecaptcha = (): void => {};
+/** Clears the Firebase reCAPTCHA widget, if one was created by sendOTP. */
+export const cleanupRecaptcha = (): void => {
+  firebaseRecaptcha?.clear();
+  firebaseRecaptcha = null;
+};
 
 // ── Backend Sync ────────────────────────────────────────────────────────────
 

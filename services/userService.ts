@@ -110,23 +110,7 @@ export const storeTokens = async (accessToken: string, refreshToken?: string): P
   }
 };
 
-/** Phone OTP via MessageBot (or similar) returns JWTs from /api/users — same persistence as email login. */
-export const establishSessionFromOtpAuth = (payload: {
-  accessToken: string;
-  refreshToken: string;
-  user: User;
-}): void => {
-  void storeTokens(payload.accessToken, payload.refreshToken);
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(payload.user));
-    }
-  } catch {
-    /* ignore */
-  }
-};
-
-/** OAuth / backend sync may return app JWTs alongside the user profile. */
+/** OAuth, backend sync and phone OTP may return app JWTs alongside the user profile. */
 export const establishSessionFromBackendAuth = (payload: {
   accessToken?: string;
   refreshToken?: string;

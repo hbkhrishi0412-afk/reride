@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "712465065696-1ph1n92d9sdfd1j3e1uorekm1nv3jfhf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.reride.app",
+            "certificate_hash": "8127330c0ea76b6bdb5eee68e1b41249612781f7"
+          }
+        },
+        {
           "client_id": "712465065696-726h4vj7b3eca622o1c3k4s6fsnouo6g.apps.googleusercontent.com",
           "client_type": 3
         }

@@ -33,6 +33,51 @@ async function otpSendAllowed(phone: string): Promise<boolean> {
   }
 }
 
+/** Find-or-create the phone user and issue app session tokens. `phone` must already be verified (E.164). */
+async function issuePhoneLoginSession(
+  req: VercelRequest,
+  res: VercelResponse,
+  phone: string,
+  requestedRole: 'customer' | 'seller',
+) {
+  const userEmail = `${phone.replace('+', '')}@phone.reride.co.in`;
+  let user = await core.userService.findByEmail(userEmail);
+
+  if (!user) {
+    const userData: Omit<core.UserType, 'id'> = {
+      email: userEmail,
+      name: `User ${phone}`,
+      mobile: phone,
+      role: requestedRole,
+      location: '',
+      authProvider: 'phone',
+      status: 'active' as const,
+      isVerified: true,
+      subscriptionPlan: 'free' as const,
+      featuredCredits: 0,
+      usedCertifications: 0,
+      createdAt: new Date().toISOString(),
+    };
+    user = await core.userService.create(userData);
+  } else if (user.role !== requestedRole) {
+    return res.status(400).json({
+      success: false,
+      reason: `This number is registered as a ${user.role}. Please choose the correct account type.`,
+      detectedRole: user.role,
+    });
+  }
+
+  const accessToken = core.generateAccessToken(user);
+  const refreshToken = core.generateRefreshToken(user);
+  const normalizedUser = core.normalizeUser(user);
+
+  if (!core.isCapacitorAppClient(req)) {
+    core.appendRefreshTokenCookie(res, refreshToken, core.refreshCookieMaxAgeSeconds());
+    return res.status(200).json({ success: true, user: normalizedUser, accessToken });
+  }
+  return res.status(200).json({ success: true, user: normalizedUser, accessToken, refreshToken });
+}
+
 async function handleUsers(req: VercelRequest, res: VercelResponse, _options: core.HandlerOptions) {
   try {
     // FIX: Handle HEAD requests immediately to prevent 405 errors
@@ -1738,55 +1783,54 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
 
         await supabase.from('otp_verifications').delete().eq('phone', cleanedNumber);
 
-        const userEmail = `${cleanedNumber.replace('+', '')}@phone.reride.co.in`;
-        let user = await core.userService.findByEmail(userEmail);
-
-        if (!user) {
-          const userData: Omit<core.UserType, 'id'> = {
-            email: userEmail,
-            name: `User ${cleanedNumber}`,
-            mobile: cleanedNumber,
-            role: requestedRole as 'customer' | 'seller',
-            location: '',
-            authProvider: 'phone',
-            status: 'active' as const,
-            isVerified: true,
-            subscriptionPlan: 'free' as const,
-            featuredCredits: 0,
-            usedCertifications: 0,
-            createdAt: new Date().toISOString(),
-          };
-          user = await core.userService.create(userData);
-        } else if (user.role !== requestedRole) {
-          return res.status(400).json({
-            success: false,
-            reason: `This number is registered as a ${user.role}. Please choose the correct account type.`,
-            detectedRole: user.role,
-          });
-        }
-
-        const accessToken = core.generateAccessToken(user);
-        const refreshToken = core.generateRefreshToken(user);
-        const normalizedUser = core.normalizeUser(user);
-
-        const rtMaxMb = core.refreshCookieMaxAgeSeconds();
-        if (!core.isCapacitorAppClient(req)) {
-          core.appendRefreshTokenCookie(res, refreshToken, rtMaxMb);
-          return res.status(200).json({
-            success: true,
-            user: normalizedUser,
-            accessToken,
-          });
-        }
-        return res.status(200).json({
-          success: true,
-          user: normalizedUser,
-          accessToken,
-          refreshToken,
-        });
+        return await issuePhoneLoginSession(req, res, cleanedNumber, requestedRole);
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : 'Failed to verify OTP';
         core.logError('❌ MessageBot OTP verify error:', error);
+        return res.status(500).json({ success: false, reason: msg });
+      }
+    }
+
+    // FIREBASE OTP — client verifies the SMS code with Firebase Phone Auth and sends the ID token here.
+    if (action === 'verify-otp-firebase') {
+      const { idToken } = req.body;
+      const requestedRole = (req.body.role as string) || 'customer';
+
+      if (typeof idToken !== 'string' || !idToken) {
+        return res.status(400).json({ success: false, reason: 'Verification token is required.' });
+      }
+      if (requestedRole !== 'customer' && requestedRole !== 'seller') {
+        return res.status(400).json({ success: false, reason: 'Invalid role for phone OTP login.' });
+      }
+
+      try {
+        const { getFirebaseAdminApp } = await import('../../lib/sellerInquiryAlerts.js');
+        const app = getFirebaseAdminApp();
+        if (!app) {
+          return res.status(503).json({
+            success: false,
+            reason: 'Firebase is not configured. Set FIREBASE_SERVICE_ACCOUNT_KEY.',
+          });
+        }
+
+        let phone: string | undefined;
+        try {
+          const { getAuth } = await import('firebase-admin/auth');
+          phone = (await getAuth(app).verifyIdToken(idToken)).phone_number;
+        } catch {
+          return res.status(401).json({
+            success: false,
+            reason: 'Verification expired or invalid. Please request a new code.',
+          });
+        }
+        if (!phone) {
+          return res.status(400).json({ success: false, reason: 'No phone number in verification token.' });
+        }
+
+        return await issuePhoneLoginSession(req, res, phone, requestedRole);
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : 'Failed to verify OTP';
+        core.logError('❌ Firebase OTP verify error:', error);
         return res.status(500).json({ success: false, reason: msg });
       }
     }

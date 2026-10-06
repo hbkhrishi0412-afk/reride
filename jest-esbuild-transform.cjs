@@ -44,6 +44,8 @@ module.exports = {
       loader,
       format: 'cjs',
       target: 'es2020',
+      // Jest's CJS runtime can't execute import() without --experimental-vm-modules.
+      supported: { 'dynamic-import': false },
       sourcemap: true,
       sourcefile: sourcePath,
     });

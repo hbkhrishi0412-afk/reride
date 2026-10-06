@@ -76,6 +76,9 @@ secrets/
 credentials/
 config/secrets.json
 firebase-service-account.json
+*firebase-adminsdk*.json
+*service-account*.json
+reride-ade6a-*.json
 
 # Firebase configuration (contains project-specific settings)
 .firebaserc

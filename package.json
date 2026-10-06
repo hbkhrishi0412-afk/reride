@@ -122,6 +122,7 @@
     "dotenv": "^17.2.3",
     "express": "^4.21.0",
     "express-rate-limit": "^7.1.5",
+    "firebase": "^11.10.0",
     "framer-motion": "^12.23.24",
     "helmet": "^7.1.0",
     "i18next": "^25.8.18",
