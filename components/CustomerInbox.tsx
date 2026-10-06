@@ -19,7 +19,6 @@ interface CustomerInboxProps {
   onUserStoppedTyping?: (conversationId: string) => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
-  onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   /** Open this thread when landing from a notification (Messenger-style deep link). */
   initialOpenConversationId?: string | null;
   onConsumedInitialConversation?: () => void;
@@ -54,7 +53,6 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   onUserStoppedTyping,
   onMarkMessagesAsRead,
   onFlagContent,
-  onOfferResponse,
   initialOpenConversationId = null,
   onConsumedInitialConversation,
   currentUserEmail,
@@ -499,7 +497,6 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                       uploaderEmail={currentUserEmail ?? undefined}
                       onMarkMessagesAsRead={onMarkMessagesAsRead}
                       onFlagContent={onFlagContent}
-                      onOfferResponse={onOfferResponse}
                       onClearChat={onClearChat}
                       height="h-full"
                   />

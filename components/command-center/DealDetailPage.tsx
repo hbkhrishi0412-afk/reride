@@ -23,7 +23,43 @@ import {
 import MechanicBookingModal from './MechanicBookingModal.js';
 import DealComplaintModal from './DealComplaintModal.js';
 import DealSellerNotesList from './DealSellerNotesList.js';
-import type { DealInspectionBooking } from '../../types.js';
+import type { DealInspectionBooking, DealKanbanStatus } from '../../types.js';
+
+const DEAL_PROGRESS_STEPS: { label: string; statuses: DealKanbanStatus[] }[] = [
+  { label: 'Negotiation', statuses: ['lead_created', 'buyer_contacted', 'chat_started', 'offer_sent', 'negotiation'] },
+  { label: 'Inspection', statuses: ['inspection'] },
+  { label: 'Payment', statuses: ['payment_pending'] },
+  { label: 'Delivery', statuses: ['vehicle_delivered'] },
+  { label: 'RC transfer', statuses: ['rc_transfer'] },
+  { label: 'Completed', statuses: ['completed'] },
+];
+
+function Section({
+  title,
+  count,
+  hint,
+  children,
+}: {
+  title: string;
+  count?: number;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-4 shadow-sm">
+      <div className="mb-3">
+        <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+          {title}
+          {count != null && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{count}</span>
+          )}
+        </h3>
+        {hint && <p className="text-[11px] text-slate-500 mt-0.5">{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export interface DealDetailPageProps {
   leadId: string;
@@ -197,8 +233,14 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
-        <div className="h-8 w-48 bg-slate-100 rounded-lg" />
-        <div className="h-64 bg-slate-100 rounded-2xl" />
+        <div className="h-5 w-16 bg-slate-100 rounded" />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-4">
+            <div className="h-44 bg-slate-100 rounded-2xl" />
+            <div className="h-56 bg-slate-100 rounded-2xl" />
+          </div>
+          <div className="h-40 bg-slate-100 rounded-2xl" />
+        </div>
       </div>
     );
   }
@@ -218,6 +260,7 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
   const seller = deal.sellerDisplayName || deal.sellerEmail;
   const vehicle = deal.vehicleName || deal.metadata.vehicleName || 'Vehicle';
   const derivedKanbanStatus = deriveKanbanStatus(deal);
+  const currentStep = DEAL_PROGRESS_STEPS.findIndex((s) => s.statuses.includes(derivedKanbanStatus));
   const kanbanColor = DEAL_KANBAN_COLUMNS.find((c) => c.status === derivedKanbanStatus)?.color
     || 'bg-slate-100 text-slate-700';
   const showSellerNotes = role === 'seller' || role === 'admin';
@@ -239,40 +282,64 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
   const canReviewReturn = isDealCompleted && deal.returnStatus === 'returned' && (role === 'seller' || role === 'admin');
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="text-sm font-semibold text-slate-600 hover:text-reride-orange"
-        >
-          ← Back
-        </button>
-        <span className="text-[10px] font-mono font-bold text-reride-orange">{deal.id}</span>
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${kanbanColor}`}>
-          {dealKanbanLabel(derivedKanbanStatus)}
-        </span>
-        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-          {dealStageLabel(deal.currentStage)}
-        </span>
-      </div>
+    <div className="space-y-4">
+      <button
+        type="button"
+        onClick={onBack}
+        className="text-sm font-semibold text-slate-600 hover:text-reride-orange"
+      >
+        ← Back
+      </button>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-5">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900">{vehicle}</h2>
-            {deal.vehiclePrice != null && (
-              <p className="text-sm text-slate-500 mt-1">
-                Listed at ₹{deal.vehiclePrice.toLocaleString('en-IN')}
-              </p>
-            )}
-            {deal.metadata.acceptedOfferAmount && (
-              <p className="text-sm font-semibold text-emerald-700 mt-1">
-                Accepted offer: ₹{deal.metadata.acceptedOfferAmount.toLocaleString('en-IN')}
-              </p>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[11px] font-mono font-bold text-reride-orange">{deal.id}</p>
+                <h2 className="text-lg font-bold text-slate-900">{vehicle}</h2>
+              </div>
+              <span
+                className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${kanbanColor}`}
+                title={dealKanbanLabel(derivedKanbanStatus)}
+              >
+                {dealStageLabel(deal.currentStage)}
+              </span>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {deal.vehiclePrice != null && (
+                <div className="rounded-xl bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-medium text-slate-500">Listed price</p>
+                  <p className="text-sm font-bold text-slate-900">₹{deal.vehiclePrice.toLocaleString('en-IN')}</p>
+                </div>
+              )}
+              {deal.metadata.acceptedOfferAmount && (
+                <div className="rounded-xl bg-emerald-50 px-3 py-2">
+                  <p className="text-[10px] font-medium text-emerald-700">Agreed price</p>
+                  <p className="text-sm font-bold text-emerald-800">₹{deal.metadata.acceptedOfferAmount.toLocaleString('en-IN')}</p>
+                </div>
+              )}
+              <div className="rounded-xl bg-slate-50 px-3 py-2 min-w-0">
+                <p className="text-[10px] font-medium text-slate-500">{role === 'customer' ? 'Seller' : 'Buyer'}</p>
+                <p className="text-sm font-bold text-slate-900 truncate">{role === 'customer' ? seller : buyer}</p>
+              </div>
+            </div>
+
+            {currentStep >= 0 && (
+              <ol className="mt-4 grid grid-cols-6 gap-1" aria-label="Deal progress">
+                {DEAL_PROGRESS_STEPS.map((step, i) => (
+                  <li key={step.label} aria-current={i === currentStep ? 'step' : undefined}>
+                    <div className={`h-1.5 rounded-full ${i <= currentStep ? 'bg-reride-orange' : 'bg-slate-200'}`} />
+                    <p className={`mt-1 text-[10px] leading-tight ${i === currentStep ? 'font-semibold text-slate-900' : i < currentStep ? 'text-slate-600' : 'text-slate-400'}`}>
+                      {step.label}
+                    </p>
+                  </li>
+                ))}
+              </ol>
             )}
 
-            <div className="flex flex-wrap gap-2 mt-4">
+            <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-100">
               {role === 'seller' && deal.chatStatus === 'pending' && (
                 <button
                   type="button"
@@ -384,109 +451,137 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
             </div>
           )}
 
+          {deal.offers && deal.offers.length > 0 && (
+            <Section title="Negotiation" count={deal.offers.length} hint="Offers in the order they were made">
+              <ul className="divide-y divide-slate-100">
+                {deal.offers.map((o) => (
+                  <li key={o.id} className="py-2 flex items-center justify-between gap-2 text-sm">
+                    <span className="font-semibold text-slate-900">₹{o.amount.toLocaleString('en-IN')}</span>
+                    <span className="flex-1 text-xs text-slate-500 capitalize">by {o.offeredBy}</span>
+                    <span
+                      className={`text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${
+                        o.status === 'accepted'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : o.status === 'rejected'
+                            ? 'bg-red-100 text-red-700'
+                            : o.status === 'pending'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {o.status}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          {(deal.documents?.length || bookings.length > 0) ? (
+            <Section title="Inspection & documents">
+              <div className="grid gap-4 sm:grid-cols-2">
+                {bookings.length > 0 && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-1.5">Inspection</p>
+                    <ul className="space-y-2">
+                      {bookings.map((b) => (
+                        <li key={b.id} className="text-xs border border-slate-100 rounded-lg p-2">
+                          <p className="font-semibold text-slate-800">
+                            {b.scheduledDate} · {b.scheduledTime}
+                          </p>
+                          <p className="text-slate-500 truncate">{b.address}</p>
+                          <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
+                            {b.status}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {deal.documents && deal.documents.length > 0 && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-1.5">Documents</p>
+                    <ul className="space-y-1.5">
+                      {deal.documents.map((d) => (
+                        <li key={d.id}>
+                          <a
+                            href={d.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 rounded-lg border border-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 capitalize hover:border-reride-orange/40 hover:text-reride-orange"
+                          >
+                            <span aria-hidden>📄</span>
+                            <span className="flex-1">{d.docType.replace(/_/g, ' ')}</span>
+                            <span aria-hidden>↗</span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </Section>
+          ) : null}
+
+          <Section title="People">
+            <ul className="grid gap-3 sm:grid-cols-3">
+              {[
+                { role: 'Buyer', name: buyer, email: deal.buyerEmail },
+                { role: 'Seller', name: seller, email: deal.sellerEmail },
+                ...(deal.assignedAdminEmail
+                  ? [{ role: 'Assigned admin', name: deal.assignedAdminEmail, email: '' }]
+                  : []),
+              ].map((p) => (
+                <li key={p.role} className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className="shrink-0 w-8 h-8 rounded-full bg-slate-100 text-slate-600 text-xs font-bold flex items-center justify-center uppercase"
+                    aria-hidden
+                  >
+                    {p.name.charAt(0)}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400">{p.role}</p>
+                    <p className="text-sm font-semibold text-slate-900 truncate">{p.name}</p>
+                    {p.email && <p className="text-xs text-slate-500 truncate">{p.email}</p>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        </div>
+
+        <aside className="space-y-4">
           {timelineForDisplay.length > 0 && (
-            <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-5 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-900 mb-3">Activity log</h3>
-              <ul className="space-y-2 max-h-64 overflow-y-auto">
-                {[...timelineForDisplay].reverse().map((evt) => (
-                  <li key={evt.id} className="flex gap-2 text-xs text-slate-600">
-                    <span className="text-emerald-600 shrink-0">●</span>
-                    <span className="flex-1">{evt.label || evt.stage}</span>
-                    <span className="text-slate-400 shrink-0">
+            <Section title="Activity" count={timelineForDisplay.length} hint="Newest first">
+              <ul className="max-h-96 overflow-y-auto pl-1.5 pr-1">
+                {[...timelineForDisplay].reverse().map((evt, i, all) => (
+                  <li
+                    key={evt.id}
+                    className={`relative pl-4 text-xs border-l-2 border-slate-100 ${i === all.length - 1 ? '' : 'pb-3'}`}
+                  >
+                    <span
+                      className={`absolute -left-[5px] top-1 w-2 h-2 rounded-full ring-2 ring-white ${i === 0 ? 'bg-reride-orange' : 'bg-slate-300'}`}
+                      aria-hidden
+                    />
+                    <p className={i === 0 ? 'font-semibold text-slate-900' : 'text-slate-700'}>
+                      {evt.label || evt.stage}
+                    </p>
+                    <p className="text-[11px] text-slate-400">
                       {new Date(evt.createdAt).toLocaleString('en-IN', {
                         day: 'numeric',
                         month: 'short',
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
-                    </span>
+                    </p>
                   </li>
                 ))}
               </ul>
-            </div>
+            </Section>
           )}
-        </div>
-
-        <aside className="space-y-4">
-          <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-4 shadow-sm space-y-3">
-            <h3 className="text-sm font-bold text-slate-900">Parties</h3>
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-slate-400">Buyer</p>
-              <p className="text-sm font-semibold text-slate-900">{buyer}</p>
-              <p className="text-xs text-slate-500">{deal.buyerEmail}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-slate-400">Seller</p>
-              <p className="text-sm font-semibold text-slate-900">{seller}</p>
-              <p className="text-xs text-slate-500">{deal.sellerEmail}</p>
-            </div>
-            {deal.assignedAdminEmail && (
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-slate-400">Assigned admin</p>
-                <p className="text-xs text-slate-600">{deal.assignedAdminEmail}</p>
-              </div>
-            )}
-          </div>
-
-          {(deal.offers?.length || deal.documents?.length || bookings.length > 0) ? (
-            <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-4 shadow-sm space-y-3">
-              {bookings.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 mb-2">Inspection bookings</h3>
-                  <ul className="space-y-2">
-                    {bookings.map((b) => (
-                      <li key={b.id} className="text-xs border border-slate-100 rounded-lg p-2">
-                        <p className="font-semibold text-slate-800">
-                          {b.scheduledDate} · {b.scheduledTime}
-                        </p>
-                        <p className="text-slate-500 truncate">{b.address}</p>
-                        <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
-                          {b.status}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {deal.offers && deal.offers.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 mb-2">Offers</h3>
-                  <ul className="space-y-1">
-                    {deal.offers.map((o) => (
-                      <li key={o.id} className="text-xs flex justify-between gap-2">
-                        <span>₹{o.amount.toLocaleString('en-IN')} · {o.offeredBy}</span>
-                        <span className="text-slate-500">{o.status}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {deal.documents && deal.documents.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 mb-2">Documents</h3>
-                  <ul className="space-y-1">
-                    {deal.documents.map((d) => (
-                      <li key={d.id}>
-                        <a
-                          href={d.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-reride-orange hover:underline"
-                        >
-                          {d.docType.replace(/_/g, ' ')}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          ) : null}
 
           {showSellerNotes && (
-            <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-900 mb-1">Seller notes</h3>
-              <p className="text-[11px] text-slate-500 mb-3">Add notes one at a time. Each saves automatically.</p>
+            <Section title="Seller notes" count={sellerNotesList.length} hint="Add notes one at a time. Each saves automatically.">
               {sellerNotesError && (
                 <p className="mb-2 text-xs font-medium text-red-600">{sellerNotesError}</p>
               )}
@@ -495,7 +590,7 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
                 saving={savingSellerNotes}
                 onChange={(next) => void persistSellerNotes(next)}
               />
-            </div>
+            </Section>
           )}
 
           {showInternalNotes && hasAssistance && (

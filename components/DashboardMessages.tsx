@@ -16,7 +16,6 @@ interface DashboardMessagesProps {
   onUserStoppedTyping?: (conversationId: string) => void;
   sellerEmail?: string | null;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
-  onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   chatPeerOnlineByConversationId?: Record<string, boolean>;
   onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
   onMarkAllAsRead?: () => void;
@@ -33,7 +32,6 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
   onUserStoppedTyping,
   sellerEmail,
   onMarkMessagesAsRead,
-  onOfferResponse,
   chatPeerOnlineByConversationId,
   onSetConversationReadState,
   onMarkAllAsRead,
@@ -308,7 +306,6 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
                   })).catch(() => { /* ignore network errors */ });
                 } catch { /* ignore */ }
               }}
-              onOfferResponse={onOfferResponse}
               height="h-96"
             />
           ) : (

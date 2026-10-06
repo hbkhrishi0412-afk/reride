@@ -207,7 +207,6 @@ interface MobileDashboardProps {
     payload?: unknown,
   ) => void;
   onMarkConversationAsRead: (conversationId: string) => void;
-  onOfferResponse: (conversationId: string, messageId: string, response: string, counterPrice?: number) => void;
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
   onUserStoppedTyping?: (conversationId: string) => void;
@@ -467,7 +466,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   onSendMessage,
   onSellerSendMessage,
   onMarkConversationAsRead,
-  onOfferResponse,
   typingStatus,
   onUserTyping,
   onUserStoppedTyping,
@@ -1556,9 +1554,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               uploaderEmail={currentUser.email}
               onMarkMessagesAsRead={onMarkMessagesAsRead}
               onFlagContent={onFlagContent}
-              onOfferResponse={(conversationId, messageId, response, counterPrice) =>
-                onOfferResponse(conversationId, String(messageId), response, counterPrice)
-              }
               height="min-h-[58vh]"
             />
           </div>

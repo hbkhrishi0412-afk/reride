@@ -10,6 +10,7 @@ jest.mock('../services/dealService.js', () => ({
     activeDeals: [{ vehicleId: '1', id: 'd1' }],
     tasks: [],
   }),
+  fetchSellerDealCalendar: jest.fn().mockResolvedValue({ events: [], thisWeekCount: 0, overdueCount: 0 }),
   invalidateSellerCommandCenterCache: jest.fn(),
 }));
 

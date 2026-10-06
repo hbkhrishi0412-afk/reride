@@ -40,7 +40,6 @@ const AppChatWidgetHost: React.FC<AppChatWidgetHostProps> = ({
     toggleTyping,
     markAsRead,
     flagContent,
-    onOfferResponse,
     clearConversationMessages,
     archiveConversation,
     deleteConversation,
@@ -92,9 +91,6 @@ const AppChatWidgetHost: React.FC<AppChatWidgetHostProps> = ({
           }}
           onFlagContent={(type, id, _reason) => {
             flagContent(type, id);
-          }}
-          onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-            onOfferResponse(conversationId, messageId, response, counterPrice);
           }}
           onTestDriveResponse={onTestDriveResponse}
           onClearChat={clearConversationMessages}

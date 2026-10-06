@@ -6,6 +6,8 @@ import { fetchSellerDealCalendar } from '../../services/dealService.js';
 export interface SellerDealCalendarProps {
   compact?: boolean;
   onOpenDeal?: (leadId: string) => void;
+  /** Refetch (silently) whenever this value changes, e.g. after the command center reloads. */
+  reloadToken?: unknown;
 }
 
 type ViewMode = 'all' | 'day';
@@ -162,19 +164,20 @@ const EventRow: React.FC<EventRowProps> = ({
           <span className={`shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border ${statusStyles(evt.status)}`}>
             {statusLabel}
           </span>
+          {showDate ? (
+            <span className={`ml-auto shrink-0 text-[11px] font-semibold ${evt.status === 'overdue' ? 'text-red-600' : 'text-slate-600'}`}>
+              {formatEventDate(evt.date, evt.time)}
+            </span>
+          ) : (
+            <span className="ml-auto shrink-0 text-[11px] font-semibold text-reride-orange">Open →</span>
+          )}
         </div>
-        <p className="text-[11px] text-slate-500 truncate">{evt.subtitle}</p>
+        <p className="text-[11px] text-slate-500 truncate">
+          {evt.subtitle} · <span className="font-mono text-reride-orange">{evt.dealId}</span>
+        </p>
         {!dense && (
           <p className="text-[10px] text-slate-400 mt-0.5 leading-snug line-clamp-1">{explanation}</p>
         )}
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <p className="text-[10px] font-mono text-reride-orange">{evt.dealId}</p>
-          {showDate ? (
-            <span className="text-[10px] text-slate-500 shrink-0">{formatEventDate(evt.date, evt.time)}</span>
-          ) : (
-            <span className="text-[10px] font-semibold text-reride-orange shrink-0">Open →</span>
-          )}
-        </div>
       </div>
     </button>
   </li>
@@ -301,7 +304,7 @@ const MonthGrid: React.FC<MonthGridProps> = ({
   );
 };
 
-export const SellerDealCalendar: React.FC<SellerDealCalendarProps> = ({ compact = false, onOpenDeal }) => {
+export const SellerDealCalendar: React.FC<SellerDealCalendarProps> = ({ compact = false, onOpenDeal, reloadToken }) => {
   const { t } = useTranslation();
   const dayCasesRef = useRef<HTMLDivElement>(null);
   const [events, setEvents] = useState<DealCalendarEvent[]>([]);
@@ -336,14 +339,13 @@ export const SellerDealCalendar: React.FC<SellerDealCalendarProps> = ({ compact 
   );
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       const calendar = await fetchSellerDealCalendar();
       setEvents(calendar.events);
       setThisWeekCount(calendar.thisWeekCount);
       setOverdueCount(calendar.overdueCount);
     } catch {
-      setEvents([]);
+      /* keep last loaded events */
     } finally {
       setLoading(false);
     }
@@ -351,7 +353,7 @@ export const SellerDealCalendar: React.FC<SellerDealCalendarProps> = ({ compact 
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, reloadToken]);
 
   const pending = useMemo(() => sortEvents(pendingEvents(events)), [events]);
   const eventsByDate = useMemo(() => buildEventsByDate(events), [events]);
@@ -433,7 +435,7 @@ export const SellerDealCalendar: React.FC<SellerDealCalendarProps> = ({ compact 
       )}
       {thisWeekCount > 0 && (
         <span className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800">
-          {thisWeekCount} wk
+          {thisWeekCount} this week
         </span>
       )}
       {overdueCount > 0 && (
@@ -444,52 +446,24 @@ export const SellerDealCalendar: React.FC<SellerDealCalendarProps> = ({ compact 
     </div>
   );
 
+  const viewToggle = (
+    <button
+      type="button"
+      onClick={() => {
+        if (viewMode === 'day') showAllDeadlines();
+        else jumpToDate(nextPendingEvent ? normalizeDateKey(nextPendingEvent.date) : todayDateKey());
+      }}
+      className="shrink-0 text-[11px] font-semibold text-reride-orange hover:underline"
+    >
+      {viewMode === 'day'
+        ? t('sellerDashboard.deadlines.tabAll', 'All deadlines')
+        : t('sellerDashboard.deadlines.calendarView', 'Calendar')}
+    </button>
+  );
+
   const calendarBody = (
     <>
-      <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50/40">
-        <div className="grid grid-cols-2 gap-0.5 p-0.5 rounded-lg bg-slate-100">
-          <button
-            type="button"
-            onClick={showAllDeadlines}
-            className={`py-1.5 text-[11px] font-semibold rounded-md transition-colors ${
-              viewMode === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-            }`}
-          >
-            {t('sellerDashboard.deadlines.tabAll', 'All deadlines')}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!selectedDateKey) jumpToDate(todayDateKey());
-              else setViewMode('day');
-            }}
-            className={`py-1.5 text-[11px] font-semibold rounded-md transition-colors ${
-              viewMode === 'day' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-            }`}
-          >
-            {t('sellerDashboard.deadlines.tabByDay', 'By day')}
-          </button>
-        </div>
-      </div>
-
-      {nextPendingEvent && (
-        <button
-          type="button"
-          onClick={() => jumpToDate(normalizeDateKey(nextPendingEvent.date))}
-          className="w-full text-left px-3 py-2 border-b border-orange-100/80 bg-orange-50/50 hover:bg-orange-50 flex items-center gap-2 active:scale-[0.99] transition-colors"
-        >
-          <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-reride-orange w-9">
-            {t('sellerDashboard.deadlines.nextUp', 'Next up')}
-          </span>
-          <span className="flex-1 min-w-0 text-[12px] font-semibold text-slate-900 truncate">
-            {nextPendingEvent.title}
-          </span>
-          <span className="shrink-0 text-[11px] font-semibold text-reride-orange">
-            {formatEventDate(nextPendingEvent.date, nextPendingEvent.time)}
-          </span>
-        </button>
-      )}
-
+      {compact && <div className="px-3 py-1.5 border-b border-slate-100 flex justify-end">{viewToggle}</div>}
       {(viewMode === 'day' || selectedDateKey) && (
         <MonthGrid
           month={displayMonth}
@@ -608,7 +582,10 @@ export const SellerDealCalendar: React.FC<SellerDealCalendarProps> = ({ compact 
         <div className="px-3 py-2.5 border-b border-slate-100">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-slate-900">{t('sellerDashboard.deadlines.title')}</h3>
-            {statsChips}
+            <div className="flex items-center gap-2">
+              {statsChips}
+              {viewToggle}
+            </div>
           </div>
         </div>
       )}

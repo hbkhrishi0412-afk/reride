@@ -272,7 +272,7 @@ export const handleLeadLifecycle: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    let lead = await fetchLeadWithTimeline(String(row.id));
+    let lead = await fetchLeadWithTimeline(String(row.id), row);
     if (lead) lead = await enrichLead(lead);
     res.status(200).json({ success: true, lead });
     return true;

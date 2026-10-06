@@ -38,7 +38,6 @@ interface MobileInboxProps {
   onTypingActivity?: (conversationId: string, isTyping: boolean) => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
-  onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   onTestDriveResponse?: (
     conversationId: string,
     messageId: number,
@@ -87,7 +86,6 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   onTypingActivity,
   onMarkMessagesAsRead,
   onFlagContent,
-  onOfferResponse,
   onTestDriveResponse,
   currentUser,
   inboxRole = 'customer',
@@ -689,6 +687,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                         currentUserRole={viewerRole}
                         listingPrice={selectedConv.vehiclePrice}
                         onOpenDealRoom={dealLead ? focusDealRoom : undefined}
+                        dealLead={dealLead}
                       />
                     </div>
                   )}
@@ -697,6 +696,8 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                       <TestDriveMessage
                         msg={msg}
                         currentUserRole={viewerRole}
+                        messages={selectedConv.messages}
+                        dealLead={dealLead}
                         onRespond={
                           onTestDriveResponse
                             ? (messageId, response) =>

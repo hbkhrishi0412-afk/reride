@@ -246,7 +246,6 @@ const AppContent: React.FC = () => {
     onUpdateFaq,
     onDeleteFaq,
     onCertificationApproval,
-    onOfferResponse,
     refreshVehicles,
   } = useApp();
 
@@ -444,6 +443,22 @@ const AppContent: React.FC = () => {
           return;
         }
 
+        if (newStatus === 'confirmed') {
+          const lead = await getDealLead({ conversationId }).catch(() => null);
+          if (lead) {
+            try {
+              const updatedLead = await advanceDealStage(lead.id, 'test_drive_scheduled', {
+                date: message.payload?.date || '',
+                time: message.payload?.time || '',
+              });
+              window.dispatchEvent(new CustomEvent('reride:deal-lead-updated', { detail: updatedLead }));
+            } catch (err) {
+              addToast(err instanceof Error ? err.message : t('toast.testDrive.responseFailed'), 'error');
+              return;
+            }
+          }
+        }
+
         const updatedMessage: ChatMessage = {
           ...message,
           payload: {
@@ -486,20 +501,6 @@ const AppContent: React.FC = () => {
           newStatus === 'confirmed' ? t('toast.testDrive.confirmed') : t('toast.testDrive.declined'),
           'success',
         );
-
-        if (newStatus === 'confirmed') {
-          try {
-            const lead = await getDealLead({ conversationId });
-            if (lead && message.payload?.date) {
-              await advanceDealStage(lead.id, 'test_drive_scheduled', {
-                date: message.payload.date,
-                time: message.payload.time || '',
-              });
-            }
-          } catch {
-            /* non-fatal */
-          }
-        }
       } catch (error) {
         logError('Failed to respond to test drive request:', error);
         addToast(t('toast.testDrive.responseFailed'), 'error');

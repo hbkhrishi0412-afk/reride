@@ -67,14 +67,6 @@ const SellerDashboardContent: React.FC<SellerDashboardContentProps> = ({
               }
             }}
             onMarkConversationAsRead={handlers.markAsRead}
-            onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-              handlers.onOfferResponse(
-                conversationId,
-                parseInt(messageId, 10),
-                response as 'accepted' | 'rejected' | 'countered',
-                counterPrice,
-              );
-            }}
             typingStatus={handlers.typingStatus}
             onUserTyping={(conversationId) => {
               handlers.toggleTyping(conversationId, true);
@@ -156,7 +148,6 @@ const SellerDashboardContent: React.FC<SellerDashboardContentProps> = ({
           onNavigate={handlers.navigate}
           onTestDriveResponse={handlers.handleTestDriveResponse}
           allVehicles={app.vehicles || []}
-          onOfferResponse={handlers.onOfferResponse}
           onViewVehicle={handlers.selectVehicle}
           onSellerOpenChat={handlers.handleSellerOpenChatFromDashboard}
           chatPeerOnlineByConversationId={handlers.chatPeerOnlineByConversationId}

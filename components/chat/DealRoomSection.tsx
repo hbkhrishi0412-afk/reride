@@ -74,7 +74,12 @@ export const DealRoomSection: React.FC<DealRoomSectionProps> = ({
       data-testid="deal-room-section"
     >
       <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <DealStageChip lead={dealLead} />
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs font-semibold uppercase tracking-wide text-reride-orange">
+            {t('deal.dealRoom', { defaultValue: 'Deal Room' })}
+          </span>
+          <DealStageChip lead={dealLead} />
+        </div>
         <button
           type="button"
           onClick={onTogglePanel}
@@ -101,14 +106,6 @@ export const DealRoomSection: React.FC<DealRoomSectionProps> = ({
           {t('deal.sellerAcceptChat', {
             defaultValue:
               'A buyer started a tracked deal. Accept chat in the Deal Room below to unlock messaging.',
-          })}
-        </p>
-      ) : null}
-
-      {currentUserRole === 'seller' && dealLead.chatStatus !== 'pending' ? (
-        <p className="mx-3 mb-2 text-xs text-slate-600">
-          {t('deal.sellerUseDealRoom', {
-            defaultValue: 'Use the Deal Room below to manage offers, milestones, and RC transfer.',
           })}
         </p>
       ) : null}

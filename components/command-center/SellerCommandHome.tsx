@@ -135,7 +135,7 @@ function FilterPills({
   onChange: (id: DealFilter) => void;
 }) {
   return (
-    <div className="px-3 py-1.5 border-b border-slate-100 flex gap-1 overflow-x-auto scrollbar-hide">
+    <div className="flex gap-1 overflow-x-auto scrollbar-hide">
       {options.map((opt) => (
         <button
           key={opt.id}
@@ -400,6 +400,8 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
   );
 
   const firstName = seller.name?.split(' ')[0] || 'there';
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
   const stats = data?.stats;
   const trustScore = stats?.trustScore ?? seller.trustScore ?? 50;
   const tasks = useMemo(() => {
@@ -485,66 +487,73 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
           {error} Showing your last loaded data.
         </div>
       )}
-      <div className={`rounded-2xl border border-slate-200/80 bg-white shadow-sm ${compact ? 'px-3 py-2.5' : 'px-3.5 py-3'}`}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-reride-orange">
-              {t('sellerDashboard.hotLeads.title', 'Hot leads')}
-            </p>
-            <h2 className={`font-bold text-slate-900 tracking-tight leading-tight ${compact ? 'text-[16px]' : 'text-[17px]'}`}>
-              Good {new Date().getHours() < 12 ? 'morning' : 'day'}, {firstName}
+      <div className={`rounded-2xl border border-slate-200/80 bg-white shadow-sm ${compact ? 'p-3' : 'p-4'}`}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className={`font-bold text-slate-900 tracking-tight leading-tight ${compact ? 'text-[16px]' : 'text-lg'}`}>
+              Good {greeting}, {firstName}
             </h2>
-            <p className="text-[12px] text-slate-500 mt-0.5 line-clamp-1">
+            <p className="text-[13px] text-slate-500 mt-0.5">
               {tasks.length > 0
                 ? t('sellerDashboard.hotLeads.tasksNeedAttention', { count: tasks.length })
                 : t('sellerDashboard.hotLeads.caughtUp')}
             </p>
           </div>
-          <div className="flex items-center gap-2.5 shrink-0">
-            <div className="text-center">
-              <div
-                className={`rounded-full flex items-center justify-center font-bold border-[3px] ${compact ? 'w-10 h-10 text-sm' : 'w-11 h-11 text-[15px]'}`}
-                style={{
-                  borderColor: trustScore >= 70 ? '#10B981' : trustScore >= 50 ? '#F59E0B' : '#EF4444',
-                  color: trustScore >= 70 ? '#059669' : trustScore >= 50 ? '#D97706' : '#DC2626',
-                }}
-                title="Trust score"
-              >
-                {trustScore}
-              </div>
-              <p className="text-[9px] text-slate-500 mt-0.5 font-medium">Trust</p>
-            </div>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={onNavigateToListings}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 active:scale-95"
+            >
+              + List vehicle
+            </button>
+            <button
+              type="button"
+              onClick={onNavigateToMessages}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95"
+            >
+              Messages
+            </button>
+            <button
+              type="button"
+              onClick={() => void load(true)}
+              disabled={loading}
+              aria-label="Refresh"
+              title="Refresh"
+              className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 active:scale-95"
+            >
+              <span className={loading ? 'inline-block animate-spin' : 'inline-block'} aria-hidden>↻</span>
+            </button>
           </div>
         </div>
-        <div className={`flex flex-wrap gap-1.5 ${compact ? 'mt-2' : 'mt-2.5'}`}>
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-            {tasks.length} tasks
-          </span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-            {stats?.activeDealCount ?? activeDeals.length} deals
-          </span>
-          {!compact && (
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-              {(stats?.ratingAverage ?? 0).toFixed(1)} ★ ({stats?.ratingCount ?? 0})
-            </span>
-          )}
+        <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+          {[
+            { label: 'Tasks', value: tasks.length },
+            { label: 'Deals', value: stats?.activeDealCount ?? activeDeals.length },
+            { label: `Rating (${stats?.ratingCount ?? 0})`, value: `${(stats?.ratingAverage ?? 0).toFixed(1)}★` },
+            { label: 'Trust', value: trustScore, className: trustScore >= 70 ? 'text-emerald-600' : trustScore >= 50 ? 'text-amber-600' : 'text-red-600' },
+          ].map((s) => (
+            <div key={s.label} className="rounded-xl bg-slate-50 py-2">
+              <p className={`text-base font-bold ${s.className ?? 'text-slate-900'}`}>{s.value}</p>
+              <p className="text-[10px] font-medium text-slate-500">{s.label}</p>
+            </div>
+          ))}
         </div>
       </div>
 
+      <div className={compact ? 'space-y-2' : 'grid gap-3 items-start xl:grid-cols-[minmax(0,1fr)_300px]'}>
+      <div className={compact ? 'space-y-2' : 'space-y-3 min-w-0'}>
       {/* Today's tasks */}
+      {tasks.length > 0 && (
       <CollapsibleSection
         title={t('sellerDashboard.hotLeads.tasksTitle')}
         compact={compact}
         defaultOpen
         collapsedSummary={tasksCollapsedSummary}
         badge={
-          tasks.length > 0 ? (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
-              {tasks.length}
-            </span>
-          ) : undefined
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+            {tasks.length}
+          </span>
         }
       >
         {tasks.length > 3 && (
@@ -555,12 +564,7 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
           />
         )}
 
-        {tasks.length === 0 ? (
-          <div className="px-3 py-3 flex items-center gap-2 text-slate-500">
-            <span className="text-base" aria-hidden>✓</span>
-            <p className="text-[13px]">{t('sellerDashboard.hotLeads.tasksEmpty')}</p>
-          </div>
-        ) : filteredTasks.length === 0 ? (
+        {filteredTasks.length === 0 ? (
           <div className="px-3 py-4 text-center">
             <p className="text-[13px] text-slate-500">{t('sellerDashboard.hotLeads.noSearchResults')}</p>
           </div>
@@ -597,6 +601,7 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
           </>
         )}
       </CollapsibleSection>
+      )}
 
       {/* Active deals */}
       <CollapsibleSection
@@ -615,17 +620,24 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
         }
       >
         {activeDeals.length > 0 && (
-          <div className="border-b border-slate-100 bg-slate-50/40">
-            <div className="px-3 py-1.5">
+          <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/40 flex flex-wrap items-center gap-2">
+            <FilterPills
+              options={dealFilterOptions.map((opt) => ({
+                ...opt,
+                label: `${opt.label} · ${activeDeals.filter((d) => dealMatchesFilter(d, opt.id)).length}`,
+              }))}
+              value={dealFilter}
+              onChange={setDealFilter}
+            />
+            {activeDeals.length > 3 && (
               <input
                 type="search"
                 value={dealQuery}
                 onChange={(e) => setDealQuery(e.target.value)}
                 placeholder={t('sellerDashboard.hotLeads.searchDeals')}
-                className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-reride-orange/25 focus:border-reride-orange/40"
+                className="flex-1 min-w-[10rem] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-reride-orange/25 focus:border-reride-orange/40"
               />
-            </div>
-            <FilterPills options={dealFilterOptions} value={dealFilter} onChange={setDealFilter} />
+            )}
           </div>
         )}
 
@@ -662,60 +674,10 @@ export const SellerCommandHome: React.FC<SellerCommandHomeProps> = ({
           </>
         )}
       </CollapsibleSection>
+      </div>
 
-      <SellerDealCalendar compact={compact} onOpenDeal={onOpenDeal} />
-
-      {compact && (
-        <div className="flex flex-wrap gap-1.5 pt-0.5">
-          <button
-            type="button"
-            onClick={onNavigateToListings}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white active:scale-95"
-          >
-            + List vehicle
-          </button>
-          <button
-            type="button"
-            onClick={onNavigateToMessages}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-700 active:scale-95"
-          >
-            Messages
-          </button>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-500 active:scale-95"
-          >
-            Refresh
-          </button>
-        </div>
-      )}
-
-      {!compact && (
-        <div className="flex flex-wrap gap-1.5 pt-0.5">
-          <button
-            type="button"
-            onClick={onNavigateToListings}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white active:scale-95"
-          >
-            + List vehicle
-          </button>
-          <button
-            type="button"
-            onClick={onNavigateToMessages}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-700 active:scale-95"
-          >
-            Messages
-          </button>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-500 active:scale-95"
-          >
-            Refresh
-          </button>
-        </div>
-      )}
+      <SellerDealCalendar compact={compact} onOpenDeal={onOpenDeal} reloadToken={data} />
+      </div>
     </div>
   );
 };
@@ -776,26 +738,33 @@ const DealListRow: React.FC<{
       <button
         type="button"
         onClick={onOpen}
-        className="w-full text-left px-3 py-2.5 flex items-center gap-2.5 hover:bg-slate-50 active:bg-orange-50/40 transition-colors"
+        className="group w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-slate-50 active:bg-orange-50/40 transition-colors"
       >
+        <span
+          className="shrink-0 w-9 h-9 rounded-full bg-orange-50 text-reride-orange text-sm font-bold flex items-center justify-center uppercase"
+          aria-hidden
+        >
+          {buyer.charAt(0)}
+        </span>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <p className="text-[10px] font-mono font-bold text-reride-orange">{deal.id}</p>
+          <p className="text-sm font-semibold text-slate-900 truncate">{buyer}</p>
+          <p className="text-xs text-slate-500 truncate">
+            {vehicle} · <span className="font-mono text-reride-orange">{deal.id}</span>
+          </p>
+        </div>
+        <div className="shrink-0 flex flex-col items-end gap-1">
+          <div className="flex items-center gap-1">
             {deal.chatStatus === 'pending' && (
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
                 Awaiting
               </span>
             )}
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
               {stage}
             </span>
           </div>
-          <p className="text-[13px] font-semibold text-slate-900 truncate">{buyer}</p>
-          <p className="text-[11px] text-slate-500 truncate">{vehicle}</p>
+          <span className="text-[11px] font-semibold text-reride-orange group-hover:underline">View →</span>
         </div>
-        <span className="shrink-0 text-[11px] font-semibold text-reride-orange">
-          →
-        </span>
       </button>
     </li>
   );

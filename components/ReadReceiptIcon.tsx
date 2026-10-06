@@ -1,6 +1,63 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ChatMessage, User } from '../types';
+import type { ChatMessage, DealLead, User } from '../types';
+import { pipelineStageIndex } from '../types';
+
+/** Test drive status from the request, the seller's reply, and the deal pipeline (deal wins once past the test drive). */
+export const TEST_DRIVE_VEHICLE_SLOT = '\u0001';
+
+export function resolveTestDriveStatus(
+    msg: ChatMessage,
+    messages: ChatMessage[] = [],
+    dealLead?: DealLead | null,
+    /** Reply templates with the vehicle replaced by TEST_DRIVE_VEHICLE_SLOT; matches replies sent before they carried originalMessageId. */
+    legacyReplyTemplates: { status: string; template: string }[] = [],
+): string {
+    const reply = messages.find(
+        (m) => m?.payload?.originalMessageId != null && String(m.payload.originalMessageId) === String(msg.id) && m.payload.status,
+    );
+    let replyStatus: string | undefined = reply?.payload?.status;
+    if (!replyStatus && legacyReplyTemplates.length) {
+        const start = messages.findIndex((m) => m?.id === msg.id);
+        for (const m of start >= 0 ? messages.slice(start + 1) : []) {
+            if (m?.type === 'test_drive_request') break;
+            if (!m || m.sender === msg.sender || m.payload?.originalMessageId != null) continue;
+            const text = String(m.text || '');
+            const hit = legacyReplyTemplates.find(({ template }) => {
+                const [prefix, suffix = ''] = template.split(TEST_DRIVE_VEHICLE_SLOT);
+                return text.length >= prefix.length + suffix.length && text.startsWith(prefix) && text.endsWith(suffix);
+            });
+            if (hit) {
+                replyStatus = hit.status;
+                break;
+            }
+        }
+    }
+    const status = String(replyStatus ?? msg.payload?.status ?? 'pending').trim().toLowerCase() || 'pending';
+    if (status !== 'pending' || !dealLead) return status;
+    const dealDone =
+        dealLead.metadata?.testDrive?.status === 'completed' ||
+        pipelineStageIndex(dealLead.currentStage) >= pipelineStageIndex('test_drive_completed');
+    return dealDone ? 'completed' : status;
+}
+
+/** Offer card status: the linked deal offer record wins over the chat message's own payload. */
+export function resolveOfferStatus(msg: ChatMessage, dealLead?: DealLead | null): string {
+    const status = String(msg.payload?.status ?? 'pending').trim().toLowerCase() || 'pending';
+    if (status !== 'pending' || !dealLead) return status;
+    const amount = Number(msg.payload?.offerPrice);
+    const offers = [...(dealLead.metadata?.offers || []), ...(dealLead.offers || [])];
+    const dealOfferId = msg.payload?.dealOfferId;
+    // Cards sent before dealOfferId existed fall back to matching by amount (latest wins).
+    const match = dealOfferId
+        ? offers.find((o) => o.id === dealOfferId)
+        : [...offers].reverse().find((o) => o.amount === amount);
+    if (match && match.status !== 'pending') return match.status;
+    if (pipelineStageIndex(dealLead.currentStage) >= pipelineStageIndex('offer_accepted')) {
+        return amount === dealLead.metadata?.acceptedOfferAmount ? 'accepted' : 'closed';
+    }
+    return status;
+}
 
 interface ReadReceiptIconProps {
   isRead: boolean;
@@ -179,13 +236,14 @@ export const OfferMessage: React.FC<{
     listingPrice?: number;
     onRespond?: (messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
     onOpenDealRoom?: () => void;
-}> = ({ msg, currentUserRole, listingPrice, onRespond, onOpenDealRoom }) => {
+    dealLead?: DealLead | null;
+}> = ({ msg, currentUserRole, listingPrice, onRespond, onOpenDealRoom, dealLead }) => {
     const [isCounterModalOpen, setIsCounterModalOpen] = useState(false);
-    const { offerPrice, counterPrice, status } = msg.payload || {};
+    const { offerPrice, counterPrice } = msg.payload || {};
 
     const isRecipient = (currentUserRole === 'customer' && msg.sender === 'seller') || (currentUserRole === 'seller' && msg.sender === 'user');
-    const statusNorm = (status ?? 'pending').toString().trim().toLowerCase();
-    const showActions = !!onRespond && isRecipient && (statusNorm === 'pending' || statusNorm === '');
+    const statusNorm = resolveOfferStatus(msg, dealLead);
+    const showActions = !!onRespond && isRecipient && statusNorm === 'pending';
     const showDealRoomCta = !showActions && !!onOpenDealRoom;
     
     const statusInfo = {
@@ -194,6 +252,7 @@ export const OfferMessage: React.FC<{
         rejected: { text: "Rejected", color: "bg-reride-orange-light text-reride-orange dark:bg-reride-orange/50 dark:text-reride-orange border-reride-orange" },
         countered: { text: "Countered", color: "bg-gray-100 text-reride-text-dark dark:bg-white dark:text-reride-text-dark border-gray-500" },
         confirmed: { text: "Confirmed", color: "bg-reride-orange-light text-reride-orange dark:bg-reride-orange/50 dark:text-reride-orange border-reride-orange" },
+        closed: { text: "Closed", color: "bg-gray-100 text-gray-600 border-gray-300" },
     };
 
     const handleCounterSubmit = (price: number) => {
@@ -294,19 +353,31 @@ export const TestDriveMessage: React.FC<{
     msg: ChatMessage;
     currentUserRole: User['role'];
     onRespond?: (messageId: number, response: 'confirmed' | 'rejected') => void;
-}> = ({ msg, currentUserRole, onRespond }) => {
-    const { t } = useTranslation();
-    const { date, time, status } = msg.payload || {};
+    messages?: ChatMessage[];
+    dealLead?: DealLead | null;
+}> = ({ msg, currentUserRole, onRespond, messages, dealLead }) => {
+    const { t, i18n } = useTranslation();
+    const { date, time } = msg.payload || {};
     const isSellerRecipient = currentUserRole === 'seller' && msg.sender === 'user';
-    const statusNorm = (status ?? 'pending').toString().trim().toLowerCase();
-    const showActions =
-        isSellerRecipient && !!onRespond && (statusNorm === 'pending' || statusNorm === '');
+    const legacyReplyTemplates = useMemo(() => {
+        const langs = (i18n.options?.supportedLngs || ['en']).filter((l) => l !== 'cimode');
+        return langs.flatMap((lng) => [
+            { status: 'confirmed', template: i18n.t('chat.testDrive.replyConfirmed', { lng, vehicle: TEST_DRIVE_VEHICLE_SLOT }) },
+            { status: 'rejected', template: i18n.t('chat.testDrive.replyDeclined', { lng, vehicle: TEST_DRIVE_VEHICLE_SLOT }) },
+        ]);
+    }, [i18n]);
+    const statusNorm = resolveTestDriveStatus(msg, messages, dealLead, legacyReplyTemplates);
+    const showActions = isSellerRecipient && !!onRespond && statusNorm === 'pending';
 
     const statusInfo = useMemo(
         (): Record<string, { text: string; color: string }> => ({
             pending: { text: t('chat.testDrive.status.pending'), color: 'bg-yellow-100 text-yellow-800' },
             confirmed: { text: t('chat.testDrive.status.confirmed'), color: 'bg-green-100 text-green-800' },
             rejected: { text: t('chat.testDrive.status.declined'), color: 'bg-red-100 text-red-800' },
+            completed: {
+                text: t('chat.testDrive.status.completed', { defaultValue: 'Completed' }),
+                color: 'bg-slate-100 text-slate-700',
+            },
         }),
         [t],
     );

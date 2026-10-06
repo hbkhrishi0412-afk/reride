@@ -2,7 +2,6 @@ import { getSupabaseAdminClient, supabaseUserService } from '../../handler-share
 import type {
   AdminKanbanBoard,
   DealKanbanStatus,
-  DealLead,
   DealLeadMetadata,
   DealRevenueDashboard,
   DealSellerNote,
@@ -88,7 +87,7 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       }
     }
 
-    for (const row of rows || []) {
+    await Promise.all((rows || []).map(async (row) => {
       const meta = (row.metadata as DealLeadMetadata) || {};
       const vehicleName =
         meta.vehicleName ||
@@ -125,25 +124,23 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
           })
           .eq('id', row.id);
       }
-    }
+    }));
 
-    const leads = await enrichLeadsBatch(
-      await leadsFromRows(rows || []),
-      { includeOffers: false, includeDocuments: false },
-    );
-
-    const { data: returnReviewRows } = await supabase
-      .from('deal_leads')
-      .select('*')
-      .eq('seller_email', auth.email)
-      .eq('status', 'completed')
-      .eq('return_status', 'returned')
-      .order('returned_at', { ascending: false });
-
-    const returnReviewLeads = await enrichLeadsBatch(
-      await leadsFromRows(returnReviewRows || []),
-      { includeOffers: false, includeDocuments: false },
-    );
+    const [leads, returnReviewLeads, sellerUser] = await Promise.all([
+      leadsFromRows(rows || []).then((l) =>
+        enrichLeadsBatch(l, { includeOffers: false, includeDocuments: false }),
+      ),
+      supabase
+        .from('deal_leads')
+        .select('*')
+        .eq('seller_email', auth.email)
+        .eq('status', 'completed')
+        .eq('return_status', 'returned')
+        .order('returned_at', { ascending: false })
+        .then(({ data }) => leadsFromRows(data || []))
+        .then((l) => enrichLeadsBatch(l, { includeOffers: false, includeDocuments: false })),
+      supabaseUserService.findByEmail(auth.email),
+    ]);
 
     const leadsForTasks = [...leads];
     for (const rl of returnReviewLeads) {
@@ -154,7 +151,6 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
 
     const tasks = buildSellerTasks(leadsForTasks);
     const pendingInterestCount = leads.filter((l) => l.chatStatus === 'pending').length;
-    const sellerUser = await supabaseUserService.findByEmail(auth.email);
 
     const commandCenter: SellerCommandCenter = {
       tasks,
@@ -223,14 +219,11 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    let lead = await fetchLeadWithTimeline(leadId);
-    if (!lead) {
-      res.status(404).json({ success: false, reason: 'Lead not found' });
-      return true;
-    }
-    lead = await enrichLead(lead);
-
-    const resolved = await resolveVehicleId(lead.vehicleId);
+    const [baseLead] = await leadsFromRows([row]);
+    const [lead, resolved] = await Promise.all([
+      enrichLead(baseLead),
+      resolveVehicleId(baseLead.vehicleId),
+    ]);
     const detail = {
       ...lead,
       vehiclePrice: resolved?.vehicle?.price,
@@ -419,15 +412,10 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       .eq('status', 'active')
       .order('updated_at', { ascending: false });
 
-    const leads: DealLead[] = [];
-    for (const row of rows || []) {
-      const lead = await fetchLeadWithTimeline(row.id);
-      if (lead) {
-        const buyer = await supabaseUserService.findByEmail(lead.buyerEmail);
-        lead.buyerDisplayName = buyer?.name || lead.buyerName;
-        leads.push(lead);
-      }
-    }
+    const leads = await enrichLeadsBatch(
+      await leadsFromRows(rows || []),
+      { includeOffers: false, includeDocuments: false },
+    );
 
     const events = buildCalendarEvents(leads);
     const weekEnd = new Date();

@@ -169,9 +169,7 @@ export function useAppMessagingActions(args: UseAppMessagingActionsArgs) {
           timestamp: new Date().toISOString(),
           isRead: false,
           type: resolvedType,
-          ...(payload && (resolvedType === 'offer' || resolvedType === 'image' || resolvedType === 'voice' || resolvedType === 'test_drive_request')
-            ? { payload }
-            : {}),
+          ...(payload ? { payload } : {}),
         };
 
         const normalizedUserEmail = (currentUser.email || '').toLowerCase().trim();

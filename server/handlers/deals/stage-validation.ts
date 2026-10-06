@@ -39,6 +39,9 @@ export function validateAdvanceStage(params: {
       if (pipelineStageIndex(currentStage) < pipelineStageIndex('inspection_completed')) {
         return 'Inspection must be completed before scheduling a test drive';
       }
+      if (pipelineStageIndex(currentStage) >= pipelineStageIndex('test_drive_completed')) {
+        return 'Test drive is already completed for this deal';
+      }
       break;
     case 'test_drive_completed':
       if (!isBuyer) return 'Only the buyer can mark test drive completed';
@@ -51,6 +54,9 @@ export function validateAdvanceStage(params: {
       if (!Number.isFinite(amount) || amount <= 0) return 'Valid offer amount is required';
       if (pipelineStageIndex(currentStage) < pipelineStageIndex('chat_accepted')) {
         return 'Chat must be started before making an offer';
+      }
+      if (pipelineStageIndex(currentStage) >= pipelineStageIndex('offer_accepted')) {
+        return 'Price is already agreed for this deal';
       }
       break;
     }

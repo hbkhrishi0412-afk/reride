@@ -77,6 +77,26 @@ describe('validateAdvanceStage — negotiation before inspection', () => {
     expect(err).toMatch(/inspection must be completed/i);
   });
 
+  it('blocks re-scheduling a test drive once it is completed (no stage regression)', () => {
+    const err = validateAdvanceStage({
+      stage: 'test_drive_scheduled',
+      row: baseRow({ current_stage: 'delivery_completed' }),
+      auth: sellerAuth,
+      payload: { date: '2026-07-22', time: '00:43' },
+    });
+    expect(err).toMatch(/already completed/i);
+  });
+
+  it('blocks new offers once the price is agreed', () => {
+    const err = validateAdvanceStage({
+      stage: 'offer_made',
+      row: baseRow({ current_stage: 'inspection_completed' }),
+      auth: buyerAuth,
+      payload: { amount: 90000 },
+    });
+    expect(err).toMatch(/already agreed/i);
+  });
+
   it('blocks token upload until test drive is completed', () => {
     const err = validateAdvanceStage({
       stage: 'token_uploaded',

@@ -44,7 +44,6 @@ import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
 import {
   logBackgroundSyncFailure,
   hasCachedVehicleCatalog,
-  runBackgroundSync,
   shouldShowOfflineToast,
   resetOfflineToastSession,
 } from '../utils/toastPolicy.js';
@@ -2038,68 +2037,6 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       if (result.blockedReason === 'max') {
         addToast(t('compare.maxReached', { max: MAX_COMPARE_VEHICLES }), 'error');
       }
-    },
-    onOfferResponse: async (
-      conversationId: string,
-      messageId: number,
-      response: 'accepted' | 'rejected' | 'countered',
-      counterPrice?: number,
-    ) => {
-      if (!currentUser) return;
-
-      const conversation = conversations.find((c) => c && c.id === conversationId);
-      if (!conversation) return;
-
-      const target = conversation.messages?.find((m) => m && m.id === messageId);
-      if (!target || target.type !== 'offer') return;
-
-      const updatedMessages =
-        conversation.messages?.map((msg) => {
-          if (msg.id !== messageId) return msg;
-          if (response === 'countered' && counterPrice) {
-            return {
-              ...msg,
-              payload: {
-                ...msg.payload,
-                status: 'countered' as const,
-                counterPrice: msg.payload?.offerPrice,
-                offerPrice: counterPrice,
-              },
-            };
-          }
-          return {
-            ...msg,
-            payload: { ...msg.payload, status: response },
-          };
-        }) ?? [];
-
-      const updatedConversation: Conversation = { ...conversation, messages: updatedMessages };
-
-      setConversations((prev) => {
-        const next = prev.map((c) => (c && c.id === conversationId ? updatedConversation : c));
-        try {
-          saveConversations(next);
-        } catch {
-          /* ignore */
-        }
-        return next;
-      });
-      if (activeChat?.id === conversationId) {
-        setActiveChat(updatedConversation);
-      }
-
-      const label =
-        response === 'accepted'
-          ? 'Offer accepted'
-          : response === 'rejected'
-            ? 'Offer declined'
-            : 'Counter-offer sent';
-      addToast(label, 'success');
-
-      void runBackgroundSync('Offer response sync', async () => {
-        const { saveConversationToSupabase } = await import('../services/conversationService');
-        await saveConversationToSupabase(updatedConversation);
-      });
     },
   };
   }, [

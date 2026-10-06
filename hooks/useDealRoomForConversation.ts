@@ -1,17 +1,22 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Conversation, DealLead } from '../types';
-import { createDealLead, resolveDealLeadForConversation } from '../services/dealService';
+import { createDealLead, getDealLead, resolveDealLeadForConversation } from '../services/dealService';
 
 type UseDealRoomOptions = {
   initialDealLead?: DealLead | null;
   currentUserRole: 'customer' | 'seller';
 };
 
+// ponytail: unbounded in-memory cache for the session; fine for a user's handful of threads.
+const dealLeadCache = new Map<string, DealLead>();
+
 export function useDealRoomForConversation(
   conversation: Conversation,
   { initialDealLead = null, currentUserRole }: UseDealRoomOptions,
 ) {
-  const [dealLead, setDealLead] = useState<DealLead | null>(initialDealLead);
+  const [dealLead, setDealLead] = useState<DealLead | null>(
+    initialDealLead ?? dealLeadCache.get(conversation.id) ?? null,
+  );
   const [dealLeadLoading, setDealLeadLoading] = useState(false);
   const [dealPanelOpen, setDealPanelOpen] = useState(true);
   const [dealRoomError, setDealRoomError] = useState<string | null>(null);
@@ -20,8 +25,21 @@ export function useDealRoomForConversation(
     dealLead?.chatStatus === 'pending' && currentUserRole === 'customer';
 
   useEffect(() => {
-    setDealLead(initialDealLead);
+    setDealLead(initialDealLead ?? dealLeadCache.get(conversation.id) ?? null);
   }, [initialDealLead, conversation.id]);
+
+  useEffect(() => {
+    if (dealLead && dealLead.conversationId === conversation.id) dealLeadCache.set(conversation.id, dealLead);
+  }, [dealLead, conversation.id]);
+
+  useEffect(() => {
+    const onLeadUpdated = (e: Event) => {
+      const lead = (e as CustomEvent<DealLead>).detail;
+      if (lead?.conversationId === conversation.id) setDealLead(lead);
+    };
+    window.addEventListener('reride:deal-lead-updated', onLeadUpdated);
+    return () => window.removeEventListener('reride:deal-lead-updated', onLeadUpdated);
+  }, [conversation.id]);
 
   useEffect(() => {
     if (!conversation.id) return;
@@ -39,6 +57,27 @@ export function useDealRoomForConversation(
       cancelled = true;
     };
   }, [conversation.id, conversation.vehicleId, conversation.hasDeal]);
+
+  const messageCount = conversation.messages?.length ?? 0;
+  const leadId = dealLead?.id;
+  const seenMessageCount = useRef(messageCount);
+  useEffect(() => {
+    const grew = messageCount > seenMessageCount.current;
+    seenMessageCount.current = messageCount;
+    if (!leadId || !grew) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void getDealLead({ leadId })
+        .then((lead) => {
+          if (!cancelled && lead) setDealLead(lead);
+        })
+        .catch(() => {});
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [leadId, messageCount]);
 
   const focusDealRoom = useCallback(() => {
     setDealPanelOpen(true);

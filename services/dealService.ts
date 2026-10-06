@@ -213,6 +213,7 @@ function isAuthMessage(message: string): boolean {
 
 export function invalidateSellerCommandCenterCache(): void {
   sellerCommandCenterCache = null;
+  sellerCalendarCache = null;
 }
 
 export async function fetchSellerCommandCenter(forceRefresh = false): Promise<SellerCommandCenter> {
@@ -308,10 +309,20 @@ export async function updateDealNotes(params: {
   return data.lead;
 }
 
-export async function fetchSellerDealCalendar(): Promise<SellerDealCalendar> {
-  const response = await authenticatedFetch(`${BASE}?action=seller-calendar`);
-  const data = await parseJson<{ success: boolean; calendar: SellerDealCalendar }>(response);
-  return data.calendar;
+let sellerCalendarCache: { promise: Promise<SellerDealCalendar>; ts: number } | null = null;
+
+export function fetchSellerDealCalendar(): Promise<SellerDealCalendar> {
+  if (sellerCalendarCache && Date.now() - sellerCalendarCache.ts < SELLER_COMMAND_CENTER_TTL_MS) {
+    return sellerCalendarCache.promise;
+  }
+  const promise = authenticatedFetch(`${BASE}?action=seller-calendar`)
+    .then((response) => parseJson<{ success: boolean; calendar: SellerDealCalendar }>(response))
+    .then((data) => data.calendar);
+  promise.catch(() => {
+    if (sellerCalendarCache?.promise === promise) sellerCalendarCache = null;
+  });
+  sellerCalendarCache = { promise, ts: Date.now() };
+  return promise;
 }
 
 export async function fetchAdminRcQueue(): Promise<RcQueueItem[]> {

@@ -238,7 +238,6 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     onUpdateFaq,
     onDeleteFaq,
     onCertificationApproval,
-    onOfferResponse,
     addSellerRating,
     sendMessage,
     setActiveChat,
@@ -1076,14 +1075,6 @@ switch (currentView) {
           setConversationReadState(conversationId, inboxViewerRole, isRead),
         onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, _reason: string) =>
           flagContent(type, id),
-        onOfferResponse: (
-          conversationId: string,
-          messageId: number,
-          response: 'accepted' | 'rejected' | 'countered',
-          counterPrice?: number,
-        ) => {
-          onOfferResponse(conversationId, messageId, response, counterPrice);
-        },
         onClearChat: clearConversationMessages,
         onDeleteConversation: deleteConversation,
         onArchiveConversation: archiveConversation,

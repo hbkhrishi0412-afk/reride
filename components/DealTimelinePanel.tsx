@@ -71,6 +71,13 @@ function formatCurrency(amount: number): string {
   return `₹${amount.toLocaleString('en-IN')}`;
 }
 
+const btnPrimary =
+  'px-3 py-2 text-xs font-semibold rounded-lg bg-reride-orange text-white hover:bg-orange-600 disabled:opacity-50';
+const btnSecondary =
+  'px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50';
+const amountInput =
+  'min-w-0 flex-1 px-2.5 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-orange-200';
+
 export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
   lead,
   currentUser,
@@ -95,18 +102,24 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
   const pendingOffer = currentOffer?.status === 'pending' ? currentOffer : undefined;
 
   const handleAdvance = useCallback(
-    async (stage: DealStage, payload?: Record<string, unknown>, label?: string) => {
+    async (stage: DealStage, payload?: Record<string, unknown>, label?: string): Promise<DealLead | null> => {
       setLoading(true);
       try {
         const updated = await advanceDealStage(lead.id, stage, payload, label);
         onLeadUpdated(updated);
+        if (stage !== 'offer_made') {
+          const latest = updated.timeline?.[updated.timeline.length - 1]?.label;
+          void onSendPipelineMessage?.(`Deal update: ${latest || label || stage.replace(/_/g, ' ')}`);
+        }
+        return updated;
       } catch (err) {
         notifyUser(onNotify, err instanceof Error ? err.message : 'Action failed');
+        return null;
       } finally {
         setLoading(false);
       }
     },
-    [lead.id, onLeadUpdated],
+    [lead.id, onLeadUpdated, onNotify, onSendPipelineMessage],
   );
 
   const handleAcceptChat = async () => {
@@ -114,6 +127,7 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
     try {
       const updated = await acceptDealChat(lead.id, conversationId);
       onLeadUpdated(updated);
+      void onSendPipelineMessage?.('Deal update: Seller accepted the chat. You can message now.');
     } catch (err) {
       notifyUser(onNotify, err instanceof Error ? err.message : 'Failed to accept chat');
     } finally {
@@ -135,6 +149,7 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
           offerPrice: Number(counterAmount),
           counterPrice: currentOffer?.amount,
           status: 'pending',
+          dealOfferId: updated.metadata.currentOfferId,
         });
       } else if (response === 'accepted' && currentOffer?.amount) {
         onSendPipelineMessage?.(`Offer accepted: ${formatCurrency(currentOffer.amount)}`);
@@ -241,88 +256,96 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
     );
   }
 
+  const eventLabelByStage = new Map<string, string>();
+  for (const e of lead.timeline || []) {
+    if (e.label && isPipelineTimelineEvent(String(e.eventType || ''))) eventLabelByStage.set(e.stage, e.label);
+  }
+  const doneCount = DEAL_TIMELINE_STAGES.filter(({ stage }) => isStageDone(effectiveStageIndex, stage)).length;
+  const nextStep = DEAL_TIMELINE_STAGES.find(({ stage }) => !isStageDone(effectiveStageIndex, stage));
+  const progressPct = Math.round((doneCount / DEAL_TIMELINE_STAGES.length) * 100);
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white dark:bg-brand-gray-800 p-3 mb-3 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-3 mb-3 shadow-sm">
       <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileUpload} />
 
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <p className="text-xs font-semibold text-reride-orange uppercase tracking-wide">Deal Room</p>
-          <p className="text-[11px] text-slate-500">Pipeline · {lead.id}</p>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0">
+          <p className="text-[11px] text-slate-500">
+            Step {Math.min(doneCount + 1, DEAL_TIMELINE_STAGES.length)} of {DEAL_TIMELINE_STAGES.length} · {lead.id}
+          </p>
+          {nextStep && (
+            <p className="text-sm font-semibold text-slate-800 truncate">Next: {nextStep.label}</p>
+          )}
         </div>
-        {lead.chatStatus === 'pending' && isSeller && (
-          <button
-            onClick={handleAcceptChat}
-            disabled={loading}
-            className="px-3 py-1.5 bg-reride-orange text-white text-sm font-semibold rounded-lg hover:bg-orange-600 disabled:opacity-50"
-          >
-            Accept Chat?
-          </button>
-        )}
-        {lead.chatStatus === 'pending' && isBuyer && (
-          <span className="text-xs text-amber-600 font-medium">Waiting for seller...</span>
-        )}
+        <span className="shrink-0 text-xs font-semibold text-green-700">{progressPct}%</span>
       </div>
 
-      {/* Timeline */}
-      <div className="space-y-1 mb-3 max-h-40 overflow-y-auto">
-        {DEAL_TIMELINE_STAGES.map(({ stage, label }) => {
-          const done = isStageDone(effectiveStageIndex, stage);
-          const event = [...(lead.timeline || [])]
-            .reverse()
-            .find((e) => e.stage === stage && isPipelineTimelineEvent(String(e.eventType || '')));
-          return (
-            <div key={stage} className="flex items-center gap-2 text-xs">
-              <span className={done ? 'text-green-600' : 'text-slate-300'}>{done ? '✓' : '○'}</span>
-              <span className={done ? 'text-slate-700 dark:text-slate-200 font-medium' : 'text-slate-400'}>
-                {event?.label || label}
-              </span>
-            </div>
-          );
-        })}
+      <div
+        className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden mb-3"
+        role="progressbar"
+        aria-valuenow={progressPct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Deal progress"
+      >
+        <div className="h-full bg-green-500 transition-all" style={{ width: `${progressPct}%` }} />
       </div>
 
-      {/* Action buttons based on stage */}
-      {lead.chatStatus === 'accepted' && (
-        <div className="flex flex-wrap gap-2">
+      <section aria-label="Your action" className="rounded-lg border border-orange-100 bg-orange-50/60 p-2.5 mb-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-reride-orange mb-2">Your action</p>
+        <div className="peer flex flex-col gap-2">
+          {lead.chatStatus === 'pending' && isSeller && (
+            <button onClick={handleAcceptChat} disabled={loading} className={btnPrimary}>
+              Accept Chat
+            </button>
+          )}
+          {lead.chatStatus === 'accepted' && (
+            <>
           {!isStageDone(effectiveStageIndex, 'offer_accepted') && (
             <>
               {isBuyer && !pendingOffer && (
-                <div className="flex gap-1 items-center">
+                <div className="flex gap-2 items-center">
                   <input
                     type="number"
-                    placeholder="Offer ₹"
+                    inputMode="numeric"
+                    placeholder="Your offer ₹"
+                    aria-label="Offer amount in rupees"
                     value={offerAmount}
                     onChange={(e) => setOfferAmount(e.target.value)}
-                    className="w-24 px-2 py-1 text-xs border rounded"
+                    className={amountInput}
                   />
                   <button
                     disabled={loading || !offerAmount}
                     onClick={async () => {
                       const amount = Number(offerAmount);
-                      await handleAdvance('offer_made', { amount });
+                      const updated = await handleAdvance('offer_made', { amount });
+                      if (!updated) return;
                       onSendPipelineMessage?.('Offer sent via Deal Room.', 'offer', {
                         offerPrice: amount,
                         status: 'pending',
+                        dealOfferId: updated.metadata.currentOfferId,
                       });
                       setOfferAmount('');
                     }}
-                    className="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded-lg font-medium"
+                    className={btnPrimary}
                   >
                     Make Offer
                   </button>
                 </div>
               )}
               {pendingOffer && (
-                <div className="w-full space-y-1">
-                  <p className="text-xs font-semibold">
-                    Offer: {formatCurrency(pendingOffer.amount)} from {pendingOffer.offeredBy}
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-600">
+                    Offer from {pendingOffer.offeredBy}:{' '}
+                    <span className="text-sm font-bold text-slate-900">{formatCurrency(pendingOffer.amount)}</span>
                   </p>
-                  <div className="flex gap-1 flex-wrap">
-                    <button onClick={() => handleOfferResponse('accepted')} disabled={loading} className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-lg">Accept</button>
-                    <button onClick={() => handleOfferResponse('rejected')} disabled={loading} className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded-lg">Reject</button>
-                    <input type="number" placeholder="Counter ₹" value={counterAmount} onChange={(e) => setCounterAmount(e.target.value)} className="w-20 px-1 py-1 text-xs border rounded" />
-                    <button onClick={() => handleOfferResponse('countered')} disabled={loading || !counterAmount} className="px-2 py-1 text-xs bg-amber-100 text-amber-800 rounded-lg">Counter</button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => handleOfferResponse('accepted')} disabled={loading} className="px-3 py-2 text-xs font-semibold rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">Accept</button>
+                    <button onClick={() => handleOfferResponse('rejected')} disabled={loading} className="px-3 py-2 text-xs font-semibold rounded-lg border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-50">Reject</button>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <input type="number" inputMode="numeric" placeholder="Counter offer ₹" aria-label="Counter offer amount in rupees" value={counterAmount} onChange={(e) => setCounterAmount(e.target.value)} className={amountInput} />
+                    <button onClick={() => handleOfferResponse('countered')} disabled={loading || !counterAmount} className={btnSecondary}>Counter</button>
                   </div>
                 </div>
               )}
@@ -332,26 +355,29 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
           {isStageDone(effectiveStageIndex, 'offer_accepted') && !isStageDone(effectiveStageIndex, 'inspection_completed') && isBuyer && (
             <>
               {!lead.metadata.inspection?.requestedAt && (
-                <button onClick={() => handleAdvance('inspection_requested')} disabled={loading} className="px-2 py-1 text-xs bg-teal-100 text-teal-800 rounded-lg font-medium">
+                <button onClick={() => handleAdvance('inspection_requested')} disabled={loading} className={btnPrimary}>
                   Need Inspection
                 </button>
               )}
               {lead.metadata.inspection?.requestedAt && !lead.metadata.inspection?.completedAt && (
-                <button onClick={() => triggerUpload('inspection')} disabled={loading} className="px-2 py-1 text-xs bg-teal-100 text-teal-800 rounded-lg font-medium">
+                <button onClick={() => triggerUpload('inspection')} disabled={loading} className={btnPrimary}>
                   Upload Inspection Report
                 </button>
               )}
             </>
           )}
 
-          {isStageDone(effectiveStageIndex, 'inspection_completed') && !isStageDone(effectiveStageIndex, 'test_drive_completed') && isBuyer && (
+          {isStageDone(effectiveStageIndex, 'inspection_completed') && !isStageDone(effectiveStageIndex, 'test_drive_scheduled') && isBuyer && (
+            <p className="text-xs text-slate-600">
+              Request a test drive from the listing page. Once the seller confirms it in chat, it appears here.
+            </p>
+          )}
+
+          {isStageDone(effectiveStageIndex, 'test_drive_scheduled') && !isStageDone(effectiveStageIndex, 'test_drive_completed') && isBuyer && (
             <button
               disabled={loading}
-              onClick={async () => {
-                await handleAdvance('test_drive_completed');
-                onSendPipelineMessage?.('Test drive marked as completed.');
-              }}
-              className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-lg font-medium hover:bg-blue-200"
+              onClick={() => handleAdvance('test_drive_completed')}
+              className={btnPrimary}
             >
               Test Drive Completed
             </button>
@@ -360,15 +386,15 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
           {isStageDone(effectiveStageIndex, 'test_drive_completed') && !isStageDone(effectiveStageIndex, 'token_confirmed') && (
             <>
               {isBuyer && !lead.metadata.token?.receiptUrl && (
-                <div className="flex gap-1 items-center">
-                  <input type="number" placeholder="Token ₹" value={tokenAmount} onChange={(e) => setTokenAmount(e.target.value)} className="w-20 px-1 py-1 text-xs border rounded" />
-                  <button onClick={() => triggerUpload('token')} disabled={loading} className="px-2 py-1 text-xs bg-indigo-100 text-indigo-800 rounded-lg font-medium">
+                <div className="flex gap-2 items-center">
+                  <input type="number" inputMode="numeric" placeholder="Token amount ₹" aria-label="Token amount in rupees" value={tokenAmount} onChange={(e) => setTokenAmount(e.target.value)} className={amountInput} />
+                  <button onClick={() => triggerUpload('token')} disabled={loading} className={btnPrimary}>
                     Upload Token Receipt
                   </button>
                 </div>
               )}
               {isSeller && lead.metadata.token?.receiptUrl && !lead.metadata.token?.confirmedAt && (
-                <button onClick={() => handleAdvance('token_confirmed')} disabled={loading} className="px-2 py-1 text-xs bg-indigo-100 text-indigo-800 rounded-lg font-medium">
+                <button onClick={() => handleAdvance('token_confirmed')} disabled={loading} className={btnPrimary}>
                   Yes, Token Received
                 </button>
               )}
@@ -378,12 +404,12 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
           {isStageDone(effectiveStageIndex, 'token_confirmed') && !isStageDone(effectiveStageIndex, 'delivery_completed') && (
             <>
               {isBuyer && !lead.metadata.delivery?.buyerConfirmedAt && (
-                <button onClick={() => handleAdvance('delivery_pending')} disabled={loading} className="px-2 py-1 text-xs bg-cyan-100 text-cyan-800 rounded-lg font-medium">
+                <button onClick={() => handleAdvance('delivery_pending')} disabled={loading} className={btnPrimary}>
                   Vehicle Received
                 </button>
               )}
               {isSeller && !lead.metadata.delivery?.sellerConfirmedAt && (
-                <button onClick={() => handleAdvance('delivery_pending')} disabled={loading} className="px-2 py-1 text-xs bg-cyan-100 text-cyan-800 rounded-lg font-medium">
+                <button onClick={() => handleAdvance('delivery_pending')} disabled={loading} className={btnPrimary}>
                   Vehicle Delivered
                 </button>
               )}
@@ -393,12 +419,12 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
           {isStageDone(effectiveStageIndex, 'delivery_completed') && !isStageDone(effectiveStageIndex, 'documents_completed') && (
             <>
               {isBuyer && !lead.metadata.documents?.saleAgreementUrl && (
-                <button onClick={() => triggerUpload('saleAgreement')} disabled={loading} className="px-2 py-1 text-xs bg-slate-100 text-slate-800 rounded-lg font-medium">
+                <button onClick={() => triggerUpload('saleAgreement')} disabled={loading} className={btnPrimary}>
                   Upload Sale Agreement
                 </button>
               )}
               {isSeller && !lead.metadata.documents?.deliveryNoteUrl && (
-                <button onClick={() => triggerUpload('deliveryNote')} disabled={loading} className="px-2 py-1 text-xs bg-slate-100 text-slate-800 rounded-lg font-medium">
+                <button onClick={() => triggerUpload('deliveryNote')} disabled={loading} className={btnPrimary}>
                   Upload Signed Delivery Note
                 </button>
               )}
@@ -408,12 +434,12 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
           {isStageDone(effectiveStageIndex, 'documents_completed') && !isStageDone(effectiveStageIndex, 'rc_completed') && (
             <>
               {isSeller && !lead.metadata.rc?.transferDocUrl && (
-                <button onClick={() => triggerUpload('rc')} disabled={loading} className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-lg font-medium">
+                <button onClick={() => triggerUpload('rc')} disabled={loading} className={btnPrimary}>
                   Upload RC Transfer Doc
                 </button>
               )}
               {isBuyer && lead.metadata.rc?.transferDocUrl && !lead.metadata.rc?.buyerConfirmedAt && (
-                <button onClick={() => handleAdvance('rc_completed')} disabled={loading} className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-lg font-medium">
+                <button onClick={() => handleAdvance('rc_completed')} disabled={loading} className={btnPrimary}>
                   Confirm RC Transfer
                 </button>
               )}
@@ -421,13 +447,46 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
           )}
 
           {isStageDone(effectiveStageIndex, 'rc_completed') && !isStageDone(effectiveStageIndex, 'deal_completed') && (
-            <button onClick={() => handleAdvance('deal_completed')} disabled={loading} className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg font-bold">
+            <button onClick={() => handleAdvance('deal_completed')} disabled={loading} className="px-3 py-2 text-xs font-bold rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">
               Complete Deal
             </button>
           )}
+            </>
+          )}
+        </div>
+        <p className="hidden peer-empty:block text-xs text-slate-600">
+          Nothing needed from you right now. Waiting for the {isBuyer ? 'seller' : 'buyer'}.
+        </p>
+      </section>
 
-          <button onClick={() => setShowAssistance(!showAssistance)} className="px-2 py-1 text-xs border border-reride-orange text-reride-orange rounded-lg font-medium ml-auto">
-            Need Help?
+      <details className="mb-2">
+        <summary className="cursor-pointer select-none text-xs font-medium text-slate-500 hover:text-slate-700">
+          View all steps ({doneCount}/{DEAL_TIMELINE_STAGES.length} done)
+        </summary>
+        <ol className="mt-2 space-y-1">
+          {DEAL_TIMELINE_STAGES.map(({ stage, label }) => {
+            const done = isStageDone(effectiveStageIndex, stage);
+            return (
+              <li key={stage} className="flex items-center gap-2 text-xs">
+                <span className={done ? 'text-green-600' : 'text-slate-300'} aria-hidden>{done ? '✓' : '○'}</span>
+                <span className={done ? 'text-slate-700 font-medium' : 'text-slate-400'}>
+                  {eventLabelByStage.get(stage) || label}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </details>
+
+      {lead.chatStatus === 'accepted' && (
+        <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
+          <span className="text-[11px] text-slate-500">Stuck on paperwork or RC?</span>
+          <button
+            onClick={() => setShowAssistance(!showAssistance)}
+            aria-expanded={showAssistance}
+            className="text-xs font-semibold text-reride-orange hover:underline"
+          >
+            {showAssistance ? 'Hide help' : 'Need Help?'}
           </button>
         </div>
       )}

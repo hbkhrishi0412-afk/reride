@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
 import type { Conversation, ChatMessage, DealLead } from '../types.js';
-import DealStageChip from './DealStageChip';
-import ReadReceiptIcon, { OfferMessage } from './ReadReceiptIcon.js';
+import ReadReceiptIcon, { OfferMessage, TestDriveMessage } from './ReadReceiptIcon.js';
 import { phoneDisplayCompact } from '../utils/numberUtils.js';
 import { uploadImage, uploadChatAudio } from '../services/imageUploadService';
 import { ChatMessageImage } from './ChatMessageImage';
@@ -29,7 +28,6 @@ interface InlineChatProps {
   uploaderEmail?: string;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
-  onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   onClearChat?: (conversationId: string) => void | Promise<void>;
   onStartCall?: (phone: string) => void;
   callTargetPhone?: string;
@@ -65,7 +63,6 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
   uploaderEmail,
   onMarkMessagesAsRead, 
   onFlagContent, 
-  onOfferResponse,
   onClearChat,
   onStartCall,
   callTargetPhone,
@@ -346,12 +343,6 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
           </button>
         </div>
         </div>
-        {dealLead ? <DealStageChip lead={dealLead} /> : null}
-        {chatBlockedByDeal ? (
-          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-            Your tracked deal is active. The seller must accept chat before you can message — you can still use the Deal Room below to make offers and track milestones.
-          </p>
-        ) : null}
       </div>
 
       {(currentUserEmail || (currentUserRole === 'customer' && conversation.vehicleId)) ? (
@@ -420,6 +411,14 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
                           currentUserRole={currentUserRole} 
                           listingPrice={conversation.vehiclePrice}
                           onOpenDealRoom={dealLead ? focusDealRoom : undefined}
+                          dealLead={dealLead}
+                        />
+                      ) : msg.type === 'test_drive_request' ? (
+                        <TestDriveMessage
+                          msg={msg}
+                          currentUserRole={currentUserRole}
+                          messages={conversation.messages}
+                          dealLead={dealLead}
                         />
                       ) : msg.type === 'image' && msg.payload?.imageUrl ? (
                         <div className="space-y-2">

@@ -26,9 +26,7 @@ import { SellerAnalyticsView } from './seller-dashboard/SellerAnalyticsView';
 import { SellerListingsView } from './seller-dashboard/SellerListingsView';
 import { SellerSalesHistoryView } from './seller-dashboard/SellerSalesHistoryView';
 import { SellerNotificationsView } from './seller-dashboard/SellerNotificationsView';
-import SellerPremiumPanel, {
-  sellerPremiumGhostBtnStyle,
-} from './seller-dashboard/SellerPremiumShell';
+import SellerPremiumPanel from './seller-dashboard/SellerPremiumShell';
 import Logo from './Logo';
 import {
   validateListingRenewal,
@@ -79,7 +77,6 @@ interface DashboardProps {
   onRequestCertification: (vehicleId: number) => void;
   onNavigate: (view: View) => void;
   onTestDriveResponse?: (conversationId: string, messageId: number, newStatus: 'confirmed' | 'rejected') => void;
-  onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   onViewVehicle?: (vehicle: Vehicle) => void;
   chatPeerOnlineByConversationId?: Record<string, boolean>;
   /** Mobile seller dashboard uses this; desktop dashboard may ignore. */
@@ -96,7 +93,7 @@ interface DashboardProps {
 type DashboardView = 'overview' | 'listings' | 'form' | 'messages' | 'analytics' | 'salesHistory' | 'reports' | 'settings' | 'notifications';
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onDeleteConversation, onArchiveConversation, onUpdateSellerProfile, vehicleData, onFeatureListing, onBoostListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat, onNotify, notifications = [], onNotificationClick, onMarkNotificationsAsRead, onLogout }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onDeleteConversation, onArchiveConversation, onUpdateSellerProfile, vehicleData, onFeatureListing, onBoostListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat, onNotify, notifications = [], onNotificationClick, onMarkNotificationsAsRead, onLogout }) => {
   const notify = useCallback(
     (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') =>
       dashboardNotify(onNotify, message, type),
@@ -1109,16 +1106,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               eyebrow="Deal"
               title="Lead detail"
               description="Review the buyer conversation and next steps."
-              actions={
-                <button
-                  type="button"
-                  onClick={() => setSelectedDealId(null)}
-                  className="rounded-xl px-3.5 py-2 text-sm font-semibold text-stone-700"
-                  style={sellerPremiumGhostBtnStyle}
-                >
-                  Back to leads
-                </button>
-              }
             >
               <DealDetailPage
                 leadId={selectedDealId}
@@ -1668,7 +1655,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               } catch { /* ignore */ }
             }}
             typingStatus={typingStatus}
-            onOfferResponse={onOfferResponse}
             onTestDriveResponse={onTestDriveResponse}
             onClearChat={onClearChat}
             onArchiveConversation={onArchiveConversation}

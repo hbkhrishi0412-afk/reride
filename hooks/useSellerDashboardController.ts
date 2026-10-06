@@ -6,6 +6,7 @@ import { planDetailsForSeller } from '../utils/listingPlanRules.js';
 import { planService } from '../services/planService';
 import {
   fetchSellerCommandCenter,
+  fetchSellerDealCalendar,
   invalidateSellerCommandCenterCache,
 } from '../services/dealService';
 import { rehydrateApiCredentials } from '../utils/validatePersistedSession.js';
@@ -105,6 +106,7 @@ export function useSellerCommandCenter(seller: User | null) {
       }
       setCommandCenterLoading(true);
       if (force) invalidateSellerCommandCenterCache();
+      void fetchSellerDealCalendar().catch(() => {});
       return fetchSellerCommandCenter(force)
         .then((center) => {
           setCommandCenter(center);

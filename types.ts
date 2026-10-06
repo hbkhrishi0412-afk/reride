@@ -491,6 +491,8 @@ export interface ChatMessage {
     originalMessageId?: number | string;
     /** If this message is a counter-offer, this field holds the price of the offer it is countering. */
     counterPrice?: number;
+    /** Deal pipeline offer this chat offer card mirrors (DealOfferRecord.id). */
+    dealOfferId?: string;
     status?: 'pending' | 'accepted' | 'rejected' | 'countered' | 'confirmed';
     /** Public URL for image messages (e.g. Supabase Storage). */
     imageUrl?: string;

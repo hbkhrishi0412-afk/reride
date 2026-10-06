@@ -30,6 +30,7 @@ import type {
   AssistanceRequestSource,
 } from '../../../types.js';
 import {
+  pipelineStageIndex,
   deriveKanbanStatus,
   dealAssistancePackageLabel,
   assistancePackageNeedsInspection,
@@ -522,18 +523,22 @@ export async function fetchDocumentsForLead(leadId: string): Promise<DealDocumen
 }
 
 export async function enrichLead(lead: DealLead): Promise<DealLead> {
-  const buyer = await supabaseUserService.findByEmail(lead.buyerEmail);
-  const seller = await supabaseUserService.findByEmail(lead.sellerEmail);
+  const [buyer, seller, resolved, offers, documents] = await Promise.all([
+    supabaseUserService.findByEmail(lead.buyerEmail),
+    supabaseUserService.findByEmail(lead.sellerEmail),
+    resolveVehicleId(lead.vehicleId),
+    fetchOffersForLead(lead.id, lead.metadata),
+    fetchDocumentsForLead(lead.id),
+  ]);
   lead.buyerDisplayName = buyer?.name || lead.buyerName;
   lead.sellerDisplayName = seller?.name;
-  const resolved = await resolveVehicleId(lead.vehicleId);
   if (resolved?.vehicle) {
     lead.vehicleName = `${resolved.vehicle.year} ${resolved.vehicle.make} ${resolved.vehicle.model}`;
     lead.vehicleMake = resolved.vehicle.make;
     lead.vehicleModel = resolved.vehicle.model;
   }
-  lead.offers = await fetchOffersForLead(lead.id, lead.metadata);
-  lead.documents = await fetchDocumentsForLead(lead.id);
+  lead.offers = offers;
+  lead.documents = documents;
   if (!lead.kanbanStatus) {
     lead.kanbanStatus = deriveKanbanStatus(lead);
   }
@@ -886,16 +891,21 @@ export async function syncDualWriteForStage(
   }
 }
 
-export async function fetchLeadWithTimeline(leadId: string): Promise<DealLead | null> {
+export async function fetchLeadWithTimeline(
+  leadId: string,
+  knownRow?: Record<string, unknown>,
+): Promise<DealLead | null> {
   const supabase = getSupabaseAdminClient();
-  const { data: row } = await supabase.from('deal_leads').select('*').eq('id', leadId).single();
+  const [rowResult, { data: events }] = await Promise.all([
+    knownRow ? Promise.resolve({ data: knownRow }) : supabase.from('deal_leads').select('*').eq('id', leadId).single(),
+    supabase
+      .from('deal_timeline_events')
+      .select('*')
+      .eq('lead_id', leadId)
+      .order('created_at', { ascending: true }),
+  ]);
+  const row = rowResult.data;
   if (!row) return null;
-
-  const { data: events } = await supabase
-    .from('deal_timeline_events')
-    .select('*')
-    .eq('lead_id', leadId)
-    .order('created_at', { ascending: true });
 
   const timeline: DealTimelineEvent[] = (events || []).map((e) => ({
     id: e.id,
@@ -1204,14 +1214,19 @@ export async function updateLeadStage(
   extra?: { metadata?: Partial<DealLeadMetadata>; status?: string; completedAt?: string },
 ): Promise<void> {
   const supabase = getSupabaseAdminClient();
-  const updates: Record<string, unknown> = {
-    current_stage: stage,
-    updated_at: new Date().toISOString(),
-  };
+  const { data: existing } = await supabase
+    .from('deal_leads')
+    .select('metadata, current_stage')
+    .eq('id', leadId)
+    .single();
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  // Stages only move forward; late actions still record metadata + timeline without regressing the deal.
+  if (pipelineStageIndex(stage) >= pipelineStageIndex(String(existing?.current_stage || 'lead_created'))) {
+    updates.current_stage = stage;
+  }
   if (extra?.status) updates.status = extra.status;
   if (extra?.completedAt) updates.completed_at = extra.completedAt;
   if (extra?.metadata) {
-    const { data: existing } = await supabase.from('deal_leads').select('metadata').eq('id', leadId).single();
     updates.metadata = { ...(existing?.metadata as object || {}), ...extra.metadata };
   }
   await supabase.from('deal_leads').update(updates).eq('id', leadId);

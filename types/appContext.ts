@@ -172,10 +172,4 @@ export interface AppContextType {
   selectVehicle: (vehicle: Vehicle) => void;
   toggleWishlist: (vehicleId: number) => void;
   toggleCompare: (vehicleId: number) => void;
-  onOfferResponse: (
-    conversationId: string,
-    messageId: number,
-    response: 'accepted' | 'rejected' | 'countered',
-    counterPrice?: number,
-  ) => void;
 }

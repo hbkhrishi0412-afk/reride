@@ -17,7 +17,6 @@ import {
   scrollContainerToBottom,
   scrollContainerToShowElement,
 } from '../utils/scrollWithinContainer.js';
-import DealStageChip from './DealStageChip';
 import { DealRoomSection } from './chat/DealRoomSection';
 import { useDealRoomForConversation } from '../hooks/useDealRoomForConversation';
 import { useApp } from './AppProvider';
@@ -35,7 +34,6 @@ interface ChatWidgetProps {
   uploaderEmail?: string;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
-  onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   onTestDriveResponse?: (
     conversationId: string,
     messageId: number,
@@ -81,7 +79,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     onUserStoppedTyping,
     onMarkMessagesAsRead,
     onFlagContent,
-    onOfferResponse,
     onTestDriveResponse,
     onClearChat,
     onArchiveConversation,
@@ -416,8 +413,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     currentUserRole === 'seller' ? conversation.isReadBySeller : conversation.isReadByCustomer;
 
   const hasLinkedDeal = Boolean(dealLead) || Boolean(conversation.hasDeal);
-  const showInboxActions = Boolean(onArchiveConversation || onDeleteConversation);
-
   const handleArchiveFromChat = () => {
     if (!onArchiveConversation) return;
     setMoreMenuOpen(false);
@@ -629,27 +624,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                         )}
                     </div>
                     <p className="text-xs text-gray-500 truncate">{conversation.vehicleName}</p>
-                    {dealLead ? (
-                      <div className="mt-1">
-                        <DealStageChip lead={dealLead} />
-                      </div>
-                    ) : null}
                 </div>
             </div>
-            <div className="flex items-center gap-1">
-                {onSetConversationReadState && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSetConversationReadState(conversation.id, !threadIsRead);
-                    }}
-                    className="px-2 py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 rounded-lg"
-                    aria-label={threadIsRead ? 'Mark conversation as unread' : 'Mark conversation as read'}
-                  >
-                    {threadIsRead ? 'Unread' : 'Read'}
-                  </button>
-                )}
+            <div className="flex items-center gap-0.5 shrink-0">
                 {callTargetPhone && (!isMobile || !mobileCallHref) && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onStartCall ? onStartCall(callTargetPhone) : window.open(`tel:${callTargetPhone}`); }}
@@ -662,32 +639,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                     </svg>
                   </button>
                 )}
-                {onClearChat && !isMobile && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void runIfConfirmed(
-                        'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
-                        () => {
-                          void onClearChat(conversation.id);
-                        },
-                      );
-                    }}
-                    className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
-                    aria-label="Clear chat history"
-                    title="Clear chat history"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-                      <path
-                        fillRule="evenodd"
-                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </button>
-                )}
-                {showInboxActions && (
                   <div className="relative">
                     <button
                       type="button"
@@ -710,7 +661,41 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                         role="menu"
                         tabIndex={-1}
                         onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') setMoreMenuOpen(false);
+                        }}
                       >
+                        {onSetConversationReadState && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100"
+                            onClick={() => {
+                              setMoreMenuOpen(false);
+                              onSetConversationReadState(conversation.id, !threadIsRead);
+                            }}
+                          >
+                            {threadIsRead ? 'Mark as unread' : 'Mark as read'}
+                          </button>
+                        )}
+                        {onClearChat && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100"
+                            onClick={() => {
+                              setMoreMenuOpen(false);
+                              void runIfConfirmed(
+                                'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
+                                () => {
+                                  void onClearChat(conversation.id);
+                                },
+                              );
+                            }}
+                          >
+                            Clear chat
+                          </button>
+                        )}
                         {onArchiveConversation && (
                           <button
                             type="button"
@@ -731,32 +716,22 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                             Delete conversation
                           </button>
                         )}
-                        {onClearChat && isMobile && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="w-full text-left px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50 active:bg-gray-100"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setMoreMenuOpen(false);
-                              void runIfConfirmed(
-                                'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
-                                () => {
-                                  void onClearChat(conversation.id);
-                                },
-                              );
-                            }}
-                          >
-                            Clear chat
-                          </button>
-                        )}
+                        <div className="my-1 border-t border-gray-100" role="separator" />
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={conversation.isFlagged}
+                          className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 active:bg-red-100 disabled:text-gray-400 disabled:hover:bg-transparent"
+                          onClick={(e) => {
+                            setMoreMenuOpen(false);
+                            handleFlagClick(e);
+                          }}
+                        >
+                          {conversation.isFlagged ? 'Reported' : 'Report conversation'}
+                        </button>
                       </div>
                     )}
                   </div>
-                )}
-                <button onClick={handleFlagClick} disabled={conversation.isFlagged} className="disabled:opacity-50 p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors" aria-label="Report conversation" title={conversation.isFlagged ? "This conversation has been reported" : "Report conversation"}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 6a3 3 0 013-3h10a1 1 0 01.8 1.6L14.25 8l2.55 3.4A1 1 0 0116 13H6a1 1 0 01-1-1V6z" clipRule="evenodd" /></svg>
-                </button>
                 <button onClick={(e) => { e.stopPropagation(); handleToggleMinimize(); }} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors" aria-label="Minimize chat">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
                 </button>
@@ -851,11 +826,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
           className="flex-grow p-3 overflow-y-auto bg-gray-50 space-y-3 relative"
           style={{ backgroundColor: '#F7F7F9' }}
         >
-            {chatBlockedByDeal && (
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-center text-sm text-amber-800">
-                Waiting for seller to accept chat.
-              </div>
-            )}
             {visibleMessages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-500">
                 <div className="text-center mb-6">
@@ -864,16 +834,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                   </svg>
                   <p className="text-gray-600 mb-2">No messages yet. Start the conversation!</p>
                 </div>
-                {currentUserRole === 'customer' && !chatBlockedByDeal && !dealLead && conversation.vehicleId ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleStartDealRoom()}
-                    disabled={dealLeadLoading}
-                    className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-60"
-                  >
-                    {dealLeadLoading ? 'Opening Deal Room…' : 'Open Deal Room'}
-                  </button>
-                ) : null}
                 {dealLead && currentUserRole === 'customer' && !chatBlockedByDeal ? (
                   <p className="text-gray-600 text-sm">Use the Deal Room above to make or counter offers.</p>
                 ) : null}
@@ -900,11 +860,14 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                                       currentUserRole={currentUserRole}
                                       listingPrice={conversation.vehiclePrice}
                                       onOpenDealRoom={dealLead ? focusDealRoom : undefined}
+                                      dealLead={dealLead}
                                     />
                                   ) : msg.type === 'test_drive_request' ? (
                                     <TestDriveMessage
                                       msg={msg}
                                       currentUserRole={currentUserRole}
+                                      messages={conversation.messages}
+                                      dealLead={dealLead}
                                       onRespond={
                                         onTestDriveResponse
                                           ? (messageId, response) =>
