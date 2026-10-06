@@ -8,7 +8,8 @@ import mongoose from 'mongoose';
 
 // MongoDB connection function
 async function connectToDatabase() {
-    const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://hbk_hrishi0412:Qaz%403755@cluster0.nmiwnl7.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+    const MONGODB_URI = process.env.MONGODB_URI;
+    if (!MONGODB_URI) throw new Error('Set MONGODB_URI');
     
     console.log('🔄 Connecting to MongoDB...');
     const mongooseInstance = await mongoose.connect(MONGODB_URI, {
