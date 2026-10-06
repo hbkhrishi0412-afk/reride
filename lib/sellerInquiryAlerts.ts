@@ -74,14 +74,19 @@ let firebaseAdminApp: App | null | undefined;
 
 export function getFirebaseAdminApp(): App | null {
   if (firebaseAdminApp !== undefined) return firebaseAdminApp;
-  // Dashboards often keep the quotes copied from .env files, which breaks JSON.parse.
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim().replace(/^'([\s\S]*)'$/, '$1');
+  // Dashboard pastes often keep the `KEY=` prefix or the quotes copied from .env files.
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim()
+    .replace(/^FIREBASE_SERVICE_ACCOUNT_KEY\s*=\s*/, '')
+    .replace(/^'([\s\S]*)'$/, '$1')
+    .replace(/^"(\{[\s\S]*\})"$/, '$1');
   if (!raw) {
     firebaseAdminApp = null;
     return null;
   }
   try {
     const serviceAccount = JSON.parse(raw) as Record<string, string>;
+    // A double-escaped key arrives with literal "\n" sequences instead of newlines.
+    if (serviceAccount.private_key) serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
     if (getApps().length === 0) {
       firebaseAdminApp = initializeApp({ credential: cert(serviceAccount as Parameters<typeof cert>[0]) });
     } else {

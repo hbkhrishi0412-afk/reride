@@ -1809,7 +1809,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         if (!app) {
           return res.status(503).json({
             success: false,
-            reason: 'Firebase is not configured. Set FIREBASE_SERVICE_ACCOUNT_KEY.',
+            reason: process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim()
+              ? 'FIREBASE_SERVICE_ACCOUNT_KEY is set but is not valid service account JSON.'
+              : 'FIREBASE_SERVICE_ACCOUNT_KEY is not set on the server. Add it for Production and redeploy.',
           });
         }
 
