@@ -295,12 +295,6 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         [indianStates],
     );
 
-    // Get cities for selected district
-    const districtCities = useMemo(() => {
-        if (!selectedDistrict) return [];
-        return citiesByState[selectedDistrict] || [];
-    }, [selectedDistrict, citiesByState]);
-
     const tier1CityQuickPicks = useMemo(() => {
         const canonicalRows = allCities.map((row) => ({
             ...row,
@@ -548,26 +542,64 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
 
     if (!isOpen) return null;
 
+    const isSearchMode = searchTerm.trim().length > 0;
+    const detectBusy = isDetecting && selectedOption === 'detect';
+    const sectionLabel = 'px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500';
+    const checkIcon = (
+        <svg className="h-4 w-4 shrink-0 text-blue-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+        </svg>
+    );
+    const pinIcon = (className: string) => (
+        <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+            <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+        </svg>
+    );
+
+    const renderCityRow = (city: string, stateCode: string, stateName?: string) => {
+        const selected = isCityRowSelected(city, stateCode);
+        return (
+            <button
+                key={`${city}-${stateCode}`}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => handleCitySelect(city, stateCode, true)}
+                className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors touch-manipulation ${
+                    selected ? 'bg-blue-50 font-semibold text-blue-900' : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'
+                }`}
+            >
+                <span className="min-w-0 truncate">
+                    {getDisplayNameForCity(city)}
+                    {stateName && <span className="font-normal text-gray-500"> Â· {stateName}</span>}
+                </span>
+                {selected && checkIcon}
+            </button>
+        );
+    };
+
     return (
-        <div 
+        <div
             className={`fixed inset-0 bg-black/50 z-modal ${useMobileSheet ? 'flex items-end' : ''}`}
             onClick={onClose}
-            style={{ 
+            style={{
                 zIndex: 9999,
                 willChange: 'opacity',
                 contain: 'layout style paint'
             }}
         >
-            <div 
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="location-modal-title"
                 className={`bg-white shadow-2xl w-full flex flex-col notranslate ${
                     useMobileSheet
                         ? 'max-h-[min(92vh,720px)] rounded-t-2xl'
-                        : 'rounded-lg max-w-md max-h-[85vh] absolute top-4 left-1/2 -translate-x-1/2'
+                        : 'rounded-xl max-w-md max-h-[85vh] absolute top-[6vh] left-1/2 -translate-x-1/2'
                 }`}
                 onClick={e => e.stopPropagation()}
                 data-no-translate
                 translate="no"
-                style={{ 
+                style={{
                     maxWidth: useMobileSheet ? '100%' : '420px',
                     minHeight: useMobileSheet ? undefined : '400px',
                     willChange: 'transform',
@@ -576,383 +608,308 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                 }}
             >
                 {/* Header */}
-                <div 
-                    className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0"
-                    style={{ minHeight: '60px' }}
-                >
-                    <h2 className="text-lg font-semibold text-gray-900">{t('locationModal.title')}</h2>
-                    <button 
-                        onClick={onClose} 
-                        className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+                <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 flex-shrink-0">
+                    <div className="min-w-0">
+                        <h2 id="location-modal-title" className="text-lg font-semibold text-gray-900">{t('locationModal.title')}</h2>
+                        <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-gray-500">
+                            {pinIcon('h-3.5 w-3.5 shrink-0 text-gray-400')}
+                            {t('locationModal.current', {
+                                defaultValue: 'Currently: {{place}}',
+                                place: currentLocation.trim() || t('locationModal.allIndia'),
+                            })}
+                        </p>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="-mr-1 p-1.5 rounded-full hover:bg-gray-100 transition-colors"
                         aria-label={t('locationModal.close')}
                     >
-                        <svg 
-                            xmlns="http://www.w3.org/2000/svg" 
-                            className="h-5 w-5 text-gray-500" 
-                            viewBox="0 0 20 20" 
-                            fill="currentColor"
-                        >
-                            <path 
-                                fillRule="evenodd" 
-                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" 
-                                clipRule="evenodd" 
-                            />
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                         </svg>
                     </button>
                 </div>
 
-                {/* Search Input */}
-                <div 
-                    className="px-6 py-4 border-b border-gray-200 flex-shrink-0"
-                    style={{ minHeight: '72px' }}
-                >
+                {/* Search */}
+                <div className="px-5 pb-3 border-b border-gray-200 flex-shrink-0">
                     <div className="relative">
-                            <input
-                                type="text"
-                                value={searchTerm}
+                        <svg xmlns="http://www.w3.org/2000/svg" className="pointer-events-none h-5 w-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                        </svg>
+                        <input
+                            type="search"
+                            value={searchTerm}
+                            autoFocus={!useMobileSheet}
+                            aria-label={t('locationModal.searchPlaceholder')}
                             onChange={(e) => {
                                 markUserEdited();
                                 const val = e.target.value;
                                 setSearchTerm(val);
                                 setSelectedLiveResult(null);
                                 if (val) {
+                                    // Typing replaces any earlier pick so Save uses what was typed.
                                     setSelectedOption('city');
+                                    setSelectedCity('');
+                                    setSelectedDistrict('');
                                 }
                                 debouncedSearch(val);
                             }}
                             placeholder={t('locationModal.searchPlaceholder')}
-                            className="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full rounded-lg border border-gray-300 bg-gray-50 py-2.5 pl-10 pr-10 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [&::-webkit-search-cancel-button]:hidden"
                         />
-                        <svg 
-                            xmlns="http://www.w3.org/2000/svg" 
-                            className="h-5 w-5 text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2" 
-                            viewBox="0 0 20 20" 
-                            fill="currentColor"
-                        >
-                            <path 
-                                fillRule="evenodd" 
-                                d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" 
-                                clipRule="evenodd" 
-                            />
-                        </svg>
+                        {searchTerm && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSearchTerm('');
+                                    setSelectedLiveResult(null);
+                                    debouncedSearch('');
+                                }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                                aria-label={t('locationModal.clearSearch', { defaultValue: 'Clear search' })}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                </svg>
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                {/* Options List */}
-                <div 
-                    className="flex-1 overflow-y-auto px-6 py-4"
-                    style={{ 
-                        minHeight: '200px',
-                        contain: 'layout style'
-                    }}
+                {/* Body */}
+                <div
+                    className="flex-1 overflow-y-auto px-5 py-4"
+                    style={{ minHeight: '200px', contain: 'layout style' }}
                 >
-                    <div className="space-y-1">
-                        {/* Auto-detect city via geolocation — tap runs detection immediately */}
-                        <div
-                            role="button"
-                            tabIndex={0}
-                            className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
-                                selectedOption === 'detect'
-                                    ? 'border-blue-300 bg-blue-50/80'
-                                    : 'border-gray-200/90 bg-gray-50/90 hover:bg-gray-100/90'
-                            }`}
-                            onClick={() => {
-                                markUserEdited();
-                                setSelectedOption('detect');
-                                setSearchTerm('');
-                            }}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    markUserEdited();
-                                    setSelectedOption('detect');
-                                    setSearchTerm('');
-                                }
-                            }}
-                        >
-                            <input
-                                type="radio"
-                                name="location"
-                                value="detect"
-                                checked={selectedOption === 'detect'}
-                                readOnly
-                                tabIndex={-1}
-                                className="w-4 h-4 text-blue-600 focus:ring-blue-500 flex-shrink-0 pointer-events-none"
-                            />
-                            <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                    className="h-5 w-5 flex-shrink-0 text-gray-400"
-                                    aria-hidden
-                                >
-                                    <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.05 11H1v2h2.05A8.994 8.994 0 0 0 11 20.95V23h2v-2.05A8.994 8.994 0 0 0 20.95 13H23v-2h-2.05zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
-                                </svg>
-                                <span className="text-sm text-[#3c4043]">{t('locationModal.autoDetect')}</span>
-                            </div>
-                            {isDetecting && selectedOption === 'detect' && (
-                                <span className="flex-shrink-0 text-xs text-blue-600">{t('locationModal.detecting')}</span>
+                    {isSearchMode ? (
+                        <div className="space-y-4">
+                            {filteredCities.length > 0 && (
+                                <section>
+                                    <p className={sectionLabel}>{t('locationModal.citiesHeading', { defaultValue: 'Cities' })}</p>
+                                    <div className="space-y-0.5">
+                                        {filteredCities.map(({ city, stateCode }) =>
+                                            renderCityRow(city, stateCode, indianStates.find((s) => s.code === stateCode)?.name || stateCode),
+                                        )}
+                                    </div>
+                                </section>
+                            )}
+
+                            {liveResults.length > 0 && (
+                                <section>
+                                    <p className={`${sectionLabel} flex items-center gap-1.5`}>
+                                        {pinIcon('h-3.5 w-3.5')}
+                                        {t('locationModal.liveResults', { defaultValue: 'More places' })}
+                                    </p>
+                                    <div className="space-y-0.5">
+                                        {liveResults.map((result) => {
+                                            const label = result.city && result.state
+                                                ? `${result.city}, ${result.state}`
+                                                : result.displayName.split(',').slice(0, 3).join(',').trim();
+                                            const isSelected = selectedLiveResult?.placeId === result.placeId;
+                                            return (
+                                                <button
+                                                    key={result.placeId}
+                                                    type="button"
+                                                    aria-pressed={isSelected}
+                                                    onClick={() => handleLiveResultSelect(result)}
+                                                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                                                        isSelected ? 'bg-blue-50' : 'hover:bg-gray-50 active:bg-gray-100'
+                                                    }`}
+                                                >
+                                                    {pinIcon('h-4 w-4 text-gray-400 flex-shrink-0')}
+                                                    <span className="min-w-0 flex-1">
+                                                        <span className="block truncate text-sm text-gray-900">{label}</span>
+                                                        {result.displayName !== label && (
+                                                            <span className="block truncate text-xs text-gray-400">{result.displayName}</span>
+                                                        )}
+                                                    </span>
+                                                    {isSelected && checkIcon}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </section>
+                            )}
+
+                            {isSearching && (
+                                <div className="flex items-center justify-center gap-2 p-3 text-sm text-gray-400" role="status">
+                                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden>
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    {t('locationModal.searching', { defaultValue: 'Searching locations...' })}
+                                </div>
+                            )}
+
+                            {filteredCities.length === 0 && liveResults.length === 0 && !isSearching && (
+                                <div className="p-6 text-center text-sm text-gray-500">
+                                    {t('locationModal.noCities', { term: searchTerm })}
+                                </div>
                             )}
                         </div>
-
-                        {/* All of India */}
-                        <label
-                            className={`flex items-center gap-3 p-3 rounded-md cursor-pointer transition-colors ${
-                                selectedOption === 'all'
-                                    ? 'bg-blue-50 ring-1 ring-inset ring-blue-200'
-                                    : 'hover:bg-gray-50'
-                            }`}
-                        >
-                            <input
-                                type="radio"
-                                name="location"
-                                value="all"
-                                checked={selectedOption === 'all'}
-                                onChange={() => {
-                                    markUserEdited();
-                                    setSelectedOption('all');
-                                    setExpandedDistrict('');
-                                    setSelectedDistrict('');
-                                    setSelectedCity('');
-                                    onLocationChange('All of India');
-                                    addToast(t('locationModal.toast.allIndiaSet'), 'success');
-                                    onClose();
-                                }}
-                                className="w-4 h-4 text-blue-600 focus:ring-blue-500 accent-blue-600"
-                            />
-                            <span className={`text-sm ${selectedOption === 'all' ? 'font-semibold text-blue-900' : 'text-gray-900'}`}>
-                                {t('locationModal.allIndia')}
-                            </span>
-                        </label>
-
-                        {/* Tier-1 quick picks (major cities only). Full search/states stay available below. */}
-                        {tier1CityQuickPicks.length > 0 && (
-                            <div className="px-1 py-2">
-                                <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                    Major Cities
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                    {tier1CityQuickPicks.map(({ displayName, city, stateCode }) => (
-                                        <button
-                                            key={`${displayName}-${stateCode}`}
-                                            type="button"
-                                            onClick={() => handleCitySelect(city, stateCode, true)}
-                                            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                                                isCityRowSelected(city, stateCode)
-                                                    ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
-                                                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                                            }`}
-                                        >
-                                            {displayName}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* District Options */}
-                        {browseStates.map((district) => (
-                            <div key={district.code}>
-                                <label
-                                    className={`flex items-center gap-3 p-3 rounded-md cursor-pointer transition-colors ${
-                                        isStateRowActive(district.code)
-                                            ? 'bg-blue-50 ring-1 ring-inset ring-blue-200'
-                                            : 'hover:bg-gray-50'
+                    ) : (
+                        <div className="space-y-5">
+                            {/* Quick options */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    aria-pressed={selectedOption === 'detect'}
+                                    disabled={detectBusy}
+                                    onClick={() => {
+                                        markUserEdited();
+                                        setSelectedOption('detect');
+                                        handleDetectLocation();
+                                    }}
+                                    className={`flex items-center gap-2 rounded-xl border p-3 text-left text-sm transition-colors disabled:cursor-wait ${
+                                        selectedOption === 'detect'
+                                            ? 'border-blue-300 bg-blue-50 text-blue-900'
+                                            : 'border-gray-200 bg-white text-gray-800 hover:border-gray-300 hover:bg-gray-50'
                                     }`}
                                 >
-                                    <input
-                                        type="radio"
-                                        name="location"
-                                        value={`district-${district.code}`}
-                                        checked={selectedOption === 'district' && selectedDistrict === district.code}
-                                        onChange={() => {
-                                            markUserEdited();
-                                            setSelectedOption('district');
-                                            setSelectedDistrict(district.code);
-                                            setSelectedCity('');
-                                            setSelectedLiveResult(null);
-                                            setExpandedDistrict(district.code);
-                                        }}
-                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 accent-blue-600"
-                                    />
-                                    <span className={`text-sm ${isStateRowActive(district.code) ? 'font-semibold text-blue-900' : 'text-gray-900'}`}>
-                                        {district.name}
+                                    {detectBusy ? (
+                                        <svg className="h-5 w-5 shrink-0 animate-spin text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden>
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                        </svg>
+                                    ) : (
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-blue-600" aria-hidden>
+                                            <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.05 11H1v2h2.05A8.994 8.994 0 0 0 11 20.95V23h2v-2.05A8.994 8.994 0 0 0 20.95 13H23v-2h-2.05zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
+                                        </svg>
+                                    )}
+                                    <span className="min-w-0 font-medium leading-tight">
+                                        {detectBusy ? t('locationModal.detecting') : t('locationModal.autoDetect')}
                                     </span>
-                                </label>
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-pressed={selectedOption === 'all'}
+                                    onClick={() => {
+                                        markUserEdited();
+                                        setSelectedOption('all');
+                                        setExpandedDistrict('');
+                                        setSelectedDistrict('');
+                                        setSelectedCity('');
+                                        onLocationChange('All of India');
+                                        addToast(t('locationModal.toast.allIndiaSet'), 'success');
+                                        onClose();
+                                    }}
+                                    className={`flex items-center justify-between gap-2 rounded-xl border p-3 text-left text-sm transition-colors ${
+                                        selectedOption === 'all'
+                                            ? 'border-blue-300 bg-blue-50 text-blue-900'
+                                            : 'border-gray-200 bg-white text-gray-800 hover:border-gray-300 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    <span className="flex min-w-0 items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-blue-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.332 8.027a6.012 6.012 0 011.912-2.706C6.512 5.73 6.974 6 7.5 6A1.5 1.5 0 019 7.5V8a2 2 0 004 0 2 2 0 011.523-1.943A5.977 5.977 0 0116 10c0 .34-.028.675-.083 1H15a2 2 0 00-2 2v2.197A5.973 5.973 0 0110 16v-2a2 2 0 00-2-2 2 2 0 01-2-2 2 2 0 00-1.668-1.973z" clipRule="evenodd" />
+                                        </svg>
+                                        <span className="font-medium leading-tight">{t('locationModal.allIndia')}</span>
+                                    </span>
+                                    {selectedOption === 'all' && checkIcon}
+                                </button>
+                            </div>
 
-                                {/* District Cities List — stays open while picking a city */}
-                                {expandedDistrict === district.code && districtCities.length > 0 && (
-                                    <div className="ml-7 mt-1 max-h-60 overflow-y-auto space-y-1">
-                                        {districtCities.map((city) => (
+                            {/* Major cities */}
+                            {tier1CityQuickPicks.length > 0 && (
+                                <section>
+                                    <p className={sectionLabel}>{t('locationModal.majorCities', { defaultValue: 'Popular cities' })}</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {tier1CityQuickPicks.map(({ displayName, city, stateCode }) => (
                                             <button
-                                                key={city}
+                                                key={`${displayName}-${stateCode}`}
                                                 type="button"
-                                                onClick={() => handleCitySelect(city, district.code, true)}
-                                                className={`flex w-full items-center gap-3 p-2 rounded-md text-left transition-colors touch-manipulation ${
-                                                    isCityRowSelected(city, district.code)
-                                                        ? 'bg-blue-100 ring-2 ring-blue-500 shadow-sm'
-                                                        : 'hover:bg-gray-50 active:bg-gray-100'
+                                                aria-pressed={isCityRowSelected(city, stateCode)}
+                                                onClick={() => handleCitySelect(city, stateCode, true)}
+                                                className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                                                    isCityRowSelected(city, stateCode)
+                                                        ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                                                        : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50'
                                                 }`}
                                             >
-                                                <span
-                                                    className={`w-4 h-4 shrink-0 rounded-full border-2 flex items-center justify-center ${
-                                                        isCityRowSelected(city, district.code)
-                                                            ? 'border-blue-600 bg-blue-600'
-                                                            : 'border-gray-300 bg-white'
-                                                    }`}
-                                                    aria-hidden
-                                                >
-                                                    {isCityRowSelected(city, district.code) ? (
-                                                        <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 20 20" fill="currentColor">
-                                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                        </svg>
-                                                    ) : null}
-                                                </span>
-                                                <span className={`text-sm ${isCityRowSelected(city, district.code) ? 'font-semibold text-blue-900' : 'text-gray-700'}`}>
-                                                    {getDisplayNameForCity(city)}
-                                                    <span className="text-gray-500"> — {district.name}</span>
-                                                </span>
+                                                {displayName}
                                             </button>
                                         ))}
                                     </div>
-                                )}
-                        </div>
-                        ))}
+                                </section>
+                            )}
 
-                        {/* Search Results / City List */}
-                        {searchTerm && filteredCities.length > 0 && (
-                            <div className="mt-2 space-y-1">
-                                {filteredCities.map(({ city, stateCode }) => {
-                                    const stateName = indianStates.find((s) => s.code === stateCode)?.name || stateCode;
-                                    const line = `${getDisplayNameForCity(city)} — ${stateName}`;
-                                    return (
-                                        <button
-                                            key={`${city}-${stateCode}`}
-                                            type="button"
-                                            onClick={() => handleCitySelect(city, stateCode, true)}
-                                            className={`flex w-full items-center gap-3 p-2 rounded-md text-left transition-colors touch-manipulation ${
-                                                isCityRowSelected(city, stateCode)
-                                                    ? 'bg-blue-100 ring-2 ring-blue-500 shadow-sm'
-                                                    : 'hover:bg-gray-50 active:bg-gray-100'
-                                            }`}
-                                        >
-                                            <span
-                                                className={`w-4 h-4 shrink-0 rounded-full border-2 flex items-center justify-center ${
-                                                    isCityRowSelected(city, stateCode)
-                                                        ? 'border-blue-600 bg-blue-600'
-                                                        : 'border-gray-300 bg-white'
-                                                }`}
-                                                aria-hidden
-                                            >
-                                                {isCityRowSelected(city, stateCode) ? (
-                                                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                    </svg>
-                                                ) : null}
-                                            </span>
-                                            <span className={`text-sm ${isCityRowSelected(city, stateCode) ? 'font-semibold text-blue-900' : 'text-gray-700'}`}>{line}</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        )}
-
-                        {/* Live search results from geocoding API */}
-                        {searchTerm && liveResults.length > 0 && (
-                            <div className="mt-3 space-y-1">
-                                <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                                    </svg>
-                                    Live Results
-                                </p>
-                                {liveResults.map((result) => {
-                                    const label = result.city && result.state
-                                        ? `${result.city}, ${result.state}`
-                                        : result.displayName.split(',').slice(0, 3).join(',').trim();
-                                    const isSelected = selectedLiveResult?.placeId === result.placeId;
-                                    return (
-                                        <div
-                                            key={result.placeId}
-                                            role="button"
-                                            tabIndex={0}
-                                            className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${
-                                                isSelected ? 'bg-blue-50 border border-blue-300' : 'hover:bg-gray-50'
-                                            }`}
-                                            onClick={() => handleLiveResultSelect(result)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault();
-                                                    handleLiveResultSelect(result);
-                                                }
-                                            }}
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                                                <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                                            </svg>
-                                            <div className="min-w-0 flex-1">
-                                                <span className="text-sm text-gray-900 block truncate">{label}</span>
-                                                {result.displayName !== label && (
-                                                    <span className="text-xs text-gray-400 block truncate">{result.displayName}</span>
+                            {/* Browse by state */}
+                            <section>
+                                <p className={sectionLabel}>{t('locationModal.browseStates', { defaultValue: 'Browse by state' })}</p>
+                                <div className="divide-y divide-gray-100 rounded-xl border border-gray-200">
+                                    {browseStates.map((district) => {
+                                        const cities = citiesByState[district.code] || [];
+                                        const expanded = expandedDistrict === district.code;
+                                        const active = isStateRowActive(district.code);
+                                        return (
+                                            <div key={district.code}>
+                                                <button
+                                                    type="button"
+                                                    aria-expanded={expanded}
+                                                    onClick={() => {
+                                                        if (expanded) {
+                                                            setExpandedDistrict('');
+                                                            return;
+                                                        }
+                                                        markUserEdited();
+                                                        if (selectedDistrict !== district.code) {
+                                                            setSelectedOption('district');
+                                                            setSelectedDistrict(district.code);
+                                                            setSelectedCity('');
+                                                            setSelectedLiveResult(null);
+                                                        }
+                                                        setExpandedDistrict(district.code);
+                                                    }}
+                                                    className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm transition-colors ${
+                                                        active ? 'bg-blue-50 font-semibold text-blue-900' : 'text-gray-900 hover:bg-gray-50'
+                                                    }`}
+                                                >
+                                                    <span className="min-w-0 truncate">{district.name}</span>
+                                                    <span className="flex shrink-0 items-center gap-2 text-xs font-normal text-gray-400">
+                                                        {cities.length > 0 && cities.length}
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                                                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </span>
+                                                </button>
+                                                {expanded && cities.length > 0 && (
+                                                    <div className="max-h-60 overflow-y-auto space-y-0.5 bg-gray-50/60 px-2 py-2">
+                                                        {cities.map((city) => renderCityRow(city, district.code))}
+                                                    </div>
                                                 )}
                                             </div>
-                                            {isSelected && (
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                </svg>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-
-                        {/* Searching indicator */}
-                        {searchTerm && isSearching && (
-                            <div className="p-3 text-sm text-gray-400 text-center flex items-center justify-center gap-2">
-                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                </svg>
-                                Searching locations...
-                            </div>
-                        )}
-
-                        {searchTerm && filteredCities.length === 0 && liveResults.length === 0 && !isSearching && (
-                            <div className="p-3 text-sm text-gray-500 text-center">
-                                {t('locationModal.noCities', { term: searchTerm })}
-                            </div>
-                        )}
+                                        );
+                                    })}
+                                </div>
+                            </section>
                         </div>
-                    </div>
+                    )}
+                </div>
 
-                {/* Footer Buttons */}
-                {pendingSelectionLabel && (
-                    <div className="px-6 py-2.5 border-t border-blue-100 bg-blue-50 flex-shrink-0">
-                        <p className="text-sm text-blue-900">
-                            <span className="font-semibold">{t('locationModal.selectedPreview', { place: pendingSelectionLabel })}</span>
-                        </p>
-                    </div>
-                )}
-                <div 
-                    className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 flex-shrink-0"
-                    style={{ minHeight: '68px' }}
+                {/* Footer */}
+                <div
+                    className="px-5 py-3 border-t border-gray-200 flex items-center gap-3 flex-shrink-0"
+                    style={{ minHeight: '64px' }}
                 >
+                    <p className="min-w-0 flex-1 truncate text-sm text-gray-600" aria-live="polite">
+                        {pendingSelectionLabel && (
+                            <span className="font-semibold text-blue-900">{t('locationModal.selectedPreview', { place: pendingSelectionLabel })}</span>
+                        )}
+                    </p>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                     >
                         {t('locationModal.cancel')}
                     </button>
                     <button
                         type="button"
                         onClick={handleSave}
-                        disabled={isDetecting && selectedOption === 'detect'}
-                        className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        disabled={detectBusy}
+                        className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                        {isDetecting && selectedOption === 'detect'
+                        {detectBusy
                             ? t('locationModal.detecting')
                             : selectedOption === 'detect'
                               ? t('locationModal.detectAction', { defaultValue: 'Detect location' })
