@@ -4,30 +4,21 @@ import { VehicleCategory } from '../vehicle-category.js';
 
 const RC_CHECKLIST_ITEM_ID = 'core.docs.rc_photo';
 
-/** Show a “verified” style badge when listing has full photo evidence on Universal Checklist. */
+/** "Verified" is reserved for listings ReRide itself certified (admin-only field). */
 export function showVerifiedListingBadge(vehicle: Vehicle | null | undefined): boolean {
-  if (!vehicle) return false;
-  if (vehicle.certificationStatus === 'certified') return true;
-  if (vehicle.sellerBadges?.some((b) => b.type === 'verified')) return true;
-  const checklist = vehicle.sellerDisclosureChecklist;
-  if (checklist?.listingTier === 'verified') return true;
-  if (checklist?.items?.length) {
-    const tier = computeListingTier(
-      checklist,
-      checklist.category || vehicle.category || VehicleCategory.FOUR_WHEELER,
-    );
-    if (tier === 'verified') return true;
-  }
-  return false;
+  return vehicle?.certificationStatus === 'certified';
 }
 
+/** Seller uploaded every required checklist item with photo evidence — self-reported, not checked by ReRide. */
+export function hasFullDisclosure(vehicle: Vehicle | null | undefined): boolean {
+  return getListingChecklistTier(vehicle) === 'verified';
+}
+
+/** Always derived from the items; a stored `listingTier` is never trusted. */
 export function getListingChecklistTier(vehicle: Vehicle | null | undefined): 'verified' | 'basic' | null {
   if (!vehicle?.sellerDisclosureChecklist?.items?.length) return null;
   const c = vehicle.sellerDisclosureChecklist;
-  return (
-    c.listingTier ??
-    computeListingTier(c, c.category || vehicle.category || VehicleCategory.FOUR_WHEELER)
-  );
+  return computeListingTier(c, vehicle.category || c.category || VehicleCategory.FOUR_WHEELER);
 }
 
 /** RC photo in checklist, RC document on file, or Vahan-verified registration. */
@@ -61,7 +52,7 @@ export function vehicleIsDealReady(vehicle: Vehicle | null | undefined): boolean
   if (!vehicle.price || vehicle.price <= 0) return false;
   if ((vehicle.images?.length ?? 0) < 2) return false;
 
-  if (showVerifiedListingBadge(vehicle)) return true;
+  if (hasFullDisclosure(vehicle) || showVerifiedListingBadge(vehicle)) return true;
 
   return Boolean(
     vehicle.rto?.trim() &&
@@ -100,7 +91,7 @@ export const LISTING_TRUST_SIGNALS: readonly ListingTrustSignalDefinition[] = [
   {
     id: 'verified_listing',
     labelKey: 'listings.trustFilter.verified',
-    defaultLabel: 'Verified listing',
+    defaultLabel: 'Full disclosure',
     hintKey: 'trust.signal.hint.verified',
     defaultHint: 'Complete all checklist items with photo evidence',
   },
@@ -133,7 +124,7 @@ export function evaluateTrustSignal(
     case 'rc_uploaded':
       return vehicleHasRcOnListing(vehicle);
     case 'verified_listing':
-      return showVerifiedListingBadge(vehicle);
+      return hasFullDisclosure(vehicle);
     case 'deal_ready':
       return vehicleIsDealReady(vehicle);
     case 'single_owner':

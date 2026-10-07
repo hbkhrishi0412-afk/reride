@@ -26,7 +26,7 @@ export interface StorefrontDiscoveryAggregates {
   cities: Record<string, number>;
 }
 
-export type BadgeType = 'verified' | 'top_seller' | 'high_rating';
+export type BadgeType = 'verified' | 'top_seller' | 'high_rating' | 'low_trust';
 
 export interface Badge {
     type: BadgeType;
@@ -571,6 +571,7 @@ export enum View {
   COMPLAINT_RESOLUTION = 'COMPLAINT_RESOLUTION',
   FRAUD_POLICY = 'FRAUD_POLICY',
   COOKIE_POLICY = 'COOKIE_POLICY',
+  DELETE_ACCOUNT = 'DELETE_ACCOUNT',
   HELP_CENTER = 'HELP_CENTER',
   BUYER_DASHBOARD = 'BUYER_DASHBOARD',
   CITY_LANDING = 'CITY_LANDING',

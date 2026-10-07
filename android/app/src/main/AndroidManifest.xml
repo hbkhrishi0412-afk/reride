@@ -75,12 +75,12 @@
     <!-- City auto-detect (Capacitor Geolocation + system dialog) -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <!-- Camera / gallery for sell-car photo capture -->
+    <!-- Camera for sell-car photo capture. Gallery uses the system photo picker: no READ_MEDIA_IMAGES (Play photo/video policy). -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <!-- Voice messages in chat -->
+    <!-- Voice messages in chat: Capacitor's WebView getUserMedia handler requests both and denies if either is missing -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Push notifications (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

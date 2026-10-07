@@ -958,14 +958,9 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                     <p className="text-[11px] text-gray-500 mb-2.5">
                       EMI from ₹{estimateMobileEmi(vehicle.price).toLocaleString('en-IN')}/mo
                     </p>
-                    <div className="flex items-baseline gap-2 mb-3">
-                      <p className="text-[20px] font-bold text-orange-600 tracking-tight">
-                        {formatCurrency(vehicle.price)}
-                      </p>
-                      <span className="text-[11px] text-gray-400 line-through">
-                        {formatCurrency(vehicle.price * 1.1)}
-                      </span>
-                    </div>
+                    <p className="text-[20px] font-bold text-orange-600 tracking-tight mb-3">
+                      {formatCurrency(vehicle.price)}
+                    </p>
                     <div className="flex items-center gap-1.5 text-[11px] text-gray-600 mb-3 flex-wrap">
                       <span className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1192,8 +1187,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         </div>
       </div>
 
-      {/* Trending — parity with desktop Home (shown when many featured listings). */}
-      {featuredVehicles.length > 4 && (
+      {/* Popular dealers */}
         <div ref={trendingRef} className={`reveal-on-scroll px-4 py-8 ${HOME_SECTION_BG.trending}`}>
           <div className="text-center space-y-3">
             <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-orange-700">
@@ -1210,7 +1204,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             </p>
             <button
               type="button"
-              onClick={() => onNavigate(ViewEnum.USED_CARS)}
+              onClick={() => onNavigate(ViewEnum.DEALER_PROFILES)}
               className="mt-2 bg-orange-500 active:bg-orange-600 text-white px-6 py-2.5 rounded-full font-semibold text-[13px] inline-flex items-center gap-2 mx-auto transition-colors shadow-md"
             >
               {t('home.trending.viewAll')}
@@ -1220,7 +1214,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             </button>
           </div>
         </div>
-      )}
 
       {/* Car Services marketing — parity with desktop Home service section. */}
       <div

@@ -13,4 +13,5 @@
   <url><loc>https://www.reride.co.in/safety-center</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>https://www.reride.co.in/privacy-policy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
   <url><loc>https://www.reride.co.in/terms-of-service</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://www.reride.co.in/delete-account</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
 </urlset>

@@ -8,6 +8,8 @@ import { claimRazorpayPayment, verifyRazorpayPayment } from '../../lib/razorpay.
 import type { User as AuthUser } from '@supabase/supabase-js';
 import { passwordFingerprint } from '../../utils/security.js';
 import { resolveRateLimit } from '../../lib/rate-limit-resolver.js';
+import { sanitizeSellerChecklist } from '../../lib/universalChecklist/helpers.js';
+import { VehicleCategory } from '../../vehicle-category.js';
 
 // listUsers() without paging only returns the first 50 auth users.
 // ponytail: O(n) scan of auth.users per call; store the auth uid on public.users when this gets slow.
@@ -116,6 +118,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           core.logInfo(
             `✅ Returning ${normalizedSellers.length} normalized sellers (${sellers.length - normalizedSellers.length} filtered out)`,
           );
+          res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
           return res.status(200).json(normalizedSellers);
         } catch (error) {
           core.logError('❌ Error fetching sellers:', error);
@@ -147,6 +150,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           core.logInfo(
             `✅ Returning ${enrichedProviders.length} enriched service providers (${providers.length - normalizedProviders.length} filtered out)`,
           );
+          res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
           return res.status(200).json(enrichedProviders);
         } catch (error) {
           core.logError('❌ Error fetching service providers:', error);
@@ -1320,7 +1324,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         core.logInfo('🔄 Refreshing access token...');
 
         // Peek at the jti without fully trusting the payload yet.
-        const preVerify = core.verifyToken(incomingRefreshToken);
+        const preVerify = core.verifyToken(incomingRefreshToken, 'refresh');
         if (preVerify.type !== 'refresh') {
           throw new Error('Invalid token type');
         }
@@ -1413,6 +1417,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         const existingUser = await core.userService.findByEmail(normalizedEmail);
         if (!existingUser) {
           return res.status(404).json({ success: false, reason: 'User not found.' });
+        }
+        // vehicles has no FK to users: remove listings (and their chats) or they stay public with the seller's contact details.
+        for (const v of await core.vehicleService.findBySellerEmail(normalizedEmail)) {
+          await core.vehicleService.delete(v.databaseId || String(v.id));
         }
         await core.userService.delete(normalizedEmail);
         try {
@@ -2286,6 +2294,21 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           updateFields[key] = updateData[key];
         }
       });
+
+      // Keep images out of the users row: inline base64 bloats every directory/profile response.
+      for (const key of ['avatarUrl', 'logoUrl'] as const) {
+        const value = updateFields[key];
+        if (typeof value === 'string' && value.startsWith('data:')) {
+          try {
+            updateFields[key] = await core.uploadDataUrlImage(value, `${normalizedRequestEmail}/profile`);
+          } catch (uploadError) {
+            return res.status(400).json({
+              success: false,
+              reason: uploadError instanceof Error ? uploadError.message : 'Could not upload image.',
+            });
+          }
+        }
+      }
 
       const MAX_NOTIFICATION_MUTE_KEYS = 200;
       const MAX_NOTIFICATION_MUTE_KEY_LEN = 200;
@@ -4126,6 +4149,14 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             return res.status(mutation.status).json({ success: false, reason: mutation.reason });
           }
           const vehicle = mutation.vehicle;
+
+          const vehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
+          if (!auth.user || (auth.user.role !== 'admin' && vehicleSellerEmail !== authenticatedEmail)) {
+            return res.status(403).json({
+              success: false,
+              reason: 'Unauthorized: You can only certify your own listings.',
+            });
+          }
           
           // Sanitize seller email
           const sanitizedSellerEmail = await core.sanitizeString(String(vehicle.sellerEmail));
@@ -4507,6 +4538,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     for (const key of ALLOWED_VEHICLE_CREATE_FIELDS) {
       if (key in body) sanitizedBody[key] = body[key];
     }
+    if ('sellerDisclosureChecklist' in body) {
+      sanitizedBody.sellerDisclosureChecklist = sanitizeSellerChecklist(
+        body.sellerDisclosureChecklist,
+        (sanitizedBody.category as VehicleCategory) || VehicleCategory.FOUR_WHEELER,
+      );
+    }
     // Client form uses noOfOwners; legacy/alternate key is numberOfOwners
     if (sanitizedBody.noOfOwners === undefined && body.numberOfOwners !== undefined) {
       sanitizedBody.noOfOwners = body.numberOfOwners;
@@ -4668,6 +4705,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       const sanitizedUpdate: Record<string, unknown> = {};
       for (const key of ALLOWED_VEHICLE_UPDATE_FIELDS) {
         if (key in rawUpdate) sanitizedUpdate[key] = rawUpdate[key];
+      }
+      if ('sellerDisclosureChecklist' in rawUpdate) {
+        sanitizedUpdate.sellerDisclosureChecklist = sanitizeSellerChecklist(
+          rawUpdate.sellerDisclosureChecklist,
+          ((sanitizedUpdate.category ?? existingVehicle.category) as VehicleCategory) || VehicleCategory.FOUR_WHEELER,
+        );
       }
       if (auth.user?.role === 'admin') {
         for (const key of ADMIN_ONLY_UPDATE_FIELDS) {
@@ -5069,6 +5112,11 @@ async function handleSeed(req: VercelRequest, res: VercelResponse, _options: cor
   const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
   const isLocalDev =
     process.env.NODE_ENV === 'development' && String(process.env.VERCEL || '') !== '1';
+
+  // Seeding recreates test admin accounts and demo listings — never on the live site.
+  if (isProduction) {
+    return res.status(404).json({ success: false, reason: 'Not found' });
+  }
   
   // Require valid secret key everywhere except local dev
   if (!isLocalDev) {

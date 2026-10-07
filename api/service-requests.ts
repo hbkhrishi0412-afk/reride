@@ -466,10 +466,12 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
     }
 
     if (req.method === 'PATCH') {
-      const { id, action, ...updates } = req.body as Partial<ServiceRequestPayload> & {
+      const { id, action, status } = req.body as Partial<ServiceRequestPayload> & {
         id?: string;
         action?: 'claim' | 'accept' | 'decline' | 'cancel' | 'submit_review';
       };
+      // Only status is client-writable; reviews, ownership and totals have dedicated actions.
+      const updates: Partial<ServiceRequestPayload> = status ? { status } : {};
       if (!id) {
         return res.status(400).json({ error: 'Missing request id' });
       }
@@ -632,7 +634,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
       }
 
       const providerOwnsRequest = providerMatchesActor(existing.providerId, actor.aliases);
-      if (!isAdmin && existing.providerId && !providerOwnsRequest) {
+      if (!isAdmin && !providerOwnsRequest) {
         return res.status(403).json({ error: 'Not allowed to update this request' });
       }
 

@@ -26,7 +26,7 @@ import { supabaseUserService } from '../../services/supabase-user-service.js';
 import { supabaseVehicleService } from '../../services/supabase-vehicle-service.js';
 import { supabaseConversationService } from '../../services/supabase-conversation-service.js';
 import { supabaseServiceProviderService } from '../../services/supabase-service-provider-service.js';
-import { getSupabaseAdminClient } from '../../lib/supabase-admin.js';
+import { getSupabaseAdminClient, uploadDataUrlImage } from '../../lib/supabase-admin.js';
 import { isRerideStaffPick } from '../../utils/staffPick.js';
 import { userRolesEqual, normalizeUserRoleString } from '../../utils/user-role.js';
 import { verifySupabaseToken } from '../supabase-auth.js';
@@ -263,13 +263,22 @@ function normalizeUser(user: UserType | null | undefined): NormalizedUser | null
   return normalized;
 }
 
-/** Public dealer/service-provider directory — omits phone; keep email for profile links. */
+/** Public dealer/service-provider directory — omits phone, KYC and auth internals; keep email for profile links. */
 function toPublicDirectoryUser(user: NormalizedUser): NormalizedUser {
-  const { mobile: _omitMobile, password: _omitPw, ...safe } = user as NormalizedUser & {
-    mobile?: string;
-    password?: string;
-  };
-  return safe as NormalizedUser;
+  const {
+    mobile: _mobile,
+    password: _pw,
+    aadharCard: _aadhar,
+    panCard: _pan,
+    alternatePhone: _altPhone,
+    firebaseUid: _fbUid,
+    authProvider: _authProvider,
+    hasPassword: _hasPw,
+    pendingPlanUpgrade: _pendingPlan,
+    notificationMuteKeys: _muteKeys,
+    ...safe
+  } = user as NormalizedUser & Record<string, unknown>;
+  return safe as unknown as NormalizedUser;
 }
 
 // Authentication middleware
@@ -643,7 +652,7 @@ export {
   setStorefrontAggregateCache, STOREFRONT_AGGREGATE_CACHE_TTL_MS, firstQueryParam, ensureMutableRequestQuery,
   mergeQueryStringFromRequestUrl,
   errorToPublicMessage, getEffectivePathnameForErrorFallback,
-  getSupabaseAdminClient, PLAN_DETAILS, buildListingRenewalUpdates, computeListingExpiresAtForSeller,
+  getSupabaseAdminClient, uploadDataUrlImage, PLAN_DETAILS, buildListingRenewalUpdates, computeListingExpiresAtForSeller,
   isSellerPlanExpired, validateListingRenewal, listingLimitGuardResponse, invalidateSellerPlanCache,
   resolveSellerPlanDetails, validateSellerCanCreateListing, validateSellerCanPublishListing,
   VehicleCategory, supabaseUserService, supabaseServiceProviderService, isRerideStaffPick,

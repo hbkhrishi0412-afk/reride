@@ -133,6 +133,37 @@ export function finalizeSellerChecklist(
   return checklist;
 }
 
+const SELLER_ITEM_STATUSES = new Set<ChecklistItemStatus>(['pass', 'fail', 'na', '']);
+
+/**
+ * Trust boundary for seller-submitted checklists: keeps only known items for the
+ * listing's own category, http(s) photo URLs, bounded notes, and recomputes the
+ * tier so a client-sent `listingTier` is never trusted.
+ */
+export function sanitizeSellerChecklist(
+  raw: unknown,
+  category: VehicleCategory,
+): UniversalSellerChecklist | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const rawItems = (raw as { items?: unknown }).items;
+  if (!Array.isArray(rawItems)) return null;
+  const allowedIds = new Set(getSellerDefinitions(category).map((d) => d.id));
+  const items: ChecklistItemResponse[] = [];
+  for (const entry of rawItems) {
+    if (!entry || typeof entry !== 'object') continue;
+    const r = entry as Record<string, unknown>;
+    if (typeof r.id !== 'string' || !allowedIds.has(r.id) || items.some((i) => i.id === r.id)) continue;
+    const photoUrl = typeof r.photoUrl === 'string' ? r.photoUrl.trim() : '';
+    items.push({
+      id: r.id,
+      status: SELLER_ITEM_STATUSES.has(r.status as ChecklistItemStatus) ? (r.status as ChecklistItemStatus) : '',
+      notes: typeof r.notes === 'string' ? r.notes.slice(0, 2000) : '',
+      photoUrl: /^https?:\/\//i.test(photoUrl) && photoUrl.length <= 2048 ? photoUrl : '',
+    });
+  }
+  return finalizeSellerChecklist(category, items);
+}
+
 export function compareBuyerToSellerUniversal(
   seller: UniversalSellerChecklist | undefined,
   buyerItems: BuyerInspectionItem[],

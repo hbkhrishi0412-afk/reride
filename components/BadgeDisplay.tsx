@@ -13,6 +13,10 @@ const badgeStyles: Record<Badge['type'], { icon: React.ReactElement<{ className?
     high_rating: {
         icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 2a.75 .75 0 01.75.75v.512a26.63 26.63 0 014.288 3.013.75 .75 0 11-.98 1.134A25.132 25.132 0 0010.5 4.792V10.5a.75 .75 0 01-1.5 0V4.792a25.132 25.132 0 00-3.558 2.618.75 .75 0 11-.98-1.134A26.63 26.63 0 019.25 3.262V2.75A.75 .75 0 0110 2z" clipRule="evenodd" /><path fillRule="evenodd" d="M10 18a5 5 0 100-10 5 5 0 000 10zm.25-6.25a.75 .75 0 00-1.5 0v2.5a.75 .75 0 001.5 0v-2.5z" clipRule="evenodd" /></svg>,
         colors: 'bg-reride-orange-light text-reride-orange dark:bg-reride-orange dark:text-reride-orange border-reride-orange/50',
+    },
+    low_trust: {
+        icon: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>,
+        colors: 'bg-red-50 text-red-700 border-red-300',
     }
 };
 

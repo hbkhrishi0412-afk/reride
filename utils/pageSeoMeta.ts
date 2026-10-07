@@ -156,6 +156,12 @@ export function computePageSeoMeta(params: {
         description: 'How ReRide uses cookies and your choices.',
         path: '/cookie-policy',
       };
+    case View.DELETE_ACCOUNT:
+      return {
+        title: 'Delete your ReRide account',
+        description: 'How to delete your ReRide account and what data is deleted or retained.',
+        path: '/delete-account',
+      };
     case View.ABOUT_US:
       return {
         title: 'About ReRide — India\'s Deal Platform for Used Vehicles',

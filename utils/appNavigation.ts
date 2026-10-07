@@ -94,6 +94,7 @@ export function pathToView(path: string): View {
   if (normalizedPath === '/complaint-resolution') return View.COMPLAINT_RESOLUTION;
   if (normalizedPath === '/fraud-policy') return View.FRAUD_POLICY;
   if (normalizedPath === '/cookie-policy') return View.COOKIE_POLICY;
+  if (normalizedPath === '/delete-account') return View.DELETE_ACCOUNT;
   if (normalizedPath === '/safety-center' || normalizedPath === '/safety') return View.SAFETY_CENTER;
   if (normalizedPath === '/customer/dashboard' || normalizedPath === '/buyer/dashboard') {
     return View.BUYER_DASHBOARD;
@@ -138,6 +139,7 @@ export const VIEW_TO_PATH_MAP: Partial<Record<View, string>> = {
   [View.COMPLAINT_RESOLUTION]: '/complaint-resolution',
   [View.FRAUD_POLICY]: '/fraud-policy',
   [View.COOKIE_POLICY]: '/cookie-policy',
+  [View.DELETE_ACCOUNT]: '/delete-account',
   [View.SAFETY_CENTER]: '/safety-center',
   [View.BUYER_DASHBOARD]: '/customer/dashboard',
   [View.SELL_CAR]: '/sell-car',

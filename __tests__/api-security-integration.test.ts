@@ -152,8 +152,7 @@ describe('API Security Integration Tests', () => {
       const result = await validateUserInput(htmlData);
       
       expect(result.isValid).toBe(true);
-      expect(result.sanitizedData?.name).toMatch(/&amp;lt;|&lt;/);
-      expect(result.sanitizedData?.name).toMatch(/&amp;gt;|&gt;/);
+      expect(result.sanitizedData?.name).not.toMatch(/[<>]/);
     });
   });
 

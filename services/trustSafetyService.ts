@@ -75,8 +75,13 @@ export function calculateTrustScore(
   let score = 0;
   
   // Verification points (max 30)
-  const verificationStatus = user.verificationStatus || initVerificationStatus();
-  const verificationCount = getVerificationCount(verificationStatus);
+  const vs = user.verificationStatus || initVerificationStatus();
+  const verificationCount = getVerificationCount({
+    ...vs,
+    phoneVerified: vs.phoneVerified || Boolean(user.phoneVerified),
+    emailVerified: vs.emailVerified || Boolean(user.emailVerified),
+    govtIdVerified: vs.govtIdVerified || Boolean(user.govtIdVerified),
+  });
   score += verificationCount * 10; // 10 points per verification
   
   // Response rate points (max 25)
@@ -84,8 +89,8 @@ export function calculateTrustScore(
   score += (responseRate / 100) * 25;
   
   // Positive reviews points (max 20)
-  const averageRating = user.averageRating || 0;
-  const ratingCount = user.ratingCount || 0;
+  const averageRating = user.sellerAverageRating ?? user.averageRating ?? 0;
+  const ratingCount = user.sellerRatingCount ?? user.ratingCount ?? 0;
   if (ratingCount > 0) {
     score += (averageRating / 5) * 20;
   }

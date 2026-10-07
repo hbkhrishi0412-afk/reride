@@ -29,6 +29,10 @@ import { PopularCitiesChips } from './PopularCitiesChips.js';
 import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 import FloatingWhatsApp from './FloatingWhatsApp';
 import ActiveDealsHomeBanner from './ActiveDealsHomeBanner';
+import VehicleCard from './VehicleCard';
+import { viewToStaticPath } from '../utils/appNavigation';
+import { useApp } from './AppProvider';
+import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import type { User } from '../types';
 
 interface HomeProps {
@@ -47,7 +51,7 @@ interface HomeProps {
     wishlist: number[];
     onViewSellerProfile: (sellerEmail: string) => void;
     recommendations: Vehicle[];
-    onNavigate: (view: View) => void;
+    onNavigate: (view: View, params?: { city?: string }) => void;
     onSelectCity: (city: string) => void;
     allVehicles?: Vehicle[];
     selectedCity?: string;
@@ -68,6 +72,7 @@ const Home: React.FC<HomeProps> = ({
     onToggleCompare,
     onToggleWishlist, 
     wishlist,
+    onViewSellerProfile,
     onNavigate,
     onSelectCity,
     onSelectCategory,
@@ -87,11 +92,21 @@ const Home: React.FC<HomeProps> = ({
     currentUser = null,
 }) => {
     const { t, i18n } = useTranslation();
+    const { comparisonCategory } = useApp();
     const [searchQuery, setSearchQuery] = useState('');
     const { data: storefrontAgg } = useStorefrontAggregates();
 
     const activeLocationFilter =
         selectedCity.trim() && !/^all of india$/i.test(selectedCity.trim()) ? selectedCity.trim() : '';
+
+    const localizedRecommendations = useMemo(
+        () =>
+            (activeLocationFilter
+                ? recommendations.filter((v) => matchesLocation(v.city, v.state, activeLocationFilter))
+                : recommendations
+            ).slice(0, 8),
+        [recommendations, activeLocationFilter]
+    );
 
     const publishedVehicles = useMemo(() => {
         const base = allVehicles.filter((v) => v && v.status === 'published');
@@ -346,11 +361,6 @@ const Home: React.FC<HomeProps> = ({
         if (!container) return;
         const delta = container.clientWidth * 0.8 * (direction === 'left' ? -1 : 1);
         container.scrollBy({ left: delta, behavior: 'smooth' });
-    };
-
-    const handleStartService = (serviceId: string) => {
-        sessionStorage.setItem('service_cart_prefill', JSON.stringify({ serviceId }));
-        onNavigate(ViewEnum.SERVICE_CART);
     };
 
     // Rough EMI estimate: 5-year loan at ~10% APR, 20% down payment.
@@ -882,12 +892,14 @@ const Home: React.FC<HomeProps> = ({
                                                 eager={index === 0}
                                                 fetchPriority={index === 0 ? 'high' : 'auto'}
                                             />
+                                            {showVerifiedListingBadge(vehicle) && (
                                             <div className="absolute top-3 left-3 bg-green-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1 text-[11px] font-semibold tracking-wide shadow-sm">
                                                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                                                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                                                 </svg>
                                                 {t('common.verified')}
                                             </div>
+                                            )}
                                             <button
                                                 type="button"
                                                 onClick={(e) => {
@@ -968,8 +980,17 @@ const Home: React.FC<HomeProps> = ({
                             </div>
                             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3 tracking-tight">{t('home.featured.emptyTitle')}</h2>
                             <p className="text-gray-600 text-base md:text-lg max-w-xl mx-auto leading-relaxed mb-8">
-                                {t('home.featured.emptyBody')}
+                                {allVehicles.length === 0 ? t('toast.vehiclesLoadFailedShort') : t('home.featured.emptyBody')}
                             </p>
+                            {allVehicles.length === 0 && onRetryCatalogLoad && (
+                                <button
+                                    type="button"
+                                    onClick={() => onRetryCatalogLoad()}
+                                    className="mr-3 px-7 py-3.5 rounded-full font-semibold text-base inline-flex items-center gap-2 border border-orange-500 text-orange-600 hover:bg-orange-50 transition-colors"
+                                >
+                                    {t('listings.retry')}
+                                </button>
+                            )}
                             <button 
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
                                 className="btn-brand-primary px-7 py-3.5 rounded-full font-semibold text-base inline-flex items-center gap-2 shadow-md hover:shadow-lg"
@@ -1088,6 +1109,46 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             ) : null}
+
+            {localizedRecommendations.length > 0 && (
+                <div className={`py-16 md:py-20 px-4 ${HOME_SECTION_BG.recommendations}`}>
+                    <div className="max-w-7xl mx-auto">
+                        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10">
+                            <div className="space-y-3 text-center md:text-left">
+                                <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-orange-700">
+                                    <span className="h-px w-6 bg-orange-300"></span>
+                                    For You
+                                </span>
+                                <h2 className="home-section-heading text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight">{t('mobile.home.recommended')}</h2>
+                            </div>
+                            <button
+                                onClick={() => onNavigate(ViewEnum.USED_CARS)}
+                                className="self-center md:self-end inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full border border-gray-300 text-gray-800 font-medium text-sm hover:border-orange-600 hover:text-orange-700 transition-colors"
+                            >
+                                {t('home.recent.viewAll')}
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
+                            {localizedRecommendations.map((vehicle) => (
+                                <VehicleCard
+                                    key={vehicle.id}
+                                    vehicle={vehicle}
+                                    onSelect={onSelectVehicle}
+                                    onToggleCompare={onToggleCompare}
+                                    isSelectedForCompare={comparisonList.includes(vehicle.id)}
+                                    onToggleWishlist={onToggleWishlist}
+                                    isInWishlist={wishlist.includes(vehicle.id)}
+                                    isCompareDisabled={isCompareDisabledForVehicle(vehicle, comparisonList, comparisonCategory)}
+                                    onViewSellerProfile={onViewSellerProfile}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Explore by Location Section — postcard-style cards (matches mobile design) */}
             <div className={`py-16 md:py-20 px-4 ${HOME_SECTION_BG.cities}`}>
@@ -1244,8 +1305,42 @@ const Home: React.FC<HomeProps> = ({
                 </div>
             </div>
 
-            {/* Trending Now / Popular Dealers */}
-            {featuredVehicles.length > 4 && (
+            {/* Car Services */}
+            <div className="relative py-16 md:py-20 px-4 text-white overflow-hidden" style={{ background: HOME_HERO_SURFACE }}>
+                <div className="relative max-w-6xl mx-auto text-center">
+                    <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-white/80 mb-3">
+                        <span className="h-px w-6 bg-white/40" />
+                        {t('home.service.badge')}
+                        <span className="h-px w-6 bg-white/40" />
+                    </span>
+                    <h2 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight leading-tight text-white">{t('home.service.title')}</h2>
+                    <p className="text-white/85 text-base max-w-xl mx-auto leading-relaxed mb-10">{t('home.service.subtitle')}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-left mb-10">
+                        {[
+                            { color: 'bg-blue-500', title: t('home.service.card1Title'), desc: t('home.service.card1Desc') },
+                            { color: 'bg-green-500', title: t('home.service.card2Title'), desc: t('home.service.card2Desc') },
+                            { color: 'bg-orange-500', title: t('home.service.card3Title'), desc: t('home.service.card3Desc') },
+                        ].map((card) => (
+                            <div key={card.title} className="bg-white/10 backdrop-blur-xl rounded-xl p-5 border border-white/20 flex gap-3 items-start">
+                                <span className={`w-3 h-3 mt-1.5 rounded-full flex-shrink-0 ${card.color}`} aria-hidden />
+                                <div>
+                                    <h3 className="font-semibold text-[15px] mb-1 tracking-tight text-white">{card.title}</h3>
+                                    <p className="text-white/80 text-sm leading-relaxed">{card.desc}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => onNavigate(ViewEnum.CAR_SERVICES)}
+                        className="bg-white text-orange-600 px-7 py-3 rounded-full font-semibold text-sm hover:bg-orange-50 transition-colors shadow-md"
+                    >
+                        {t('nav.carServices')}
+                    </button>
+                </div>
+            </div>
+
+            {/* Popular Dealers */}
                 <div className={`py-16 md:py-20 px-4 ${HOME_SECTION_BG.trending}`}>
                     <div className="max-w-3xl mx-auto">
                         <div className="text-center space-y-4">
@@ -1259,7 +1354,7 @@ const Home: React.FC<HomeProps> = ({
                             <p className="text-gray-600 text-base max-w-xl mx-auto leading-relaxed">{t('home.trending.subtitle')}</p>
                             <div className="pt-3">
                                 <button 
-                                    onClick={() => onNavigate(ViewEnum.USED_CARS)}
+                                    onClick={() => onNavigate(ViewEnum.DEALER_PROFILES)}
                                     className="bg-orange-500 hover:bg-orange-600 text-white px-7 py-3 rounded-full font-semibold text-sm inline-flex items-center gap-2 mx-auto transition-all duration-300 shadow-md hover:shadow-lg"
                                 >
                                     {t('home.trending.viewAll')}
@@ -1271,7 +1366,61 @@ const Home: React.FC<HomeProps> = ({
                         </div>
                     </div>
                 </div>
-            )}
+
+            {/* Crawlable links: real hrefs for search engines, SPA navigation on plain click. */}
+            <nav aria-label={t('home.explore.label', { defaultValue: 'Explore ReRide' })} className="py-12 px-4 bg-white border-t border-gray-100">
+                <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-10">
+                    <div>
+                        <h2 className="text-lg font-bold text-gray-900 mb-4">
+                            {t('home.explore.citiesTitle', { defaultValue: 'Used cars by city' })}
+                        </h2>
+                        <ul className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2">
+                            {HOME_DISCOVERY_CITY_ORDER.map((city) => (
+                                <li key={city}>
+                                    <a
+                                        href={`/city/${encodeURIComponent(city.toLowerCase().replace(/\s+/g, '-'))}`}
+                                        onClick={(e) => {
+                                            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                                            e.preventDefault();
+                                            onNavigate(ViewEnum.CITY_LANDING, { city });
+                                        }}
+                                        className="text-sm text-gray-600 hover:text-orange-700 hover:underline"
+                                    >
+                                        {t('home.explore.usedCarsIn', { city, defaultValue: `Used cars in ${city}` })}
+                                    </a>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                    <div>
+                        <h2 className="text-lg font-bold text-gray-900 mb-4">
+                            {t('home.explore.moreTitle', { defaultValue: 'More from ReRide' })}
+                        </h2>
+                        <ul className="space-y-2">
+                            {[
+                                { view: ViewEnum.DEALER_PROFILES, label: t('footer.dealerNetwork') },
+                                { view: ViewEnum.CAR_SERVICES, label: t('nav.carServices') },
+                                { view: ViewEnum.SAFETY_CENTER, label: t('footer.howDealsWork', { defaultValue: 'How deals work' }) },
+                                { view: ViewEnum.HELP_CENTER, label: t('home.explore.helpFaq', { defaultValue: 'Help & FAQ' }) },
+                            ].map((link) => (
+                                <li key={link.view}>
+                                    <a
+                                        href={viewToStaticPath(link.view)}
+                                        onClick={(e) => {
+                                            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                                            e.preventDefault();
+                                            onNavigate(link.view);
+                                        }}
+                                        className="text-sm text-gray-600 hover:text-orange-700 hover:underline"
+                                    >
+                                        {link.label}
+                                    </a>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            </nav>
 
             {/* WHY: WhatsApp is the #1 support/conversion channel for Indian buyers;
                 self-gating component renders only when a business number is configured. */}

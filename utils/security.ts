@@ -225,7 +225,7 @@ export const verifyPasswordResetToken = (token: string): { email: string; pf?: s
   return { email: decoded.email.toLowerCase().trim(), pf: decoded.pf };
 };
 
-export const verifyToken = (token: string): TokenPayload => {
+export const verifyToken = (token: string, expectedType: 'access' | 'refresh' = 'access'): TokenPayload => {
   try {
     const secret = config.JWT.SECRET;
     if (!secret) {
@@ -238,11 +238,16 @@ export const verifyToken = (token: string): TokenPayload => {
       const decoded = jwt.verify(token, secret, {
         issuer: config.JWT.ISSUER,
         audience: config.JWT.AUDIENCE,
-        clockTolerance: toleranceSeconds
+        clockTolerance: toleranceSeconds,
+        algorithms: ['HS256'],
       });
       
       if (typeof decoded === 'string' || !decoded) {
         throw new Error('Invalid token payload');
+      }
+      // Long-lived refresh tokens must never authenticate API requests.
+      if ((decoded as TokenPayload).type === 'refresh' && expectedType !== 'refresh') {
+        throw new Error('Invalid token type');
       }
       
       return decoded as TokenPayload;
@@ -289,7 +294,7 @@ export const rotateRefreshToken = (
   oldRefreshToken: string,
   currentRole: User['role'],
 ): { accessToken: string; refreshToken: string; oldJti?: string; oldTtlSeconds: number } => {
-  const decoded = verifyToken(oldRefreshToken);
+  const decoded = verifyToken(oldRefreshToken, 'refresh');
   if (decoded.type !== 'refresh') {
     throw new Error('Invalid token type');
   }

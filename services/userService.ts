@@ -770,6 +770,38 @@ export const getSellers = async (): Promise<User[]> => {
 export const getServiceProviders = async (): Promise<User[]> => {
   return getPublicDirectoryUsers('service_provider');
 };
+
+const DEALER_DIRECTORY_CACHE_KEY = 'reRideDealerDirectory_v1';
+
+/** Last successful dealer-page directory (sellers + service providers), for instant first paint. */
+export function readCachedDealerDirectory(): User[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DEALER_DIRECTORY_CACHE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Sellers + service providers for the Dealers page; refreshes the local cache on success. */
+export async function getDealerDirectory(): Promise<{ users: User[]; failed: boolean }> {
+  let failed = false;
+  const [sellers, services] = await Promise.all([
+    getSellers().catch(() => { failed = true; return [] as User[]; }),
+    getServiceProviders().catch(() => { failed = true; return [] as User[]; }),
+  ]);
+  const users = [...sellers, ...services].filter(
+    (u) => u.role === 'seller' || u.role === 'service_provider',
+  );
+  if (users.length > 0) {
+    try {
+      localStorage.setItem(DEALER_DIRECTORY_CACHE_KEY, JSON.stringify(users));
+    } catch {
+      /* quota — cache is best-effort */
+    }
+  }
+  return { users, failed };
+}
 export const updateUser = async (userData: Partial<User> & { email: string }): Promise<User> => {
   if (!isDevelopment) {
     return await updateUserApi(userData);

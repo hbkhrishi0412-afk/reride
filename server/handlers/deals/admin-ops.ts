@@ -16,6 +16,7 @@ import {
   assistancePackageNeedsRc,
   deriveKanbanStatus,
 } from '../../../types.js';
+import { calculateTrustScore } from '../../../services/trustSafetyService.js';
 import { parseSellerNotes, serializeSellerNotes, normalizeSellerNotes } from '../../../lib/dealSellerNotes.js';
 import type { DealActionHandler } from './context.js';
 import {
@@ -126,7 +127,7 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       }
     }));
 
-    const [leads, returnReviewLeads, sellerUser] = await Promise.all([
+    const [leads, returnReviewLeads, sellerUser, soldCount] = await Promise.all([
       leadsFromRows(rows || []).then((l) =>
         enrichLeadsBatch(l, { includeOffers: false, includeDocuments: false }),
       ),
@@ -140,7 +141,20 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
         .then(({ data }) => leadsFromRows(data || []))
         .then((l) => enrichLeadsBatch(l, { includeOffers: false, includeDocuments: false })),
       supabaseUserService.findByEmail(auth.email),
+      supabase
+        .from('vehicles')
+        .select('id', { count: 'exact', head: true })
+        .eq('seller_email', auth.email)
+        .eq('status', 'sold')
+        .then(({ count }) => count ?? 0),
     ]);
+
+    const trustScore = sellerUser
+      ? calculateTrustScore({ ...sellerUser, soldListings: Math.max(soldCount, sellerUser.soldListings ?? 0) }).score
+      : 0;
+    if (sellerUser && (sellerUser.trustScore ?? 0) !== trustScore) {
+      await supabase.from('users').update({ trust_score: trustScore }).eq('email', auth.email);
+    }
 
     const leadsForTasks = [...leads];
     for (const rl of returnReviewLeads) {
@@ -159,7 +173,7 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
         activeDealCount: leads.length,
         pendingInterestCount,
         tasksToday: tasks.length,
-        trustScore: sellerUser?.trustScore ?? 50,
+        trustScore,
         ratingAverage: sellerUser?.sellerAverageRating ?? sellerUser?.averageRating ?? 0,
         ratingCount: sellerUser?.sellerRatingCount ?? sellerUser?.ratingCount ?? 0,
       },

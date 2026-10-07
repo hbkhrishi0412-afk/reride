@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { hashPassword, validatePassword, generateAccessToken, verifyToken, sanitizeString, validateUserInput, generatePasswordResetToken, verifyPasswordResetToken, passwordFingerprint } from '../utils/security';
+import { hashPassword, validatePassword, generateAccessToken, generateRefreshToken, verifyToken, sanitizeString, validateUserInput, generatePasswordResetToken, verifyPasswordResetToken, passwordFingerprint } from '../utils/security';
 import { jwt } from '../utils/jwt-loader';
 import type { User } from '../types';
 
@@ -110,6 +110,12 @@ describe('Security Utilities', () => {
       spy.mockRestore();
     });
 
+    it('rejects refresh tokens as access tokens', () => {
+      const refresh = generateRefreshToken(mockUser);
+      expect(() => verifyToken(refresh)).toThrow('Invalid or expired token');
+      expect(verifyToken(refresh, 'refresh').email).toBe(mockUser.email);
+    });
+
     it('password reset token is bound to the password hash (dies after reset)', () => {
       const { pf } = verifyPasswordResetToken(generatePasswordResetToken('A@x.com', '$2a$old'));
       expect(pf).toBe(passwordFingerprint('$2a$old'));
@@ -130,10 +136,8 @@ describe('Security Utilities', () => {
       const input = 'Hello <world> & "quotes"';
       const sanitized = await sanitizeString(input);
       
-      // DOMPurify + validator.escape double-encodes angle brackets as &amp;lt; / &amp;gt;
-      expect(sanitized).toMatch(/&amp;lt;|&lt;/);
-      expect(sanitized).toMatch(/&amp;gt;|&gt;/);
-      expect(sanitized).not.toContain('<world>');
+      // Server escapes tags; DOMPurify (browser/jsdom) strips unknown tags. Either way no raw markup survives.
+      expect(sanitized).not.toMatch(/[<>]/);
     });
 
     it('should handle empty strings', async () => {

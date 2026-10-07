@@ -144,6 +144,7 @@ const RefundPolicyPage = React.lazy(() => import('../RefundPolicyPage'));
 const ComplaintResolutionPage = React.lazy(() => import('../ComplaintResolutionPage'));
 const FraudPolicyPage = React.lazy(() => import('../FraudPolicyPage'));
 const CookiePolicyPage = React.lazy(() => import('../CookiePolicyPage'));
+const DeleteAccountPage = React.lazy(() => import('../DeleteAccountPage'));
 const HelpCenterPage = React.lazy(() => import('../HelpCenterPage'));
 const NotFoundPage = React.lazy(() => import('../NotFoundPage'));
 const MobileBuyerDashboard = React.lazy(() => import('../MobileBuyerDashboard'));
@@ -1453,6 +1454,13 @@ switch (currentView) {
     return (
       <React.Suspense fallback={<LoadingSpinner />}>
         <CookiePolicyPage />
+      </React.Suspense>
+    );
+
+  case ViewEnum.DELETE_ACCOUNT:
+    return (
+      <React.Suspense fallback={<LoadingSpinner />}>
+        <DeleteAccountPage />
       </React.Suspense>
     );
 

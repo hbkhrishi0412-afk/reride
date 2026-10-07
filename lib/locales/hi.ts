@@ -390,10 +390,10 @@ const hi: Record<string, string> = {
   'role.serviceProvider': 'सेवा प्रदाता',
   'user.greeting': 'नमस्ते, {{name}}',
   'home.trustBadge1M': 'खरीदारों और विक्रेताओं के लिए मार्केटप्लेस',
-  'home.trustBadgeVerified': 'लिस्टिंग पर RC और विक्रेता विवरण',
-  'home.premiumUsedCars': 'स्मार्ट खरीदें। सुरक्षित बेचें।',
+  'home.trustBadgeVerified': 'हर लिस्टिंग पर RC',
+  'home.premiumUsedCars': 'गाड़ी लो, टेंशन नहीं।',
   'home.marketingSubhead':
-    'विश्वसनीय प्लेटफ़ॉर्म जो प्रयोग की गई गाड़ियों की खरीद-बिक्री को सरल, सुरक्षित और अधिक पारदर्शी बनाता है।',
+    'चैट से पहले RC देखें। जाँच करें, टोकन दें और ओनरशिप ट्रांसफ़र करें, सब एक डील रूम में।',
   'home.card.qualityTitle': 'पूर्ण लिस्टिंग विवरण',
   'home.card.qualityDesc': 'RC, मालिक, बीमा और फोटो',
   'home.card.fixedTitle': 'स्पष्ट लिस्टिंग मूल्य',
@@ -468,7 +468,7 @@ const hi: Record<string, string> = {
   'mobile.home.readyToSell': 'बेचने के लिए तैयार?',
   'mobile.home.listVehicle': 'अपना वाहन मुफ्त में लिस्ट करें और अपने शहर के खरीदारों से जुड़ें',
   'mobile.home.heroSub':
-    'विश्वसनीय प्लेटफ़ॉर्म जो प्रयोग की गई गाड़ियों की खरीद-बिक्री को सरल, सुरक्षित और अधिक पारदर्शी बनाता है।',
+    'चैट से पहले RC देखें। जाँच करें, टोकन दें और ओनरशिप ट्रांसफ़र करें, सब एक डील रूम में।',
   'search.placeholderMobile': 'ब्रांड, मॉडल, बजट से खोजें...',
   'mobile.home.browseAllCars': 'सभी कारें ब्राउज़ करें',
   'mobile.home.exploreLocation': 'स्थान के अनुसार खोजें',

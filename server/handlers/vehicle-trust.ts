@@ -128,7 +128,7 @@ export async function handleVehicleTrust(
 
       if (vehicleIdRaw) {
         const resolved = await resolveVehicleId(vehicleIdRaw);
-        if (resolved) {
+        if (resolved && normalizeEmail(String(resolved.vehicle?.sellerEmail || '')) === authEmail) {
           const updates: Partial<Vehicle> = {
             registrationNumber,
           };

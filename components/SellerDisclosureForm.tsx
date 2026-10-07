@@ -145,7 +145,7 @@ export const SellerDisclosureForm: React.FC<SellerDisclosureFormProps> = ({
                 : 'bg-amber-100 text-amber-800'
             }`}
           >
-            {tier === 'verified' ? 'Verified Listing' : 'Basic — Self Reported'}
+            {tier === 'verified' ? 'Full disclosure' : 'Basic — Self Reported'}
           </span>
         </div>
       </div>

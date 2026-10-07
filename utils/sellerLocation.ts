@@ -79,7 +79,7 @@ async function resolveCityCoordsFromLocation(location: string | undefined): Prom
   return coords;
 }
 
-async function geocodeNominatim(params: {
+async function geocodeNominatimCached(params: {
   address?: string;
   pincode?: string;
   cityHint?: string;
@@ -89,12 +89,45 @@ async function geocodeNominatim(params: {
   const city = (params.cityHint || '').trim();
   if (!addr && !pc && !city) return null;
 
+  const parts = [addr, pc, city, 'India'].filter((p) => !!p);
+  const cacheKey = parts.join(', ').toLowerCase();
+  const cache = readGeocodeCache();
+  if (cacheKey in cache) return cache[cacheKey];
+
+  const result = await fetchNominatim(parts);
+  // Only cache definitive answers; network errors throw and are retried next visit.
+  cache[cacheKey] = result;
+  writeGeocodeCache(cache);
+  return result;
+}
+
+const GEOCODE_CACHE_KEY = 'reRideGeocodeCache_v1';
+let geocodeCacheMem: Record<string, CompanyLocation | null> | null = null;
+
+function readGeocodeCache(): Record<string, CompanyLocation | null> {
+  if (geocodeCacheMem) return geocodeCacheMem;
+  try {
+    geocodeCacheMem = JSON.parse(localStorage.getItem(GEOCODE_CACHE_KEY) || '{}');
+  } catch {
+    geocodeCacheMem = {};
+  }
+  return geocodeCacheMem!;
+}
+
+function writeGeocodeCache(cache: Record<string, CompanyLocation | null>) {
+  try {
+    localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    /* quota / private mode — memory cache still works */
+  }
+}
+
+async function fetchNominatim(parts: string[]): Promise<CompanyLocation | null> {
   const now = Date.now();
   const wait = Math.max(0, NOMINATIM_GAP_MS - (now - lastNominatimMs));
   if (wait) await sleep(wait);
   lastNominatimMs = Date.now();
 
-  const parts = [addr, pc, city, 'India'].filter((p) => !!p);
   const q = encodeURIComponent(parts.join(', '));
   const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=in`;
   const res = await fetch(url, {
@@ -104,7 +137,7 @@ async function geocodeNominatim(params: {
       'User-Agent': 'ReRide/1.0 (dealer map; https://reride.app)',
     },
   });
-  if (!res.ok) return null;
+  if (!res.ok) throw new Error(`Nominatim ${res.status}`);
   const data = await res.json();
   if (!Array.isArray(data) || data.length === 0) return null;
   const lat = parseFloat(data[0].lat);
@@ -128,7 +161,10 @@ export function tryResolveSellerCoordsFast(seller: User): CompanyLocation | null
   if (addr || pc) {
     return undefined;
   }
+  return cityCentroidSync(cityHint, seed) ?? undefined;
+}
 
+function cityCentroidSync(cityHint: string, seed: string): CompanyLocation | null {
   let cityCoords: CompanyLocation | null = CITY_COORDINATES[cityHint] ?? null;
   if (!cityCoords && cityHint) {
     const cityKey = Object.keys(CITY_COORDINATES).find(
@@ -136,15 +172,16 @@ export function tryResolveSellerCoordsFast(seller: User): CompanyLocation | null
     );
     if (cityKey) cityCoords = CITY_COORDINATES[cityKey];
   }
-  if (cityCoords) {
-    return jitterCoords(cityCoords.lat, cityCoords.lng, seed);
-  }
-  return undefined;
+  return cityCoords ? jitterCoords(cityCoords.lat, cityCoords.lng, seed) : null;
 }
 
-/** Resolve map pins for many sellers: fast city lookups first, then sequential Nominatim. */
+/**
+ * Resolve map pins for many sellers: fast city lookups first, then sequential Nominatim.
+ * `onPartial` fires immediately with city-centroid pins so the map isn't empty while geocoding.
+ */
 export async function getSellerMapCoordinatesBatch(
   sellers: User[],
+  onPartial?: (coords: Map<string, CompanyLocation | null>) => void,
 ): Promise<Map<string, CompanyLocation | null>> {
   const out = new Map<string, CompanyLocation | null>();
   const slow: User[] = [];
@@ -155,10 +192,13 @@ export async function getSellerMapCoordinatesBatch(
     const fast = tryResolveSellerCoordsFast(seller);
     if (fast === undefined) {
       slow.push(seller);
+      out.set(key, cityCentroidSync(extractCityHint(seller.location), key));
     } else {
       out.set(key, fast);
     }
   }
+
+  if (slow.length > 0) onPartial?.(new Map(out));
 
   for (const seller of slow) {
     const key = seller.email || seller.id || '';
@@ -169,6 +209,8 @@ export async function getSellerMapCoordinatesBatch(
 }
 
 export async function getSellerMapCoordinates(seller: User): Promise<CompanyLocation | null> {
+  const geocodeNominatim = (p: Parameters<typeof geocodeNominatimCached>[0]) =>
+    geocodeNominatimCached(p).catch(() => null);
   const seed = seller.email || seller.id || 'unknown';
   const cityHint = extractCityHint(seller.location);
   const pc = normalizeIndianPincode(seller.pincode);

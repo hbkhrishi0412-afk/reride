@@ -478,10 +478,10 @@ const en = {
   'role.serviceProvider': 'Service Provider',
   'user.greeting': 'Hi, {{name}}',
   'home.trustBadge1M': 'Marketplace for buyers & sellers',
-  'home.trustBadgeVerified': 'RC-tracked deals — not classifieds',
-  'home.premiumUsedCars': 'Your deal, tracked — from chat to RC transfer',
+  'home.trustBadgeVerified': 'RC on every listing',
+  'home.premiumUsedCars': 'Buy it. Own it. Officially.',
   'home.marketingSubhead':
-    'Browse with RC on the listing. Chat, inspect, token, and RC transfer in one deal room.',
+    'Check the RC before you chat. Inspect, pay a token and transfer ownership, all in one deal room.',
   'home.card.qualityTitle': 'See the full picture',
   'home.card.qualityDesc': 'RC, owners, insurance & photos before you visit',
   'home.card.fixedTitle': 'One deal room per vehicle',
@@ -588,7 +588,7 @@ const en = {
   'mobile.home.readyToSell': 'Ready to Sell?',
   'mobile.home.listVehicle': 'List your vehicle for free and connect with buyers in your city',
   'mobile.home.heroSub':
-    'One deal room. Chat to RC transfer — tracked on the platform.',
+    'Check the RC before you chat. Inspect, pay a token and transfer ownership, all in one deal room.',
   'search.placeholderMobile': 'Search by brand, model, budget...',
   'mobile.home.browseAllCars': 'Browse All Cars',
   'mobile.home.exploreLocation': 'Explore by Location',
@@ -730,7 +730,7 @@ const en = {
   'listings.subtitle': 'Every listing can become a tracked deal on ReRide.',
   'listings.trustFilter.aria': 'Trust filters',
   'listings.trustFilter.rc': 'RC on listing',
-  'listings.trustFilter.verified': 'Verified listing',
+  'listings.trustFilter.verified': 'Full disclosure',
   'listings.trustFilter.dealReady': 'Deal-ready',
   'listings.trustFilter.singleOwner': 'Single owner',
   'listings.noVehiclesTrustHint':

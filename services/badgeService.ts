@@ -6,7 +6,7 @@ export const getSellerBadges = (seller: User, allSellerVehicles: Vehicle[]): Bad
   // Low disclosure trust marker
   if (seller.reportedCount && seller.reportedCount >= 2) {
     badges.push({
-      type: 'verified',
+      type: 'low_trust',
       label: 'Low trust',
       description: 'Multiple buyers reported disclosure mismatches on past listings.',
     });

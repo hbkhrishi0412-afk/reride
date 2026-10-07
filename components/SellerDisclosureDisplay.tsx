@@ -22,7 +22,7 @@ export const SellerDisclosureDisplay: React.FC<SellerDisclosureDisplayProps> = (
 }) => {
   const tier: ListingChecklistTier | null = useMemo(() => {
     if (!checklist?.items?.length) return null;
-    return checklist.listingTier ?? computeListingTier(checklist, category);
+    return computeListingTier(checklist, category);
   }, [checklist, category]);
 
   const sections = useMemo(() => {
@@ -47,7 +47,7 @@ export const SellerDisclosureDisplay: React.FC<SellerDisclosureDisplayProps> = (
               : 'bg-amber-100 text-amber-800 border border-amber-200'
           }`}
         >
-          {tier === 'verified' ? '✓ Verified Listing' : 'Basic Listing — Self Reported'}
+          {tier === 'verified' ? '✓ Full disclosure — Self Reported' : 'Basic Listing — Self Reported'}
         </div>
       )}
 

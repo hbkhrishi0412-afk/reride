@@ -1,6 +1,10 @@
 import type { Vehicle } from '../types';
+import { VehicleCategory } from '../vehicle-category';
+import { getSellerDefinitions } from '../lib/universalChecklist/items';
+import { sanitizeSellerChecklist } from '../lib/universalChecklist/helpers';
 import {
   evaluateTrustSignal,
+  hasFullDisclosure,
   getListingDisclosureScore,
   getListingTrustRail,
   getListingTrustSignalStatuses,
@@ -44,6 +48,62 @@ const baseVehicle = {
   bootSpace: '268 litres',
 } as unknown as Vehicle;
 
+const completeItems = getSellerDefinitions(VehicleCategory.FOUR_WHEELER).map((d) => ({
+  id: d.id,
+  status: 'pass' as const,
+  notes: 'ok',
+  photoUrl: 'https://cdn/x.jpg',
+}));
+
+const fullyDisclosedVehicle = {
+  ...baseVehicle,
+  category: VehicleCategory.FOUR_WHEELER,
+  sellerDisclosureChecklist: { version: '1.0', category: VehicleCategory.FOUR_WHEELER, items: completeItems },
+} as unknown as Vehicle;
+
+describe('hasFullDisclosure', () => {
+  it('is true when every required item has evidence', () => {
+    expect(hasFullDisclosure(fullyDisclosedVehicle)).toBe(true);
+  });
+
+  it('ignores a stored listingTier that the items do not support', () => {
+    const faked = {
+      ...baseVehicle,
+      sellerDisclosureChecklist: {
+        listingTier: 'verified',
+        items: [{ id: 'core.docs.rc_photo', photoUrl: 'https://cdn/rc.jpg', status: 'pass' }],
+      },
+    } as Vehicle;
+    expect(hasFullDisclosure(faked)).toBe(false);
+  });
+});
+
+describe('sanitizeSellerChecklist', () => {
+  it('recomputes the tier and strips unknown items and non-http photos', () => {
+    const out = sanitizeSellerChecklist(
+      {
+        listingTier: 'verified',
+        items: [
+          { id: 'core.docs.rc_photo', status: 'pass', photoUrl: 'data:image/png;base64,AAAA' },
+          { id: 'not.a.real.item', status: 'pass', photoUrl: 'https://cdn/x.jpg' },
+        ],
+      },
+      VehicleCategory.FOUR_WHEELER,
+    );
+    expect(out?.listingTier).toBe('basic');
+    expect(out?.items.map((i) => i.id)).toEqual(['core.docs.rc_photo']);
+    expect(out?.items[0].photoUrl).toBe('');
+  });
+
+  it('keeps a genuinely complete checklist verified', () => {
+    expect(sanitizeSellerChecklist({ items: completeItems }, VehicleCategory.FOUR_WHEELER)?.listingTier).toBe('verified');
+  });
+
+  it('rejects non-object input', () => {
+    expect(sanitizeSellerChecklist('nope', VehicleCategory.FOUR_WHEELER)).toBeNull();
+  });
+});
+
 describe('showVerifiedListingBadge', () => {
   it('returns false for null/undefined', () => {
     expect(showVerifiedListingBadge(null)).toBe(false);
@@ -55,9 +115,9 @@ describe('showVerifiedListingBadge', () => {
     expect(showVerifiedListingBadge(v)).toBe(true);
   });
 
-  it('is true when seller has verified badge', () => {
-    const v = { sellerBadges: [{ type: 'verified' as const }] } as Vehicle;
-    expect(showVerifiedListingBadge(v)).toBe(true);
+  it('is not granted by a seller badge or a completed checklist', () => {
+    expect(showVerifiedListingBadge({ sellerBadges: [{ type: 'verified' as const }] } as Vehicle)).toBe(false);
+    expect(showVerifiedListingBadge(fullyDisclosedVehicle)).toBe(false);
   });
 
   it('is false otherwise', () => {
@@ -136,8 +196,9 @@ describe('trust signal statuses', () => {
     expect(statuses).toHaveLength(4);
     expect(statuses.find((s) => s.id === 'single_owner')?.met).toBe(true);
     expect(statuses.find((s) => s.id === 'rc_uploaded')?.met).toBe(true);
-    expect(statuses.find((s) => s.id === 'verified_listing')?.met).toBe(true);
+    expect(statuses.find((s) => s.id === 'verified_listing')?.met).toBe(false);
     expect(statuses.find((s) => s.id === 'deal_ready')?.met).toBe(true);
+    expect(evaluateTrustSignal(fullyDisclosedVehicle, 'verified_listing')).toBe(true);
   });
 
   it('filters listings consistently', () => {

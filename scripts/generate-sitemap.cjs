@@ -25,6 +25,7 @@ const STATIC_ROUTES = [
   { loc: '/safety-center', changefreq: 'monthly', priority: '0.5' },
   { loc: '/privacy-policy', changefreq: 'yearly', priority: '0.3' },
   { loc: '/terms-of-service', changefreq: 'yearly', priority: '0.3' },
+  { loc: '/delete-account', changefreq: 'yearly', priority: '0.3' },
 ];
 
 function xmlEscape(s) {

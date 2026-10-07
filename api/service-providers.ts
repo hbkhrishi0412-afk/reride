@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
-import { emailToKey, supabaseUserService } from '../services/supabase-user-service.js';
+import { supabaseUserService } from '../services/supabase-user-service.js';
 import type { ServiceProviderPayload } from '../services/supabase-service-provider-service.js';
 import { applyCors } from '../lib/api-route-cors.js';
 import { sanitizeServiceCategories } from '../constants/serviceProviderCatalog.js';
@@ -20,52 +20,6 @@ function parseStringList(value: unknown): string[] {
       .filter(Boolean);
   }
   return [];
-}
-
-async function doesAuthUserExistByEmail(
-  supabase: ReturnType<typeof getSupabaseAdminClient>,
-  email: string,
-): Promise<boolean> {
-  const normalized = email.toLowerCase().trim();
-  let page = 1;
-  const perPage = 200;
-
-  while (page <= 50) {
-    const { data, error } = await supabase.auth.admin.listUsers({
-      page,
-      perPage,
-    });
-    if (error) {
-      throw new Error(`Failed to verify auth user existence: ${error.message}`);
-    }
-
-    const users = data?.users || [];
-    if (users.some((u) => (u.email || '').toLowerCase().trim() === normalized)) {
-      return true;
-    }
-    if (users.length < perPage) {
-      break;
-    }
-    page += 1;
-  }
-
-  return false;
-}
-
-async function cleanupStaleUserRecord(email: string): Promise<void> {
-  const supabase = getSupabaseAdminClient();
-  const emailKey = emailToKey(email);
-  const normalizedEmail = email.toLowerCase().trim();
-
-  // Delete by both id and email to handle legacy rows not keyed by emailKey.
-  const { error } = await supabase
-    .from('users')
-    .delete()
-    .or(`id.eq.${emailKey},email.eq.${normalizedEmail}`);
-
-  if (error) {
-    throw new Error(`Failed to clean stale users row: ${error.message}`);
-  }
 }
 
 /**
@@ -108,30 +62,18 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
 
     const supabase = getSupabaseAdminClient();
     const hashedPassword = await hashPassword(password);
-    const authUserExists = await doesAuthUserExistByEmail(supabase, email);
 
-    const existingProvider = await supabaseServiceProviderService.findByEmail(email);
-    if (existingProvider) {
-      if (authUserExists) {
-        return res.status(409).json({
-          error: 'A service provider profile already exists for this email. Please sign in.',
-        });
-      }
-      // Stale profile without matching auth user; remove and recreate cleanly.
-      await supabaseServiceProviderService.delete(String(existingProvider.id));
+    // Unauthenticated endpoint: never delete or overwrite an existing account for this email.
+    if (await supabaseServiceProviderService.findByEmail(email)) {
+      return res.status(409).json({
+        error: 'A service provider profile already exists for this email. Please sign in.',
+      });
     }
-
-    const existingUser = await supabaseUserService.findByEmail(email);
-    if (existingUser && authUserExists) {
+    if (await supabaseUserService.findByEmail(email)) {
       return res.status(409).json({
         error:
           'An account with this email already exists. Please sign in or use Forgot password.',
       });
-    }
-    if (existingUser && !authUserExists) {
-      // Existing public.users row without matching auth.users can break createUser
-      // via auth trigger unique constraints; remove stale row before retrying.
-      await cleanupStaleUserRecord(email);
     }
 
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({

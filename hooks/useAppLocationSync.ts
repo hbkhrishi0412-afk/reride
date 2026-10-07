@@ -15,6 +15,35 @@ import { agentNavDebugLog } from '../utils/detailNavigationStorage';
 import { findVehicleByRouteSegment, vehicleIdsEqual } from '../utils/vehicleIdentity';
 import { stringifyVehicleForSession } from '../utils/vehicleSessionCache';
 import { logDebug } from '../utils/logger';
+import { getSellers, readCachedDealerDirectory } from '../services/userService';
+
+let lastSellerFetchEmail = '';
+const sameEmail = (u: User | null | undefined, email: string) => u?.email?.toLowerCase().trim() === email;
+
+/** Seller for /seller/:email — app users, then cached dealer directory, then a placeholder refreshed from the public API. */
+export function hydrateSellerProfile(
+  email: string,
+  users: User[],
+  setPublicSellerProfile: Dispatch<SetStateAction<User | null>>,
+) {
+  const known = users.find((u) => sameEmail(u, email)) ?? readCachedDealerDirectory().find((u) => sameEmail(u, email));
+  setPublicSellerProfile((prev) =>
+    sameEmail(prev, email) && prev?.id
+      ? prev
+      : known ??
+        (sameEmail(prev, email)
+          ? prev
+          : ({ email, name: 'Seller', mobile: '', role: 'seller', location: '', status: 'active', createdAt: new Date().toISOString() } as User)),
+  );
+  if (known || lastSellerFetchEmail === email) return;
+  lastSellerFetchEmail = email;
+  void getSellers()
+    .then((list) => {
+      const match = list.find((u) => sameEmail(u, email));
+      if (match) setPublicSellerProfile((prev) => (sameEmail(prev, email) && !prev?.id ? match : prev));
+    })
+    .catch(() => {});
+}
 
 export type UseAppLocationSyncArgs = {
   location: Location;
@@ -180,24 +209,7 @@ export function useAppLocationSync(args: UseAppLocationSyncArgs) {
     // Still on seller profile but URL switched to another dealer — view enum unchanged, so hydrate profile
     if (newView === viewNow && newView === View.SELLER_PROFILE) {
       const email = parseSellerEmailFromPath(path);
-      if (email) {
-        setPublicSellerProfile((prev) => {
-          if (prev?.email?.toLowerCase().trim() === email) return prev;
-          const match = users.find((u) => u?.email && u.email.toLowerCase().trim() === email);
-          return (
-            match ??
-            ({
-              email,
-              name: 'Seller',
-              mobile: '',
-              role: 'seller',
-              location: '',
-              status: 'active',
-              createdAt: new Date().toISOString(),
-            } as User)
-          );
-        });
-      }
+      if (email) hydrateSellerProfile(email, users, setPublicSellerProfile);
       return;
     }
 
@@ -276,24 +288,7 @@ export function useAppLocationSync(args: UseAppLocationSyncArgs) {
       setPublicSellerProfile(null);
     } else {
       const email = parseSellerEmailFromPath(path);
-      if (email) {
-        setPublicSellerProfile((prev) => {
-          if (prev?.email?.toLowerCase().trim() === email) return prev;
-          const match = users.find((u) => u?.email && u.email.toLowerCase().trim() === email);
-          return (
-            match ??
-            ({
-              email,
-              name: 'Seller',
-              mobile: '',
-              role: 'seller',
-              location: '',
-              status: 'active',
-              createdAt: new Date().toISOString(),
-            } as User)
-          );
-        });
-      }
+      if (email) hydrateSellerProfile(email, users, setPublicSellerProfile);
     }
 
     setCurrentView(newView);

@@ -147,7 +147,7 @@ const PrivacyPolicyPage: React.FC = () => {
             <ul className="list-disc list-inside text-gray-700 space-y-2 mb-4 ml-4">
               <li><strong>Access:</strong> Request access to your personal information</li>
               <li><strong>Correction:</strong> Request correction of inaccurate information</li>
-              <li><strong>Deletion:</strong> Request deletion of your personal information</li>
+              <li><strong>Deletion:</strong> Request deletion of your personal information (<a href="/delete-account" className="text-blue-600 hover:underline">how to delete your account</a>)</li>
               <li><strong>Portability:</strong> Request transfer of your data to another service</li>
               <li><strong>Objection:</strong> Object to processing of your personal information</li>
               <li><strong>Withdrawal of Consent:</strong> Withdraw consent where processing is based on consent</li>

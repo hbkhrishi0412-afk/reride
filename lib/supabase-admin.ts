@@ -1,5 +1,6 @@
 // Server-only Supabase admin client (service_role). No client-side auth storage imports.
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { detectBufferContentType } from '../utils/fileContentValidation.js';
 
 const getSupabaseServerConfig = () => ({
   url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
@@ -74,4 +75,29 @@ export function getSupabaseAdminClient(): SupabaseClient {
   }
 
   return supabaseAdminClient;
+}
+
+const INLINE_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+
+/**
+ * Moves an inline `data:image/...;base64,` value into the public `Images` bucket and returns its URL.
+ * Content type comes from the bytes, not the data-URL header.
+ */
+export async function uploadDataUrlImage(dataUrl: string, folder: string): Promise<string> {
+  const match = /^data:image\/[a-z+.-]+;base64,([A-Za-z0-9+/=\s]+)$/i.exec(dataUrl);
+  if (!match) throw new Error('Unsupported inline image.');
+  const buffer = Buffer.from(match[1], 'base64');
+  if (!buffer.length || buffer.length > 10 * 1024 * 1024) throw new Error('Image must be under 10MB.');
+  const mime = detectBufferContentType(buffer);
+  if (!mime || !INLINE_IMAGE_MIME.includes(mime)) throw new Error('Only JPEG, PNG and WebP images are allowed.');
+
+  const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+  const safeFolder = folder.replace(/[^a-zA-Z0-9@._\-/]/g, '').slice(0, 120);
+  const filePath = `${safeFolder}/${Date.now()}_${Array.from(globalThis.crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('')}.${ext}`;
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.storage
+    .from('Images')
+    .upload(filePath, buffer, { contentType: mime, cacheControl: '31536000', upsert: false });
+  if (error) throw new Error(`Image upload failed: ${error.message}`);
+  return supabase.storage.from('Images').getPublicUrl(filePath).data.publicUrl;
 }
