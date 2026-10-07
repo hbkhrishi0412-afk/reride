@@ -209,7 +209,8 @@ export async function runGoogleSignInButtonFlow(
 /** In-memory only (not persisted) — avoids storing the phone number in sessionStorage. */
 let pendingOtpPhoneForVerification: string | null = null;
 
-let firebaseRecaptcha: import('firebase/auth').RecaptchaVerifier | null = null;
+type PreparedRecaptcha = { verifier: import('firebase/auth').RecaptchaVerifier; dispose: () => void };
+let firebaseRecaptcha: Promise<PreparedRecaptcha> | null = null;
 let firebaseConfirmation: import('firebase/auth').ConfirmationResult | null = null;
 
 /** @internal Resets module OTP state between unit tests. */
@@ -217,6 +218,41 @@ export function resetOtpSessionForTests(): void {
   pendingOtpPhoneForVerification = null;
   firebaseRecaptcha = null;
   firebaseConfirmation = null;
+}
+
+/**
+ * Loads the Firebase SDK and renders the invisible reCAPTCHA ahead of time, so "Send OTP"
+ * only waits on the SMS request. A verifier is single-use, so sendOTP takes and drops it.
+ */
+function prepareFirebaseRecaptcha(containerId: string) {
+  if (!firebaseRecaptcha) {
+    const ready = getFirebaseAuth().then(async ({ auth, authMod }) => {
+      // Fresh element per verifier: an invisible verifier's clear() leaves its widget in the DOM.
+      const el = document.createElement('div');
+      (document.getElementById(containerId) ?? document.body).appendChild(el);
+      const verifier = new authMod.RecaptchaVerifier(auth, el, { size: 'invisible' });
+      const dispose = () => {
+        try {
+          verifier.clear();
+        } catch {
+          /* already cleared */
+        }
+        el.remove();
+      };
+      try {
+        await verifier.render();
+      } catch (error) {
+        dispose();
+        throw error;
+      }
+      return { verifier, dispose };
+    });
+    ready.catch(() => {
+      if (firebaseRecaptcha === ready) firebaseRecaptcha = null;
+    });
+    firebaseRecaptcha = ready;
+  }
+  return firebaseRecaptcha;
 }
 
 function isMessageBotOtpEnabled(): boolean {
@@ -327,15 +363,16 @@ export const sendOTP = async (
 
     if (isFirebaseOtpEnabled()) {
       const { auth, authMod } = await getFirebaseAuth();
-      // A fresh invisible verifier per send; reusing one after a send/failure makes Firebase reject it.
-      firebaseRecaptcha?.clear();
-      firebaseRecaptcha = new authMod.RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
+      const { verifier, dispose } = await prepareFirebaseRecaptcha('recaptcha-container');
+      firebaseRecaptcha = null;
       try {
-        firebaseConfirmation = await authMod.signInWithPhoneNumber(auth, formattedNumber, firebaseRecaptcha);
-      } catch (error) {
-        firebaseRecaptcha.clear();
-        firebaseRecaptcha = null;
-        throw error;
+        firebaseConfirmation = await authMod.signInWithPhoneNumber(auth, formattedNumber, verifier);
+      } finally {
+        dispose();
+        // Re-arm in the background so "Resend" / a retry is just as fast.
+        if (document.getElementById('recaptcha-container')) {
+          prepareFirebaseRecaptcha('recaptcha-container').catch(() => {});
+        }
       }
       pendingOtpPhoneForVerification = formattedNumber;
       return { success: true, confirmationResult: { phone: formattedNumber } };
@@ -468,7 +505,7 @@ export const verifyOTP = async (
       const credential = await firebaseConfirmation.confirm(otp);
       const idToken = await credential.user.getIdToken();
       // Only the app session is kept; the Firebase session exists just to mint this token.
-      await authMod.signOut(auth).catch(() => {});
+      void authMod.signOut(auth).catch(() => {});
       firebaseConfirmation = null;
       return completeServerOtpLogin({ action: 'verify-otp-firebase', idToken, role });
     }
@@ -518,16 +555,19 @@ export const verifyOTP = async (
   }
 };
 
-// ── reCAPTCHA stubs (not needed for Supabase) ───────────────────────────────
+// ── reCAPTCHA (Firebase OTP only) ───────────────────────────────────────────
 
-/** No-op — reCAPTCHA is not required for Supabase Auth. */
+/** Pre-warms Firebase + invisible reCAPTCHA when the OTP form opens; no-op for other providers. */
 export const initializeRecaptcha = (
-  _containerId: string = 'recaptcha-container',
-): null => null;
+  containerId: string = 'recaptcha-container',
+): null => {
+  if (isFirebaseOtpEnabled()) prepareFirebaseRecaptcha(containerId).catch(() => {});
+  return null;
+};
 
-/** Clears the Firebase reCAPTCHA widget, if one was created by sendOTP. */
+/** Clears the pre-warmed Firebase reCAPTCHA widget, if any. */
 export const cleanupRecaptcha = (): void => {
-  firebaseRecaptcha?.clear();
+  firebaseRecaptcha?.then((r) => r.dispose()).catch(() => {});
   firebaseRecaptcha = null;
 };
 

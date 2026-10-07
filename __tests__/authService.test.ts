@@ -35,7 +35,7 @@ jest.mock('firebase/app', () => ({
 }));
 jest.mock('firebase/auth', () => ({
   getAuth: jest.fn(() => ({})),
-  RecaptchaVerifier: jest.fn().mockImplementation(() => ({ clear: jest.fn() })),
+  RecaptchaVerifier: jest.fn().mockImplementation(() => ({ clear: jest.fn(), render: jest.fn().mockResolvedValue(0) })),
   signInWithPhoneNumber: (...args: unknown[]) => mockSignInWithPhoneNumber(...args),
   signOut: jest.fn().mockResolvedValue(undefined),
 }));
@@ -205,6 +205,23 @@ describe('authService (Supabase)', () => {
   describe('initializeRecaptcha', () => {
     it('is a no-op for Supabase', () => {
       expect(initializeRecaptcha('x')).toBeNull();
+    });
+
+    it('Firebase: pre-renders the verifier on open and sendOTP reuses it', async () => {
+      globalThis.__IMPORT_META__.env.VITE_OTP_SMS_PROVIDER = 'firebase';
+      const { RecaptchaVerifier } = jest.requireMock('firebase/auth') as { RecaptchaVerifier: jest.Mock };
+      mockSignInWithPhoneNumber.mockResolvedValue({ confirm: mockConfirm });
+
+      initializeRecaptcha();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+      const prewarmed = RecaptchaVerifier.mock.results[0].value;
+      expect(prewarmed.render).toHaveBeenCalled();
+
+      await sendOTP('9876543210');
+      expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+      expect(mockSignInWithPhoneNumber).toHaveBeenCalledWith(expect.anything(), '+919876543210', prewarmed);
+      expect(prewarmed.clear).toHaveBeenCalled();
     });
   });
 });
