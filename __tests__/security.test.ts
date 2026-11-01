@@ -45,9 +45,14 @@ describe('Security Utilities', () => {
       const result2 = await validatePassword('test', null as any);
       expect(result2).toBe(false);
       
-      // Test with invalid hash format - should return false (not throw)
+      // Non-bcrypt stored value that does not match typed password
       const result3 = await validatePassword('test', 'invalid-hash-format');
       expect(result3).toBe(false);
+    });
+
+    it('accepts legacy plaintext match so login can rehash', async () => {
+      expect(await validatePassword('legacy-pass', 'legacy-pass')).toBe(true);
+      expect(await validatePassword('wrong', 'legacy-pass')).toBe(false);
     });
   });
 
@@ -132,12 +137,12 @@ describe('Security Utilities', () => {
       expect(sanitized).toContain('Hello World');
     });
 
-    it('should escape HTML entities', async () => {
-      const input = 'Hello <world> & "quotes"';
+    it('should strip HTML without storing entity-escaped apostrophes', async () => {
+      const input = "O'Brien <script>x</script>";
       const sanitized = await sanitizeString(input);
-      
-      // Server escapes tags; DOMPurify (browser/jsdom) strips unknown tags. Either way no raw markup survives.
       expect(sanitized).not.toMatch(/[<>]/);
+      expect(sanitized).toContain("O'Brien");
+      expect(sanitized).not.toContain('&#');
     });
 
     it('should handle empty strings', async () => {

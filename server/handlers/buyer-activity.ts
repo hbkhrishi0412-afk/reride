@@ -10,6 +10,8 @@ import {
   type AuthResult,
 } from '../handler-shared.js';
 import { logWarn, logError } from '../../utils/logger.js';
+import { InvalidJsonBodyError, parseJsonBody } from '../parse-json-body.js';
+import { mergeBuyerActivityRecord } from './buyer-activity-merge.js';
 
 function firstQueryParam(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] || '';
@@ -135,7 +137,16 @@ export async function handleBuyerActivity(
     }
 
     if (req.method === 'POST' || req.method === 'PUT') {
-      const activityData = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+      let activityData: Record<string, unknown>;
+      try {
+        activityData = parseJsonBody(req);
+      } catch (err) {
+        if (err instanceof InvalidJsonBodyError) {
+          res.status(400).json({ success: false, reason: 'Invalid JSON body' });
+          return;
+        }
+        throw err;
+      }
       if (!activityData.userId) {
         res.status(400).json({ success: false, reason: 'User ID is required' });
         return;
@@ -150,17 +161,25 @@ export async function handleBuyerActivity(
       const supabase = getSupabaseAdminClient();
       const { data: existing } = await supabase
         .from('buyer_activity')
-        .select('id')
+        .select('id, recently_viewed, saved_searches, price_drops, new_matches')
         .eq('user_id', normalizedUserId)
         .single();
+
+      const merged = mergeBuyerActivityRecord(existing, {
+        recentlyViewed: activityData.recentlyViewed,
+        savedSearches: activityData.savedSearches,
+        notifications: activityData.notifications as { priceDrops?: unknown; newMatches?: unknown } | undefined,
+        removePriceDrops: activityData.removePriceDrops,
+        removeSavedSearchIds: activityData.removeSavedSearchIds,
+      });
 
       const activityRecord: Record<string, unknown> = {
         id: existing?.id || `activity_${normalizedUserId}_${Date.now()}`,
         user_id: normalizedUserId,
-        recently_viewed: activityData.recentlyViewed || [],
-        saved_searches: activityData.savedSearches || [],
-        price_drops: activityData.notifications?.priceDrops || [],
-        new_matches: activityData.notifications?.newMatches || [],
+        recently_viewed: merged.recently_viewed,
+        saved_searches: merged.saved_searches,
+        price_drops: merged.price_drops,
+        new_matches: merged.new_matches,
         updated_at: new Date().toISOString(),
       };
 

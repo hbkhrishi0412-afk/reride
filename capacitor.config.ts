@@ -13,7 +13,11 @@ import { CapacitorConfig } from '@capacitor/cli';
  * loads that URL instead of `dist/`. Run **`npm run android:bundle`** (clears the var for this
  * command), then **Build → Clean Project** in Android Studio and reinstall the APK.
  */
-const liveReloadUrl = (process.env.RERIDE_VITE_DEV_SERVER_URL || '').trim();
+// Never bake a live-reload URL into production / CAPACITOR_BUILD syncs (blank WebView if the URL dies).
+const liveReloadUrl =
+  process.env.CAPACITOR_BUILD === '1' || process.env.NODE_ENV === 'production'
+    ? ''
+    : (process.env.RERIDE_VITE_DEV_SERVER_URL || '').trim();
 
 const config: CapacitorConfig = {
   appId: 'com.reride.app',

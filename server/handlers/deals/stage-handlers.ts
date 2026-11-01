@@ -1,7 +1,7 @@
 import { getSupabaseAdminClient } from '../../handler-shared.js';
 import type { DealLeadMetadata, DealStage } from '../../../types.js';
 import { validateAdvanceStage } from './stage-validation.js';
-import type { DealActionHandler } from './context.js';
+import { parseBody, type DealActionHandler } from './context.js';
 import {
   assertDealParticipant,
   fetchLeadWithTimeline,
@@ -27,7 +27,7 @@ export const handleStageHandlers: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     const stage = String(body.stage || '') as DealStage;
     const payload = (body.payload || {}) as Record<string, unknown>;
@@ -241,7 +241,7 @@ export const handleStageHandlers: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     const response = String(body.response || '');
     const counterAmount = body.counterAmount != null ? Number(body.counterAmount) : undefined;

@@ -1,6 +1,6 @@
 import { getSupabaseAdminClient } from '../../handler-shared.js';
 import type { DealInspectionBookingStatus, DealLeadMetadata, DealStage } from '../../../types.js';
-import type { DealActionHandler } from './context.js';
+import { parseBody, type DealActionHandler } from './context.js';
 import {
   assertDealParticipant,
   fetchLeadWithTimeline,
@@ -34,7 +34,7 @@ export const handleInspections: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     const scheduledDate = String(body.scheduledDate || '').trim();
     const scheduledTime = String(body.scheduledTime || '').trim();
@@ -228,7 +228,7 @@ export const handleInspections: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const bookingId = String(body.bookingId || '');
     const status = String(body.status || '') as DealInspectionBookingStatus;
     const mechanicName = body.mechanicName ? String(body.mechanicName) : undefined;

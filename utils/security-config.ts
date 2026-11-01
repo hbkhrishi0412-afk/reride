@@ -94,9 +94,7 @@ export const SECURITY_CONFIG = {
   /** Per-endpoint rate limits (tighter than global gateway bucket). */
   ENDPOINT_RATE_LIMITS: {
     TRACK_VIEW: {
-      MAX_REQUESTS: process.env.TRACK_VIEW_RATE_LIMIT_MAX
-        ? parseInt(process.env.TRACK_VIEW_RATE_LIMIT_MAX, 10)
-        : 30,
+      MAX_REQUESTS: envInt('TRACK_VIEW_RATE_LIMIT_MAX', 30, 30),
       WINDOW_MS: 15 * 60 * 1000,
     },
     CHAT_POST: {
@@ -117,12 +115,10 @@ export const SECURITY_CONFIG = {
   CORS: {
     // Mobile / WebView shells MUST stay allowlisted even if NODE_ENV is mis-inferred at bundle time.
     ALLOWED_ORIGINS: (() => {
-      const mobileShellOrigins = [
+      // Production: Capacitor / WebView shells only — not browser http://localhost (credentialed CORS).
+      const capacitorOrigins = [
         'https://appassets.androidplatform.net',
         'https://localhost',
-        'http://localhost',
-        'http://127.0.0.1',
-        'https://127.0.0.1',
         'capacitor://localhost',
         'ionic://localhost',
       ] as const;
@@ -131,14 +127,17 @@ export const SECURITY_CONFIG = {
         'https://www.reride.co.in',
         'https://reride.co.in',
         'https://reride-app.vercel.app',
-        ...mobileShellOrigins,
+        ...capacitorOrigins,
       ];
       const developmentExtra = [
         'http://localhost:3000',
         'http://localhost:5173',
         'http://localhost:5174',
+        'http://localhost',
+        'http://127.0.0.1',
+        'https://127.0.0.1',
         'https://reride--2-.vercel.app',
-        ...mobileShellOrigins,
+        ...capacitorOrigins,
       ];
       const merged =
         process.env.NODE_ENV === 'production'
@@ -172,29 +171,28 @@ export const SECURITY_CONFIG = {
     'X-Frame-Options': 'DENY',
     'X-XSS-Protection': '0', // Disabled - CSP provides better protection
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
-    // Enhanced CSP: More restrictive while allowing necessary functionality
-    // Note: 'unsafe-inline' and 'unsafe-eval' are required for Vite HMR in development
-    // In production, consider using nonces for inline scripts
+    // SPA CSP for HTML is in vercel.json. This header is for API responses.
+    // Production: no 'unsafe-eval'. 'unsafe-inline' kept for style-src only on API; script-src is self + analytics.
     'Content-Security-Policy': process.env.NODE_ENV === 'production'
       ? [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com", // Required for Vite, allow analytics
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", // Allow Google Fonts
-          "img-src 'self' data: https: blob:", // Allow images from any HTTPS source
-          "connect-src 'self' https: wss: ws:", // Allow API calls and WebSockets
-          "font-src 'self' data: https://fonts.gstatic.com", // Allow Google Fonts
-          "object-src 'none'", // Block plugins
+          "script-src 'self' https://www.googletagmanager.com https://www.google-analytics.com",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+          "img-src 'self' data: https: blob:",
+          "connect-src 'self' https: wss: ws:",
+          "font-src 'self' data: https://fonts.gstatic.com",
+          "object-src 'none'",
           "base-uri 'self'",
           "form-action 'self'",
-          "frame-ancestors 'none'", // Prevent framing
-          "upgrade-insecure-requests", // Force HTTPS
+          "frame-ancestors 'none'",
+          "upgrade-insecure-requests",
         ].join('; ')
       : [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Required for Vite HMR
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Vite HMR
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: https: blob:",
-          "connect-src 'self' https: wss: ws: http://localhost:*", // Allow localhost for dev
+          "connect-src 'self' https: wss: ws: http://localhost:*",
           "font-src 'self' data: https:",
           "object-src 'none'",
           "base-uri 'self'",

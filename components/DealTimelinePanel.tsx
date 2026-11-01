@@ -6,7 +6,6 @@ import {
   respondToDealOffer,
   acceptDealChat,
   confirmDealAssistancePayment,
-  purchaseDealAssistance,
   getDealLead,
 } from '../services/dealService.js';
 import { uploadImage } from '../services/imageUploadService.js';
@@ -206,36 +205,35 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
   const handleAssistancePurchase = async (packageId: string, packageName: string, price: number) => {
     setLoading(true);
     try {
-      if (isRazorpayConfiguredInClient()) {
-        await new Promise<void>((resolve, reject) => {
-          openRazorpayDealAssistanceCheckout({
-            leadId: lead.id,
-            packageId,
-            packageName,
-            amountInr: price,
-            payerEmail: currentUser.email,
-            payerName: currentUser.name,
-            onSuccess: async (proof) => {
-              try {
-                await confirmDealAssistancePayment({
-                  leadId: lead.id,
-                  packageId,
-                  amount: price,
-                  razorpay_order_id: proof.razorpay_order_id,
-                  razorpay_payment_id: proof.razorpay_payment_id,
-                  razorpay_signature: proof.razorpay_signature,
-                });
-                resolve();
-              } catch (err) {
-                reject(err);
-              }
-            },
-            onFailure: (msg) => reject(new Error(msg)),
-          });
-        });
-      } else {
-        await purchaseDealAssistance(lead.id, packageId);
+      if (!isRazorpayConfiguredInClient()) {
+        throw new Error('Online payment is not configured. Please try again later.');
       }
+      await new Promise<void>((resolve, reject) => {
+        openRazorpayDealAssistanceCheckout({
+          leadId: lead.id,
+          packageId,
+          packageName,
+          amountInr: price,
+          payerEmail: currentUser.email,
+          payerName: currentUser.name,
+          onSuccess: async (proof) => {
+            try {
+              await confirmDealAssistancePayment({
+                leadId: lead.id,
+                packageId,
+                amount: price,
+                razorpay_order_id: proof.razorpay_order_id,
+                razorpay_payment_id: proof.razorpay_payment_id,
+                razorpay_signature: proof.razorpay_signature,
+              });
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          },
+          onFailure: (msg) => reject(new Error(msg)),
+        });
+      });
       const updated = await getDealLead({ leadId: lead.id });
       if (updated) onLeadUpdated(updated);
       setShowAssistance(false);

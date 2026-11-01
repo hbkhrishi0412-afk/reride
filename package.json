@@ -23,7 +23,7 @@
     "android:sync": "npm run build:android && npx cap sync android",
     "android:check": "node scripts/check-android-setup.cjs",
     "google:oauth-check": "node scripts/check-google-oauth.cjs",
-    "android:bundle": "cross-env RERIDE_VITE_DEV_SERVER_URL= npm run android:sync",
+    "android:bundle": "cross-env CAPACITOR_BUILD=1 RERIDE_VITE_DEV_SERVER_URL= npm run android:sync",
     "android:apk": "npm run android:bundle && cd android && gradlew.bat assembleDebug",
     "android:aab": "npm run android:bundle && cd android && gradlew.bat bundleRelease",
     "android:install": "cd android && gradlew.bat installDebug",

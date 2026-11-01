@@ -12,6 +12,7 @@ import { handleInspections } from './deals/inspections.js';
 import { handleAdminOps } from './deals/admin-ops.js';
 import { handleReturnLifecycle } from './deals/return-lifecycle.js';
 import { firstQueryParam } from './deals/shared.js';
+import { InvalidJsonBodyError } from './deals/context.js';
 
 export async function handleDeals(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   if (!USE_SUPABASE) {
@@ -33,6 +34,9 @@ export async function handleDeals(req: VercelRequest, res: VercelResponse, _opti
 
     return res.status(404).json({ success: false, reason: 'Unknown deals action' });
   } catch (error) {
+    if (error instanceof InvalidJsonBodyError) {
+      return res.status(400).json({ success: false, reason: 'Invalid JSON body' });
+    }
     console.error('deals handler error:', error);
     return res.status(500).json({
       success: false,

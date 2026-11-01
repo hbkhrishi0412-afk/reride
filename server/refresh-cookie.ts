@@ -62,6 +62,10 @@ export function getRefreshTokenFromRequest(req: VercelRequest): string | null {
   if (fromBody) return fromBody;
   const primary = getCookie(req, refreshCookieName());
   if (primary) return primary;
+  // Dev-only fallback — never accept the non-__Host- cookie in production.
+  const prod =
+    process.env.NODE_ENV === 'production' || String(process.env.VERCEL_ENV || '') === 'production';
+  if (prod) return null;
   return getCookie(req, REFRESH_COOKIE_DEV);
 }
 
@@ -88,9 +92,13 @@ export function appendRefreshTokenCookie(res: VercelResponse, token: string, max
 }
 
 export function clearRefreshTokenCookie(res: VercelResponse): void {
-  const name = refreshCookieName();
   const secure =
     process.env.NODE_ENV === 'production' || String(process.env.VERCEL_ENV || '') === 'production';
-  const securePart = secure ? 'Secure; ' : '';
-  appendSetCookie(res, `${name}=; Path=/; HttpOnly; ${securePart}SameSite=Lax; Max-Age=0`);
+  // Clear both names so a leftover cookie cannot outlive logout.
+  // __Host- cookies require Secure; clear the prod name with Secure always.
+  appendSetCookie(res, `${REFRESH_COOKIE_PROD}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+  appendSetCookie(
+    res,
+    `${REFRESH_COOKIE_DEV}=; Path=/; HttpOnly; ${secure ? 'Secure; ' : ''}SameSite=Lax; Max-Age=0`,
+  );
 }

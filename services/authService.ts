@@ -263,6 +263,14 @@ function isMessageBotOtpEnabled(): boolean {
   }
 }
 
+function isWhatsAppOtpEnabled(): boolean {
+  try {
+    return import.meta.env.VITE_OTP_SMS_PROVIDER === 'whatsapp';
+  } catch {
+    return false;
+  }
+}
+
 function isFirebaseOtpEnabled(): boolean {
   try {
     return import.meta.env.VITE_OTP_SMS_PROVIDER === 'firebase';
@@ -347,7 +355,7 @@ export const signInWithGoogle = async (): Promise<{
 // ── OTP / Phone Authentication ──────────────────────────────────────────────
 
 /**
- * Send an OTP: either MessageBot SMS (server) or Supabase phone auth (Twilio/Supabase SMS).
+ * Send an OTP: WhatsApp, MessageBot SMS, Firebase SMS, or Supabase phone auth.
  */
 export const sendOTP = async (
   phoneNumber: string,
@@ -360,6 +368,26 @@ export const sendOTP = async (
     const formattedNumber = phoneNumber.startsWith('+')
       ? phoneNumber
       : `+91${phoneNumber}`;
+
+    if (isWhatsAppOtpEnabled()) {
+      const response = await authenticatedFetch('/api/users', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({
+          action: 'send-otp-whatsapp',
+          phoneNumber: formattedNumber,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        reason?: string;
+      };
+      if (!response.ok || !data.success) {
+        return { success: false, reason: data.reason || 'Failed to send OTP' };
+      }
+      pendingOtpPhoneForVerification = formattedNumber;
+      return { success: true, confirmationResult: { phone: formattedNumber } };
+    }
 
     if (isFirebaseOtpEnabled()) {
       const { auth, authMod } = await getFirebaseAuth();
@@ -495,6 +523,15 @@ export const verifyOTP = async (
         success: false,
         reason: 'Phone number not found. Please request OTP again.',
       };
+    }
+
+    if (isWhatsAppOtpEnabled()) {
+      return completeServerOtpLogin({
+        action: 'verify-otp-whatsapp',
+        phoneNumber: phone,
+        otp,
+        role,
+      });
     }
 
     if (isFirebaseOtpEnabled()) {

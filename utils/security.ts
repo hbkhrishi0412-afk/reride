@@ -23,23 +23,19 @@ const getDOMPurify = async () => {
   return dompurifyPromise;
 };
 
-// Safe HTML sanitizer usable in both browser and server environments.
-// - In browser: use DOMPurify if available.
-// - In server (Vercel functions): fall back to validator-based escaping.
-const sanitizeHtml = async (input: string): Promise<string> => {
+/** Strip markup for storage; React/HTML sinks escape on render — do not store entities. */
+const stripHtmlForStorage = async (input: string): Promise<string> => {
   try {
-    // Use DOMPurify only when running in a browser-like environment
     if (typeof window !== 'undefined') {
       const DOMPurify = await getDOMPurify();
-      if (DOMPurify && DOMPurify.sanitize) {
-        return DOMPurify.sanitize(input);
+      if (DOMPurify?.sanitize) {
+        return DOMPurify.sanitize(input, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
       }
     }
   } catch {
-    // Ignore and fall back to validator escaping below
+    /* fall through */
   }
-  // Server-side fallback: escape potentially dangerous characters
-  return validator.escape(input);
+  return input.replace(/<\/?[^>]+>/g, '').replace(/[<>]/g, '');
 };
 
 // Password hashing utilities
@@ -51,45 +47,39 @@ export const hashPassword = async (password: string): Promise<string> => {
   }
 };
 
+function timingSafeEqualString(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const aBuf = enc.encode(a);
+  const bBuf = enc.encode(b);
+  if (aBuf.length !== bBuf.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aBuf.length; i++) diff |= aBuf[i]! ^ bBuf[i]!;
+  return diff === 0;
+}
+
 export const validatePassword = async (password: string, hash: string): Promise<boolean> => {
   try {
-    // Add check for missing hash
     if (!hash) {
       console.warn('Password validation failed: hash is missing');
       return false;
     }
-    
-    // CRITICAL FIX: Check if hash is a bcrypt hash BEFORE trying bcrypt.compare
-    // This prevents errors when comparing plain text passwords
-    // Bcrypt hashes start with $2 followed by a version letter: a, b, x, or y
-    // Format: $2[abxy]$[cost]$[salt+hash]
-    const isBcryptHash = /^\$2[abxy]\$/.test(hash);
-    
-    if (isBcryptHash) {
-      // Hash is a bcrypt hash, use bcrypt.compare
+
+    // Bcrypt hashes start with $2[abxy]$
+    if (/^\$2[abxy]\$/.test(hash)) {
       try {
-        const bcryptResult = await bcrypt.compare(password, hash);
-        return bcryptResult;
+        return await bcrypt.compare(password, hash);
       } catch (bcryptError) {
-        // If bcrypt.compare throws an error, the hash format is invalid
         console.warn('bcrypt.compare error (invalid hash format):', bcryptError);
         return false;
       }
-    } else {
-      // Hash is NOT a bcrypt hash (likely plain text)
-      // SECURITY FIX: No longer support plain text passwords
-      // If password is stored as plain text, it needs to be rehashed on next login
-      // Return false to force password rehashing through the login flow
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('⚠️ Password stored as plain text in database. User must reset password or rehash on login.');
-      }
-      
-      // Return false to indicate authentication failure
-      // The API will handle rehashing if password matches in plain text
-      return false;
     }
+
+    // Legacy plaintext rows: allow one successful login so the API can rehash (see marketplace login).
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('⚠️ Password stored as plain text; matching will trigger rehash on login.');
+    }
+    return timingSafeEqualString(password, hash);
   } catch (error) {
-    // Log the error but return false to treat it as an authentication failure
     console.warn('Password validation error:', error);
     return false;
   }
@@ -110,21 +100,11 @@ export const generateAccessToken = (user: User): string => {
     throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
   }
   
-  // CRITICAL FIX: Ensure expiration is properly set
-  const expiresIn = jwtConfig.ACCESS_TOKEN_EXPIRES_IN;
-  if (!expiresIn || expiresIn === '1m' || expiresIn === '60s') {
-    console.error('❌ CRITICAL: Token expiration is set to 1 minute! Using default 48h');
-    return jwt.sign(payload, secret, { 
-      expiresIn: '48h', // Force 48 hours
-      issuer: jwtConfig.ISSUER,
-      audience: jwtConfig.AUDIENCE
-    });
-  }
-  
-  return jwt.sign(payload, secret, { 
+  const expiresIn = jwtConfig.ACCESS_TOKEN_EXPIRES_IN || '24h';
+  return jwt.sign(payload, secret, {
     expiresIn: expiresIn as any,
     issuer: jwtConfig.ISSUER,
-    audience: jwtConfig.AUDIENCE
+    audience: jwtConfig.AUDIENCE,
   });
 };
 
@@ -315,12 +295,7 @@ export const sanitizeString = async (input: string): Promise<string> => {
   if (typeof input !== 'string') {
     return '';
   }
-
-  // Remove potential XSS attacks (browser) or escape (server)
-  const sanitized = await sanitizeHtml(input);
-
-  // Ensure HTML entities are escaped even after DOMPurify
-  return validator.escape(sanitized);
+  return stripHtmlForStorage(input);
 };
 
 export const sanitizeObject = async <T>(obj: T): Promise<T> => {
@@ -339,11 +314,10 @@ export const sanitizeObject = async <T>(obj: T): Promise<T> => {
   if (typeof obj === 'object') {
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
-      // Sanitize both key and value
       const sanitizedKey = await sanitizeString(key);
-      // Never HTML-escape passwords: bcrypt/legacy checks must see the exact bytes the user typed.
+      // Passwords: exact bytes the user typed (no trim, no HTML strip that could alter them).
       if (key === 'password' && typeof value === 'string') {
-        sanitized[sanitizedKey] = value.trim();
+        sanitized[sanitizedKey] = value;
         continue;
       }
       sanitized[sanitizedKey] = await sanitizeObject(value);

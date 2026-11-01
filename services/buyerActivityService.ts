@@ -5,7 +5,10 @@ import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFet
 /**
  * Save buyer activity to Supabase
  */
-export async function saveBuyerActivityToSupabase(activity: BuyerActivity): Promise<{ success: boolean; data?: BuyerActivity; error?: string }> {
+export async function saveBuyerActivityToSupabase(
+  activity: BuyerActivity,
+  extras?: { removePriceDrops?: number[]; removeSavedSearchIds?: string[] },
+): Promise<{ success: boolean; data?: BuyerActivity; error?: string }> {
   try {
     const normalized: BuyerActivity = {
       ...activity,
@@ -13,7 +16,11 @@ export async function saveBuyerActivityToSupabase(activity: BuyerActivity): Prom
     };
     const response = await authenticatedFetch('/api/buyer-activity', {
       method: 'POST',
-      body: JSON.stringify(normalized),
+      body: JSON.stringify({
+        ...normalized,
+        ...(extras?.removePriceDrops ? { removePriceDrops: extras.removePriceDrops } : {}),
+        ...(extras?.removeSavedSearchIds?.length ? { removeSavedSearchIds: extras.removeSavedSearchIds } : {}),
+      }),
     });
 
     const result = await handleApiResponse<{ data?: BuyerActivity; reason?: string; error?: string }>(response);

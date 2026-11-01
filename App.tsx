@@ -1153,7 +1153,9 @@ const AppContent: React.FC = () => {
           id: it.serviceId,
           name: svcMeta?.name || it.serviceId,
           quantity: it.quantity || 1,
-          price: typeof svcMeta?.price === 'number' ? svcMeta.price : undefined,
+          // Server prices from the provider catalog using these keys; client price is not trusted.
+          ...(svcMeta?.serviceType ? { serviceType: svcMeta.serviceType } : {}),
+          ...(svcMeta?.includedServiceId ? { includedServiceId: svcMeta.includedServiceId } : {}),
         };
       });
 

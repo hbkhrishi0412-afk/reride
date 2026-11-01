@@ -15,6 +15,7 @@ import {
   vahanLookupMessage,
 } from '../../lib/vahanVerification.js';
 import type { RatingEligibility, VehicleTrustDeal, Vehicle } from '../../types.js';
+import { InvalidJsonBodyError, parseJsonBody } from '../parse-json-body.js';
 
 function firstQueryParam(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value[0];
@@ -114,7 +115,7 @@ export async function handleVehicleTrust(
         return res.status(401).json({ success: false, reason: 'Authentication required' });
       }
 
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+      const body = parseJsonBody(req);
       const registrationNumber = String(body.registrationNumber || '').trim().toUpperCase();
       const vehicleIdRaw = body.vehicleId != null ? String(body.vehicleId) : undefined;
 
@@ -167,7 +168,7 @@ export async function handleVehicleTrust(
         return res.status(401).json({ success: false, reason: 'Authentication required' });
       }
 
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+      const body = parseJsonBody(req);
       const vehicleIdRaw = String(body.vehicleId || '');
       const buyerEmail = normalizeEmail(String(body.buyerEmail || ''));
 
@@ -224,7 +225,7 @@ export async function handleVehicleTrust(
         return res.status(401).json({ success: false, reason: 'Authentication required' });
       }
 
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+      const body = parseJsonBody(req);
       const dealId = String(body.dealId || '');
 
       if (!dealId) {
@@ -366,7 +367,7 @@ export async function handleVehicleTrust(
         return res.status(401).json({ success: false, reason: 'Authentication required' });
       }
 
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+      const body = parseJsonBody(req);
       const dealId = String(body.dealId || '');
       const rating = Number(body.rating);
       const comment = body.comment as string | undefined;
@@ -456,6 +457,9 @@ export async function handleVehicleTrust(
 
     return res.status(404).json({ success: false, reason: 'Unknown vehicle-trust action' });
   } catch (error) {
+    if (error instanceof InvalidJsonBodyError) {
+      return res.status(400).json({ success: false, reason: 'Invalid JSON body' });
+    }
     console.error('vehicle-trust error:', error);
     return res.status(500).json({
       success: false,

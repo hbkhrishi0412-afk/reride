@@ -6,7 +6,7 @@ import type {
   DealLeadMetadata,
 } from '../../../types.js';
 import { DEAL_COMPLAINT_CATEGORIES } from '../../../types.js';
-import type { DealActionHandler } from './context.js';
+import { parseBody, type DealActionHandler } from './context.js';
 import {
   assertDealParticipant,
   firstQueryParam,
@@ -31,7 +31,7 @@ export const handleDealComplaints: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     const category = String(body.category || '') as DealComplaintCategory;
     const message = String(body.message || '').trim();
@@ -170,7 +170,7 @@ export const handleDealComplaints: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const complaintId = String(body.complaintId || '');
     const status = String(body.status || '') as DealComplaintStatus;
     const adminNotes = body.adminNotes != null ? String(body.adminNotes) : undefined;

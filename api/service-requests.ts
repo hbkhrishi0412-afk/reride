@@ -1,10 +1,11 @@
+import { randomUUID } from 'crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { authenticateRequestDual } from './auth.js';
 import { supabaseServiceRequestService } from '../services/supabase-service-request-service.js';
+import type { ServiceLineItem, ServiceRequestPayload } from '../services/supabase-service-request-service.js';
 import { supabaseUserService } from '../services/supabase-user-service.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { serviceRequestAuditService } from '../services/service-request-audit-service.js';
-import type { ServiceRequestPayload } from '../services/supabase-service-request-service.js';
 import { applyCors } from '../lib/api-route-cors.js';
 import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
 import {
@@ -13,6 +14,70 @@ import {
   incomingVisibleToProvider,
   providerMatchesActor,
 } from '../utils/workshopBooking.js';
+
+function newNotificationId(): string {
+  return randomUUID();
+}
+
+type ProviderCatalogService = {
+  price?: number;
+  active?: boolean;
+  includedServices?: Array<{ id: string; price?: number; active?: boolean }>;
+};
+
+async function resolvePricedServices(
+  providerId: string | null,
+  services: ServiceLineItem[] | undefined,
+): Promise<{ services?: ServiceLineItem[]; total?: number }> {
+  if (!services?.length) return { services };
+  if (!providerId) {
+    return {
+      services: services.map((line) => ({
+        id: String(line.id || ''),
+        name: String(line.name || line.id || ''),
+        quantity: Math.max(1, Number(line.quantity) || 1),
+      })),
+    };
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const { data } = await supabase
+    .from('service_providers')
+    .select('metadata')
+    .eq('id', providerId)
+    .maybeSingle();
+  const catalog = ((data?.metadata as { services?: Record<string, ProviderCatalogService> } | null)?.services)
+    || {};
+
+  const priced: ServiceLineItem[] = [];
+  let total = 0;
+  for (const line of services) {
+    const qty = Math.max(1, Number(line.quantity) || 1);
+    const raw = line as ServiceLineItem & { serviceType?: string; includedServiceId?: string };
+    const key = String(raw.serviceType || raw.name || raw.id || '').trim();
+    const entry = catalog[key];
+    let unit: number | undefined;
+    if (entry && entry.active !== false) {
+      if (raw.includedServiceId && Array.isArray(entry.includedServices)) {
+        const inc = entry.includedServices.find(
+          (i) => String(i.id) === String(raw.includedServiceId) && i.active !== false,
+        );
+        unit = inc?.price != null && Number.isFinite(Number(inc.price)) ? Number(inc.price) : undefined;
+      } else if (entry.price != null && Number.isFinite(Number(entry.price))) {
+        unit = Number(entry.price);
+      }
+    }
+    const item: ServiceLineItem = {
+      id: String(line.id || key),
+      name: String(line.name || key),
+      quantity: qty,
+      ...(unit != null ? { price: unit } : {}),
+    };
+    priced.push(item);
+    if (unit != null) total += unit * qty;
+  }
+  return { services: priced, total: priced.some((p) => p.price != null) ? total : undefined };
+}
 
 /**
  * Customers and providers authenticate with either a Supabase session JWT or the legacy
@@ -100,9 +165,8 @@ async function notifyProvidersOnOpenRequest(
 
     const supabase = getSupabaseAdminClient();
     const now = new Date().toISOString();
-    const baseId = Date.now();
-    const records = recipients.map((recipient, idx) => ({
-      id: String(baseId + idx),
+    const records = recipients.map((recipient) => ({
+      id: newNotificationId(),
       recipient_email: recipient.email,
       user_id: recipient.email,
       type: 'service_request',
@@ -200,10 +264,9 @@ async function notifyCustomerOnStatusChange(
     }
 
     const supabase = getSupabaseAdminClient();
-    const notificationId = String(Date.now());
     const now = new Date().toISOString();
     const { error } = await supabase.from('notifications').insert({
-      id: notificationId,
+      id: newNotificationId(),
       recipient_email: recipientEmail,
       user_id: recipientEmail,
       type: 'service_request',
@@ -243,7 +306,7 @@ async function notifyProviderOnCancel(
     const supabase = getSupabaseAdminClient();
     const now = new Date().toISOString();
     const { error } = await supabase.from('notifications').insert({
-      id: String(Date.now()),
+      id: newNotificationId(),
       recipient_email: recipientEmail,
       user_id: recipientEmail,
       type: 'service_request',
@@ -421,15 +484,43 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         }
       }
 
+      let customerName = '';
+      let customerEmail = actor.email || '';
+      let customerPhone = typeof body.customerPhone === 'string' ? body.customerPhone.trim() : '';
+      try {
+        const user =
+          (await supabaseUserService.findById(actorId))
+          || (actor.email ? await supabaseUserService.findByEmail(actor.email) : null);
+        if (user) {
+          customerName = String(user.name || '').trim();
+          customerEmail = String(user.email || customerEmail).toLowerCase().trim();
+          if (!customerPhone) customerPhone = String((user as { mobile?: string }).mobile || '').trim();
+        }
+      } catch {
+        /* best effort — fall back to auth email */
+      }
+      // Admins may book on behalf of a customer; everyone else uses their own profile.
+      if (isAdmin) {
+        if (typeof body.customerName === 'string' && body.customerName.trim()) {
+          customerName = body.customerName.trim();
+        }
+        if (typeof body.customerEmail === 'string' && body.customerEmail.trim()) {
+          customerEmail = body.customerEmail.trim().toLowerCase();
+        }
+      }
+
+      const rawServices = Array.isArray(body.services) ? (body.services as ServiceLineItem[]) : undefined;
+      const priced = await resolvePricedServices(canonicalAssigned, rawServices);
+
       const payload: ServiceRequestPayload = {
         providerId: canonicalAssigned,
         customerId: actorId,
         candidateProviderIds: canonicalAssigned ? [canonicalAssigned] : [],
         title: body.title,
         serviceType: body.serviceType || 'General',
-        customerName: body.customerName || '',
-        customerPhone: body.customerPhone || '',
-        customerEmail: body.customerEmail || '',
+        customerName,
+        customerPhone,
+        customerEmail,
         vehicle: normalizeVehicleText(body.vehicle),
         city: body.city || '',
         addressLine: body.addressLine || '',
@@ -438,12 +529,12 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         scheduledAt: body.scheduledAt || '',
         notes: body.notes || '',
         carDetails: normalizeVehicleText(body.carDetails),
-        services: Array.isArray(body.services) ? body.services : undefined,
+        services: priced.services,
         addressId: typeof body.addressId === 'string' ? body.addressId : undefined,
         slotId: typeof body.slotId === 'string' ? body.slotId : undefined,
         scheduledDate: typeof body.scheduledDate === 'string' ? body.scheduledDate : undefined,
         slotTimeLabel: typeof body.slotTimeLabel === 'string' ? body.slotTimeLabel : undefined,
-        total: typeof body.total === 'number' ? body.total : undefined,
+        total: priced.total,
         couponCode: typeof body.couponCode === 'string' ? body.couponCode : undefined,
       };
 
@@ -501,10 +592,14 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           return res.status(409).json({ error: 'Request cannot be cancelled' });
         }
         const cancelledAt = new Date().toISOString();
-        await supabaseServiceRequestService.update(id, {
-          status: 'cancelled',
-          cancelledAt,
-        });
+        const cancelled = await supabaseServiceRequestService.updateIfStatus(
+          id,
+          ['open', 'accepted'],
+          { status: 'cancelled', cancelledAt },
+        );
+        if (!cancelled) {
+          return res.status(409).json({ error: 'Request cannot be cancelled' });
+        }
         await serviceRequestAuditService.log({
           requestId: id,
           actorId,
@@ -529,8 +624,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         if (!existing.providerId) {
           return res.status(409).json({ error: 'No provider assigned to this request' });
         }
-        const current = await supabaseServiceRequestService.findById(id);
-        if (current?.customerReview?.submittedAt) {
+        if (existing.customerReview?.submittedAt) {
           return res.status(409).json({ error: 'You have already submitted a review for this service' });
         }
         const body = req.body as { stars?: unknown; comment?: unknown };
@@ -540,13 +634,16 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           return res.status(400).json({ error: 'Invalid rating: provide stars between 1 and 5' });
         }
         const comment = String(body.comment || '').trim().slice(0, 2000);
-        await supabaseServiceRequestService.update(id, {
+        const reviewed = await supabaseServiceRequestService.updateIfNoReview(id, {
           customerReview: {
             stars,
             ...(comment ? { comment } : {}),
             submittedAt: new Date().toISOString(),
           },
         });
+        if (!reviewed) {
+          return res.status(409).json({ error: 'You have already submitted a review for this service' });
+        }
         await serviceRequestAuditService.log({
           requestId: id,
           actorId,
@@ -609,11 +706,14 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           return res.status(409).json({ error: 'Only waiting orders can be declined' });
         }
         const cancelledAt = new Date().toISOString();
-        await supabaseServiceRequestService.update(id, {
+        const declined = await supabaseServiceRequestService.updateIfStatus(id, 'open', {
           status: 'cancelled',
           cancelledAt,
           providerId: existing.providerId || actor.canonicalProviderId,
         });
+        if (!declined) {
+          return res.status(409).json({ error: 'Only waiting orders can be declined' });
+        }
         await serviceRequestAuditService.log({
           requestId: id,
           actorId,
@@ -684,8 +784,17 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         updates.cancelledAt = new Date().toISOString();
       }
 
-      await supabaseServiceRequestService.update(id, updates);
       if (normalizedStatus && normalizedStatus !== existing.status) {
+        const transitioned = await supabaseServiceRequestService.updateIfStatus(
+          id,
+          existing.status || 'open',
+          updates,
+        );
+        if (!transitioned) {
+          return res.status(409).json({
+            error: `Invalid status transition from ${existing.status} to ${normalizedStatus}`,
+          });
+        }
         await serviceRequestAuditService.log({
           requestId: id,
           actorId,
@@ -716,6 +825,8 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
             }
           }
         }
+      } else {
+        await supabaseServiceRequestService.update(id, updates);
       }
       const updated = await supabaseServiceRequestService.findById(id);
       return res.status(200).json(normalizeServiceRequestResponse(updated || existing));
@@ -731,7 +842,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         return res.status(404).json({ error: 'Request not found' });
       }
 
-      const isProviderOwner = existing.providerId === actorId;
+      const isProviderOwner = providerMatchesActor(existing.providerId, actor.aliases);
       const isCustomerOwner = existing.customerId === actorId;
       if (!isAdmin && !isProviderOwner && !isCustomerOwner) {
         return res.status(403).json({ error: 'Not allowed to delete this request' });
@@ -765,8 +876,10 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
       lower.includes('token has expired') ||
       lower.includes('invalid token') ||
       lower.includes('no valid authorization');
-    const status = isAuthFailure ? 401 : 500;
-    return res.status(status).json({ error: message });
+    if (isAuthFailure) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    return res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 }
 

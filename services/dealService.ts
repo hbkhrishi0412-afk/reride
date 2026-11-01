@@ -163,13 +163,6 @@ export async function confirmDealAssistancePayment(params: {
   });
 }
 
-export async function purchaseDealAssistance(leadId: string, packageId: string): Promise<void> {
-  await authenticatedFetch(`${BASE}?action=purchase-assistance`, {
-    method: 'POST',
-    body: JSON.stringify({ leadId, packageId }),
-  });
-}
-
 export async function submitDealSurvey(
   surveyId: string,
   response: 'yes' | 'no' | 'negotiating',

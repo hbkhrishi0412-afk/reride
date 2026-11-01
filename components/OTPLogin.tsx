@@ -13,6 +13,9 @@ interface OTPLoginProps {
 const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
   const { t } = useTranslation();
   const { isMobileApp } = useIsMobileApp();
+  const viaWhatsApp = import.meta.env.VITE_OTP_SMS_PROVIDER === 'whatsapp';
+  const subtitleKey = viaWhatsApp ? 'auth.otp.subtitleWhatsapp' : 'auth.otp.subtitle';
+  const sentKey = viaWhatsApp ? 'auth.otp.sentToWhatsapp' : 'auth.otp.sentTo';
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [confirmationResult, setConfirmationResult] = useState<any | null>(null);
@@ -118,7 +121,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
             {t('auth.otp.title')}
           </h3>
           <p className="text-sm text-white/90 font-medium">
-            {t('auth.otp.subtitle')}
+            {t(subtitleKey)}
           </p>
         </div>
 
@@ -192,7 +195,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
                 required
               />
               <p className="text-xs text-white/80 mt-3 text-center font-medium">
-                {t('auth.otp.sentTo', { phone: phoneNumber })}
+                {t(sentKey, { phone: phoneNumber })}
               </p>
             </div>
 
@@ -246,7 +249,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
           {t('auth.otp.title')}
         </h3>
         <p className="text-sm text-gray-600">
-          {t('auth.otp.subtitle')}
+          {t(subtitleKey)}
         </p>
       </div>
 
@@ -309,7 +312,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
               required
             />
             <p className="text-xs text-gray-600 mt-2">
-              {t('auth.otp.sentTo', { phone: phoneNumber })}
+              {t(sentKey, { phone: phoneNumber })}
             </p>
           </div>
 

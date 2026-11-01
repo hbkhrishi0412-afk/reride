@@ -3,6 +3,9 @@
  */
 import { randomUUID } from 'crypto';
 import { parseSellerNotes } from '../../../lib/dealSellerNotes.js';
+import { mergeDealMetadata } from '../../../lib/dealMetadataMerge.js';
+import { toCalendarDateKey, calendarDateStatus } from './calendar-date.js';
+export { mergeDealMetadata, toCalendarDateKey, calendarDateStatus };
 import type { VercelRequest } from '@vercel/node';
 import {
   supabaseUserService,
@@ -40,6 +43,38 @@ import {
 export function firstQueryParam(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value[0];
   return value;
+}
+
+export function parsePager(
+  req: { query?: Record<string, string | string[] | undefined> },
+  defaultSize: number,
+  maxSize = 500,
+): { page: number; pageSize: number; from: number; to: number } {
+  const page = Math.max(1, Number.parseInt(firstQueryParam(req.query?.page) || '1', 10) || 1);
+  const pageSize = Math.min(
+    maxSize,
+    Math.max(1, Number.parseInt(firstQueryParam(req.query?.pageSize) || String(defaultSize), 10) || defaultSize),
+  );
+  const from = (page - 1) * pageSize;
+  return { page, pageSize, from, to: from + pageSize - 1 };
+}
+
+/** Sequential range scan. Upgrade to SQL aggregates if the table grows past tens of thousands. ponytail: O(n) page loop. */
+export async function fetchAllPaged<T>(
+  loadPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message?: string } | null }>,
+  pageSize = 1000,
+): Promise<T[]> {
+  const all: T[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await loadPage(from, from + pageSize - 1);
+    if (error) throw new Error(error.message || 'Failed to load rows');
+    const chunk = data || [];
+    all.push(...chunk);
+    if (chunk.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
 }
 
 export function normalizeEmail(email: string): string {
@@ -89,6 +124,7 @@ export async function ensureConversationForDeal(params: {
   buyerName?: string;
   sellerEmail: string;
   clientConversationId?: string;
+  createIfMissing?: boolean;
 }): Promise<string | null> {
   const supabase = getSupabaseAdminClient();
   const {
@@ -99,6 +135,7 @@ export async function ensureConversationForDeal(params: {
     buyerName,
     sellerEmail,
     clientConversationId,
+    createIfMissing = true,
   } = params;
 
   if (clientConversationId) {
@@ -130,6 +167,8 @@ export async function ensureConversationForDeal(params: {
       .limit(1);
     if (byVehicle?.[0]?.id) return String(byVehicle[0].id);
   }
+
+  if (!createIfMissing) return null;
 
   const sellerFk = await resolveUserTableIdAdmin(supabase, sellerEmail);
   const customerFk = await resolveUserTableIdAdmin(supabase, buyerEmail);
@@ -170,7 +209,7 @@ export async function ensureConversationForDeal(params: {
 }
 
 export function generateId(prefix: string): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}_${randomUUID().replace(/-/g, '')}`;
 }
 
 export async function getAuthEmail(req: VercelRequest): Promise<{ email: string; role?: string } | null> {
@@ -196,10 +235,25 @@ export async function resolveVehicleId(vehicleIdRaw: string) {
 
 export async function nextLeadId(): Promise<string> {
   const supabase = getSupabaseAdminClient();
-  const { data: seq } = await supabase.from('deal_lead_sequence').select('next_val').eq('id', 1).single();
-  const num = seq?.next_val ?? 101;
-  await supabase.from('deal_lead_sequence').update({ next_val: num + 1 }).eq('id', 1);
-  return `RR-LD-${num}`;
+  const { data: rpcVal, error: rpcError } = await supabase.rpc('next_deal_lead_number');
+  if (!rpcError && rpcVal != null && Number.isFinite(Number(rpcVal))) {
+    return `RR-LD-${Number(rpcVal)}`;
+  }
+
+  // Fallback when RPC migration is not applied yet: compare-and-swap on next_val.
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const { data: seq } = await supabase.from('deal_lead_sequence').select('next_val').eq('id', 1).maybeSingle();
+    const num = seq?.next_val ?? 101;
+    const { data: updated, error } = await supabase
+      .from('deal_lead_sequence')
+      .update({ next_val: num + 1 })
+      .eq('id', 1)
+      .eq('next_val', num)
+      .select('next_val')
+      .maybeSingle();
+    if (!error && updated) return `RR-LD-${num}`;
+  }
+  throw new Error('Could not allocate lead id');
 }
 
 export async function insertTimelineEvent(params: {
@@ -211,7 +265,7 @@ export async function insertTimelineEvent(params: {
   payload?: Record<string, unknown>;
 }): Promise<void> {
   const supabase = getSupabaseAdminClient();
-  await supabase.from('deal_timeline_events').insert({
+  const { error } = await supabase.from('deal_timeline_events').insert({
     id: generateId('evt'),
     lead_id: params.leadId,
     stage: params.stage,
@@ -220,6 +274,10 @@ export async function insertTimelineEvent(params: {
     label: params.label || null,
     payload: params.payload || {},
   });
+  if (error) {
+    console.error('insertTimelineEvent failed:', error.message, { leadId: params.leadId, eventType: params.eventType });
+    throw new Error(`Failed to record timeline event: ${error.message}`);
+  }
 }
 
 export async function insertDealNotification(params: {
@@ -232,27 +290,27 @@ export async function insertDealNotification(params: {
 }): Promise<void> {
   const recipientEmail = normalizeEmail(params.recipientEmail);
   if (!recipientEmail.includes('@')) return;
-  try {
-    const supabase = getSupabaseAdminClient();
-    await supabase.from('notifications').insert({
-      user_id: recipientEmail,
-      recipient_email: recipientEmail,
-      type: 'deal',
-      title: params.title,
-      message: params.message,
-      read: false,
-      is_read: false,
-      created_at: new Date().toISOString(),
-      metadata: {
-        leadId: params.leadId,
-        targetType: 'deal',
-        targetId: params.leadId,
-        action: params.action,
-        conversationId: params.conversationId || null,
-      },
-    });
-  } catch (err) {
-    console.warn('deal notification insert failed (non-fatal):', err);
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.from('notifications').insert({
+    id: generateId('notif'),
+    user_id: recipientEmail,
+    recipient_email: recipientEmail,
+    type: 'deal',
+    title: params.title,
+    message: params.message,
+    read: false,
+    is_read: false,
+    created_at: new Date().toISOString(),
+    metadata: {
+      leadId: params.leadId,
+      targetType: 'deal',
+      targetId: params.leadId,
+      action: params.action,
+      conversationId: params.conversationId || null,
+    },
+  });
+  if (error) {
+    console.error('deal notification insert failed:', error.message, { recipientEmail, leadId: params.leadId });
   }
 }
 
@@ -364,7 +422,13 @@ export async function recordAssistanceRequest(params: {
     metadata.surveyServicesInterested = params.surveyServicesInterested;
   }
 
-  await supabase.from('deal_leads').update({ metadata, updated_at: now }).eq('id', params.leadId);
+  const { error: metaError } = await supabase
+    .from('deal_leads')
+    .update({ metadata, updated_at: now })
+    .eq('id', params.leadId);
+  if (metaError) {
+    throw new Error(`Failed to record assistance request: ${metaError.message}`);
+  }
 
   const pkgLabel = dealAssistancePackageLabel(params.packageId);
   await insertTimelineEvent({
@@ -595,24 +659,6 @@ export async function backfillAllKanbanStatuses(): Promise<{
   return { total: list.length, updated, unchanged };
 }
 
-/** Calendar grid keys use local YYYY-MM-DD (not UTC ISO slice). */
-export function toCalendarDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-export function calendarDateStatus(eventDate: Date, today: Date): DealCalendarEventStatus {
-  const d = new Date(eventDate);
-  d.setHours(0, 0, 0, 0);
-  const t = new Date(today);
-  t.setHours(0, 0, 0, 0);
-  if (d.getTime() === t.getTime()) return 'today';
-  if (d.getTime() < t.getTime()) return 'overdue';
-  return 'upcoming';
-}
-
 export function buildCalendarEvents(leads: DealLead[]): DealCalendarEvent[] {
   const events: DealCalendarEvent[] = [];
   const today = new Date();
@@ -665,18 +711,27 @@ export function buildCalendarEvents(leads: DealLead[]): DealCalendarEvent[] {
       lead.currentStage !== 'rc_completed' &&
       lead.currentStage !== 'deal_completed'
     ) {
-      const base = new Date(lead.updatedAt);
-      const deadline = new Date(base);
-      deadline.setDate(deadline.getDate() + 30);
-      events.push({
-        id: `${lead.id}_rc`,
-        dealId: lead.id,
-        type: 'rc_deadline',
-        title: 'RC transfer target',
-        subtitle: vehicle,
-        date: toCalendarDateKey(deadline),
-        status: calendarDateStatus(deadline, today),
-      });
+      // Anchor on delivery confirmation (stable), not updatedAt which moves on every edit.
+      const anchorIso =
+        lead.metadata.delivery?.sellerConfirmedAt
+        || lead.metadata.delivery?.buyerConfirmedAt
+        || lead.metadata.rc?.sellerUploadedAt
+        || lead.completedAt
+        || lead.createdAt;
+      const base = new Date(anchorIso);
+      if (!Number.isNaN(base.getTime())) {
+        const deadline = new Date(base);
+        deadline.setDate(deadline.getDate() + 30);
+        events.push({
+          id: `${lead.id}_rc`,
+          dealId: lead.id,
+          type: 'rc_deadline',
+          title: 'RC transfer target',
+          subtitle: vehicle,
+          date: toCalendarDateKey(deadline),
+          status: calendarDateStatus(deadline, today),
+        });
+      }
     }
   }
 
@@ -781,18 +836,17 @@ export async function tryInsertDealOffer(params: {
   status: 'pending' | 'accepted' | 'rejected' | 'countered';
   parentOfferId?: string;
 }): Promise<void> {
-  try {
-    const supabase = getSupabaseAdminClient();
-    await supabase.from('deal_offers').insert({
-      id: params.id,
-      lead_id: params.leadId,
-      amount: params.amount,
-      offered_by: params.offeredBy,
-      status: params.status,
-      parent_offer_id: params.parentOfferId || null,
-    });
-  } catch {
-    /* deal_offers table may not exist yet */
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.from('deal_offers').insert({
+    id: params.id,
+    lead_id: params.leadId,
+    amount: params.amount,
+    offered_by: params.offeredBy,
+    status: params.status,
+    parent_offer_id: params.parentOfferId || null,
+  });
+  if (error && error.code !== '42P01' && error.code !== '23505') {
+    console.error('tryInsertDealOffer failed:', error.message, { leadId: params.leadId, offerId: params.id });
   }
 }
 
@@ -800,11 +854,10 @@ export async function tryUpdateDealOfferStatus(
   offerId: string,
   status: 'pending' | 'accepted' | 'rejected' | 'countered',
 ): Promise<void> {
-  try {
-    const supabase = getSupabaseAdminClient();
-    await supabase.from('deal_offers').update({ status }).eq('id', offerId);
-  } catch {
-    /* non-fatal */
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.from('deal_offers').update({ status }).eq('id', offerId);
+  if (error && error.code !== '42P01') {
+    console.error('tryUpdateDealOfferStatus failed:', error.message, { offerId, status });
   }
 }
 
@@ -814,17 +867,16 @@ export async function tryInsertDealDocument(params: {
   url: string;
   uploadedBy?: string;
 }): Promise<void> {
-  try {
-    const supabase = getSupabaseAdminClient();
-    await supabase.from('deal_documents').insert({
-      id: generateId('doc'),
-      lead_id: params.leadId,
-      doc_type: params.docType,
-      url: params.url,
-      uploaded_by: params.uploadedBy || null,
-    });
-  } catch {
-    /* deal_documents table may not exist yet */
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.from('deal_documents').insert({
+    id: generateId('doc'),
+    lead_id: params.leadId,
+    doc_type: params.docType,
+    url: params.url,
+    uploaded_by: params.uploadedBy || null,
+  });
+  if (error && error.code !== '42P01' && error.code !== '23505') {
+    console.error('tryInsertDealDocument failed:', error.message, { leadId: params.leadId, docType: params.docType });
   }
 }
 
@@ -1214,21 +1266,37 @@ export async function updateLeadStage(
   extra?: { metadata?: Partial<DealLeadMetadata>; status?: string; completedAt?: string },
 ): Promise<void> {
   const supabase = getSupabaseAdminClient();
-  const { data: existing } = await supabase
-    .from('deal_leads')
-    .select('metadata, current_stage')
-    .eq('id', leadId)
-    .single();
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  // Stages only move forward; late actions still record metadata + timeline without regressing the deal.
-  if (pipelineStageIndex(stage) >= pipelineStageIndex(String(existing?.current_stage || 'lead_created'))) {
-    updates.current_stage = stage;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data: existing, error: readError } = await supabase
+      .from('deal_leads')
+      .select('metadata, current_stage, updated_at')
+      .eq('id', leadId)
+      .single();
+    // A failed read must not fall through to an unlocked write — that would replace metadata with the patch.
+    if (readError || !existing) {
+      throw new Error(readError?.message || 'Lead not found');
+    }
+    const prevUpdatedAt = existing.updated_at ? String(existing.updated_at) : null;
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    // Stages only move forward; late actions still record metadata + timeline without regressing the deal.
+    if (pipelineStageIndex(stage) >= pipelineStageIndex(String(existing?.current_stage || 'lead_created'))) {
+      updates.current_stage = stage;
+    }
+    if (extra?.status) updates.status = extra.status;
+    if (extra?.completedAt) updates.completed_at = extra.completedAt;
+    if (extra?.metadata) {
+      updates.metadata = mergeDealMetadata(existing?.metadata as DealLeadMetadata, extra.metadata);
+    }
+
+    let query = supabase.from('deal_leads').update(updates).eq('id', leadId);
+    if (prevUpdatedAt) query = query.eq('updated_at', prevUpdatedAt);
+    const { data, error } = await query.select('id').maybeSingle();
+    if (error) throw new Error(`Failed to update lead stage: ${error.message}`);
+    if (data) {
+      await syncKanbanStatus(leadId);
+      return;
+    }
   }
-  if (extra?.status) updates.status = extra.status;
-  if (extra?.completedAt) updates.completed_at = extra.completedAt;
-  if (extra?.metadata) {
-    updates.metadata = { ...(existing?.metadata as object || {}), ...extra.metadata };
-  }
-  await supabase.from('deal_leads').update(updates).eq('id', leadId);
-  await syncKanbanStatus(leadId);
+  throw new Error('Failed to update lead stage after concurrent edits');
 }

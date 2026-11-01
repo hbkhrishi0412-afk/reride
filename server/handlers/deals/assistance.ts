@@ -11,9 +11,9 @@ import {
   assistancePackageNeedsRc,
   dealAssistancePackageLabel,
 } from '../../../types.js';
-import type { DealActionHandler } from './context.js';
+import { parseBody, type DealActionHandler } from './context.js';
+import { assistancePaymentNotesMatchLead } from './assistance-payment-notes.js';
 import {
-  assertDealParticipant,
   assistanceFulfillmentIsOpen,
   enrichLeadsBatch,
   fetchLeadWithTimeline,
@@ -23,6 +23,7 @@ import {
   leadsFromRows,
   mapAssistanceQueueItemFromLead,
   normalizeEmail,
+  parsePager,
   recordAssistanceRequest,
 } from './shared.js';
 
@@ -45,7 +46,7 @@ export const handleAssistance: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const surveyId = String(body.surveyId || '');
     const response = String(body.response || '') as 'yes' | 'no' | 'negotiating';
     const servicesInterested = body.servicesInterested as string[] | undefined;
@@ -140,7 +141,7 @@ export const handleAssistance: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     const packageId = String(body.packageId || '');
     const razorpay_order_id = String(body.razorpay_order_id || '');
@@ -183,91 +184,87 @@ export const handleAssistance: DealActionHandler = async (ctx) => {
     }
     const amount = verified.amountPaise / 100;
     const nowIso = new Date().toISOString();
-    const claimed = await claimRazorpayPayment({
-      sellerEmail: auth.email,
-      amount,
-      plan: 'deal_assist',
-      planId: packageId,
-      packageId,
-      status: 'approved',
-      paymentMethod: 'razorpay',
-      transactionId: razorpay_payment_id,
-      razorpayOrderId: razorpay_order_id,
-      createdAt: nowIso,
-      requestedAt: nowIso,
-      updatedAt: nowIso,
-      reviewedAt: nowIso,
-      notes: `Deal assistance for lead ${leadId}`,
-    });
-    if (!claimed) {
-      res.status(409).json({ success: false, reason: 'This payment has already been used.' });
-      return true;
-    }
+    const existingMeta = (row.metadata as DealLeadMetadata) || {};
+    const alreadyFulfilled =
+      existingMeta.assistancePayment?.razorpayPaymentId === razorpay_payment_id
+      && existingMeta.assistancePackage === packageId;
 
-    await recordAssistanceRequest({
-      leadId,
-      packageId,
-      source: 'purchase',
-      actorEmail: auth.email,
-      amount,
-      payment: {
-        razorpayOrderId: razorpay_order_id,
-        razorpayPaymentId: razorpay_payment_id,
+    if (!alreadyFulfilled) {
+      // payment_requests.sellerEmail is the legacy payer column (plans/boosts); notes carry the real role.
+      const claimed = await claimRazorpayPayment({
+        sellerEmail: auth.email,
         amount,
-        paidAt: new Date().toISOString(),
-      },
-    });
+        plan: 'deal_assist',
+        planId: packageId,
+        packageId,
+        status: 'approved',
+        paymentMethod: 'razorpay',
+        transactionId: razorpay_payment_id,
+        razorpayOrderId: razorpay_order_id,
+        createdAt: nowIso,
+        requestedAt: nowIso,
+        updatedAt: nowIso,
+        reviewedAt: nowIso,
+        notes: `Deal assistance payer=${auth.email} lead=${leadId} package=${packageId}`,
+      });
+
+      // Already-claimed payment: only continue if we still need to fulfill (prior write failed mid-flight).
+      if (!claimed) {
+        const { data: prior } = await supabase
+          .from('payment_requests')
+          .select('id, notes, "packageId"')
+          .eq('id', `payment_rzp_${razorpay_payment_id}`)
+          .maybeSingle();
+        const notes = String(prior?.notes || '');
+        const sameLead = assistancePaymentNotesMatchLead(notes, leadId);
+        const samePkg =
+          String(prior?.packageId || '') === packageId
+          || notes.endsWith(`package=${packageId}`);
+        if (!prior || !sameLead || !samePkg) {
+          res.status(409).json({ success: false, reason: 'This payment has already been used.' });
+          return true;
+        }
+      }
+
+      try {
+        await recordAssistanceRequest({
+          leadId,
+          packageId,
+          source: 'purchase',
+          actorEmail: auth.email,
+          amount,
+          payment: {
+            razorpayOrderId: razorpay_order_id,
+            razorpayPaymentId: razorpay_payment_id,
+            amount,
+            paidAt: nowIso,
+          },
+        });
+      } catch (err) {
+        console.error('confirm-assistance-payment: paid but fulfillment failed; retryable', {
+          leadId,
+          packageId,
+          razorpay_payment_id,
+          err,
+        });
+        res.status(503).json({
+          success: false,
+          reason: 'Payment received but assistance could not be recorded. Please retry confirmation.',
+        });
+        return true;
+      }
+    }
 
     res.status(200).json({ success: true, packageId, leadId });
     return true;
   }
 
+  // Free / unpaid purchase path removed — live traffic must use confirm-assistance-payment.
   if (method === 'POST' && subPath === 'purchase-assistance') {
-    const auth = await getAuthEmail(req);
-    if (!auth) {
-      res.status(401).json({ success: false, reason: 'Authentication required' });
-      return true;
-    }
-
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-    const leadId = String(body.leadId || '');
-    const packageId = String(body.packageId || '');
-
-    if (!leadId || !packageId) {
-      res.status(400).json({ success: false, reason: 'leadId and packageId are required' });
-      return true;
-    }
-
-    const participant = await assertDealParticipant(leadId, auth);
-    if (!participant) {
-      res.status(403).json({ success: false, reason: 'Not authorized' });
-      return true;
-    }
-
-    if (process.env.RAZORPAY_KEY_SECRET) {
-      res.status(400).json({
-        success: false,
-        reason: 'Use online payment to purchase assistance',
-      });
-      return true;
-    }
-
-    const pkg = DEAL_ASSISTANCE_PACKAGES.find((p) => p.id === packageId);
-    const amount = pkg?.price ?? 0;
-
-    await recordAssistanceRequest({
-      leadId,
-      packageId,
-      source: 'purchase',
-      actorEmail: auth.email,
-      amount,
-      payment: {
-        amount,
-        paidAt: new Date().toISOString(),
-      },
+    res.status(400).json({
+      success: false,
+      reason: 'Online payment is required. Use confirm-assistance-payment after Razorpay checkout.',
     });
-
-    res.status(200).json({ success: true, packageId });
     return true;
   }
 
@@ -279,13 +276,19 @@ export const handleAssistance: DealActionHandler = async (ctx) => {
     }
 
     const supabase = getSupabaseAdminClient();
-    const { data: rows } = await supabase
+    const pager = parsePager(req, 300);
+    const { data: rows, count, error } = await supabase
       .from('deal_leads')
-      .select('*')
+      .select('*', { count: 'exact' })
       .neq('status', 'cancelled')
       .not('metadata', 'is', null)
       .order('updated_at', { ascending: true })
-      .limit(300);
+      .range(pager.from, pager.to);
+
+    if (error) {
+      res.status(500).json({ success: false, reason: error.message || 'Failed to load assistance queue' });
+      return true;
+    }
 
     const candidateRows = (rows || []).filter((row) => {
       const meta = (row.metadata as DealLeadMetadata) || {};
@@ -301,7 +304,15 @@ export const handleAssistance: DealActionHandler = async (ctx) => {
       if (item) queue.push(item);
     }
 
-    res.status(200).json({ success: true, queue });
+    const totalCount = count ?? (rows || []).length;
+    res.status(200).json({
+      success: true,
+      queue,
+      page: pager.page,
+      pageSize: pager.pageSize,
+      totalCount,
+      truncated: totalCount > (rows || []).length,
+    });
     return true;
   }
 
@@ -312,7 +323,7 @@ export const handleAssistance: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     const status = body.status ? String(body.status) as AssistanceFulfillmentStatus : undefined;
     const assignedAdminEmail = body.assignedAdminEmail !== undefined

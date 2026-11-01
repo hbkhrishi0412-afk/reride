@@ -18,7 +18,7 @@ import {
 } from '../../../types.js';
 import { calculateTrustScore } from '../../../services/trustSafetyService.js';
 import { parseSellerNotes, serializeSellerNotes, normalizeSellerNotes } from '../../../lib/dealSellerNotes.js';
-import type { DealActionHandler } from './context.js';
+import { parseBody, type DealActionHandler } from './context.js';
 import {
   backfillAllKanbanStatuses,
   buildCalendarEvents,
@@ -26,16 +26,19 @@ import {
   canActAsSellerOnLead,
   enrichLead,
   enrichLeadsBatch,
-  ensureConversationForDeal,
+  fetchAllPaged,
   fetchLeadWithTimeline,
   firstQueryParam,
   getAuthEmail,
   insertTimelineEvent,
   leadsFromRows,
   mapLeadRow,
+  markVehicleSoldForCompletedDeal,
   normalizeEmail,
+  parsePager,
   rcStatusForLead,
   resolveVehicleId,
+  toCalendarDateKey,
 } from './shared.js';
 
 const KANBAN_STATUSES: DealKanbanStatus[] = [
@@ -88,45 +91,7 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       }
     }
 
-    await Promise.all((rows || []).map(async (row) => {
-      const meta = (row.metadata as DealLeadMetadata) || {};
-      const vehicleName =
-        meta.vehicleName ||
-        (typeof row.vehicle_id === 'string' || typeof row.vehicle_id === 'number'
-          ? `Vehicle ${row.vehicle_id}`
-          : 'Vehicle');
-
-      const repairedConversationId = await ensureConversationForDeal({
-        vehiclePrimaryKey: String(row.vehicle_id),
-        vehicleName,
-        buyerEmail: String(row.buyer_email),
-        buyerName: row.buyer_name ? String(row.buyer_name) : undefined,
-        sellerEmail: String(row.seller_email || auth.email),
-        clientConversationId: row.conversation_id ? String(row.conversation_id) : undefined,
-      });
-
-      if (repairedConversationId && String(row.conversation_id || '') !== repairedConversationId) {
-        await supabase
-          .from('deal_leads')
-          .update({
-            conversation_id: repairedConversationId,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', row.id);
-        row.conversation_id = repairedConversationId;
-      }
-
-      if (!normalizeEmail(String(row.seller_email || '')) && auth.email) {
-        await supabase
-          .from('deal_leads')
-          .update({
-            seller_email: auth.email,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', row.id);
-      }
-    }));
-
+    // GET must stay read-only — no conversation/seller_email/trust writes on dashboard load.
     const [leads, returnReviewLeads, sellerUser, soldCount] = await Promise.all([
       leadsFromRows(rows || []).then((l) =>
         enrichLeadsBatch(l, { includeOffers: false, includeDocuments: false }),
@@ -152,9 +117,6 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
     const trustScore = sellerUser
       ? calculateTrustScore({ ...sellerUser, soldListings: Math.max(soldCount, sellerUser.soldListings ?? 0) }).score
       : 0;
-    if (sellerUser && (sellerUser.trustScore ?? 0) !== trustScore) {
-      await supabase.from('users').update({ trust_score: trustScore }).eq('email', auth.email);
-    }
 
     const leadsForTasks = [...leads];
     for (const rl of returnReviewLeads) {
@@ -191,18 +153,32 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
     }
 
     const supabase = getSupabaseAdminClient();
-    const { data: rows } = await supabase
+    const pager = parsePager(req, 200);
+    const { data: rows, count, error } = await supabase
       .from('deal_leads')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
-      .limit(200);
+      .range(pager.from, pager.to);
 
+    if (error) {
+      res.status(500).json({ success: false, reason: error.message || 'Failed to load leads' });
+      return true;
+    }
+
+    const totalCount = count ?? (rows || []).length;
     const leads = await enrichLeadsBatch(
       await leadsFromRows(rows || []),
       { includeOffers: false, includeDocuments: false },
     );
 
-    res.status(200).json({ success: true, leads });
+    res.status(200).json({
+      success: true,
+      leads,
+      page: pager.page,
+      pageSize: pager.pageSize,
+      totalCount,
+      truncated: totalCount > leads.length,
+    });
     return true;
   }
 
@@ -256,11 +232,17 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
     }
 
     const supabase = getSupabaseAdminClient();
-    const { data: rows } = await supabase
+    const pager = parsePager(req, 300);
+    const { data: rows, count, error } = await supabase
       .from('deal_leads')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('updated_at', { ascending: false })
-      .limit(300);
+      .range(pager.from, pager.to);
+
+    if (error) {
+      res.status(500).json({ success: false, reason: error.message || 'Failed to load kanban' });
+      return true;
+    }
 
     const columns: AdminKanbanBoard['columns'] = {
       lead_created: [],
@@ -286,9 +268,16 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       else columns.lead_created.push(lead);
     }
 
-    const totalCount = Object.values(columns).reduce((sum, arr) => sum + arr.length, 0);
+    const pageCount = Object.values(columns).reduce((sum, arr) => sum + arr.length, 0);
+    const totalCount = count ?? pageCount;
     const board: AdminKanbanBoard = { columns, totalCount };
-    res.status(200).json({ success: true, board });
+    res.status(200).json({
+      success: true,
+      board,
+      page: pager.page,
+      pageSize: pager.pageSize,
+      truncated: totalCount > pageCount,
+    });
     return true;
   }
 
@@ -311,7 +300,7 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     const kanbanStatus = String(body.kanbanStatus || '') as DealKanbanStatus;
     const assignedAdminEmail = body.assignedAdminEmail
@@ -330,16 +319,36 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
     };
     if (kanbanStatus === 'cancelled') updates.status = 'cancelled';
     if (kanbanStatus === 'completed') {
+      // Match normal deal_completed path: mark sold + stage, but do not invent assistance purchases.
       updates.status = 'completed';
       updates.completed_at = new Date().toISOString();
+      updates.current_stage = 'deal_completed';
     }
     if (assignedAdminEmail !== undefined) updates.assigned_admin_email = assignedAdminEmail || null;
 
-    await supabase.from('deal_leads').update(updates).eq('id', leadId);
+    const { data: beforeRow, error: beforeError } = await supabase
+      .from('deal_leads')
+      .select('vehicle_id')
+      .eq('id', leadId)
+      .maybeSingle();
+    if (beforeError || !beforeRow) {
+      res.status(404).json({ success: false, reason: 'Lead not found' });
+      return true;
+    }
+
+    const { error: kanbanError } = await supabase.from('deal_leads').update(updates).eq('id', leadId);
+    if (kanbanError) {
+      res.status(500).json({ success: false, reason: kanbanError.message || 'Could not update kanban' });
+      return true;
+    }
+
+    if (kanbanStatus === 'completed' && beforeRow.vehicle_id) {
+      await markVehicleSoldForCompletedDeal(String(beforeRow.vehicle_id));
+    }
 
     await insertTimelineEvent({
       leadId,
-      stage: kanbanStatus,
+      stage: kanbanStatus === 'completed' ? 'deal_completed' : kanbanStatus,
       eventType: 'kanban_moved',
       actorEmail: auth.email,
       label: `Moved to ${kanbanStatus.replace(/_/g, ' ')}`,
@@ -358,7 +367,7 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     const internalNotes = body.internalNotes != null ? String(body.internalNotes) : undefined;
     let sellerNotesList: ReturnType<typeof normalizeSellerNotes> | undefined;
@@ -388,9 +397,6 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (sellerNotesList !== undefined && (isSeller || isAdmin)) {
       updates.seller_notes = serializeSellerNotes(sellerNotesList);
-      if (isSeller && !normalizeEmail(String(row.seller_email || ''))) {
-        updates.seller_email = auth.email;
-      }
     }
     if (internalNotes !== undefined && isAdmin) updates.internal_notes = internalNotes;
 
@@ -432,10 +438,9 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
     );
 
     const events = buildCalendarEvents(leads);
-    const weekEnd = new Date();
-    weekEnd.setDate(weekEnd.getDate() + 7);
-    const weekEndStr = weekEnd.toISOString().slice(0, 10);
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const todayStr = toCalendarDateKey(now);
+    const weekEndStr = toCalendarDateKey(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000));
 
     const calendar: SellerDealCalendar = {
       events,
@@ -455,9 +460,10 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
     }
 
     const supabase = getSupabaseAdminClient();
-    const { data: rows } = await supabase
+    const pager = parsePager(req, 100);
+    const { data: rows, count, error } = await supabase
       .from('deal_leads')
-      .select('*')
+      .select('*', { count: 'exact' })
       .in('current_stage', [
         'delivery_completed',
         'documents_pending',
@@ -467,16 +473,27 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       ])
       .neq('status', 'cancelled')
       .order('updated_at', { ascending: true })
-      .limit(100);
+      .range(pager.from, pager.to);
+
+    if (error) {
+      res.status(500).json({ success: false, reason: error.message || 'Failed to load RC queue' });
+      return true;
+    }
 
     const queue: RcQueueItem[] = [];
     const now = Date.now();
+    const enriched = await enrichLeadsBatch(await leadsFromRows(rows || []));
 
-    for (const row of rows || []) {
-      let lead = mapLeadRow(row, undefined);
-      lead = await enrichLead(lead);
-      const updatedAt = new Date(lead.updatedAt).getTime();
-      const daysInQueue = Math.max(0, Math.floor((now - updatedAt) / (1000 * 60 * 60 * 24)));
+    for (const lead of enriched) {
+      const anchorIso =
+        lead.metadata.delivery?.sellerConfirmedAt
+        || lead.metadata.delivery?.buyerConfirmedAt
+        || lead.metadata.rc?.sellerUploadedAt
+        || lead.createdAt;
+      const anchorMs = new Date(anchorIso).getTime();
+      const daysInQueue = Number.isFinite(anchorMs)
+        ? Math.max(0, Math.floor((now - anchorMs) / (1000 * 60 * 60 * 24)))
+        : 0;
       queue.push({
         ...lead,
         rcDocUrl: lead.metadata.rc?.transferDocUrl,
@@ -490,7 +507,15 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
       });
     }
 
-    res.status(200).json({ success: true, queue });
+    const totalCount = count ?? queue.length;
+    res.status(200).json({
+      success: true,
+      queue,
+      page: pager.page,
+      pageSize: pager.pageSize,
+      totalCount,
+      truncated: totalCount > queue.length,
+    });
     return true;
   }
 
@@ -605,14 +630,23 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
 
     let rcOverdue = 0;
     try {
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const thirtyDaysAgoMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
       const { data: rcRows } = await supabase
         .from('deal_leads')
-        .select('id, updated_at, current_stage')
+        .select('id, created_at, metadata, current_stage')
         .in('current_stage', ['delivery_completed', 'documents_pending', 'documents_completed', 'rc_pending'])
         .neq('status', 'cancelled')
-        .lt('updated_at', thirtyDaysAgo);
-      rcOverdue = (rcRows || []).length;
+        .limit(500);
+      rcOverdue = (rcRows || []).filter((row) => {
+        const meta = (row.metadata || {}) as DealLeadMetadata;
+        const anchor =
+          meta.delivery?.sellerConfirmedAt
+          || meta.delivery?.buyerConfirmedAt
+          || meta.rc?.sellerUploadedAt
+          || String(row.created_at || '');
+        const t = new Date(anchor).getTime();
+        return Number.isFinite(t) && t < thirtyDaysAgoMs;
+      }).length;
     } catch {
       /* non-fatal */
     }
@@ -640,9 +674,22 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
     }
 
     const supabase = getSupabaseAdminClient();
-    const { data: rows } = await supabase.from('deal_leads').select('*').limit(500);
-
-    const all = rows || [];
+    type RevenueRow = {
+      id: string;
+      status: string;
+      current_stage: string;
+      metadata: DealLeadMetadata | null;
+      buyer_email: string;
+      seller_email: string;
+      updated_at: string;
+    };
+    const all = await fetchAllPaged<RevenueRow>((from, to) =>
+      supabase
+        .from('deal_leads')
+        .select('id, status, current_stage, metadata, buyer_email, seller_email, updated_at')
+        .order('created_at', { ascending: false })
+        .range(from, to),
+    );
     const totalLeads = all.length;
     const activeDeals = all.filter((r) => r.status === 'active').length;
     const completedDeals = all.filter(

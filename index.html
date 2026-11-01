@@ -165,129 +165,21 @@
       </div>
     </div>
     <style>@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}</style>
+    <style>
+      .reride-load-wrap { display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px; }
+      .reride-load-card { text-align:center;max-width:600px; }
+      .reride-load-card img { width:60px;margin:0 auto 16px; }
+      .reride-load-card h1 { color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px; }
+      .reride-load-card p { color:#595959;font-size:16px;margin-bottom:24px;line-height:1.6; }
+      .reride-load-actions { display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:24px; }
+      .reride-load-actions button { background:#FF6B35;color:#fff;padding:12px 24px;border:none;border-radius:8px;font-weight:600;cursor:pointer; }
+      .reride-load-actions a { background:#f5f5f5;color:#333;padding:12px 24px;border-radius:8px;font-weight:600;text-decoration:none; }
+      .reride-load-detail { color:#c00;font-size:12px;margin-top:16px;text-align:left;word-break:break-all; }
+      .reride-load-details { margin-top:16px;text-align:left; }
+      .reride-load-details summary { cursor:pointer;color:#595959;font-size:13px; }
+      .reride-load-details pre { background:#f5f5f5;padding:12px;border-radius:8px;font-size:11px;overflow-x:auto;margin-top:8px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto; }
+    </style>
+    <script src="/reride-load-guard.js"></script>
     <script type="module" src="/index.tsx"></script>
-    <script>
-      // Collect all JS errors so we can display them if React never mounts
-      window.__RERIDE_ERRORS__ = [];
-
-      window.addEventListener('error', function(e) {
-        var msg = (e.message || '') + ' at ' + (e.filename || '?') + ':' + (e.lineno || '?');
-        window.__RERIDE_ERRORS__.push(msg);
-
-        // Script load failure
-        if (e.target && e.target.tagName === 'SCRIPT' && (e.target.src || '').indexOf('assets/') !== -1) {
-          showLoadError('Script failed to load: ' + (e.target.src || 'unknown'));
-        }
-      }, true);
-
-      window.addEventListener('unhandledrejection', function(e) {
-        var reason = e.reason;
-        var msg = (reason instanceof Error) ? reason.message + '\n' + (reason.stack || '') : String(reason);
-        window.__RERIDE_ERRORS__.push('Promise: ' + msg);
-      });
-
-      function escapeHtml(s) {
-        return String(s)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
-      }
-      function showLoadError(detail) {
-        if (window.__APP_SCRIPT_LOAD_FAILED__) return;
-        window.__APP_SCRIPT_LOAD_FAILED__ = true;
-        var root = document.getElementById('root');
-        if (!root) return;
-        var rawErrors = window.__RERIDE_ERRORS__ || [];
-        var errors = rawErrors.map(escapeHtml).join('<br><br>');
-        var extra = detail
-          ? '<p style="color:#c00;font-size:12px;margin-top:16px;text-align:left;word-break:break-all;">' +
-            escapeHtml(detail) +
-            '</p>'
-          : '';
-        var errBlock = errors
-          ? '<details style="margin-top:16px;text-align:left;"><summary style="cursor:pointer;color:#595959;font-size:13px;">Error details</summary><pre style="background:#f5f5f5;padding:12px;border-radius:8px;font-size:11px;overflow-x:auto;margin-top:8px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;">' +
-            errors +
-            '</pre></details>'
-          : '';
-        root.innerHTML =
-          '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><img src="/icon-192.png" alt="ReRide" style="width:60px;margin:0 auto 16px;" /><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Something went wrong</h1><p style="color:#595959;font-size:16px;margin-bottom:24px;line-height:1.6;">The app could not load. This is usually a network issue.</p><div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:24px;"><button onclick="window.location.reload()" style="background:#FF6B35;color:#fff;padding:12px 24px;border:none;border-radius:8px;font-weight:600;cursor:pointer;">Try Again</button><a href="https://status.reride.co.in" style="background:#f5f5f5;color:#333;padding:12px 24px;border-radius:8px;font-weight:600;text-decoration:none;">Check Status</a><a href="tel:+910000000000" style="background:#f5f5f5;color:#333;padding:12px 24px;border-radius:8px;font-weight:600;text-decoration:none;">Call Support</a></div>' +
-          extra +
-          errBlock +
-          '</div></div>';
-      }
-
-      // Detect if the app script failed to load (e.g. 404 in production)
-      (function() {
-        var scriptEl = document.querySelector('script[src="/index.tsx"], script[src^="/assets/index"], script[src^="./assets/index"]');
-        if (scriptEl) {
-          scriptEl.addEventListener('error', function() { showLoadError('Entry script load failed'); });
-        }
-      })();
-    </script>
-    <!-- Safety timeout: If React doesn't mount within 15 seconds, show error with diagnostics -->
-    <script>
-      (function() {
-        var timeoutId;
-        var checkInterval;
-        var reactMounted = false;
-        var h = location.hostname;
-        var p = location.protocol;
-        var port = location.port || '';
-        var devPorts = ['5173', '4173', '3000', '8080'];
-        var isCapacitorLike =
-          (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ||
-          h === 'appassets.androidplatform.net' ||
-          (typeof h === 'string' && h.endsWith('.appassets.androidplatform.net')) ||
-          (h === 'localhost' && (p === 'capacitor:' || p === 'ionic:' || (p === 'https:' && devPorts.indexOf(port) === -1)));
-        // Allow slower devices to finish JS hydration before showing a fatal error.
-        var TIMEOUT_MS = isCapacitorLike ? 60000 : 30000;
-        
-        var checkReactMounted = function() {
-          if (window.__RERIDE_MOUNTED__) return true;
-          var root = document.getElementById('root');
-          if (!root) return false;
-          if (!root.innerHTML.includes('Loading ReRide')) return true;
-          return false;
-        };
-        
-        var clearMountTimeout = function() {
-          reactMounted = true;
-          if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
-          if (checkInterval) { clearInterval(checkInterval); checkInterval = null; }
-        };
-        
-        timeoutId = setTimeout(function() {
-          if (!reactMounted) {
-            var root = document.getElementById('root');
-            if (root && !checkReactMounted()) {
-              showLoadError('React did not mount within ' + (TIMEOUT_MS/1000) + 's');
-            }
-          }
-        }, TIMEOUT_MS);
-        
-        var startChecking = function() {
-          checkInterval = setInterval(function() {
-            if (checkReactMounted()) {
-              clearMountTimeout();
-            }
-          }, 500);
-          
-          setTimeout(function() {
-            if (checkInterval) {
-              clearInterval(checkInterval);
-              checkInterval = null;
-            }
-          }, TIMEOUT_MS + 5000);
-        };
-        
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', startChecking);
-        } else {
-          startChecking();
-        }
-      })();
-    </script>
   </body>
 </html>

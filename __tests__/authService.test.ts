@@ -134,6 +134,25 @@ describe('authService (Supabase)', () => {
       );
     });
 
+    it('uses WhatsApp API when VITE_OTP_SMS_PROVIDER is whatsapp', async () => {
+      globalThis.__IMPORT_META__.env.VITE_OTP_SMS_PROVIDER = 'whatsapp';
+      authenticatedFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true }),
+      } as Response);
+
+      const result = await sendOTP('9876543210');
+
+      expect(result.success).toBe(true);
+      expect(authenticatedFetch).toHaveBeenCalledWith(
+        '/api/users',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('send-otp-whatsapp'),
+        }),
+      );
+    });
+
     it('uses MessageBot API when VITE_OTP_SMS_PROVIDER is messagebot', async () => {
       globalThis.__IMPORT_META__.env.VITE_OTP_SMS_PROVIDER = 'messagebot';
       authenticatedFetch.mockResolvedValue({
@@ -171,6 +190,30 @@ describe('authService (Supabase)', () => {
       const result = await verifyOTP(null, '123456');
       expect(result.success).toBe(false);
       expect(result.reason).toBe('Phone number not found. Please request OTP again.');
+    });
+
+    it('WhatsApp: verifies the code on the server and stores the session', async () => {
+      globalThis.__IMPORT_META__.env.VITE_OTP_SMS_PROVIDER = 'whatsapp';
+      authenticatedFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true, user: { email: 'p@x' }, accessToken: 'at' }),
+        } as Response);
+
+      const sent = await sendOTP('9876543210');
+      const result = await verifyOTP(sent.confirmationResult!, '123456', 'customer');
+
+      expect(JSON.parse(authenticatedFetch.mock.calls[1][1].body)).toEqual({
+        action: 'verify-otp-whatsapp',
+        phoneNumber: '+919876543210',
+        otp: '123456',
+        role: 'customer',
+      });
+      expect(result).toEqual({ success: true, sessionComplete: true, appUser: { email: 'p@x' } });
     });
 
     it('Firebase: confirms code, sends ID token to server, stores session without refresh token (web)', async () => {

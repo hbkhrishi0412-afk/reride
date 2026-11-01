@@ -1,5 +1,5 @@
 import { getSupabaseAdminClient, supabaseUserService } from '../../handler-shared.js';
-import type { DealActionHandler } from './context.js';
+import { parseBody, type DealActionHandler } from './context.js';
 import {
   assertDealParticipant,
   enrichLead,
@@ -29,7 +29,7 @@ export const handleLeadLifecycle: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const vehicleIdRaw = String(body.vehicleId || '');
     const conversationId = body.conversationId ? String(body.conversationId) : undefined;
     const buyerName = body.buyerName ? String(body.buyerName) : undefined;
@@ -153,7 +153,7 @@ export const handleLeadLifecycle: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     if (!leadId) {
       res.status(400).json({ success: false, reason: 'leadId is required' });
@@ -345,7 +345,7 @@ export const handleLeadLifecycle: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     const conversationId = String(body.conversationId || '');
 

@@ -32,7 +32,7 @@ interface ImportMetaEnv {
   /** When `true`, skip Socket.io to the local dev API (no console noise if you only run Vite). */
   readonly VITE_DISABLE_DEV_SOCKET?: string
   readonly VITE_GA_MEASUREMENT_ID?: string
-  /** When `messagebot`, phone OTP uses MessageBot SMS + server JWT (see .env.example). Omit or other value = Supabase SMS. */
+  /** `whatsapp` | `messagebot` | `firebase`. Omit = Supabase SMS. See .env.example. */
   readonly VITE_OTP_SMS_PROVIDER?: string
   /** Google OAuth Web client ID for native Android/iOS sign-in (see .env.example). */
   readonly VITE_GOOGLE_WEB_CLIENT_ID?: string

@@ -13,10 +13,20 @@ dev-dist/
 
 # Env files (do NOT commit secrets)
 .env
+.env.local
+.env.development
+.env.production
 .env.*.local
 
 # Local mock data (may contain test credentials)
 localStorage/
+mock-users.json
+
+# Ad-hoc debug artifacts (not for production)
+debug-*.js
+debug-*.html
+debug-*.log
+.cursor/debug-*.log
 
 # OS/editor junk
 .DS_Store

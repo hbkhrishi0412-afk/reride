@@ -1,6 +1,6 @@
 import { getSupabaseAdminClient, supabaseUserService, supabaseVehicleService } from '../../handler-shared.js';
 import { validateSellerCanPublishListing } from '../../sellerPlanLimits.js';
-import type { DealActionHandler } from './context.js';
+import { parseBody, type DealActionHandler } from './context.js';
 import {
   fetchLeadWithTimeline,
   getAuthEmail,
@@ -23,7 +23,7 @@ export const handleReturnLifecycle: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     const reason = body.reason ? String(body.reason).trim() : undefined;
 
@@ -95,7 +95,7 @@ export const handleReturnLifecycle: DealActionHandler = async (ctx) => {
       return true;
     }
 
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    const body = parseBody(req);
     const leadId = String(body.leadId || '');
     const action = String(body.action || '');
 

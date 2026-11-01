@@ -547,17 +547,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         }
       }
 
-      if (
-        !isPasswordValid &&
-        user.password &&
-        typeof user.password === 'string' &&
-        !/^\$2[abxy]\$/.test(user.password)
-      ) {
-        core.logWarn('⚠️ Login rejected: account has non-bcrypt password storage — user must reset password:', {
-          email: normalizedEmail,
-        });
-      }
-
       if (!isPasswordValid) {
         // SECURITY: Log minimal details - don't expose password hash prefixes
         if (process.env.NODE_ENV !== 'production') {
@@ -571,6 +560,25 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         
         await core.recordFailedLogin(normalizedEmail);
         return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
+      }
+
+      // Upgrade legacy plaintext password rows to bcrypt on successful login.
+      if (
+        user.password &&
+        typeof user.password === 'string' &&
+        !/^\$2[abxy]\$/.test(user.password)
+      ) {
+        try {
+          const hashed = await core.hashPassword(loginPassword);
+          await core.userService.update(normalizedEmail, {
+            password: hashed,
+            updatedAt: new Date().toISOString(),
+          });
+          user.password = hashed;
+          core.logInfo('✅ Rehashed legacy plaintext password on login:', { email: normalizedEmail });
+        } catch (rehashErr) {
+          core.logWarn('⚠️ Login succeeded but plaintext→bcrypt rehash failed:', rehashErr);
+        }
       }
       // Service providers should only login through the service provider login page
       if (core.normalizeUserRoleString(user.role) === 'seller') {
@@ -1705,8 +1713,86 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       }
     }
 
-    // Karix and MessageBot both store sha256(otp + JWT secret) in otp_verifications, so they share verification.
-    if (action === 'verify-otp-messagebot' || action === 'verify-otp-karix') {
+    // WhatsApp OTP — same hashed row as SMS providers; delivery is a Meta authentication template.
+    if (action === 'send-otp-whatsapp') {
+      const { phoneNumber } = req.body;
+
+      if (!phoneNumber) {
+        return res.status(400).json({ success: false, reason: 'Phone number is required.' });
+      }
+
+      try {
+        const { sendWhatsAppOTP, getWhatsAppOtpConfig } = await import('../../services/whatsappOtpService.js');
+        const waConfig = getWhatsAppOtpConfig();
+        if (!waConfig) {
+          return res.status(503).json({
+            success: false,
+            reason:
+              'WhatsApp OTP is not configured. Set WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID.',
+          });
+        }
+
+        let cleanedNumber = String(phoneNumber).replace(/[\s\-\(\)]/g, '');
+        if (!cleanedNumber.startsWith('+')) {
+          cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
+          cleanedNumber = `+91${cleanedNumber}`;
+        }
+        if (!(await otpSendAllowed(cleanedNumber))) {
+          return res.status(429).json({ success: false, reason: 'Too many OTP requests. Please try again later.' });
+        }
+
+        const otp = core.randomInt(100_000, 1_000_000).toString();
+        const supabase = core.getSupabaseAdminClient();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+        const nodeCrypto = await import('crypto');
+        const jwtSecret = core.getSecurityConfig().JWT.SECRET;
+        if (!jwtSecret) {
+          return res.status(503).json({ success: false, reason: 'Server configuration error. Please try again later.' });
+        }
+        const otpHash = nodeCrypto.createHash('sha256').update(otp + jwtSecret).digest('hex');
+
+        const { error: storeError } = await supabase.from('otp_verifications').upsert(
+          {
+            phone: cleanedNumber,
+            otp_hash: otpHash,
+            expires_at: expiresAt,
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: 'phone' },
+        );
+        if (storeError) {
+          core.logWarn('⚠️ Could not store WhatsApp OTP:', storeError.message);
+          return res.status(503).json({
+            success: false,
+            reason: 'Could not save the login code. Please try again.',
+          });
+        }
+
+        const waResult = await sendWhatsAppOTP(cleanedNumber, otp, waConfig);
+        if (!waResult.success) {
+          core.logError('❌ WhatsApp OTP send failed:', waResult.error);
+          return res.status(500).json({
+            success: false,
+            reason: waResult.error || 'Failed to send OTP on WhatsApp',
+          });
+        }
+
+        core.logInfo('✅ OTP sent via WhatsApp to:', cleanedNumber);
+        return res.status(200).json({
+          success: true,
+          message: 'OTP sent on WhatsApp',
+          phone: cleanedNumber,
+          ...(process.env.NODE_ENV !== 'production' ? { otp } : {}),
+        });
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : 'Failed to send OTP';
+        core.logError('❌ WhatsApp OTP send error:', error);
+        return res.status(500).json({ success: false, reason: msg });
+      }
+    }
+
+    // Karix, MessageBot, and WhatsApp store sha256(otp + JWT secret) in otp_verifications.
+    if (action === 'verify-otp-messagebot' || action === 'verify-otp-karix' || action === 'verify-otp-whatsapp') {
       const { phoneNumber, otp } = req.body;
       const requestedRole = (req.body.role as string) || 'customer';
 
@@ -1794,7 +1880,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         return await issuePhoneLoginSession(req, res, cleanedNumber, requestedRole);
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : 'Failed to verify OTP';
-        core.logError('❌ MessageBot OTP verify error:', error);
+        core.logError('❌ OTP verify error:', error);
         return res.status(500).json({ success: false, reason: msg });
       }
     }

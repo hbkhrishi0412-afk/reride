@@ -13,6 +13,15 @@ import {
 
 const LEGACY_SAVED_KEY_PREFIX = 'savedSearches_';
 
+const activityWriteQueues = new Map<string, Promise<unknown>>();
+
+function enqueueBuyerActivityWrite(userId: string, task: () => Promise<void>): Promise<void> {
+  const prev = activityWriteQueues.get(userId) ?? Promise.resolve();
+  const next = prev.then(task, task);
+  activityWriteQueues.set(userId, next.catch(() => undefined));
+  return next;
+}
+
 function buyerActivityKey(userId: string): string {
   return `buyerActivity_${userId}`;
 }
@@ -103,15 +112,11 @@ export const saveSearch = (userId: string, search: Omit<SavedSearch, 'id' | 'cre
   }
   const saved =
     getSavedSearches(userId).find((s) => s.id === created.id) ?? created;
-  void (async () => {
-    try {
-      const activity = getBuyerActivitySync(userId);
-      activity.savedSearches = getSavedSearches(userId);
-      await saveBuyerActivity(activity);
-    } catch {
-      /* non-fatal — local save already succeeded */
-    }
-  })();
+  void enqueueBuyerActivityWrite(userId, async () => {
+    const activity = await getBuyerActivity(userId);
+    activity.savedSearches = getSavedSearches(userId);
+    await saveBuyerActivity(activity);
+  });
   return saved;
 };
 
@@ -119,6 +124,11 @@ export const deleteSavedSearch = (userId: string, searchId: string): void => {
   migrateLegacySavedSearchesIfNeeded(userId);
   if (!engagementGetSavedSearches(userId).some((s) => s.id === searchId)) return;
   engagementDeleteSavedSearch(searchId);
+  void enqueueBuyerActivityWrite(userId, async () => {
+    const activity = await getBuyerActivity(userId);
+    activity.savedSearches = getSavedSearches(userId);
+    await saveBuyerActivity(activity, { removeSavedSearchIds: [searchId] });
+  });
 };
 
 export const updateSavedSearch = (userId: string, searchId: string, updates: Partial<SavedSearch>): void => {
@@ -201,7 +211,10 @@ export const getBuyerActivitySync = (userId: string): BuyerActivity => {
 };
 
 // Save buyer activity - saves to localStorage immediately, syncs to database
-export const saveBuyerActivity = async (activity: BuyerActivity): Promise<void> => {
+export const saveBuyerActivity = async (
+  activity: BuyerActivity,
+  extras?: { removePriceDrops?: number[]; removeSavedSearchIds?: string[] },
+): Promise<void> => {
   try {
     writeBuyerActivityJson(activity.userId, JSON.stringify(activity));
   } catch (error) {
@@ -210,7 +223,7 @@ export const saveBuyerActivity = async (activity: BuyerActivity): Promise<void> 
 
   // Sync to database (async, non-blocking)
   try {
-    const result = await saveBuyerActivityToSupabase(activity);
+    const result = await saveBuyerActivityToSupabase(activity, extras);
     if (result.success) {
       logInfo('✅ Buyer activity synced to database');
     } else {
@@ -241,18 +254,20 @@ export type ReridePriceDropDetail = {
 // Track price drops (async: load activity, update, then save)
 export const trackPriceDrop = async (userId: string, vehicleId: number, oldPrice: number, newPrice: number): Promise<void> => {
   try {
-    const activity = await getBuyerActivity(userId);
-    if (!activity.notifications.priceDrops.includes(vehicleId)) {
-      activity.notifications.priceDrops.push(vehicleId);
-      await saveBuyerActivity(activity);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent<ReridePriceDropDetail>(RERIDE_PRICE_DROP_EVENT, {
-            detail: { userId, vehicleId, oldPrice, newPrice },
-          }),
-        );
+    await enqueueBuyerActivityWrite(userId, async () => {
+      const activity = await getBuyerActivity(userId);
+      if (!activity.notifications.priceDrops.includes(vehicleId)) {
+        activity.notifications.priceDrops.push(vehicleId);
+        await saveBuyerActivity(activity);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent<ReridePriceDropDetail>(RERIDE_PRICE_DROP_EVENT, {
+              detail: { userId, vehicleId, oldPrice, newPrice },
+            }),
+          );
+        }
       }
-    }
+    });
   } catch (error) {
     console.error('Failed to track price drop:', error);
   }
@@ -320,17 +335,19 @@ export const updatePriceHistory = (vehicleId: number, price: number): void => {
   savePriceHistory(history);
 };
 
-// Clear old price drops
+// Clear old price drops — load DB first, then merge-remove so empty sessionStorage cannot wipe alerts.
 export const clearPriceDropNotifications = (userId: string, vehicleIds: number[]): void => {
-  try {
-    const activity = getBuyerActivitySync(userId);
-    activity.notifications.priceDrops = activity.notifications.priceDrops.filter(
-      (id: number) => !vehicleIds.includes(id)
-    );
-    void saveBuyerActivity(activity);
-  } catch (error) {
-    console.error('Failed to clear price drop notifications:', error);
-  }
+  void enqueueBuyerActivityWrite(userId, async () => {
+    try {
+      const activity = await getBuyerActivity(userId);
+      activity.notifications.priceDrops = activity.notifications.priceDrops.filter(
+        (id: number) => !vehicleIds.includes(id),
+      );
+      await saveBuyerActivity(activity, { removePriceDrops: vehicleIds });
+    } catch (error) {
+      console.error('Failed to clear price drop notifications:', error);
+    }
+  });
 };
 
 // Get recently viewed vehicle IDs (async - loads from DB first, then returns array)
@@ -354,23 +371,17 @@ export const getRecentlyViewedSync = (userId: string): number[] => {
   }
 };
 
-// Add to recently viewed - uses sync version for immediate access
+// Add to recently viewed — merge onto DB state so a fresh device cannot erase the server list.
 export const addToRecentlyViewed = async (userId: string, vehicleId: number): Promise<void> => {
   try {
-    // Use sync version for immediate access
-    const activity = getBuyerActivitySync(userId);
-    
-    // Remove if already exists
-    activity.recentlyViewed = activity.recentlyViewed.filter(id => id !== vehicleId);
-    
-    // Add to beginning
-    activity.recentlyViewed.unshift(vehicleId);
-    
-    // Keep only last 20
-    activity.recentlyViewed = activity.recentlyViewed.slice(0, 20);
-    
-    // Save (async, will sync to database)
-    await saveBuyerActivity(activity);
+    await enqueueBuyerActivityWrite(userId, async () => {
+      const activity = await getBuyerActivity(userId);
+      activity.recentlyViewed = [
+        vehicleId,
+        ...activity.recentlyViewed.filter((id) => id !== vehicleId),
+      ].slice(0, 20);
+      await saveBuyerActivity(activity);
+    });
   } catch (error) {
     console.error('Failed to add to recently viewed:', error);
   }
