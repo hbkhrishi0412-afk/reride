@@ -15,6 +15,13 @@ import { migrateVehicleListCache, normalizeVehiclesList } from '../utils/vehicle
 import { filterVehiclesBySellerEmail } from '../utils/sellerVehicleFilter.js';
 import { mergeVehicleCatalog } from '../utils/mergeVehicleCatalog.js';
 
+/** Local-only accounts when reRideUsers is empty. Same emails as server dev mock login. */
+const LOCAL_DEV_USERS: User[] = [
+  { email: 'admin@test.com', name: 'Test Admin', password: 'password', mobile: '9999999999', role: 'admin', location: 'Test City', status: 'active', createdAt: '2020-01-01T00:00:00.000Z' },
+  { email: 'seller@test.com', name: 'Test Seller', password: 'password', mobile: '9999999998', role: 'seller', location: 'Test City', status: 'active', createdAt: '2020-01-01T00:00:00.000Z' },
+  { email: 'customer@test.com', name: 'Test Customer', password: 'password', mobile: '9999999997', role: 'customer', location: 'Test City', status: 'active', createdAt: '2020-01-01T00:00:00.000Z' },
+];
+
 function formatServiceUnavailableMessage(errorData: {
   reason?: string;
   issues?: string[];
@@ -1663,16 +1670,8 @@ class DataService {
     let users = this.getLocalStorageData<User[]>('reRideUsers', []);
 
     if (users.length === 0) {
-      try {
-        const mockUsers = await import('../mock-users.json');
-        if (mockUsers.default && mockUsers.default.length > 0) {
-          users = mockUsers.default as User[];
-          this.setLocalStorageData('reRideUsers', users);
-          logInfo('✅ Loaded mock users data:', users.length, 'users');
-        }
-      } catch (error) {
-        logInfo('⚠️ Could not load mock users:', error);
-      }
+      users = LOCAL_DEV_USERS;
+      this.setLocalStorageData('reRideUsers', users);
     }
 
     return users;
