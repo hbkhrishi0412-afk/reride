@@ -504,6 +504,11 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
   };
 
   const submitCarData = async () => {
+    if (!getBrowserAccessTokenForApi()) {
+      addToast('Please sign in to submit your car details.', 'error');
+      onNavigate(ViewEnum.CUSTOMER_LOGIN);
+      return;
+    }
     const carSubmissionData = {
       registration: carDetails.registration,
       make: carDetails.make,
@@ -516,7 +521,9 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
       kilometers: carDetails.kilometers,
       fuelType: carDetails.fuelType,
       transmission: selectedTransmission,
-      customerContact
+      customerContact,
+      sellerType,
+      ...(carDetails.condition ? { condition: carDetails.condition } : {}),
     };
     try {
       setIsLoading(true);

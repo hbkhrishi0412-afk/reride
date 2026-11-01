@@ -10,7 +10,7 @@ import { passwordFingerprint } from '../../utils/security.js';
 import { resolveRateLimit } from '../../lib/rate-limit-resolver.js';
 import { sanitizeSellerChecklist } from '../../lib/universalChecklist/helpers.js';
 import { VehicleCategory } from '../../vehicle-category.js';
-import { phoneMatchTail, syntheticPhoneEmail, toE164IndianPhone } from '../phone-login-identity.js';
+import { filterVerifiedMobileMatches, phoneMatchTail, syntheticPhoneEmail, toE164IndianPhone } from '../phone-login-identity.js';
 
 function otpMayIncludeInResponse(): boolean {
   return process.env.ALLOW_OTP_IN_RESPONSE === '1' && process.env.NODE_ENV !== 'production';
@@ -49,18 +49,23 @@ async function issuePhoneLoginSession(
 ) {
   const userEmail = syntheticPhoneEmail(phone);
   let user = await core.userService.findByEmail(userEmail);
-  let linkedExisting = false;
+  let linkedViaVerifiedMobile = false;
   if (!user) {
     const tail = phoneMatchTail(phone);
     if (tail.length >= 10) {
       const supabase = core.getSupabaseAdminClient();
-      const { data } = await supabase.from('users').select('email, mobile').ilike('mobile', `%${tail}`).limit(20);
-      const matches = (data || []).filter((row) => String(row.mobile || '').replace(/\D/g, '').endsWith(tail));
-      // Ambiguous tail match → refuse auto-link (avoids attaching OTP to the wrong email account).
+      const { data } = await supabase
+        .from('users')
+        .select('email, mobile, phone_verified')
+        .ilike('mobile', `%${tail}`)
+        .limit(20);
+      // Only auto-link accounts that already verified this number. An unverified mobile on an
+      // email profile must not receive OTP logins (account-takeover via typed-in phone at signup).
+      const matches = filterVerifiedMobileMatches(data || [], tail);
       if (matches.length === 1 && matches[0]?.email) {
         user = await core.userService.findByEmail(String(matches[0].email).toLowerCase().trim());
-        linkedExisting = Boolean(user);
-        if (user && !user.mobile) {
+        linkedViaVerifiedMobile = Boolean(user);
+        if (user) {
           await core.userService.update(user.email, { mobile: phone, phoneVerified: true });
           user = { ...user, mobile: phone, phoneVerified: true };
         }
@@ -75,12 +80,11 @@ async function issuePhoneLoginSession(
 
   if (!user) {
     // New phone-only accounts start as customer; sellers upgrade in-app (stops role self-pick on first OTP).
-    const role = linkedExisting ? requestedRole : 'customer';
     const userData: Omit<core.UserType, 'id'> = {
       email: userEmail,
       name: `User ${phoneMatchTail(phone) || phone}`,
       mobile: phone,
-      role,
+      role: 'customer',
       location: '',
       authProvider: 'phone',
       status: 'active' as const,
@@ -94,11 +98,17 @@ async function issuePhoneLoginSession(
     user = await core.userService.create(userData);
   }
 
+  if (linkedViaVerifiedMobile && user.role && user.role !== requestedRole) {
+    return res.status(400).json({
+      success: false,
+      reason: `This number is registered as a ${user.role}. Please use the ${user.role} login.`,
+    });
+  }
+
   const accessToken = core.generateAccessToken(user);
   const refreshToken = core.generateRefreshToken(user);
   const normalizedUser = core.normalizeUser(user);
-  // Phone OTP proves possession of the number, not account-type discovery for third parties:
-  // still return role (app needs it) but never invent a second account for an email user who already stored this mobile.
+  // Phone OTP proves possession of the number for verified-mobile accounts only.
 
   if (!core.isCapacitorAppClient(req)) {
     core.appendRefreshTokenCookie(res, refreshToken, core.refreshCookieMaxAgeSeconds());

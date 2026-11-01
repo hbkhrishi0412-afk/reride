@@ -203,20 +203,53 @@ async function handleSupportTickets(req: VercelRequest, res: VercelResponse) {
       const ownerEmail = ((existing as Record<string, unknown>).userEmail as string)?.toLowerCase().trim() ?? '';
       if (!isAdmin && ownerEmail !== email) return res.status(403).json({ success: false, error: 'Unauthorized' });
 
-      let update: Record<string, unknown>;
+      let update: Record<string, unknown> = {};
       if (isAdmin) {
-        update = { ...req.body };
+        const allowedStatuses = ['Open', 'In Progress', 'Resolved', 'Closed'];
+        if (typeof req.body?.status === 'string' && allowedStatuses.includes(req.body.status)) {
+          update.status = req.body.status;
+        }
+        if (typeof req.body?.subject === 'string') {
+          update.subject = await sanitizeString(req.body.subject);
+        }
+        if (Array.isArray(req.body?.replies)) {
+          update.replies = req.body.replies;
+        }
+        // Admin reply must use `reply` only — ignore body.message so legacy clients
+        // that resend the original ticket message on status edits do not create duplicates.
+        const adminReply =
+          typeof req.body?.reply === 'string' ? (await sanitizeString(req.body.reply)).trim() : '';
+        if (adminReply) {
+          const priorReplies = Array.isArray((existing as Record<string, unknown>).replies)
+            ? ([...(existing as { replies: unknown[] }).replies] as unknown[])
+            : [];
+          priorReplies.push({
+            message: adminReply,
+            createdAt: new Date().toISOString(),
+            from: 'admin',
+            userEmail: email,
+          });
+          update.replies = priorReplies;
+        }
+        if (Object.keys(update).length === 0) {
+          return res.status(400).json({ success: false, error: 'No valid fields to update' });
+        }
       } else {
         // Customers may only append one reply — not forge status / admin replies / ownership.
-        const message = typeof req.body?.message === 'string' ? (await sanitizeString(req.body.message)).trim() : '';
-        if (!message) {
-          return res.status(400).json({ success: false, error: 'message is required' });
+        const replyText =
+          typeof req.body?.reply === 'string'
+            ? (await sanitizeString(req.body.reply)).trim()
+            : typeof req.body?.message === 'string'
+              ? (await sanitizeString(req.body.message)).trim()
+              : '';
+        if (!replyText) {
+          return res.status(400).json({ success: false, error: 'reply is required' });
         }
         const priorReplies = Array.isArray((existing as Record<string, unknown>).replies)
           ? ([...(existing as { replies: unknown[] }).replies] as unknown[])
           : [];
         priorReplies.push({
-          message,
+          message: replyText,
           createdAt: new Date().toISOString(),
           from: 'customer',
           userEmail: email,

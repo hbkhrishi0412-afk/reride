@@ -148,6 +148,9 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
   const [isEditingPassword, setIsEditingPassword] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDeletePasswordModal, setShowDeletePasswordModal] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   
   const [formData, setFormData] = useState({
     name: currentUser.name,
@@ -1399,26 +1402,24 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                       void runIfConfirmed(
                         'Permanently delete your account? This cannot be undone. You will be signed out immediately.',
                         async () => {
-                      try {
-                        const needsPassword = Boolean(currentUser.authProvider === 'email' || currentUser.password);
-                        const password = needsPassword
-                          ? window.prompt('Enter your password to confirm account deletion:') || undefined
-                          : undefined;
-                        if (needsPassword && !password) {
-                          addToast('Password is required to delete your account.', 'error');
-                          return;
-                        }
-                        const { requestAccountDeletion } = await import('../services/accountPrivacyService');
-                        const result = await requestAccountDeletion(currentUser.email, { password });
-                        if (result.success) {
-                          addToast(result.message || 'Your account has been deleted.', 'success');
-                          window.location.href = '/';
-                        } else {
-                          addToast(result.reason || 'Could not delete your account. Please try again.', 'error');
-                        }
-                      } catch {
-                        addToast('Could not delete your account. Please try again.', 'error');
-                      }
+                          try {
+                            const needsPassword = Boolean(currentUser.authProvider === 'email' || currentUser.password);
+                            if (needsPassword) {
+                              setDeletePassword('');
+                              setShowDeletePasswordModal(true);
+                              return;
+                            }
+                            const { requestAccountDeletion } = await import('../services/accountPrivacyService');
+                            const result = await requestAccountDeletion(currentUser.email, {});
+                            if (result.success) {
+                              addToast(result.message || 'Your account has been deleted.', 'success');
+                              window.location.href = '/';
+                            } else {
+                              addToast(result.reason || 'Could not delete your account. Please try again.', 'error');
+                            }
+                          } catch {
+                            addToast('Could not delete your account. Please try again.', 'error');
+                          }
                         },
                         { variant: 'danger' },
                       );
@@ -1429,6 +1430,63 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                   </button>
                 </div>
               </div>
+
+              {showDeletePasswordModal && (
+                <div className="fixed inset-0 z-[2600] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+                  <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+                    <h3 className="text-base font-semibold text-gray-900">Confirm deletion</h3>
+                    <p className="mt-1 text-sm text-gray-600">Enter your password to permanently delete this account.</p>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={deletePassword}
+                      onChange={(e) => setDeletePassword(e.target.value)}
+                      className="mt-4 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm"
+                      placeholder="Password"
+                    />
+                    <div className="mt-4 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        onClick={() => {
+                          setShowDeletePasswordModal(false);
+                          setDeletePassword('');
+                        }}
+                        disabled={isDeletingAccount}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                        disabled={isDeletingAccount || !deletePassword}
+                        onClick={() => {
+                          void (async () => {
+                            setIsDeletingAccount(true);
+                            try {
+                              const { requestAccountDeletion } = await import('../services/accountPrivacyService');
+                              const result = await requestAccountDeletion(currentUser.email, { password: deletePassword });
+                              if (result.success) {
+                                setShowDeletePasswordModal(false);
+                                addToast(result.message || 'Your account has been deleted.', 'success');
+                                window.location.href = '/';
+                              } else {
+                                addToast(result.reason || 'Could not delete your account. Please try again.', 'error');
+                              }
+                            } catch {
+                              addToast('Could not delete your account. Please try again.', 'error');
+                            } finally {
+                              setIsDeletingAccount(false);
+                            }
+                          })();
+                        }}
+                      >
+                        {isDeletingAccount ? 'Deleting…' : 'Delete account'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

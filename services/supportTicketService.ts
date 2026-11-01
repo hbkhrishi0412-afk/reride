@@ -107,19 +107,23 @@ export const createSupportTicketInSupabase = async (
 };
 
 export const updateSupportTicketInSupabase = async (
-  ticket: SupportTicket
+  ticket: SupportTicket,
+  opts?: { reply?: string },
 ): Promise<boolean> => {
   try {
+    // Never resend the original ticket.message — the server treats `message`/`reply` as a new reply.
+    const body: Record<string, unknown> = {
+      status: ticket.status,
+      subject: ticket.subject,
+      replies: ticket.replies,
+    };
+    if (opts?.reply?.trim()) body.reply = opts.reply.trim();
+
     const response = await authenticatedFetch(
       `/api/support-tickets?id=${encodeURIComponent(String(ticket.id))}`,
       {
         method: 'PUT',
-        body: JSON.stringify({
-          status: ticket.status,
-          subject: ticket.subject,
-          message: ticket.message,
-          replies: ticket.replies
-        })
+        body: JSON.stringify(body),
       }
     );
     const parsed = await handleApiResponse(response);

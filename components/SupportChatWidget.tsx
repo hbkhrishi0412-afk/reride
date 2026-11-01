@@ -324,21 +324,35 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
       return;
     }
 
-    // Fallback to REST API if WebSocket is not available
+    // Fallback to REST API if WebSocket is not available (prod often has no WS).
+    // Guests must omit userId — server 401s when body.userId is set without a valid login.
     try {
       const { authenticatedFetch, publicApiFetch } = await import('../utils/apiFetch');
       const chatFetch = currentUser?.email ? authenticatedFetch : publicApiFetch;
+      const guestSessionId =
+        sessionId ||
+        (() => {
+          const rand = new Uint8Array(9);
+          globalThis.crypto.getRandomValues(rand);
+          const randHex = Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('');
+          const id = `anon_${Date.now()}_${randHex}`;
+          setSessionId(id);
+          return id;
+        })();
       const response = await chatFetch('/api/chat', {
         method: 'POST',
         body: JSON.stringify({
           message: messageText,
-          userId: currentUser?.email || sessionId,
+          ...(currentUser?.email ? { userId: currentUser.email } : {}),
           userName: currentUser?.name || 'Guest',
-          sessionId
+          sessionId: currentUser?.email ? sessionId : guestSessionId,
         }),
       });
 
       const data = await response.json();
+      if (data?.sessionId && !currentUser?.email) {
+        setSessionId(String(data.sessionId));
+      }
       if (data.success && data.response) {
         setMessages(prev => [...prev, {
           id: `bot_${Date.now()}`,

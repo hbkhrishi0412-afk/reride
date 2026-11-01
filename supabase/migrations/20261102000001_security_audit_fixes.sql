@@ -64,6 +64,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.otp_register_failed_attempt(text, int, int) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.otp_register_failed_attempt(text, int, int) TO service_role;
 
 -- 4) Atomic boost credit / certify quota consume.
 CREATE OR REPLACE FUNCTION public.consume_featured_credit(p_email text)
@@ -131,6 +132,9 @@ $$;
 REVOKE ALL ON FUNCTION public.consume_featured_credit(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.consume_certification_quota(text, int) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.increment_sold_listings(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.consume_featured_credit(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.consume_certification_quota(text, int) TO service_role;
+GRANT EXECUTE ON FUNCTION public.increment_sold_listings(text) TO service_role;
 
 -- 5) Storage: drop open folder prefixes (vehicles/chat-messages/listings/profiles).
 DROP POLICY IF EXISTS "Authenticated users can upload images" ON storage.objects;

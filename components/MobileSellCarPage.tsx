@@ -624,6 +624,20 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
       return;
     }
 
+    if (!getBrowserAccessTokenForApi()) {
+      const message = 'Please sign in to submit your car details.';
+      setSubmitError(message);
+      addToast?.(message, 'error');
+      onNavigate(ViewEnum.CUSTOMER_LOGIN);
+      return;
+    }
+    if (vehicleImages.length > 5) {
+      const message = 'You can upload at most 5 photos (max 2 MB each after compression).';
+      setSubmitError(message);
+      addToast?.(message, 'error');
+      return;
+    }
+
     setContactError('');
     setSubmitError('');
     setIsSubmitting(true);

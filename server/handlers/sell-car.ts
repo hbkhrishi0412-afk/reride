@@ -42,6 +42,10 @@ const SELL_CAR_PUBLIC_FIELDS = [
   'comments',
   'color',
   'insurance',
+  'engineNumber',
+  'chassisNumber',
+  'condition',
+  'sellerType',
 ] as const;
 
 async function uploadSellCarImageFromDataUrl(
@@ -85,13 +89,19 @@ async function uploadSellCarImageFromDataUrl(
 async function normalizeVehicleImages(
   raw: unknown,
   submissionId: string,
-): Promise<string[]> {
-  if (!Array.isArray(raw)) return [];
+): Promise<{ urls: string[]; error?: string }> {
+  if (raw == null) return { urls: [] };
+  if (!Array.isArray(raw)) return { urls: [], error: 'vehicleImages must be an array' };
+  if (raw.length > MAX_SELL_CAR_IMAGES) {
+    return { urls: [], error: `At most ${MAX_SELL_CAR_IMAGES} images are allowed` };
+  }
 
   const urls: string[] = [];
-  for (let i = 0; i < Math.min(raw.length, MAX_SELL_CAR_IMAGES); i++) {
+  for (let i = 0; i < raw.length; i++) {
     const item = raw[i];
-    if (typeof item !== 'string' || !item.trim()) continue;
+    if (typeof item !== 'string' || !item.trim()) {
+      return { urls: [], error: `Image ${i + 1} is empty or invalid` };
+    }
 
     if (/^https?:\/\//i.test(item)) {
       urls.push(item);
@@ -100,10 +110,19 @@ async function normalizeVehicleImages(
 
     if (item.startsWith('data:')) {
       const uploaded = await uploadSellCarImageFromDataUrl(item, submissionId, i);
-      if (uploaded) urls.push(uploaded);
+      if (!uploaded) {
+        return {
+          urls: [],
+          error: `Image ${i + 1} failed (use JPEG/PNG/WebP under ${MAX_IMAGE_BYTES / (1024 * 1024)} MB)`,
+        };
+      }
+      urls.push(uploaded);
+      continue;
     }
+
+    return { urls: [], error: `Image ${i + 1} must be a URL or data URL` };
   }
-  return urls;
+  return { urls };
 }
 
 export async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
@@ -151,10 +170,13 @@ export async function handleSellCar(req: VercelRequest, res: VercelResponse, _op
         }
 
         const id = `submission_${randomBytes(12).toString('hex')}`;
-        const vehicleImages = await normalizeVehicleImages(body.vehicleImages, id);
+        const imageResult = await normalizeVehicleImages(body.vehicleImages, id);
+        if (imageResult.error) {
+          return res.status(400).json({ error: imageResult.error });
+        }
         const payload = {
           ...data,
-          ...(vehicleImages.length > 0 ? { vehicleImages } : {}),
+          ...(imageResult.urls.length > 0 ? { vehicleImages: imageResult.urls } : {}),
         };
 
         const sanitized = await sanitizeObject(payload);

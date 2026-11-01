@@ -13,6 +13,18 @@ export function phoneMatchTail(phone: string): string {
   return digits.length > 10 ? digits.slice(-10) : digits;
 }
 
+/** OTP may auto-link only to accounts that already verified this mobile tail. */
+export function filterVerifiedMobileMatches<T extends { mobile?: string | null; phone_verified?: boolean | null }>(
+  rows: T[],
+  tail: string,
+): T[] {
+  if (!tail || tail.length < 10) return [];
+  return rows.filter((row) => {
+    const digits = phoneDigits(String(row.mobile || ''));
+    return digits.endsWith(tail) && Boolean(row.phone_verified);
+  });
+}
+
 /**
  * Normalize India phone input to E.164 (+91XXXXXXXXXX).
  * Do not strip a leading "91" from a bare 10-digit local number (9123456789 is a valid mobile).
