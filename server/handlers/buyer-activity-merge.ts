@@ -11,6 +11,42 @@ export function uniqueIds(ids: unknown): number[] {
   return out;
 }
 
+/** Stored inside saved_searches so a stale tab cannot put a deleted search back. */
+export const REMOVED_SAVED_SEARCH_ID = '__removed__';
+
+function searchId(item: unknown): string {
+  if (!item || typeof item !== 'object') return '';
+  return String((item as { id?: unknown }).id || '');
+}
+
+export function splitSavedSearches(raw: unknown): { items: unknown[]; removed: string[] } {
+  const items: unknown[] = [];
+  const removed: string[] = [];
+  if (!Array.isArray(raw)) return { items, removed };
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as { id?: unknown; ids?: unknown };
+    if (String(record.id || '') === REMOVED_SAVED_SEARCH_ID && Array.isArray(record.ids)) {
+      for (const id of record.ids) {
+        const text = String(id || '');
+        if (text && text !== REMOVED_SAVED_SEARCH_ID) removed.push(text);
+      }
+      continue;
+    }
+    if (searchId(item)) items.push(item);
+  }
+  return { items, removed };
+}
+
+export function savedSearchesForClient(raw: unknown): unknown[] {
+  return splitSavedSearches(raw).items;
+}
+
+export function storedSavedSearches(items: unknown[], removedIds: string[]): unknown[] {
+  if (!removedIds.length) return items;
+  return [...items, { id: REMOVED_SAVED_SEARCH_ID, ids: removedIds }];
+}
+
 function mergeById(incoming: unknown, existing: unknown): unknown[] {
   const a = Array.isArray(incoming) ? incoming : [];
   const b = Array.isArray(existing) ? existing : [];
@@ -46,6 +82,7 @@ export function mergeBuyerActivityRecord(
 ): {
   recently_viewed: number[];
   saved_searches: unknown[];
+  removedSavedSearchIds: string[];
   price_drops: number[];
   new_matches: number[];
 } {
@@ -53,11 +90,19 @@ export function mergeBuyerActivityRecord(
   const incomingViewed = uniqueIds(incoming.recentlyViewed);
   const recently_viewed = uniqueIds([...incomingViewed, ...existingViewed]).slice(0, 20);
 
-  const removedSearches = new Set(
-    (Array.isArray(incoming.removeSavedSearchIds) ? incoming.removeSavedSearchIds : []).map((id) => String(id || '')).filter(Boolean),
+  const existingSplit = splitSavedSearches(existing?.saved_searches);
+  const removedSearches = new Set(existingSplit.removed);
+  for (const id of Array.isArray(incoming.removeSavedSearchIds) ? incoming.removeSavedSearchIds : []) {
+    const text = String(id || '');
+    if (text) removedSearches.add(text);
+  }
+  const incomingItems = splitSavedSearches(incoming.savedSearches).items.filter(
+    (item) => !removedSearches.has(searchId(item)),
   );
-  const saved_searches = mergeById(incoming.savedSearches, existing?.saved_searches)
-    .filter((item) => !removedSearches.has(String((item as { id?: unknown }).id || '')));
+  const keptExisting = existingSplit.items.filter((item) => !removedSearches.has(searchId(item)));
+  const saved_searches = mergeById(incomingItems, keptExisting);
+  // ponytail: cap tombstones at 100; older deletions can be re-added by a stale client after that.
+  const removedSavedSearchIds = [...removedSearches].slice(-100);
 
   let price_drops = uniqueIds([
     ...(uniqueIds(existing?.price_drops)),
@@ -73,5 +118,5 @@ export function mergeBuyerActivityRecord(
     ...(uniqueIds(incoming.notifications?.newMatches)),
   ]);
 
-  return { recently_viewed, saved_searches, price_drops, new_matches };
+  return { recently_viewed, saved_searches, removedSavedSearchIds, price_drops, new_matches };
 }

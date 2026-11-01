@@ -1400,8 +1400,16 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                         'Permanently delete your account? This cannot be undone. You will be signed out immediately.',
                         async () => {
                       try {
+                        const needsPassword = Boolean(currentUser.authProvider === 'email' || currentUser.password);
+                        const password = needsPassword
+                          ? window.prompt('Enter your password to confirm account deletion:') || undefined
+                          : undefined;
+                        if (needsPassword && !password) {
+                          addToast('Password is required to delete your account.', 'error');
+                          return;
+                        }
                         const { requestAccountDeletion } = await import('../services/accountPrivacyService');
-                        const result = await requestAccountDeletion(currentUser.email);
+                        const result = await requestAccountDeletion(currentUser.email, { password });
                         if (result.success) {
                           addToast(result.message || 'Your account has been deleted.', 'success');
                           window.location.href = '/';

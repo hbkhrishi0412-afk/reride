@@ -2,6 +2,7 @@
  * Shared deal-pipeline utilities (mappers, auth, batch fetch, assistance helpers).
  */
 import { randomUUID } from 'crypto';
+import { insertAppNotifications } from '../../insert-app-notification.js';
 import { parseSellerNotes } from '../../../lib/dealSellerNotes.js';
 import { mergeDealMetadata } from '../../../lib/dealMetadataMerge.js';
 import { toCalendarDateKey, calendarDateStatus } from './calendar-date.js';
@@ -275,8 +276,8 @@ export async function insertTimelineEvent(params: {
     payload: params.payload || {},
   });
   if (error) {
+    // The lead write has already committed. Throwing here turns a saved change into a 500 and a retry inserts a second event.
     console.error('insertTimelineEvent failed:', error.message, { leadId: params.leadId, eventType: params.eventType });
-    throw new Error(`Failed to record timeline event: ${error.message}`);
   }
 }
 
@@ -290,17 +291,11 @@ export async function insertDealNotification(params: {
 }): Promise<void> {
   const recipientEmail = normalizeEmail(params.recipientEmail);
   if (!recipientEmail.includes('@')) return;
-  const supabase = getSupabaseAdminClient();
-  const { error } = await supabase.from('notifications').insert({
-    id: generateId('notif'),
-    user_id: recipientEmail,
-    recipient_email: recipientEmail,
+  await insertAppNotifications([{
+    recipientEmail,
     type: 'deal',
     title: params.title,
     message: params.message,
-    read: false,
-    is_read: false,
-    created_at: new Date().toISOString(),
     metadata: {
       leadId: params.leadId,
       targetType: 'deal',
@@ -308,10 +303,7 @@ export async function insertDealNotification(params: {
       action: params.action,
       conversationId: params.conversationId || null,
     },
-  });
-  if (error) {
-    console.error('deal notification insert failed:', error.message, { recipientEmail, leadId: params.leadId });
-  }
+  }]);
 }
 
 export function assistanceFulfillmentIsOpen(meta: DealLeadMetadata): boolean {

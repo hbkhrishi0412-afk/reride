@@ -392,7 +392,18 @@ export const handleAssistance: DealActionHandler = async (ctx) => {
       assistanceFulfillment: fulfillment,
     };
 
-    await supabase.from('deal_leads').update({ metadata, updated_at: now }).eq('id', leadId);
+    const previousUpdatedAt = typeof row.updated_at === 'string' ? row.updated_at : '';
+    let leadUpdate = supabase.from('deal_leads').update({ metadata, updated_at: now }).eq('id', leadId);
+    if (previousUpdatedAt) leadUpdate = leadUpdate.eq('updated_at', previousUpdatedAt);
+    const { data: savedLead, error: leadUpdateError } = await leadUpdate.select('id').maybeSingle();
+    if (leadUpdateError) {
+      res.status(500).json({ success: false, reason: leadUpdateError.message || 'Could not update assistance' });
+      return true;
+    }
+    if (!savedLead) {
+      res.status(409).json({ success: false, reason: 'This request was updated by someone else. Refresh and try again.' });
+      return true;
+    }
 
     const pkgLabel = dealAssistancePackageLabel(meta.assistancePackage || '');
     await insertTimelineEvent({

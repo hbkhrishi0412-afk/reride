@@ -1,6 +1,7 @@
 /**
  * Platform complaint_cases API — formal grievances (listing, payment, deal, etc.)
  */
+import { randomBytes } from 'crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   USE_SUPABASE,
@@ -18,7 +19,7 @@ function normalizeEmail(email: string): string {
 }
 
 function generateId(): string {
-  return `case_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  return `case_${randomBytes(12).toString('hex')}`;
 }
 
 async function getAuthEmail(req: VercelRequest): Promise<{ email: string; role?: string } | null> {
@@ -29,8 +30,8 @@ async function getAuthEmail(req: VercelRequest): Promise<{ email: string; role?:
   return { email, role: user?.role ?? auth.user.role };
 }
 
-function mapRow(row: Record<string, unknown>): ComplaintCase {
-  return {
+function mapRow(row: Record<string, unknown>, opts?: { includeAdminFields?: boolean }): ComplaintCase {
+  const base: ComplaintCase = {
     id: String(row.id),
     reporterEmail: String(row.reporter_email || ''),
     reporterName: row.reporter_name ? String(row.reporter_name) : undefined,
@@ -41,12 +42,15 @@ function mapRow(row: Record<string, unknown>): ComplaintCase {
     vehicleId: row.vehicle_id ? String(row.vehicle_id) : undefined,
     status: (row.status as ComplaintCaseStatus) || 'open',
     resolution: row.resolution ? String(row.resolution) : undefined,
-    adminNotes: row.admin_notes ? String(row.admin_notes) : undefined,
-    resolvedBy: row.resolved_by ? String(row.resolved_by) : undefined,
     createdAt: String(row.created_at || new Date().toISOString()),
     updatedAt: row.updated_at ? String(row.updated_at) : undefined,
     resolvedAt: row.resolved_at ? String(row.resolved_at) : undefined,
   };
+  if (opts?.includeAdminFields) {
+    base.adminNotes = row.admin_notes ? String(row.admin_notes) : undefined;
+    base.resolvedBy = row.resolved_by ? String(row.resolved_by) : undefined;
+  }
+  return base;
 }
 
 const VALID_CATEGORIES = COMPLAINT_CASE_CATEGORIES.map((c) => c.value) as ComplaintCaseCategory[];
@@ -133,7 +137,9 @@ export async function handleComplaints(
 
     return res.status(200).json({
       success: true,
-      complaints: (data || []).map((r) => mapRow(r as Record<string, unknown>)),
+      complaints: (data || []).map((r) =>
+        mapRow(r as Record<string, unknown>, { includeAdminFields: isAdmin }),
+      ),
     });
   }
 
@@ -172,7 +178,10 @@ export async function handleComplaints(
       return res.status(500).json({ success: false, reason: error.message });
     }
 
-    return res.status(200).json({ success: true, complaint: mapRow(data as Record<string, unknown>) });
+    return res.status(200).json({
+      success: true,
+      complaint: mapRow(data as Record<string, unknown>, { includeAdminFields: true }),
+    });
   }
 
   return res.status(400).json({

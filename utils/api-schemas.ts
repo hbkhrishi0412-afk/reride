@@ -8,9 +8,9 @@ export const trackViewBodySchema = z.object({
 
 export const supportChatPostSchema = z.object({
   message: z.string().min(1).max(2000),
-  userId: z.string().optional(),
-  userName: z.string().max(120).optional(),
-  sessionId: z.string().optional(),
+  userId: z.string().nullish(),
+  userName: z.string().max(120).nullish(),
+  sessionId: z.string().nullish(),
 });
 
 export const supportChatHistoryQuerySchema = z.object({

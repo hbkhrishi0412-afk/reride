@@ -141,12 +141,10 @@ export async function submitPeerRating(
 }
 
 export interface PrePurchaseInspector {
-  email: string;
+  id: string;
   name: string;
   city?: string;
   avatarUrl?: string;
-  averageRating?: number;
-  ratingCount?: number;
 }
 
 export async function fetchPrePurchaseInspectors(city?: string): Promise<PrePurchaseInspector[]> {

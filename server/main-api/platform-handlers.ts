@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as core from './shared.js';
 import type { ChatMessage, Conversation } from '../../types.js';
 import { claimRazorpayPayment, createRazorpayOrder, verifyRazorpayPayment } from '../../lib/razorpay.js';
+import { insertAppNotifications } from '../insert-app-notification.js';
 
 async function handleAI(req: VercelRequest, res: VercelResponse, _options: core.HandlerOptions) {
   return res.status(410).json({
@@ -374,35 +375,21 @@ async function notifyAdminsOfSupportTicket(ticket: Record<string, unknown>): Pro
     const subject = String(ticket.subject || 'New support ticket');
     const requester = String(ticket.userName || ticket.userEmail || 'A user');
     const ticketId = String(ticket.id || '');
-    const now = new Date().toISOString();
 
-    // notifications.id column is TEXT â€” store string form of a numeric-looking
-    // id so downstream clients that treat it as a number can still parse it.
-    const baseId = Date.now();
-    const rows = adminEmails.map((email: string, idx: number) => ({
-      id: String(baseId + idx),
-      user_id: email,
-      recipient_email: email,
+    await insertAppNotifications(adminEmails.map((email: string) => ({
+      recipientEmail: email,
       type: 'general_admin',
       title: 'New support ticket',
       message: `${requester} opened: ${subject}`,
-      read: false,
-      created_at: now,
-      updated_at: now,
       metadata: {
         targetType: 'general_admin',
         targetId: ticketId,
         ticketId,
         subject,
         userEmail: ticket.userEmail,
-        userName: ticket.userName
-      }
-    }));
-
-    const { error: insertError } = await supabase.from('notifications').insert(rows);
-    if (insertError) {
-      core.logWarn('notifyAdminsOfSupportTicket: insert failed', insertError);
-    }
+        userName: ticket.userName,
+      },
+    })));
   } catch (err) {
     core.logWarn('notifyAdminsOfSupportTicket: unexpected error', err);
   }
@@ -1337,35 +1324,18 @@ async function insertConversationMessageNotification(params: {
     messageText.length > 50
       ? `New message from ${senderName}: ${messageText.substring(0, 50)}...`
       : `New message from ${senderName}: ${messageText}`;
-  const notificationId = Date.now() * 1000 + core.randomInt(0, 1000);
   try {
-    const supabase = core.getSupabaseAdminClient();
-    const record: Record<string, unknown> = {
-      user_id: recipientEmail,
-      recipient_email: recipientEmail,
+    await insertAppNotifications([{
+      recipientEmail,
       type: 'conversation',
       title: 'New message',
       message: notificationMessage,
-      read: false,
-      is_read: false,
-      created_at: new Date().toISOString(),
       metadata: {
         conversationId: String(params.conversationId),
         targetType: 'conversation',
         targetId: String(params.conversationId),
       },
-    };
-    const inserted = await supabase
-      .from('notifications')
-      .insert({ ...record, id: notificationId })
-      .select('id')
-      .single();
-    if (inserted.error) {
-      const retry = await supabase.from('notifications').insert(record).select('id').single();
-      if (retry.error) {
-        console.warn('âš ï¸ API: Failed to create message notification (non-fatal):', retry.error.message);
-      }
-    }
+    }]);
   } catch (notifErr) {
     console.warn('âš ï¸ API: Failed to create message notification (non-fatal):', notifErr);
   }
@@ -2070,18 +2040,20 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       
       // Create notification in Supabase
       const supabase = core.getSupabaseAdminClient();
-      const notificationRecord = {
-        id: String(notificationData.id),
-        user_id: normalizedEmail,
+      const { data: userRow } = await supabase.from('users').select('id').eq('email', normalizedEmail).maybeSingle();
+      const numericId = Number(notificationData.id);
+      const notificationRecord: Record<string, unknown> = {
+        user_id: userRow?.id ? String(userRow.id) : null,
         recipient_email: normalizedEmail,
         type: notificationData.targetType || 'general',
         title: notificationData.title || notificationData.message?.substring(0, 50) || 'Notification',
         message: notificationData.message || '',
         read: notificationData.isRead || false,
+        is_read: notificationData.isRead || false,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        metadata: notificationData
+        metadata: notificationData,
       };
+      if (Number.isSafeInteger(numericId) && numericId > 0) notificationRecord.id = numericId;
       
       const { data: created, error: createError } = await supabase
         .from('notifications')

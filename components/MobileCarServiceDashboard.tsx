@@ -14,6 +14,7 @@ import {
   type SubServiceTemplate,
 } from '../constants/carServiceSubServices.js';
 import { nextPrimaryStatus, primaryAdvanceButtonLabel } from '../utils/serviceRequestStatusFlow';
+import { completeLineTotal } from '../utils/pricedServiceTotal.js';
 import { View as ViewEnum } from '../types';
 import { spApiFetch } from '../utils/spApiFetch';
 import { useApp } from './AppProvider';
@@ -876,12 +877,7 @@ const MobileCarServiceDashboard: React.FC<Props> = ({ provider, onNavigate, onLo
     const lineItems = (req.services || []).filter(
       (s): s is ServiceLineItem => !!s && (typeof s.name === 'string' || typeof s.id === 'string'),
     );
-    const totalAmount = lineItems.reduce((sum, line) => {
-      const qty = line.quantity != null && line.quantity > 0 ? line.quantity : 1;
-      const price = line.price != null && Number.isFinite(line.price) && line.price > 0 ? line.price : 0;
-      return sum + qty * price;
-    }, 0);
-    const finalAmount = totalAmount > 0 ? totalAmount : req.total && req.total > 0 ? req.total : null;
+    const finalAmount = completeLineTotal(lineItems) ?? (lineItems.length === 0 && req.total && req.total > 0 ? req.total : null);
     const phoneHref = req.customerPhone ? `tel:${req.customerPhone.replace(/\s+/g, '')}` : null;
     const nextPrimary = nextPrimaryStatus(req.status as RequestStatus);
     const isLocked = req.status === 'completed' || req.status === 'cancelled';

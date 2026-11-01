@@ -4,6 +4,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomBytes } from 'crypto';
 import { getSupabaseAdminClient } from '../../lib/supabase-admin.js';
+import { resolveRateLimit } from '../../lib/rate-limit-resolver.js';
+import { getTrustedClientIP } from '../../utils/trusted-client-ip.js';
 import {
   USE_SUPABASE,
   adminRead,
@@ -15,10 +17,32 @@ import {
   sanitizeObject,
   sanitizeString,
   requireAdmin,
+  requireAuth,
 } from '../handler-shared.js';
 
-const MAX_SELL_CAR_IMAGES = 10;
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_SELL_CAR_IMAGES = 5;
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
+const SELL_CAR_PUBLIC_FIELDS = [
+  'registration',
+  'make',
+  'model',
+  'variant',
+  'year',
+  'state',
+  'district',
+  'noOfOwners',
+  'kilometers',
+  'fuelType',
+  'transmission',
+  'customerContact',
+  'customerName',
+  'customerEmail',
+  'expectedPrice',
+  'comments',
+  'color',
+  'insurance',
+] as const;
 
 async function uploadSellCarImageFromDataUrl(
   dataUrl: string,
@@ -99,9 +123,26 @@ export async function handleSellCar(req: VercelRequest, res: VercelResponse, _op
 
     switch (method) {
       case 'POST': {
-        const data = { ...req.body, submittedAt: new Date().toISOString(), status: 'pending' };
+        const auth = await requireAuth(req, res, 'Sell car submission');
+        if (!auth) return;
+
+        const ip = getTrustedClientIP(req);
+        const rate = await resolveRateLimit('sell-car-post', ip, { maxRequests: 5, windowMs: 60 * 60 * 1000 });
+        if (!rate.allowed) {
+          return res.status(429).json({ error: 'Too many submissions. Please try again later.' });
+        }
+
+        const body = (req.body || {}) as Record<string, unknown>;
+        const data: Record<string, unknown> = {};
+        for (const key of SELL_CAR_PUBLIC_FIELDS) {
+          if (body[key] !== undefined) data[key] = body[key];
+        }
+        data.submittedAt = new Date().toISOString();
+        data.status = 'pending';
+        data.submittedBy = auth.user?.email?.toLowerCase().trim();
+
         const required = ['registration', 'make', 'model', 'variant', 'year', 'state', 'district', 'noOfOwners', 'kilometers', 'fuelType', 'transmission', 'customerContact'];
-        const missing = required.filter(f => !data[f as keyof typeof data]);
+        const missing = required.filter((f) => !data[f]);
         if (missing.length) return res.status(400).json({ error: `Missing: ${missing.join(', ')}` });
 
         const existing = await adminReadAll<Record<string, unknown>>(path);
@@ -109,12 +150,10 @@ export async function handleSellCar(req: VercelRequest, res: VercelResponse, _op
           return res.status(409).json({ error: 'Registration already submitted' });
         }
 
-        const id = `submission_${Date.now()}`;
-        const vehicleImages = await normalizeVehicleImages(data.vehicleImages, id);
-
-        const { vehicleImages: _rawImages, ...rest } = data;
+        const id = `submission_${randomBytes(12).toString('hex')}`;
+        const vehicleImages = await normalizeVehicleImages(body.vehicleImages, id);
         const payload = {
-          ...rest,
+          ...data,
           ...(vehicleImages.length > 0 ? { vehicleImages } : {}),
         };
 
@@ -172,6 +211,7 @@ export async function handleSellCar(req: VercelRequest, res: VercelResponse, _op
         return res.status(405).json({ error: `Method ${method} not allowed` });
     }
   } catch (error) {
-    return res.status(500).json({ error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error' });
+    console.error('sell-car error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }

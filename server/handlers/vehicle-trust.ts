@@ -1,6 +1,7 @@
 /**
  * Vehicle trust API: VAHAN verify, deals, peer ratings.
  */
+import { randomBytes } from 'crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   USE_SUPABASE,
@@ -27,7 +28,13 @@ function normalizeEmail(email: string): string {
 }
 
 function generateId(prefix: string): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}_${randomBytes(12).toString('hex')}`;
+}
+
+function listingAlreadySold(vehicle: { status?: string | null; listingStatus?: string | null }): boolean {
+  const status = String(vehicle.status || '').toLowerCase();
+  const listing = String(vehicle.listingStatus || '').toLowerCase();
+  return status === 'sold' || listing === 'sold';
 }
 
 async function getAuthEmail(req: VercelRequest): Promise<string | null> {
@@ -185,12 +192,37 @@ export async function handleVehicleTrust(
       if (sellerEmail !== authEmail) {
         return res.status(403).json({ success: false, reason: 'Only the seller can initiate a deal' });
       }
+      if (buyerEmail === sellerEmail) {
+        return res.status(400).json({ success: false, reason: 'Buyer email must differ from the seller' });
+      }
+      if (listingAlreadySold(resolved.vehicle)) {
+        return res.status(409).json({ success: false, reason: 'This vehicle is already marked sold' });
+      }
+
+      const supabase = getSupabaseAdminClient();
+      const { data: openDeal } = await supabase
+        .from('vehicle_trust_deals')
+        .select('id')
+        .eq('vehicle_id', resolved.primaryKey)
+        .in('status', ['pending_buyer_confirm', 'completed'])
+        .limit(1)
+        .maybeSingle();
+      if (openDeal) {
+        return res.status(409).json({ success: false, reason: 'A deal already exists for this vehicle' });
+      }
+
+      const buyer = await supabaseUserService.findByEmail(buyerEmail);
+      if (!buyer) {
+        return res.status(400).json({
+          success: false,
+          reason: 'Buyer must have a ReRide account. Ask them to sign up first.',
+        });
+      }
 
       const dealId = generateId('deal');
       const now = new Date().toISOString();
-      const supabase = getSupabaseAdminClient();
 
-      await supabase.from('vehicle_trust_deals').insert({
+      const { error: insertError } = await supabase.from('vehicle_trust_deals').insert({
         id: dealId,
         vehicle_id: resolved.primaryKey,
         seller_email: sellerEmail,
@@ -198,19 +230,11 @@ export async function handleVehicleTrust(
         status: 'pending_buyer_confirm',
         seller_confirmed_at: now,
       });
-
-      await supabaseVehicleService.update(resolved.primaryKey, {
-        status: 'sold',
-        soldAt: now,
-        listingStatus: 'sold',
-      });
-
-      const seller = await supabaseUserService.findByEmail(sellerEmail);
-      if (seller) {
-        const sold = (seller.soldListings || 0) + 1;
-        await supabaseUserService.update(sellerEmail, { soldListings: sold });
+      if (insertError) {
+        throw new Error(insertError.message);
       }
 
+      // Do not mark sold / bump soldListings until the buyer confirms.
       return res.status(200).json({
         success: true,
         dealId,
@@ -246,16 +270,46 @@ export async function handleVehicleTrust(
       if (normalizeEmail(deal.buyer_email) !== authEmail) {
         return res.status(403).json({ success: false, reason: 'Only the buyer can confirm this deal' });
       }
+      if (deal.status !== 'pending_buyer_confirm') {
+        return res.status(409).json({ success: false, reason: 'Deal is not awaiting confirmation' });
+      }
 
       const now = new Date().toISOString();
-      await supabase
+      const { data: completed, error: completeError } = await supabase
         .from('vehicle_trust_deals')
         .update({
           status: 'completed',
           buyer_confirmed_at: now,
           completed_at: now,
         })
-        .eq('id', dealId);
+        .eq('id', dealId)
+        .eq('status', 'pending_buyer_confirm')
+        .select('id, vehicle_id, seller_email')
+        .maybeSingle();
+      if (completeError) {
+        throw new Error(completeError.message);
+      }
+      if (!completed) {
+        return res.status(409).json({ success: false, reason: 'Deal is not awaiting confirmation' });
+      }
+
+      await supabaseVehicleService.update(String(completed.vehicle_id), {
+        status: 'sold',
+        soldAt: now,
+        listingStatus: 'sold',
+      });
+      const sellerEmail = normalizeEmail(String(completed.seller_email || ''));
+      const { error: soldRpcError } = await supabase.rpc('increment_sold_listings', {
+        p_email: sellerEmail,
+      });
+      if (soldRpcError) {
+        const seller = await supabaseUserService.findByEmail(sellerEmail);
+        if (seller) {
+          await supabaseUserService.update(sellerEmail, {
+            soldListings: (seller.soldListings || 0) + 1,
+          });
+        }
+      }
 
       return res.status(200).json({ success: true, dealId, status: 'completed' });
     }
@@ -426,7 +480,7 @@ export async function handleVehicleTrust(
       const supabase = getSupabaseAdminClient();
       const { data: providers } = await supabase
         .from('users')
-        .select('email, name, location, city, avatar_url, average_rating, rating_count, metadata')
+        .select('id, name, location, avatar_url, metadata')
         .eq('role', 'service_provider')
         .eq('status', 'active');
 
@@ -440,16 +494,14 @@ export async function handleVehicleTrust(
       const inspectors = pool
         .filter((p) => {
           if (!city) return true;
-          const loc = String(p.city || p.location || '').toLowerCase();
+          const loc = String(p.location || '').toLowerCase();
           return loc.includes(city);
         })
         .map((p) => ({
-          email: p.email,
+          id: p.id,
           name: p.name,
-          city: p.city || p.location,
+          city: p.location,
           avatarUrl: p.avatar_url,
-          averageRating: p.average_rating,
-          ratingCount: p.rating_count,
         }));
 
       return res.status(200).json({ success: true, inspectors });
@@ -463,7 +515,7 @@ export async function handleVehicleTrust(
     console.error('vehicle-trust error:', error);
     return res.status(500).json({
       success: false,
-      reason: error instanceof Error ? error.message : 'Internal error',
+      reason: 'Internal error',
     });
   }
 }

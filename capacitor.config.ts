@@ -8,6 +8,9 @@ import { CapacitorConfig } from '@capacitor/cli';
  * - Emulator: see npm script `cap:android:live` (default `http://10.0.2.2:5173`; override if Vite uses another port).
  * - Physical device: `RERIDE_VITE_DEV_SERVER_URL=http://<pc-lan-ip>:5173` then `npx cap sync android`.
  * Packaged app: omit the var and run `npm run android:sync` (or `npx cap sync android`).
+ * Live reload is opt-in: set `RERIDE_CAP_LIVE_RELOAD=1` together with the URL.
+ * A leftover URL in the environment is ignored unless that flag is set, and a
+ * production or CAPACITOR_BUILD sync never embeds it.
  *
  * **Android still on old JS?** If you ever synced with `RERIDE_VITE_DEV_SERVER_URL` set, the APK
  * loads that URL instead of `dist/`. Run **`npm run android:bundle`** (clears the var for this
@@ -15,7 +18,7 @@ import { CapacitorConfig } from '@capacitor/cli';
  */
 // Never bake a live-reload URL into production / CAPACITOR_BUILD syncs (blank WebView if the URL dies).
 const liveReloadUrl =
-  process.env.CAPACITOR_BUILD === '1' || process.env.NODE_ENV === 'production'
+  process.env.CAPACITOR_BUILD === '1' || process.env.NODE_ENV === 'production' || process.env.RERIDE_CAP_LIVE_RELOAD !== '1'
     ? ''
     : (process.env.RERIDE_VITE_DEV_SERVER_URL || '').trim();
 

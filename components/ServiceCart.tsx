@@ -966,10 +966,13 @@ const ServiceCart: React.FC<Props> = ({
 
     const totals = useMemo(() => {
         const pricingProviderId = selectedProviders[0];
-        const packageSubtotal = items.reduce((sum, item) => {
+        const complete = items.length > 0 && items.every((item) => {
             const unitPrice = resolveItemUnitPrice(item, pricingProviderId);
-            return sum + ((unitPrice || 0) * item.quantity);
-        }, 0);
+            return unitPrice != null && Number.isFinite(unitPrice) && unitPrice >= 0;
+        });
+        const packageSubtotal = complete
+            ? items.reduce((sum, item) => sum + ((resolveItemUnitPrice(item, pricingProviderId) || 0) * item.quantity), 0)
+            : 0;
         const subtotal = packageSubtotal;
         const couponValue = coupons.find(c => c.code === selectedCoupon)?.amountOff || 0;
         const discount = Math.min(couponValue, subtotal);
@@ -977,7 +980,7 @@ const ServiceCart: React.FC<Props> = ({
         const platformFee = subtotal > 0 ? 49 : 0;
         const tax = Math.round(subtotal * 0.05); // simple 5% mock tax
         const total = subtotal - discount + pickupFee + platformFee + tax;
-        return { packageSubtotal, subtotal, discount, pickupFee, platformFee, tax, total };
+        return { packageSubtotal, subtotal, discount, pickupFee, platformFee, tax, total, complete };
     }, [items, selectedCoupon, coupons, selectedProviders, resolveItemUnitPrice]);
 
     const checkoutReadiness = useMemo(() => {
@@ -1196,10 +1199,11 @@ const ServiceCart: React.FC<Props> = ({
     }, [availableProviders]);
 
     const providerTotals = useMemo(() => {
-        const result: Record<string, { total: number; breakdown: Array<{ id: string; name: string; price?: number }> }> = {};
+        const result: Record<string, { total: number; complete: boolean; breakdown: Array<{ id: string; name: string; price?: number }> }> = {};
         availableProviders.forEach(p => {
             const services = providerServices[p.id] || [];
             let total = 0;
+            let complete = items.length > 0;
             const breakdown: Array<{ id: string; name: string; price?: number }> = [];
             
             // Calculate totals based on selected items with quantities
@@ -1217,25 +1221,32 @@ const ServiceCart: React.FC<Props> = ({
                 }
                 const quantity = item.quantity || 1;
                 
-                if (price !== undefined) {
+                if (price == null || !Number.isFinite(price) || price < 0) {
+                    complete = false;
+                } else {
                     total += price * quantity;
                 }
                 breakdown.push({ 
                     id: item.serviceId, 
                     name: serviceName, 
-                    price: price !== undefined ? price * quantity : undefined 
+                    price: price != null && Number.isFinite(price) && price >= 0 ? price * quantity : undefined 
                 });
             });
             
-            result[p.id] = { total, breakdown };
+            result[p.id] = { total: complete ? total : 0, complete, breakdown };
         });
         return result;
     }, [availableProviders, providerServices, items, availableServicePackages]);
 
     const sortedAvailableProviders = useMemo(() => {
         return [...availableProviders].sort((a, b) => {
-            const at = providerTotals[a.id]?.total ?? Number.POSITIVE_INFINITY;
-            const bt = providerTotals[b.id]?.total ?? Number.POSITIVE_INFINITY;
+            const rank = (id: string) => {
+                const row = providerTotals[id];
+                if (!row?.complete) return Number.POSITIVE_INFINITY;
+                return row.total;
+            };
+            const at = rank(a.id);
+            const bt = rank(b.id);
             if (at !== bt) return at - bt;
             const ad = a.distanceKm ?? Number.POSITIVE_INFINITY;
             const bd = b.distanceKm ?? Number.POSITIVE_INFINITY;
@@ -1519,7 +1530,7 @@ const ServiceCart: React.FC<Props> = ({
             couponCode: selectedCoupon,
             providerId: primaryProviderId,
             candidateProviderIds: providersToNotify, // Include all providers to notify
-            total: (providerTotals[primaryProviderId]?.total || totals.subtotal) + totals.pickupFee + totals.platformFee + totals.tax - totals.discount,
+            total: totals.complete ? totals.total : undefined,
             note,
             carDetails,
             servicePackages,
@@ -1970,7 +1981,7 @@ const ServiceCart: React.FC<Props> = ({
                     >
                         <div>
                             <div className="text-[11px] font-medium text-slate-500">Estimated total</div>
-                            <div className="text-lg font-bold tabular-nums">₹{totals.total.toLocaleString('en-IN')}</div>
+                            <div className="text-lg font-bold tabular-nums">{totals.complete ? `₹${totals.total.toLocaleString('en-IN')}` : 'Pending quote'}</div>
                         </div>
                         <span className="text-xs font-semibold text-blue-600 shrink-0">Summary and book ↓</span>
                     </a>
@@ -3242,7 +3253,7 @@ const ServiceCart: React.FC<Props> = ({
                                 )}
                                 <div className="flex justify-between items-baseline pt-3 mt-1 border-t border-slate-200">
                                     <span className="text-sm font-bold text-slate-900">Total</span>
-                                    <span className="text-2xl font-black tabular-nums text-slate-900">₹{totals.total.toLocaleString('en-IN')}</span>
+                                    <span className="text-2xl font-black tabular-nums text-slate-900">{totals.complete ? `₹${totals.total.toLocaleString('en-IN')}` : 'Pending quote'}</span>
                                 </div>
                             </div>
                             <button
@@ -3281,7 +3292,7 @@ const ServiceCart: React.FC<Props> = ({
                         <div className="min-w-0 flex-1">
                             <div className="text-[10px] uppercase tracking-wide text-slate-500">Total</div>
                             <div className="text-base font-bold tabular-nums text-slate-900 leading-tight">
-                                ₹{totals.total.toLocaleString('en-IN')}
+                                {totals.complete ? `₹${totals.total.toLocaleString('en-IN')}` : 'Pending quote'}
                             </div>
                         </div>
                         <a

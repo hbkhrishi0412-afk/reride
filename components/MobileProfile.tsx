@@ -645,7 +645,15 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
                 void runIfConfirmed(
                   'Permanently delete your account? This cannot be undone. You will be signed out immediately.',
                   async () => {
-                const r = await requestAccountDeletion(currentUser.email);
+                const needsPassword = Boolean(currentUser.authProvider === 'email' || currentUser.password);
+                const password = needsPassword
+                  ? window.prompt('Enter your password to confirm account deletion:') || undefined
+                  : undefined;
+                if (needsPassword && !password) {
+                  addToast?.('Password is required to delete your account.', 'error');
+                  return;
+                }
+                const r = await requestAccountDeletion(currentUser.email, { password });
                 if (r.success) {
                   addToast?.(r.message || 'Your account has been deleted.', 'success');
                   onLogout?.();

@@ -22,10 +22,16 @@ export function downloadProfileExport(currentUser: User): void {
 /** Permanently delete the signed-in user's account (required by Apple/Google app store rules). */
 export async function requestAccountDeletion(
   email: string,
+  opts?: { password?: string },
 ): Promise<{ success: boolean; message?: string; reason?: string }> {
   const res = await authenticatedFetch('/api/users', {
     method: 'DELETE',
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({
+      email,
+      confirm: 'DELETE',
+      confirmEmail: email,
+      ...(opts?.password ? { password: opts.password } : {}),
+    }),
   });
   const data = (await res.json().catch(() => ({}))) as {
     success?: boolean;

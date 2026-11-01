@@ -19,6 +19,7 @@ import {
   nextPrimaryStatus,
   primaryAdvanceButtonLabel,
 } from '../utils/serviceRequestStatusFlow';
+import { completeLineTotal } from '../utils/pricedServiceTotal.js';
 import { spApiFetch } from '../utils/spApiFetch';
 import { getServiceDashboardNextAction, isRealProfileValue } from '../utils/serviceDashboardOverview';
 import { EmptyState, SectionHeader, StatCard, StatCardGrid } from './dashboard/shared';
@@ -308,20 +309,14 @@ function hasCustomerDetails(req: ServiceRequest): boolean {
   return Boolean(req.customerName || req.customerPhone || req.customerEmail || req.addressLine);
 }
 
-function ServiceRequestPackages({ services, total }: { services?: ServiceLineItem[]; total?: number }) {
+function ServiceRequestPackages({ services }: { services?: ServiceLineItem[]; total?: number }) {
   const lines = (services ?? []).filter(
     (s): s is ServiceLineItem =>
       !!s &&
       typeof s === 'object' &&
       (typeof s.name === 'string' || typeof s.id === 'string'),
   );
-  const computedAmount = lines.reduce((sum, line) => {
-    const qty = line.quantity != null && line.quantity > 0 ? line.quantity : 1;
-    const unitPrice =
-      line.price != null && Number.isFinite(line.price) && line.price > 0 ? line.price : 0;
-    return sum + unitPrice * qty;
-  }, 0);
-  const finalAmount = computedAmount > 0 ? computedAmount : total && total > 0 ? total : null;
+  const finalAmount = completeLineTotal(lines) ?? null;
 
   if (lines.length === 0) return null;
   return (
@@ -3500,7 +3495,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                   </div>
                   {extra && (
                     <div className="mt-3 space-y-2">
-                      <ServiceRequestPackages services={req.services} total={req.total} />
+                      <ServiceRequestPackages services={req.services} />
                       {req.notes && (
                         <p className="text-xs text-amber-800">Notes: {req.notes}</p>
                       )}
@@ -3684,7 +3679,7 @@ body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCa
                   </div>
                   {extra && (
                     <div className="mt-3 space-y-2">
-                      <ServiceRequestPackages services={req.services} total={req.total} />
+                      <ServiceRequestPackages services={req.services} />
                       {req.notes && <p className="text-xs text-amber-800">Notes: {req.notes}</p>}
                       {hasCustomerDetails(req) && (
                         <p className="text-xs text-gray-600">

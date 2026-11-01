@@ -26,11 +26,11 @@ export async function handleContent(req: VercelRequest, res: VercelResponse, _op
       default: return res.status(400).json({ success: false, error: 'Use ?type=faqs or ?type=support-tickets' });
     }
   } catch (error) {
+    console.error('content handler error:', error);
     if (req.method === 'GET') {
-      res.setHeader('X-Data-Fallback', 'true');
-      return res.status(200).json([]);
+      return res.status(503).json({ success: false, error: 'Content temporarily unavailable' });
     }
-    return res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+    return res.status(500).json({ success: false, error: 'Internal server error' });
   }
 }
 
@@ -175,12 +175,23 @@ async function handleSupportTickets(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, tickets, count: tickets.length });
     }
     case 'POST': {
-      const d = req.body;
+      const d = req.body || {};
       if (!d.userEmail || !d.userName || !d.subject || !d.message) return res.status(400).json({ success: false, error: 'Missing required fields' });
       const se = (await sanitizeString(String(d.userEmail))).toLowerCase().trim();
       if (!isAdmin && se !== email) return res.status(403).json({ success: false, error: 'Unauthorized' });
-      const id = `ticket_${Date.now()}`;
-      const ticket = { ...d, userEmail: isAdmin ? se : email, id, status: 'Open', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), replies: [] };
+      const id = `ticket_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      const ticket = {
+        userEmail: isAdmin ? se : email,
+        userName: await sanitizeString(String(d.userName)),
+        subject: await sanitizeString(String(d.subject)),
+        message: await sanitizeString(String(d.message)),
+        category: d.category ? await sanitizeString(String(d.category)) : undefined,
+        id,
+        status: 'Open',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        replies: [],
+      };
       await adminCreate(path, ticket, id);
       return res.status(201).json({ success: true, ticket });
     }
@@ -191,8 +202,27 @@ async function handleSupportTickets(req: VercelRequest, res: VercelResponse) {
       if (!existing) return res.status(404).json({ success: false, error: 'Ticket not found' });
       const ownerEmail = ((existing as Record<string, unknown>).userEmail as string)?.toLowerCase().trim() ?? '';
       if (!isAdmin && ownerEmail !== email) return res.status(403).json({ success: false, error: 'Unauthorized' });
-      const update = { ...req.body };
-      if (!isAdmin) delete update.userEmail;
+
+      let update: Record<string, unknown>;
+      if (isAdmin) {
+        update = { ...req.body };
+      } else {
+        // Customers may only append one reply — not forge status / admin replies / ownership.
+        const message = typeof req.body?.message === 'string' ? (await sanitizeString(req.body.message)).trim() : '';
+        if (!message) {
+          return res.status(400).json({ success: false, error: 'message is required' });
+        }
+        const priorReplies = Array.isArray((existing as Record<string, unknown>).replies)
+          ? ([...(existing as { replies: unknown[] }).replies] as unknown[])
+          : [];
+        priorReplies.push({
+          message,
+          createdAt: new Date().toISOString(),
+          from: 'customer',
+          userEmail: email,
+        });
+        update = { replies: priorReplies };
+      }
       await adminUpdate(path, String(id), { ...update, updatedAt: new Date().toISOString() });
       return res.status(200).json({ success: true, message: 'Ticket updated' });
     }

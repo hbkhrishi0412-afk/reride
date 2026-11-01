@@ -183,10 +183,11 @@ GRANT EXECUTE ON FUNCTION public.reride_is_admin() TO authenticated;
 
 -- Column-level protection: VITE_SUPABASE_ANON_KEY is in every client bundle.
 -- Must REVOKE ALL first (Supabase defaults anon/authenticated to ALL on users).
-REVOKE ALL ON TABLE public.users FROM anon;
+-- Never GRANT SELECT ON TABLE then REVOKE SELECT (password) — column revoke does
+-- not override table-level SELECT. Email is API-only (not scrapable via anon key).
+REVOKE ALL ON TABLE public.users FROM anon, authenticated;
 GRANT SELECT (
   id,
-  email,
   name,
   role,
   status,
@@ -205,11 +206,8 @@ GRANT SELECT (
   updated_at,
   plan_activated_at,
   plan_expires_at
-) ON TABLE public.users TO anon;
-
-REVOKE ALL ON TABLE public.users FROM authenticated;
-GRANT SELECT, UPDATE ON TABLE public.users TO authenticated;
-REVOKE SELECT (password) ON TABLE public.users FROM authenticated;
+) ON TABLE public.users TO anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.users FROM anon, authenticated;
 
 -- ============================================================================
 -- 2. VEHICLES
@@ -507,27 +505,9 @@ WITH CHECK (
   OR (SELECT auth.uid())::text = user_id
 );
 
-CREATE POLICY "Service requests update access"
-ON service_requests
-FOR UPDATE
-USING (
-  EXISTS (
-    SELECT 1 FROM users u
-    WHERE u.id = (SELECT auth.uid())::text
-      AND u.role = 'admin'
-  )
-  OR (SELECT auth.uid())::text = user_id
-  OR (SELECT auth.uid())::text = provider_id
-)
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM users u
-    WHERE u.id = (SELECT auth.uid())::text
-      AND u.role = 'admin'
-  )
-  OR (SELECT auth.uid())::text = user_id
-  OR (SELECT auth.uid())::text = provider_id
-);
+-- Writes go through the API (service role). Direct client UPDATE could change status/totals.
+DROP POLICY IF EXISTS "Service requests update access" ON service_requests;
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.service_requests FROM anon, authenticated;
 
 -- ============================================================================
 -- 7. SERVICE_PROVIDERS — public directory
@@ -912,18 +892,16 @@ USING (
   AND (SELECT auth.role()) = 'authenticated'
 );
 
--- Upload: only authenticated users. The API uses the service role (bypasses
--- RLS) when uploading server-side; this policy handles direct client uploads.
+-- Upload: only under the caller's own email folder. Open prefixes (vehicles/,
+-- listings/, …) let any logged-in user host arbitrary files in the public bucket.
+-- Server uploads use the service role and bypass RLS.
 CREATE POLICY "Authenticated users can upload images"
 ON storage.objects
 FOR INSERT
 WITH CHECK (
   bucket_id = 'Images'
   AND (SELECT auth.role()) = 'authenticated'
-  AND (
-    (storage.foldername(name))[1] = (SELECT auth.email())
-    OR (storage.foldername(name))[1] IN ('vehicles', 'chat-messages', 'listings', 'profiles')
-  )
+  AND (storage.foldername(name))[1] = (SELECT auth.email())
 );
 
 -- Update: owner (first folder segment = user's email) or admin.

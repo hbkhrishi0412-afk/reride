@@ -619,7 +619,13 @@ const AppContent: React.FC = () => {
         const value = typeof next === 'function' ? next(prev) : next;
         try {
           if (value) {
-            localStorage.setItem(SERVICE_PROVIDER_STORAGE_KEY, JSON.stringify(value));
+            // Keep session restore minimal — do not persist phone/address PII in localStorage.
+            const { phone: _phone, mobile: _mobile, address: _address, ...safe } = value as AppServiceProvider & {
+              phone?: string;
+              mobile?: string;
+              address?: string;
+            };
+            localStorage.setItem(SERVICE_PROVIDER_STORAGE_KEY, JSON.stringify(safe));
           } else {
             localStorage.removeItem(SERVICE_PROVIDER_STORAGE_KEY);
           }

@@ -629,24 +629,35 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
     signals.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
     let rcOverdue = 0;
+    let rcOverdueTruncated = false;
     try {
       const thirtyDaysAgoMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      const { data: rcRows } = await supabase
-        .from('deal_leads')
-        .select('id, created_at, metadata, current_stage')
-        .in('current_stage', ['delivery_completed', 'documents_pending', 'documents_completed', 'rc_pending'])
-        .neq('status', 'cancelled')
-        .limit(500);
-      rcOverdue = (rcRows || []).filter((row) => {
-        const meta = (row.metadata || {}) as DealLeadMetadata;
-        const anchor =
-          meta.delivery?.sellerConfirmedAt
-          || meta.delivery?.buyerConfirmedAt
-          || meta.rc?.sellerUploadedAt
-          || String(row.created_at || '');
-        const t = new Date(anchor).getTime();
-        return Number.isFinite(t) && t < thirtyDaysAgoMs;
-      }).length;
+      const pageSize = 500;
+      // ponytail: stop after 5000 rows; the response says so via rcOverdueTruncated.
+      const ceiling = 5000;
+      for (let from = 0; from < ceiling; from += pageSize) {
+        const { data: rcRows, error: rcError } = await supabase
+          .from('deal_leads')
+          .select('id, created_at, metadata, current_stage')
+          .in('current_stage', ['delivery_completed', 'documents_pending', 'documents_completed', 'rc_pending'])
+          .neq('status', 'cancelled')
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (rcError) break;
+        const rows = rcRows || [];
+        rcOverdue += rows.filter((row) => {
+          const meta = (row.metadata || {}) as DealLeadMetadata;
+          const anchor =
+            meta.delivery?.sellerConfirmedAt
+            || meta.delivery?.buyerConfirmedAt
+            || meta.rc?.sellerUploadedAt
+            || String(row.created_at || '');
+          const t = new Date(anchor).getTime();
+          return Number.isFinite(t) && t < thirtyDaysAgoMs;
+        }).length;
+        if (rows.length < pageSize) break;
+        if (from + pageSize >= ceiling) rcOverdueTruncated = true;
+      }
     } catch {
       /* non-fatal */
     }
@@ -659,6 +670,7 @@ export const handleAdminOps: DealActionHandler = async (ctx) => {
         pendingReports: signals.filter((s) => s.type === 'content_report').length,
         cancelledDeals: signals.filter((s) => s.type === 'cancelled_deal').length,
         rcOverdue,
+        ...(rcOverdueTruncated ? { rcOverdueTruncated: true } : {}),
       },
     };
 

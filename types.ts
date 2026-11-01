@@ -1325,6 +1325,8 @@ export interface FraudDashboard {
     pendingReports: number;
     cancelledDeals: number;
     rcOverdue: number;
+    /** True when the overdue scan stopped at its row ceiling. */
+    rcOverdueTruncated?: boolean;
   };
 }
 

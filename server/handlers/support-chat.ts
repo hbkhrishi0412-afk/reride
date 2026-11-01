@@ -42,12 +42,21 @@ async function assertSessionOwnership(
   if (!session) {
     return { ok: false, status: 404, error: 'Session not found' };
   }
+  const storedToken = sessionTokenFromMetadata(session.metadata);
+  if (storedToken) {
+    // The cookie is the session. An IP change (mobile network switch) must not lock it.
+    if (cookieSessionId !== sessionId) {
+      return { ok: false, status: 403, error: 'Forbidden' };
+    }
+    return { ok: true };
+  }
+  // Legacy IP-bound sessions: require the cookie match once issued; otherwise allow
+  // one more message so upsertSession can attach sessionToken (see handlePostMessage).
+  if (cookieSessionId && cookieSessionId === sessionId) {
+    return { ok: true };
+  }
   const storedIp = sessionIpFromMetadata(session.metadata);
   if (storedIp && storedIp !== requestIp) {
-    return { ok: false, status: 403, error: 'Forbidden' };
-  }
-  const storedToken = sessionTokenFromMetadata(session.metadata);
-  if (storedToken && cookieSessionId !== sessionId) {
     return { ok: false, status: 403, error: 'Forbidden' };
   }
   return { ok: true };
@@ -96,12 +105,18 @@ async function handlePostMessage(req: VercelRequest, res: VercelResponse) {
   }
 
   const cookieSessionId = parseChatSessionFromCookie(req.headers.cookie);
-  let sessionId = body.sessionId || cookieSessionId;
+  let sessionId = body.sessionId || cookieSessionId || undefined;
   const isNewSession = !sessionId;
+
+  // Never trust body.userId — derive the account solely from the bearer token.
+  const auth = await authenticateRequestDual(req);
+  if (body.userId && (!auth.isValid || !auth.user?.email)) {
+    return res.status(401).json({ success: false, error: 'Authentication required' });
+  }
+  const userId = auth.isValid && auth.user?.email ? auth.user.email.toLowerCase() : undefined;
+
   if (!sessionId) {
-    sessionId = body.userId
-      ? `user_${body.userId}_${Date.now()}`
-      : `anon_${Date.now()}_${randomBytes(9).toString('hex')}`;
+    sessionId = `anon_${randomBytes(16).toString('hex')}`;
   } else {
     const ownership = await assertSessionOwnership(sessionId, ip, cookieSessionId);
     if (!ownership.ok) {
@@ -110,7 +125,6 @@ async function handlePostMessage(req: VercelRequest, res: VercelResponse) {
   }
 
   const userName = (await sanitizeString(String(body.userName ?? 'Guest').slice(0, 120))) || 'Guest';
-  const userId = body.userId || undefined;
   const meta = {
     ipAddress: ip,
     userAgent: req.headers['user-agent'] ?? '',

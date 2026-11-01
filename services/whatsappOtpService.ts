@@ -72,6 +72,8 @@ export async function sendWhatsAppOTP(
   config: WhatsAppOtpConfig,
 ): Promise<WhatsAppSendResult> {
   const url = `https://graph.facebook.com/${config.graphVersion}/${config.phoneNumberId}/messages`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -82,29 +84,22 @@ export async function sendWhatsAppOTP(
       body: JSON.stringify(
         buildWhatsAppOtpBody(toWhatsAppRecipient(phoneE164), otp, config),
       ),
+      signal: controller.signal,
     });
     const raw = await response.text();
     let json: Record<string, unknown> = {};
     try {
       json = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
     } catch {
-      return {
-        success: false,
-        error: `WhatsApp: invalid JSON (${response.status}): ${raw.slice(0, 200)}`,
-      };
+      return { success: false, error: 'WhatsApp delivery failed' };
     }
     if (response.ok && Array.isArray(json.messages) && json.messages.length > 0) {
       return { success: true };
     }
-    const err = json.error as { message?: string } | undefined;
-    return {
-      success: false,
-      error: err?.message || `WhatsApp error (HTTP ${response.status})`,
-    };
-  } catch (e: unknown) {
-    return {
-      success: false,
-      error: e instanceof Error ? e.message : 'Failed to send OTP via WhatsApp',
-    };
+    return { success: false, error: 'WhatsApp delivery failed' };
+  } catch {
+    return { success: false, error: 'WhatsApp delivery failed' };
+  } finally {
+    clearTimeout(timer);
   }
 }

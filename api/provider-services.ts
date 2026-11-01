@@ -37,7 +37,7 @@ function normalizeIncludedServices(input: unknown): IncludedService[] {
       name,
       active: raw.active !== false,
     };
-    if (priceNum != null && Number.isFinite(priceNum)) normalized.price = priceNum;
+    if (priceNum != null && Number.isFinite(priceNum) && priceNum >= 0) normalized.price = priceNum;
     if (etaNum != null && Number.isFinite(etaNum)) normalized.etaMinutes = etaNum;
     result.push(normalized);
   });
@@ -75,44 +75,44 @@ function toPublicProviderService(serviceType: string, payload: ProviderService) 
 
 // Using Supabase service_providers table with services stored in metadata
 
-// verifyIdTokenFromHeader is now imported from server/supabase-auth.js
-
-function devFallbackProviderId(req: VercelRequest): string | null {
-  const isDev = process.env.NODE_ENV === 'development';
-  if (!isDev) return null;
-  const headerId = (req.headers['x-mock-provider-id'] as string) || '';
-  return headerId || 'dev-mock-provider';
+async function resolveProviderId(req: VercelRequest): Promise<string> {
+  const auth = await authenticateRequestDual(req);
+  if (auth.isValid && auth.user) {
+    const uid = auth.user.userId;
+    const email = String(auth.user.email || '').toLowerCase().trim();
+    if (uid) {
+      const supabase = getSupabaseAdminClient();
+      const { data: byId } = await supabase.from('service_providers').select('id').eq('id', uid).maybeSingle();
+      if (byId?.id) return String(byId.id);
+      if (email) {
+        const { data: byEmail } = await supabase
+          .from('service_providers')
+          .select('id')
+          .eq('email', email)
+          .maybeSingle();
+        if (byEmail?.id) return String(byEmail.id);
+      }
+      return uid;
+    }
+  }
+  throw new Error(auth.error || 'Authentication required');
 }
 
-async function resolveProviderId(req: VercelRequest, allowDevFallback = false): Promise<string> {
-  try {
-    const auth = await authenticateRequestDual(req);
-    if (auth.isValid && auth.user) {
-      const uid = auth.user.userId;
-      const email = String(auth.user.email || '').toLowerCase().trim();
-      if (uid) {
-        const supabase = getSupabaseAdminClient();
-        const { data: byId } = await supabase.from('service_providers').select('id').eq('id', uid).maybeSingle();
-        if (byId?.id) return String(byId.id);
-        if (email) {
-          const { data: byEmail } = await supabase
-            .from('service_providers')
-            .select('id')
-            .eq('email', email)
-            .maybeSingle();
-          if (byEmail?.id) return String(byEmail.id);
-        }
-        return uid;
-      }
-    }
-    throw new Error(auth.error || 'Authentication required');
-  } catch (err) {
-    if (allowDevFallback) {
-      const fallback = devFallbackProviderId(req);
-      if (fallback) return fallback;
-    }
-    throw err;
-  }
+function isAuthFailure(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes('missing bearer token')
+    || lower.includes('authentication required')
+    || lower.includes('no valid authorization')
+    || lower.includes('not authenticated')
+    || lower.includes('invalid or expired')
+    || lower.includes('session revoked');
+}
+
+function nonNegativePrice(value: unknown): { ok: true; price?: number } | { ok: false } {
+  if (value === undefined || value === null || value === '') return { ok: true };
+  const price = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(price) || price < 0) return { ok: false };
+  return { ok: true, price };
 }
 
 export async function handleProviderServices(req: VercelRequest, res: VercelResponse) {
@@ -123,13 +123,7 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
 
     // For GET public scope, token is optional
     if (!(req.method === 'GET' && scope === 'public')) {
-      uid = await resolveProviderId(req, true);
-    } else {
-      try {
-        uid = await resolveProviderId(req, false);
-      } catch {
-        uid = devFallbackProviderId(req);
-      }
+      uid = await resolveProviderId(req);
     }
 
     if (req.method === 'GET') {
@@ -191,17 +185,32 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
       if (!isValidServiceType(serviceType)) {
         return res.status(400).json({ error: 'Invalid serviceType' });
       }
+      const parsedPrice = nonNegativePrice(price);
+      if (!parsedPrice.ok) {
+        return res.status(400).json({ error: 'Price must be a non-negative number' });
+      }
+      if (Array.isArray(includedServices)) {
+        for (const line of includedServices) {
+          const linePrice = nonNegativePrice((line as { price?: unknown })?.price);
+          if (!linePrice.ok) {
+            return res.status(400).json({ error: 'Price must be a non-negative number' });
+          }
+        }
+      }
       const supabase = getSupabaseAdminClient();
       
       // Get existing provider to merge services
       const { data: existing, error: fetchError } = await supabase
         .from('service_providers')
-        .select('metadata')
+        .select('metadata, updated_at')
         .eq('id', uid)
         .single();
       
       if (fetchError && fetchError.code !== 'PGRST116') {
         throw new Error(`Failed to fetch provider: ${fetchError.message}`);
+      }
+      if (!existing) {
+        return res.status(404).json({ error: 'Service provider profile not found' });
       }
       
       const currentMetadata = existing?.metadata || {};
@@ -214,7 +223,7 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
       const payload: ProviderService = {
         ...existingService,
         serviceType: serviceType.trim(),
-        price: price !== undefined ? Number(price) : existingService.price,
+        price: price !== undefined ? parsedPrice.price : existingService.price,
         description: description !== undefined ? String(description || '') : existingService.description || '',
         etaMinutes: etaMinutes !== undefined ? Number(etaMinutes) : existingService.etaMinutes,
         active,
@@ -227,18 +236,25 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
       };
       
       // Update provider with new services in metadata
-      const { error: updateError } = await supabase
+      const previousUpdatedAt = typeof existing?.updated_at === 'string' ? existing.updated_at : '';
+      let serviceUpdate = supabase
         .from('service_providers')
         .update({
           metadata: {
             ...currentMetadata,
             services: updatedServices,
           },
+          updated_at: new Date().toISOString(),
         })
         .eq('id', uid);
-      
+      if (previousUpdatedAt) serviceUpdate = serviceUpdate.eq('updated_at', previousUpdatedAt);
+      const { data: savedServices, error: updateError } = await serviceUpdate.select('id').maybeSingle();
+
       if (updateError) {
         throw new Error(`Failed to update provider services: ${updateError.message}`);
+      }
+      if (!savedServices) {
+        return res.status(409).json({ error: 'Services were updated by someone else. Refresh and try again.' });
       }
       
       // Return updated list
@@ -256,12 +272,15 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
       const supabase = getSupabaseAdminClient();
       const { data: existing, error: fetchError } = await supabase
         .from('service_providers')
-        .select('metadata')
+        .select('metadata, updated_at')
         .eq('id', uid)
         .single();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
         throw new Error(`Failed to fetch provider: ${fetchError.message}`);
+      }
+      if (!existing) {
+        return res.status(404).json({ error: 'Service provider profile not found' });
       }
 
       const currentMetadata = existing?.metadata || {};
@@ -272,18 +291,25 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
       }
 
       const { [serviceType]: _removed, ...restServices } = currentServices;
-      const { error: updateError } = await supabase
+      const previousUpdatedAt = typeof existing?.updated_at === 'string' ? existing.updated_at : '';
+      let serviceUpdate = supabase
         .from('service_providers')
         .update({
           metadata: {
             ...currentMetadata,
             services: restServices,
           },
+          updated_at: new Date().toISOString(),
         })
         .eq('id', uid);
+      if (previousUpdatedAt) serviceUpdate = serviceUpdate.eq('updated_at', previousUpdatedAt);
+      const { data: savedServices, error: updateError } = await serviceUpdate.select('id').maybeSingle();
 
       if (updateError) {
         throw new Error(`Failed to delete provider service: ${updateError.message}`);
+      }
+      if (!savedServices) {
+        return res.status(409).json({ error: 'Services were updated by someone else. Refresh and try again.' });
       }
 
       const list = Object.entries(restServices).map(([st, val]) => toPublicProviderService(st, val as ProviderService));
@@ -294,7 +320,7 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
   } catch (error) {
     console.error('Provider services API error:', error);
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    const status = message.includes('Missing bearer token') ? 401 : 500;
+    const status = isAuthFailure(message) ? 401 : 500;
     return res.status(status).json({ error: message });
   }
 }

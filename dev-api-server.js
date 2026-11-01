@@ -2293,7 +2293,7 @@ app.post('/api/service-providers/register', async (req, res) => {
     const { data: spRow } = await supabase.from('service_providers').select('id').eq('email', email).maybeSingle();
     if (spRow) {
       return res.status(409).json({
-        error: 'A service provider profile already exists for this email. Please sign in.',
+        error: 'An account with this email already exists. Please sign in or use Forgot password.',
       });
     }
 
@@ -2308,7 +2308,7 @@ app.post('/api/service-providers/register', async (req, res) => {
       const msg = authError?.message || 'Failed to create auth account';
       const lower = msg.toLowerCase();
       if (lower.includes('already') || lower.includes('registered') || lower.includes('exists')) {
-        return res.status(409).json({ error: 'This email is already registered. Please sign in instead.' });
+        return res.status(409).json({ error: 'An account with this email already exists. Please sign in or use Forgot password.' });
       }
       return res.status(400).json({ error: msg });
     }
@@ -2368,7 +2368,25 @@ app.post('/api/service-providers/register', async (req, res) => {
       : await supabase.from('users').insert({ id: emailKey, created_at: new Date().toISOString(), ...userRow });
 
     if (userSyncError) {
-      console.warn('service provider register: users sync failed (non-fatal):', userSyncError.message);
+      console.error('service provider register: users sync failed:', userSyncError.message);
+      try {
+        await supabase.from('service_providers').delete().eq('id', uid);
+      } catch {
+        /* ignore rollback errors */
+      }
+      try {
+        await supabase.from('users').delete().eq('email', email);
+      } catch {
+        /* ignore rollback errors */
+      }
+      try {
+        await supabase.auth.admin.deleteUser(uid);
+      } catch {
+        /* ignore rollback errors */
+      }
+      return res.status(500).json({
+        error: 'Could not complete registration. Please try again or contact support.',
+      });
     }
 
     return res.status(201).json({ success: true, uid });

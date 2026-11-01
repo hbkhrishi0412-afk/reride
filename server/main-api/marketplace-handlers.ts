@@ -10,6 +10,11 @@ import { passwordFingerprint } from '../../utils/security.js';
 import { resolveRateLimit } from '../../lib/rate-limit-resolver.js';
 import { sanitizeSellerChecklist } from '../../lib/universalChecklist/helpers.js';
 import { VehicleCategory } from '../../vehicle-category.js';
+import { phoneMatchTail, syntheticPhoneEmail, toE164IndianPhone } from '../phone-login-identity.js';
+
+function otpMayIncludeInResponse(): boolean {
+  return process.env.ALLOW_OTP_IN_RESPONSE === '1' && process.env.NODE_ENV !== 'production';
+}
 
 // listUsers() without paging only returns the first 50 auth users.
 // ponytail: O(n) scan of auth.users per call; store the auth uid on public.users when this gets slow.
@@ -42,36 +47,58 @@ async function issuePhoneLoginSession(
   phone: string,
   requestedRole: 'customer' | 'seller',
 ) {
-  const userEmail = `${phone.replace('+', '')}@phone.reride.co.in`;
+  const userEmail = syntheticPhoneEmail(phone);
   let user = await core.userService.findByEmail(userEmail);
+  let linkedExisting = false;
+  if (!user) {
+    const tail = phoneMatchTail(phone);
+    if (tail.length >= 10) {
+      const supabase = core.getSupabaseAdminClient();
+      const { data } = await supabase.from('users').select('email, mobile').ilike('mobile', `%${tail}`).limit(20);
+      const matches = (data || []).filter((row) => String(row.mobile || '').replace(/\D/g, '').endsWith(tail));
+      // Ambiguous tail match → refuse auto-link (avoids attaching OTP to the wrong email account).
+      if (matches.length === 1 && matches[0]?.email) {
+        user = await core.userService.findByEmail(String(matches[0].email).toLowerCase().trim());
+        linkedExisting = Boolean(user);
+        if (user && !user.mobile) {
+          await core.userService.update(user.email, { mobile: phone, phoneVerified: true });
+          user = { ...user, mobile: phone, phoneVerified: true };
+        }
+      } else if (matches.length > 1) {
+        return res.status(409).json({
+          success: false,
+          reason: 'This phone number matches multiple accounts. Sign in with email instead.',
+        });
+      }
+    }
+  }
 
   if (!user) {
+    // New phone-only accounts start as customer; sellers upgrade in-app (stops role self-pick on first OTP).
+    const role = linkedExisting ? requestedRole : 'customer';
     const userData: Omit<core.UserType, 'id'> = {
       email: userEmail,
-      name: `User ${phone}`,
+      name: `User ${phoneMatchTail(phone) || phone}`,
       mobile: phone,
-      role: requestedRole,
+      role,
       location: '',
       authProvider: 'phone',
       status: 'active' as const,
       isVerified: true,
+      phoneVerified: true,
       subscriptionPlan: 'free' as const,
       featuredCredits: 0,
       usedCertifications: 0,
       createdAt: new Date().toISOString(),
     };
     user = await core.userService.create(userData);
-  } else if (user.role !== requestedRole) {
-    return res.status(400).json({
-      success: false,
-      reason: `This number is registered as a ${user.role}. Please choose the correct account type.`,
-      detectedRole: user.role,
-    });
   }
 
   const accessToken = core.generateAccessToken(user);
   const refreshToken = core.generateRefreshToken(user);
   const normalizedUser = core.normalizeUser(user);
+  // Phone OTP proves possession of the number, not account-type discovery for third parties:
+  // still return role (app needs it) but never invent a second account for an email user who already stored this mobile.
 
   if (!core.isCapacitorAppClient(req)) {
     core.appendRefreshTokenCookie(res, refreshToken, core.refreshCookieMaxAgeSeconds());
@@ -1007,7 +1034,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       const bodyEmail = String(email || '').toLowerCase().trim();
       const derivedPhoneEmail =
         !tokenEmail && supabaseUserRecord.phone
-          ? `${String(supabaseUserRecord.phone).replace(/\D/g, '')}@phone.reride.co.in`.toLowerCase()
+          ? syntheticPhoneEmail(String(supabaseUserRecord.phone))
           : '';
 
       if (tokenEmail && bodyEmail && tokenEmail !== bodyEmail) {
@@ -1212,7 +1239,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       const bodyEmail = String(req.body.email || '').toLowerCase().trim();
       const derivedPhoneEmail =
         !tokenEmail && supabaseUserRecord.phone
-          ? `${String(supabaseUserRecord.phone).replace(/\D/g, '')}@phone.reride.co.in`.toLowerCase()
+          ? syntheticPhoneEmail(String(supabaseUserRecord.phone))
           : '';
 
       if (tokenEmail && bodyEmail && tokenEmail !== bodyEmail) {
@@ -1426,6 +1453,37 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         if (!existingUser) {
           return res.status(404).json({ success: false, reason: 'User not found.' });
         }
+        const confirm = String((req.body as { confirm?: string })?.confirm || '');
+        if (confirm !== 'DELETE') {
+          return res.status(400).json({
+            success: false,
+            reason: 'Send confirm: "DELETE" to permanently delete your account.',
+          });
+        }
+        const password = (req.body as { password?: string })?.password;
+        if (existingUser.password) {
+          if (typeof password !== 'string' || !password) {
+            return res.status(400).json({
+              success: false,
+              reason: 'Password is required to delete this account.',
+            });
+          }
+          const { validatePassword } = await import('../../utils/security.js');
+          const ok = await validatePassword(password, existingUser.password);
+          if (!ok) {
+            return res.status(403).json({ success: false, reason: 'Incorrect password.' });
+          }
+        } else {
+          const typed = String((req.body as { confirmEmail?: string })?.confirmEmail || '')
+            .toLowerCase()
+            .trim();
+          if (typed !== normalizedEmail) {
+            return res.status(400).json({
+              success: false,
+              reason: 'Type your account email in confirmEmail to delete a passwordless account.',
+            });
+          }
+        }
         // vehicles has no FK to users: remove listings (and their chats) or they stay public with the seller's contact details.
         for (const v of await core.vehicleService.findBySellerEmail(normalizedEmail)) {
           await core.vehicleService.delete(v.databaseId || String(v.id));
@@ -1556,11 +1614,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           });
         }
 
-        // Format phone number (E.164 format)
-        let cleanedNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
-        if (!cleanedNumber.startsWith('+')) {
-          cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
-          cleanedNumber = `+91${cleanedNumber}`;
+        const cleanedNumber = toE164IndianPhone(String(phoneNumber));
+        if (!cleanedNumber) {
+          return res.status(400).json({ success: false, reason: 'Enter a valid 10-digit Indian mobile number.' });
         }
         if (!(await otpSendAllowed(cleanedNumber))) {
           return res.status(429).json({ success: false, reason: 'Too many OTP requests. Please try again later.' });
@@ -1607,7 +1663,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           core.logError('❌ Karix SMS send failed:', karixResult.error);
           return res.status(500).json({ 
             success: false, 
-            reason: karixResult.error || 'Failed to send OTP via Karix' 
+            reason: 'Failed to send OTP via Karix' 
           });
         }
         
@@ -1616,8 +1672,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           success: true, 
           message: 'OTP sent successfully',
           phone: cleanedNumber,
-          // Don't return OTP in production - only for testing
-          ...(process.env.NODE_ENV !== 'production' ? { otp } : {})
+          ...(otpMayIncludeInResponse() ? { otp } : {}),
         });
       } catch (error: any) {
         core.logError('❌ Karix OTP send error:', error);
@@ -1651,10 +1706,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           });
         }
 
-        let cleanedNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
-        if (!cleanedNumber.startsWith('+')) {
-          cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
-          cleanedNumber = `+91${cleanedNumber}`;
+        const cleanedNumber = toE164IndianPhone(String(phoneNumber));
+        if (!cleanedNumber) {
+          return res.status(400).json({ success: false, reason: 'Enter a valid 10-digit Indian mobile number.' });
         }
         if (!(await otpSendAllowed(cleanedNumber))) {
           return res.status(429).json({ success: false, reason: 'Too many OTP requests. Please try again later.' });
@@ -1695,7 +1749,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           core.logError('❌ MessageBot SMS send failed:', mbResult.error);
           return res.status(500).json({
             success: false,
-            reason: mbResult.error || 'Failed to send OTP via MessageBot',
+            reason: 'Failed to send OTP via MessageBot',
           });
         }
 
@@ -1704,7 +1758,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           success: true,
           message: 'OTP sent successfully',
           phone: cleanedNumber,
-          ...(process.env.NODE_ENV !== 'production' ? { otp } : {}),
+          ...(otpMayIncludeInResponse() ? { otp } : {}),
         });
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : 'Failed to send OTP';
@@ -1732,10 +1786,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           });
         }
 
-        let cleanedNumber = String(phoneNumber).replace(/[\s\-\(\)]/g, '');
-        if (!cleanedNumber.startsWith('+')) {
-          cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
-          cleanedNumber = `+91${cleanedNumber}`;
+        const cleanedNumber = toE164IndianPhone(String(phoneNumber));
+        if (!cleanedNumber) {
+          return res.status(400).json({ success: false, reason: 'Enter a valid 10-digit Indian mobile number.' });
         }
         if (!(await otpSendAllowed(cleanedNumber))) {
           return res.status(429).json({ success: false, reason: 'Too many OTP requests. Please try again later.' });
@@ -1773,7 +1826,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           core.logError('❌ WhatsApp OTP send failed:', waResult.error);
           return res.status(500).json({
             success: false,
-            reason: waResult.error || 'Failed to send OTP on WhatsApp',
+            reason: 'Failed to send OTP on WhatsApp',
           });
         }
 
@@ -1782,7 +1835,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
           success: true,
           message: 'OTP sent on WhatsApp',
           phone: cleanedNumber,
-          ...(process.env.NODE_ENV !== 'production' ? { otp } : {}),
+          ...(otpMayIncludeInResponse() ? { otp } : {}),
         });
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : 'Failed to send OTP';
@@ -1813,10 +1866,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       try {
         const supabase = core.getSupabaseAdminClient();
 
-        let cleanedNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
-        if (!cleanedNumber.startsWith('+')) {
-          cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
-          cleanedNumber = `+91${cleanedNumber}`;
+        const cleanedNumber = toE164IndianPhone(String(phoneNumber));
+        if (!cleanedNumber) {
+          return res.status(400).json({ success: false, reason: 'Enter a valid 10-digit Indian mobile number.' });
         }
 
         const crypto = await import('crypto');
@@ -1857,15 +1909,30 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
 
         const expectedHash = crypto.createHash('sha256').update(String(otp) + jwtSecret).digest('hex');
         if (expectedHash !== row.otp_hash) {
-          const priorAttempts = typeof row.attempt_count === 'number' ? row.attempt_count : 0;
-          const nextAttempts = priorAttempts + 1;
           const maxAttempts = 5;
-          const lockoutMs = 30 * 60 * 1000;
-          const updatePayload: Record<string, unknown> = { attempt_count: nextAttempts };
-          if (nextAttempts >= maxAttempts) {
-            updatePayload.locked_until = new Date(Date.now() + lockoutMs).toISOString();
+          const { data: attemptRows, error: attemptError } = await supabase.rpc('otp_register_failed_attempt', {
+            p_phone: cleanedNumber,
+            p_max_attempts: maxAttempts,
+            p_lockout_minutes: 30,
+          });
+          if (attemptError) {
+            core.logWarn('otp_register_failed_attempt failed, falling back:', attemptError.message);
+            const priorAttempts = typeof row.attempt_count === 'number' ? row.attempt_count : 0;
+            const nextAttempts = priorAttempts + 1;
+            await supabase
+              .from('otp_verifications')
+              .update({
+                attempt_count: nextAttempts,
+                ...(nextAttempts >= maxAttempts
+                  ? { locked_until: new Date(Date.now() + 30 * 60 * 1000).toISOString() }
+                  : {}),
+              })
+              .eq('phone', cleanedNumber)
+              .eq('attempt_count', priorAttempts);
           }
-          await supabase.from('otp_verifications').update(updatePayload).eq('phone', cleanedNumber);
+          const nextAttempts = Array.isArray(attemptRows) && attemptRows[0]
+            ? Number(attemptRows[0].attempt_count)
+            : (typeof row.attempt_count === 'number' ? row.attempt_count : 0) + 1;
           return res.status(400).json({
             success: false,
             reason:
@@ -2729,7 +2796,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       return res.status(401).json({ success: false, reason: auth.error });
     }
     try {
-      const { email } = req.body;
+      const { email, confirm, password } = (req.body || {}) as {
+        email?: string;
+        confirm?: string;
+        password?: string;
+      };
       
       // SECURITY FIX: Authorization Check
       // Normalize emails for comparison (critical for production)
@@ -2742,6 +2813,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       if (!email) {
         return res.status(400).json({ success: false, reason: 'Email is required for deletion.' });
       }
+      if (auth.user.role !== 'admin' && confirm !== 'DELETE') {
+        return res.status(400).json({
+          success: false,
+          reason: 'Send confirm: "DELETE" to permanently delete your account.',
+        });
+      }
 
       // Sanitize email
       const sanitizedEmail = await core.sanitizeString(String(email));
@@ -2753,6 +2830,35 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       if (!existingUser) {
         core.logWarn('⚠️ User not found for deletion:', normalizedEmail);
         return res.status(404).json({ success: false, reason: 'User not found.' });
+      }
+      if (auth.user.role !== 'admin') {
+        if (existingUser.password) {
+          if (typeof password !== 'string' || !password) {
+            return res.status(400).json({
+              success: false,
+              reason: 'Password is required to delete this account.',
+            });
+          }
+          const { validatePassword } = await import('../../utils/security.js');
+          const ok = await validatePassword(password, existingUser.password);
+          if (!ok) {
+            return res.status(403).json({ success: false, reason: 'Incorrect password.' });
+          }
+        } else {
+          const typed = String((req.body as { confirmEmail?: string })?.confirmEmail || '')
+            .toLowerCase()
+            .trim();
+          if (typed !== normalizedEmail) {
+            return res.status(400).json({
+              success: false,
+              reason: 'Type your account email in confirmEmail to delete a passwordless account.',
+            });
+          }
+        }
+      }
+
+      for (const v of await core.vehicleService.findBySellerEmail(normalizedEmail)) {
+        await core.vehicleService.delete(v.databaseId || String(v.id));
       }
 
       // Delete user from Supabase users table
@@ -4128,19 +4234,34 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
               remainingCredits: credits,
             });
           }
-          remainingCredits = Math.max(0, credits - 1);
-          await core.userService.update(seller.email, {
-            featuredCredits: remainingCredits,
+          const supabase = core.getSupabaseAdminClient();
+          const { data: consumed, error: creditError } = await supabase.rpc('consume_featured_credit', {
+            p_email: seller.email,
           });
-          const updatedSeller = await core.userService.findByEmail(seller.email);
-          remainingCredits = updatedSeller?.featuredCredits ?? remainingCredits;
+          if (!creditError && consumed != null) {
+            remainingCredits = Number(consumed);
+          } else if (creditError && /consume_featured_credit|PGRST202|42883/.test(creditError.message || '')) {
+            // Migration not applied yet — last-resort non-atomic decrement.
+            remainingCredits = Math.max(0, credits - 1);
+            await core.userService.update(seller.email, { featuredCredits: remainingCredits });
+          } else {
+            return res.status(403).json({
+              success: false,
+              reason: 'You have no boost credits remaining. Upgrade your plan or choose a paid boost pack.',
+              remainingCredits: 0,
+            });
+          }
         } else if (credits > 0) {
-          remainingCredits = Math.max(0, credits - 1);
-          await core.userService.update(seller.email, {
-            featuredCredits: remainingCredits,
+          const supabase = core.getSupabaseAdminClient();
+          const { data: consumed, error: creditError } = await supabase.rpc('consume_featured_credit', {
+            p_email: seller.email,
           });
-          const updatedSeller = await core.userService.findByEmail(seller.email);
-          remainingCredits = updatedSeller?.featuredCredits ?? remainingCredits;
+          if (!creditError && consumed != null) {
+            remainingCredits = Number(consumed);
+          } else {
+            remainingCredits = Math.max(0, credits - 1);
+            await core.userService.update(seller.email, { featuredCredits: remainingCredits });
+          }
         } else {
           remainingCredits = credits;
         }
@@ -4280,17 +4401,29 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             });
           }
 
+          const supabase = core.getSupabaseAdminClient();
+          const { data: totalUsedRaw, error: quotaError } = await supabase.rpc('consume_certification_quota', {
+            p_email: seller.email,
+            p_allowed: allowedCertifications,
+          });
+          let totalUsed: number;
+          if (!quotaError && totalUsedRaw != null) {
+            totalUsed = Number(totalUsedRaw);
+          } else if (quotaError && /consume_certification_quota|PGRST202|42883/.test(quotaError.message || '')) {
+            totalUsed = usedCertifications + 1;
+            await core.userService.update(seller.email, { usedCertifications: totalUsed });
+          } else {
+            return res.status(403).json({
+              success: false,
+              reason: `You have used all ${allowedCertifications} certification requests included in your plan.`,
+            });
+          }
+
           const updatedVehicle = await core.vehicleService.update(mutation.primaryKey, {
             certificationStatus: 'requested',
             certificationRequestedAt: new Date().toISOString(),
           });
 
-          await core.userService.update(seller.email, {
-            usedCertifications: usedCertifications + 1,
-          });
-
-          const updatedSeller = await core.userService.findByEmail(seller.email);
-          const totalUsed = updatedSeller?.usedCertifications ?? usedCertifications + 1;
           const remaining = Math.max(allowedCertifications - totalUsed, 0);
           
           return res.status(200).json({ 
@@ -4303,7 +4436,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           console.error('❌ Error requesting vehicle certification:', error);
           return res.status(500).json({ 
             success: false, 
-            reason: error instanceof Error ? error.message : 'Unknown error' 
+            reason: 'Failed to request certification',
           });
         }
       }

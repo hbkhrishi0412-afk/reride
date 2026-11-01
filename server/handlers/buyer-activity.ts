@@ -11,7 +11,8 @@ import {
 } from '../handler-shared.js';
 import { logWarn, logError } from '../../utils/logger.js';
 import { InvalidJsonBodyError, parseJsonBody } from '../parse-json-body.js';
-import { mergeBuyerActivityRecord } from './buyer-activity-merge.js';
+import { randomBytes } from 'crypto';
+import { mergeBuyerActivityRecord, savedSearchesForClient, storedSavedSearches } from './buyer-activity-merge.js';
 
 function firstQueryParam(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] || '';
@@ -126,7 +127,7 @@ export async function handleBuyerActivity(
           id: activity.id,
           userId: activity.user_id,
           recentlyViewed: activity.recently_viewed || [],
-          savedSearches: activity.saved_searches || [],
+          savedSearches: savedSearchesForClient(activity.saved_searches),
           notifications: {
             priceDrops: activity.price_drops || [],
             newMatches: activity.new_matches || [],
@@ -174,42 +175,57 @@ export async function handleBuyerActivity(
       });
 
       const activityRecord: Record<string, unknown> = {
-        id: existing?.id || `activity_${normalizedUserId}_${Date.now()}`,
+        id: existing?.id || `activity_${randomBytes(16).toString('hex')}`,
         user_id: normalizedUserId,
         recently_viewed: merged.recently_viewed,
-        saved_searches: merged.saved_searches,
+        saved_searches: storedSavedSearches(merged.saved_searches, merged.removedSavedSearchIds),
         price_drops: merged.price_drops,
         new_matches: merged.new_matches,
         updated_at: new Date().toISOString(),
       };
 
-      let result;
-      if (existing) {
-        const { data, error } = await supabase
-          .from('buyer_activity')
-          .update(activityRecord)
-          .eq('user_id', normalizedUserId)
-          .select()
-          .single();
-        if (error) {
-          logError('❌ Failed to update buyer activity:', error);
-          res.status(500).json({ success: false, reason: 'Failed to update buyer activity' });
-          return;
-        }
-        result = data;
-      } else {
+      if (!existing) {
         activityRecord.created_at = new Date().toISOString();
-        const { data, error } = await supabase
-          .from('buyer_activity')
-          .insert(activityRecord)
-          .select()
-          .single();
-        if (error) {
-          logError('❌ Failed to create buyer activity:', error);
-          res.status(500).json({ success: false, reason: 'Failed to create buyer activity' });
+      }
+      // Upsert closes the first-time insert race (two tabs both seeing "no row").
+      // Requires unique index buyer_activity_user_id_uidx (see security_audit_fixes migration).
+      const { data: result, error } = await supabase
+        .from('buyer_activity')
+        .upsert(activityRecord, { onConflict: 'user_id' })
+        .select()
+        .single();
+      if (error) {
+        // Fallback if unique index not applied yet: update-or-insert without racing on id.
+        if (existing) {
+          const { data: updated, error: updateError } = await supabase
+            .from('buyer_activity')
+            .update(activityRecord)
+            .eq('user_id', normalizedUserId)
+            .select()
+            .single();
+          if (updateError) {
+            logError('❌ Failed to save buyer activity:', updateError);
+            res.status(500).json({ success: false, reason: 'Failed to save buyer activity' });
+            return;
+          }
+          res.status(200).json({
+            success: true,
+            data: {
+              id: updated.id,
+              userId: updated.user_id,
+              recentlyViewed: updated.recently_viewed || [],
+              savedSearches: savedSearchesForClient(updated.saved_searches),
+              notifications: {
+                priceDrops: updated.price_drops || [],
+                newMatches: updated.new_matches || [],
+              },
+            },
+          });
           return;
         }
-        result = data;
+        logError('❌ Failed to save buyer activity:', error);
+        res.status(500).json({ success: false, reason: 'Failed to save buyer activity' });
+        return;
       }
 
       res.status(200).json({
@@ -218,7 +234,7 @@ export async function handleBuyerActivity(
           id: result.id,
           userId: result.user_id,
           recentlyViewed: result.recently_viewed || [],
-          savedSearches: result.saved_searches || [],
+          savedSearches: savedSearchesForClient(result.saved_searches),
           notifications: {
             priceDrops: result.price_drops || [],
             newMatches: result.new_matches || [],
@@ -231,7 +247,6 @@ export async function handleBuyerActivity(
     res.status(405).json({ success: false, reason: 'Method not allowed' });
   } catch (error) {
     logError('❌ Buyer Activity API Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ success: false, reason: errorMessage, error: errorMessage });
+    res.status(500).json({ success: false, reason: 'Failed to process buyer activity' });
   }
 }

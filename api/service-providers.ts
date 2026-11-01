@@ -64,16 +64,12 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
     const hashedPassword = await hashPassword(password);
 
     // Unauthenticated endpoint: never delete or overwrite an existing account for this email.
+    const accountExists = 'An account with this email already exists. Please sign in or use Forgot password.';
     if (await supabaseServiceProviderService.findByEmail(email)) {
-      return res.status(409).json({
-        error: 'A service provider profile already exists for this email. Please sign in.',
-      });
+      return res.status(409).json({ error: accountExists });
     }
     if (await supabaseUserService.findByEmail(email)) {
-      return res.status(409).json({
-        error:
-          'An account with this email already exists. Please sign in or use Forgot password.',
-      });
+      return res.status(409).json({ error: accountExists });
     }
 
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
@@ -97,7 +93,7 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
         authError?.status === 422
       ) {
         return res.status(409).json({
-          error: 'This email is already registered. Please sign in instead.',
+          error: 'An account with this email already exists. Please sign in or use Forgot password.',
         });
       }
       return res.status(400).json({ error: msg });
@@ -157,7 +153,25 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
         });
       }
     } catch (userSyncErr) {
-      console.warn('Service provider users table sync failed (non-fatal):', userSyncErr);
+      console.error('Service provider users table sync failed:', userSyncErr);
+      try {
+        await supabaseServiceProviderService.delete(uid);
+      } catch (delErr) {
+        console.error('Rollback: failed to delete provider after users sync error:', delErr);
+      }
+      try {
+        await supabase.from('users').delete().eq('email', email);
+      } catch (delErr) {
+        console.error('Rollback: failed to delete users row after users sync error:', delErr);
+      }
+      try {
+        await supabase.auth.admin.deleteUser(uid);
+      } catch (delErr) {
+        console.error('Rollback: failed to delete auth user after users sync error:', delErr);
+      }
+      return res.status(500).json({
+        error: 'Could not complete registration. Please try again or contact support.',
+      });
     }
 
     return res.status(201).json({ success: true, uid });
@@ -303,10 +317,27 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
             firebaseUid: uid,
             createdAt: new Date().toISOString(),
           });
+        } else {
+          await supabaseUserService.update(payload.email, {
+            name: payload.name,
+            mobile: payload.phone,
+            role: 'service_provider',
+            location: payload.city,
+            status: 'active',
+            authProvider: existingUser.authProvider || 'email',
+            firebaseUid: uid,
+          });
         }
       } catch (userError) {
-        // Log but don't fail - service provider profile was created successfully
-        console.warn('Failed to sync service provider to users table:', userError);
+        console.error('Failed to sync service provider to users table:', userError);
+        try {
+          await supabaseServiceProviderService.delete(String(uid));
+        } catch (delErr) {
+          console.error('Rollback: failed to delete provider after users sync error:', delErr);
+        }
+        return res.status(500).json({
+          error: 'Could not finish creating your profile. Please try again.',
+        });
       }
 
       return res.status(201).json({ uid, ...payload });

@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { authenticateRequestDual } from './auth.js';
 import { supabaseServiceRequestService } from '../services/supabase-service-request-service.js';
@@ -14,10 +13,8 @@ import {
   incomingVisibleToProvider,
   providerMatchesActor,
 } from '../utils/workshopBooking.js';
-
-function newNotificationId(): string {
-  return randomUUID();
-}
+import { completeLineTotal } from '../utils/pricedServiceTotal.js';
+import { insertAppNotifications } from '../server/insert-app-notification.js';
 
 type ProviderCatalogService = {
   price?: number;
@@ -50,7 +47,6 @@ async function resolvePricedServices(
     || {};
 
   const priced: ServiceLineItem[] = [];
-  let total = 0;
   for (const line of services) {
     const qty = Math.max(1, Number(line.quantity) || 1);
     const raw = line as ServiceLineItem & { serviceType?: string; includedServiceId?: string };
@@ -62,8 +58,10 @@ async function resolvePricedServices(
         const inc = entry.includedServices.find(
           (i) => String(i.id) === String(raw.includedServiceId) && i.active !== false,
         );
-        unit = inc?.price != null && Number.isFinite(Number(inc.price)) ? Number(inc.price) : undefined;
-      } else if (entry.price != null && Number.isFinite(Number(entry.price))) {
+        unit = inc?.price != null && Number.isFinite(Number(inc.price)) && Number(inc.price) >= 0
+          ? Number(inc.price)
+          : undefined;
+      } else if (entry.price != null && Number.isFinite(Number(entry.price)) && Number(entry.price) >= 0) {
         unit = Number(entry.price);
       }
     }
@@ -74,9 +72,8 @@ async function resolvePricedServices(
       ...(unit != null ? { price: unit } : {}),
     };
     priced.push(item);
-    if (unit != null) total += unit * qty;
   }
-  return { services: priced, total: priced.some((p) => p.price != null) ? total : undefined };
+  return { services: priced, total: completeLineTotal(priced) };
 }
 
 /**
@@ -147,33 +144,33 @@ async function notifyProvidersOnOpenRequest(
     let recipients: { id: string; email: string }[] = [];
 
     if (notifyIds.length > 0) {
-      const providers = await Promise.all(
-        notifyIds.map(async (providerId) => {
-          const provider =
-            (await supabaseServiceProviderService.findById(providerId)) ||
-            (providerId.includes('@')
-              ? await supabaseServiceProviderService.findByEmail(providerId)
-              : null);
-          if (!provider?.email) return null;
-          return { id: String((provider as { id?: string }).id || providerId), email: String(provider.email).toLowerCase().trim() };
-        }),
-      );
-      recipients = providers.filter((p): p is { id: string; email: string } => Boolean(p));
+      const supabase = getSupabaseAdminClient();
+      const idKeys = notifyIds.filter((id) => !id.includes('@'));
+      const emailKeys = notifyIds.filter((id) => id.includes('@')).map((id) => id.toLowerCase());
+      const [byId, byEmail] = await Promise.all([
+        idKeys.length
+          ? supabase.from('service_providers').select('id, email').in('id', idKeys)
+          : Promise.resolve({ data: [] as { id?: string; email?: string }[] }),
+        emailKeys.length
+          ? supabase.from('service_providers').select('id, email').in('email', emailKeys)
+          : Promise.resolve({ data: [] as { id?: string; email?: string }[] }),
+      ]);
+      const seen = new Set<string>();
+      for (const provider of [...(byId.data || []), ...(byEmail.data || [])]) {
+        const email = String(provider.email || '').toLowerCase().trim();
+        if (!email || seen.has(email)) continue;
+        seen.add(email);
+        recipients.push({ id: String(provider.id || email), email });
+      }
     }
 
     if (recipients.length === 0) return;
 
-    const supabase = getSupabaseAdminClient();
-    const now = new Date().toISOString();
-    const records = recipients.map((recipient) => ({
-      id: newNotificationId(),
-      recipient_email: recipient.email,
-      user_id: recipient.email,
+    await insertAppNotifications(recipients.map((recipient) => ({
+      recipientEmail: recipient.email,
       type: 'service_request',
       title: 'New order',
       message: `${request.serviceType || 'General'} order${request.city ? ` in ${request.city}` : ''} — tap to accept`,
-      read: false,
-      created_at: now,
       metadata: {
         targetType: 'service_request',
         targetId: request.id,
@@ -183,11 +180,7 @@ async function notifyProvidersOnOpenRequest(
         city: request.city || '',
         action: 'request_created',
       },
-    }));
-    const { error } = await supabase.from('notifications').insert(records);
-    if (error) {
-      console.warn('Failed to create provider notifications for open request:', error.message);
-    }
+    })));
   } catch (error) {
     console.warn('Open request provider notification flow failed:', error);
   }
@@ -263,17 +256,11 @@ async function notifyCustomerOnStatusChange(
         message = `Your ${serviceLabel} request status changed to ${statusLabel}`;
     }
 
-    const supabase = getSupabaseAdminClient();
-    const now = new Date().toISOString();
-    const { error } = await supabase.from('notifications').insert({
-      id: newNotificationId(),
-      recipient_email: recipientEmail,
-      user_id: recipientEmail,
+    await insertAppNotifications([{
+      recipientEmail,
       type: 'service_request',
       title,
       message,
-      read: false,
-      created_at: now,
       metadata: {
         targetType: 'service_request',
         targetId: request.id,
@@ -284,10 +271,7 @@ async function notifyCustomerOnStatusChange(
         providerId: providerId || null,
         providerName: providerName || null,
       },
-    });
-    if (error) {
-      console.warn('Failed to create customer notification for status change:', error.message);
-    }
+    }]);
   } catch (error) {
     console.warn('Customer notification flow failed:', error);
   }
@@ -303,17 +287,11 @@ async function notifyProviderOnCancel(
     const recipientEmail = String(provider.email).toLowerCase().trim();
     if (!recipientEmail) return;
 
-    const supabase = getSupabaseAdminClient();
-    const now = new Date().toISOString();
-    const { error } = await supabase.from('notifications').insert({
-      id: newNotificationId(),
-      recipient_email: recipientEmail,
-      user_id: recipientEmail,
+    await insertAppNotifications([{
+      recipientEmail,
       type: 'service_request',
       title: 'Customer cancelled request',
       message: `${request.customerName || 'Customer'} cancelled their ${request.serviceType || 'General'} request`,
-      read: false,
-      created_at: now,
       metadata: {
         targetType: 'service_request',
         targetId: request.id,
@@ -321,10 +299,7 @@ async function notifyProviderOnCancel(
         action: 'request_cancelled',
         serviceType: request.serviceType || 'General',
       },
-    });
-    if (error) {
-      console.warn('Failed to create provider cancel notification:', error.message);
-    }
+    }]);
   } catch (error) {
     console.warn('Provider cancel notification flow failed:', error);
   }
