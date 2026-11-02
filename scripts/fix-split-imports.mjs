@@ -14,7 +14,7 @@ function fixSharedImports(content) {
     .replace(/from '\.\.\/server\/handlers\/admin\.js'/g, "from './admin.js'")
     .replace(/from '\.\.\/server\/handlers\/system\.js'/g, "from './system.js'")
     .replace(/from '\.\.\/server\/refresh-cookie\.js'/g, "from '../refresh-cookie.js'")
-    .replace(/from '\.\/lib\/send-password-reset-email\.js'/g, "from '../../api/lib/send-password-reset-email.js'");
+    .replace(/from '\.\/lib\/send-password-reset-email\.js'/g, "from '../../lib/send-password-reset-email.js'");
 }
 
 const sharedPath = 'server/handlers/main-api-shared.ts';

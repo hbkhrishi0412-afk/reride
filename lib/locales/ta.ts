@@ -622,7 +622,6 @@ const ta: Record<string, string> = {
   'vehicle.detail.compare': 'ஒப்பிடு',
   'vehicle.detail.comparing': 'ஒப்பிடப்படுகிறது',
   'vehicle.detail.reportThisListing': 'இந்த பட்டியலை அறிக்கையிடு',
-  'vehicle.detail.price.saveExtraLoanInterest': '1.25% குறைந்த வட்டியுடன் கடன் வட்டியில் கூடுதலாக ₹{{amount}} சேமிக்கவும்',
   'vehicle.detail.tabs.overview': 'மேலோட்டம்',
   'vehicle.detail.tabs.report': 'அறிக்கை',
   'vehicle.detail.tabs.featureSpecs': 'அம்சங்கள் & விபரங்கள்',

@@ -30,6 +30,7 @@ import { getSupabaseAdminClient, uploadDataUrlImage } from '../../lib/supabase-a
 import { isRerideStaffPick } from '../../utils/staffPick.js';
 import { userRolesEqual, normalizeUserRoleString } from '../../utils/user-role.js';
 import { verifySupabaseToken } from '../supabase-auth.js';
+import { authenticateRequestDual as authenticateRequestDualCached } from '../auth-request.js';
 import { readVehicleCatalogFromSupabase, writeVehicleCatalogToSupabase } from '../../lib/vehicleCatalogSupabase.js';
 import { sendInquiryNotificationToSeller } from '../../lib/email.js';
 import { notifySellerInquiryChannels } from '../../lib/sellerInquiryAlerts.js';
@@ -166,10 +167,10 @@ import { attachApiCors } from '../../utils/attach-api-cors.js';
 import { shouldSkipCsrfForCapacitorNative } from '../../utils/csrfCapacitorExempt.js';
 import { logInfo, logWarn, logError, logSecurity } from '../../utils/logger.js';
 import { generateCsrfToken, validateCsrfToken, getCsrfCookieName, getCsrfHeaderName } from '../../utils/csrf.js';
-import { getPublicAppOriginForPasswordReset, sendPasswordResetEmail } from '../../api/lib/send-password-reset-email.js';
+import { getPublicAppOriginForPasswordReset, sendPasswordResetEmail } from '../../lib/send-password-reset-email.js';
 import { checkUpstashRateLimit } from '../../lib/rate-limit-upstash.js';
 import { checkLoginAllowed, recordFailedLogin, clearLoginLockout } from '../../lib/login-lockout.js';
-import { resolveEffectiveApiPathname } from '../../utils/api-path-routing.js';
+import { isApiRewriteDestination, resolveEffectiveApiPathname } from '../../utils/api-path-routing.js';
 import {
   appendRefreshTokenCookie,
   clearRefreshTokenCookie,
@@ -178,12 +179,11 @@ import {
   refreshCookieMaxAgeSeconds,
 } from '../refresh-cookie.js';
 
-// Allow larger JSON payloads for base64 image uploads (seller dashboard, chat attachments).
-// Vercel default parser limits are lower and can reject valid resized images before route logic runs.
+// Keep marketplace catch-all modest by default. Image upload routes raise this in api/main.ts.
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '15mb',
+      sizeLimit: '1mb',
     },
   },
 };
@@ -263,7 +263,10 @@ function normalizeUser(user: UserType | null | undefined): NormalizedUser | null
   return normalized;
 }
 
-/** Public dealer/service-provider directory — omits phone, KYC and auth internals; keep email for profile links. */
+/**
+ * Public dealer/service-provider directory — omits phone, KYC and auth internals.
+ * Email is kept for /seller/:email profile links (scraping tradeoff until id-based URLs ship).
+ */
 function toPublicDirectoryUser(user: NormalizedUser): NormalizedUser {
   const {
     mobile: _mobile,
@@ -357,39 +360,9 @@ const requireAuth = async (
   return auth;
 };
 
-/** App JWT (reRideAccessToken) or Supabase access_token in Authorization header. */
-const authenticateRequestDual = async (req: VercelRequest): Promise<AuthResult> => {
-  const legacy = authenticateRequest(req);
-  if (legacy.isValid) {
-    return (await isTokenRevokedForUser(req.headers.authorization, legacy.user?.email))
-      ? { isValid: false, error: SESSION_REVOKED_ERROR }
-      : legacy;
-  }
-  try {
-    const sb = await verifySupabaseToken(req.headers.authorization);
-    const email = (sb.email || '').toLowerCase().trim();
-    if (!email) {
-      return { isValid: false, error: 'Invalid Supabase token' };
-    }
-    if (await isTokenRevokedForUser(req.headers.authorization, email)) {
-      return { isValid: false, error: SESSION_REVOKED_ERROR };
-    }
-    const meta = sb.user?.app_metadata as Record<string, unknown> | undefined;
-    const appMetaRole = typeof meta?.role === 'string' ? meta.role : undefined;
-    const { resolveAuthRoleFromEmail } = await import('../../utils/resolveAuthRole.js');
-    const role = await resolveAuthRoleFromEmail(email, appMetaRole);
-    return {
-      isValid: true,
-      user: {
-        userId: sb.uid,
-        email,
-        role,
-      },
-    };
-  } catch {
-    return { isValid: false, error: legacy.error || 'Authentication required' };
-  }
-};
+/** App JWT or Supabase token — shared per-request cache with server/auth-request.ts. */
+const authenticateRequestDual = (req: VercelRequest): Promise<AuthResult> =>
+  authenticateRequestDualCached(req) as Promise<AuthResult>;
 
 const requireAdmin = async (
   req: VercelRequest,
@@ -579,11 +552,10 @@ function respondServiceUnavailable(
 }
 
 function errorToPublicMessage(error: unknown): string {
-  const isDev =
-    process.env.NODE_ENV === 'development' ||
-    process.env.VERCEL_ENV === 'preview' ||
-    process.env.VERCEL_ENV === 'development';
-  if (!isDev) {
+  // Preview deployments are often public — only local development may see internals.
+  const isLocalDev =
+    process.env.NODE_ENV === 'development' && process.env.VERCEL !== '1' && !process.env.VERCEL_ENV;
+  if (!isLocalDev) {
     return 'An unexpected server error occurred.';
   }
   if (error instanceof Error) {
@@ -608,31 +580,45 @@ function errorToPublicMessage(error: unknown): string {
  */
 function getEffectivePathnameForErrorFallback(req: VercelRequest): string {
   mergeQueryStringFromRequestUrl(req);
-  let pathname = '/';
+  const host = String(req.headers.host || 'localhost');
+  let urlPath = '/';
   try {
-    const originalPath = req.headers['x-vercel-original-path'] as string;
-    const invokePath = req.headers['x-invoke-path'] as string;
-    const requestUrl = originalPath || invokePath || req.url || '';
-    if (requestUrl.startsWith('http://') || requestUrl.startsWith('https://')) {
-      pathname = new URL(requestUrl).pathname;
-    } else if (requestUrl.startsWith('/')) {
-      pathname = requestUrl.split('?')[0];
-    } else if (requestUrl) {
-      pathname = new URL(requestUrl, `http://${req.headers.host || 'localhost'}`).pathname;
+    const raw = typeof req.url === 'string' ? req.url : '';
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      urlPath = new URL(raw).pathname;
+    } else if (raw.startsWith('/')) {
+      urlPath = raw.split('?')[0];
+    } else if (raw) {
+      urlPath = new URL(raw, `http://${host}`).pathname;
     }
   } catch {
     if (req.url) {
       const m = req.url.match(/^([^?]+)/);
-      if (m) pathname = m[1];
+      if (m) urlPath = m[1];
     }
   }
-  if (
-    (pathname === '/api/main' || pathname === '/main') &&
-    req.url &&
-    req.url.startsWith('/api/') &&
-    req.url !== '/api/main'
-  ) {
-    pathname = req.url.split('?')[0];
+
+  let pathname = urlPath;
+  // Prefer concrete req.url over spoofable rewrite headers.
+  if (!urlPath.startsWith('/api/') || isApiRewriteDestination(urlPath)) {
+    try {
+      const originalPath = req.headers['x-vercel-original-path'] as string;
+      const invokePath = req.headers['x-invoke-path'] as string;
+      const requestUrl = originalPath || invokePath || '';
+      if (requestUrl.startsWith('http://') || requestUrl.startsWith('https://')) {
+        pathname = new URL(requestUrl).pathname;
+      } else if (requestUrl.startsWith('/')) {
+        pathname = requestUrl.split('?')[0];
+      } else if (requestUrl) {
+        pathname = new URL(requestUrl, `http://${host}`).pathname;
+      }
+    } catch {
+      pathname = urlPath;
+    }
+  }
+
+  if (isApiRewriteDestination(pathname) && urlPath.startsWith('/api/') && !isApiRewriteDestination(urlPath)) {
+    pathname = urlPath;
   }
   try {
     return resolveEffectiveApiPathname(req, pathname);

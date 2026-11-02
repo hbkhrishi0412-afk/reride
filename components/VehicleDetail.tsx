@@ -1,6 +1,6 @@
 import React, { useState, useMemo, memo, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, User, CertifiedInspection, VehicleDocument, DealLead } from '../types';
+import { testDriveBookingState, type Vehicle, type User, type CertifiedInspection, type VehicleDocument, type DealLead } from '../types';
 import { useTranslatedText, useTranslatedArray, useTranslatedFields } from '../hooks/useTranslatedText';
 import { getFirstValidImage, getValidImages, getSafeImageSrc, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, VEHICLE_THUMB_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder, isPlaceholderService } from '../utils/imageUtils';
 import StarRating from './StarRating';
@@ -1619,17 +1619,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               </button>
                             </div>
                           </div>
-                          
-                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2.5 flex items-start gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                            </svg>
-                            <span className="text-sm text-gray-700 leading-tight">
-                              {t('vehicle.detail.price.saveExtraLoanInterest', {
-                                amount: Math.round(baseEMI * 12 * 0.0125).toLocaleString('en-IN'),
-                              })}
-                            </span>
-                          </div>
                         </div>
 
                         {/* Compare and Share */}
@@ -1686,7 +1675,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               ? t('vehicle.detail.openDealRoom', { defaultValue: 'Open deal room' })
                               : t('vehicle.detail.chatWithSeller')}
                           </button>
-                          {onRequestTestDrive && listingAvailable ? (
+                          {onRequestTestDrive && listingAvailable && testDriveBookingState(vehicleDealLead) === 'available' ? (
                             <div className="rounded-lg border border-orange-100 bg-orange-50/60 p-3">
                               {showTestDriveForm ? (
                                 <form className="space-y-2" onSubmit={handleRequestTestDriveSubmit}>
@@ -1749,6 +1738,10 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 </button>
                               )}
                             </div>
+                          ) : onRequestTestDrive && listingAvailable && testDriveBookingState(vehicleDealLead) === 'locked' ? (
+                            <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                              {t('vehicle.detail.testDriveLocked')}
+                            </p>
                           ) : null}
                           {/* Secondary contact options */}
                           {listingAvailable && (callHref || sellerWhatsAppUrl) ? (

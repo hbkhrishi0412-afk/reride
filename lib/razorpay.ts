@@ -8,6 +8,17 @@ import { getSupabaseAdminClient } from './supabase-admin.js';
 type Fail = { ok: false; status: number; reason: string };
 const fail = (status: number, reason: string): Fail => ({ ok: false, status, reason });
 
+const RAZORPAY_FETCH_TIMEOUT_MS = 10_000;
+
+function razorpayFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const signal =
+    init.signal ??
+    (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
+      ? AbortSignal.timeout(RAZORPAY_FETCH_TIMEOUT_MS)
+      : undefined);
+  return fetch(url, { ...init, signal });
+}
+
 /**
  * Product ids: `pro` / `premium` / custom plan id, `boost:<packageId>`, `deal_assist:<packageId>`.
  * Returns null when the product cannot be bought online.
@@ -41,6 +52,25 @@ export async function resolveRazorpayProductPrice(
   return { priceInr, durationDays: dbDays > 0 ? dbDays : base?.durationDays ?? 30 };
 }
 
+/** Stack plan days onto an existing future expiry (renewals keep remaining days). */
+export function computeStackedPlanExpiry(
+  existingExpiryIso: string | null | undefined,
+  durationDays: number,
+  now: Date = new Date(),
+): Date {
+  const days = Number.isFinite(durationDays) && durationDays > 0 ? Math.floor(durationDays) : 30;
+  let start = now;
+  if (existingExpiryIso) {
+    const existing = new Date(existingExpiryIso);
+    if (Number.isFinite(existing.getTime()) && existing.getTime() > now.getTime()) {
+      start = existing;
+    }
+  }
+  const expiry = new Date(start.getTime());
+  expiry.setUTCDate(expiry.getUTCDate() + days);
+  return expiry;
+}
+
 function razorpayAuthHeader(keyId: string, keySecret: string): string {
   return `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
 }
@@ -58,17 +88,22 @@ export async function createRazorpayOrder(
   const price = await resolveRazorpayProductPrice(productId);
   if (!price) return fail(400, 'This product cannot be purchased online.');
 
-  const rzRes = await fetch('https://api.razorpay.com/v1/orders', {
-    method: 'POST',
-    headers: { Authorization: razorpayAuthHeader(keyId, keySecret), 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      amount: Math.round(price.priceInr * 100),
-      currency: 'INR',
-      receipt: `reride_${Date.now()}`,
-      payment_capture: 1,
-      notes: { productId, planId: productId, sellerEmail: payerEmail.toLowerCase().trim() },
-    }),
-  });
+  let rzRes: Response;
+  try {
+    rzRes = await razorpayFetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: { Authorization: razorpayAuthHeader(keyId, keySecret), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: Math.round(price.priceInr * 100),
+        currency: 'INR',
+        receipt: `reride_${Date.now()}`,
+        payment_capture: 1,
+        notes: { productId, planId: productId, sellerEmail: payerEmail.toLowerCase().trim() },
+      }),
+    });
+  } catch {
+    return fail(504, 'Razorpay order timed out. Please try again.');
+  }
   const rz = (await rzRes.json().catch(() => ({}))) as Record<string, any>;
   if (!rzRes.ok) {
     return fail(502, rz?.error?.description || rz?.description || 'Razorpay order failed');
@@ -78,7 +113,7 @@ export async function createRazorpayOrder(
 
 /**
  * Verifies the checkout signature, then asks Razorpay that the payment belongs to the order,
- * was completed, was created for this product + payer, and paid at least the server price.
+ * was captured, was created for this product + payer, and matches the order amount.
  */
 export async function verifyRazorpayPayment(p: {
   orderId: string;
@@ -98,15 +133,22 @@ export async function verifyRazorpayPayment(p: {
   }
 
   const headers = { Authorization: razorpayAuthHeader(keyId, keySecret) };
-  const [orderRes, paymentRes] = await Promise.all([
-    fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(p.orderId)}`, { headers }),
-    fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(p.paymentId)}`, { headers }),
-  ]);
+  let orderRes: Response;
+  let paymentRes: Response;
+  try {
+    [orderRes, paymentRes] = await Promise.all([
+      razorpayFetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(p.orderId)}`, { headers }),
+      razorpayFetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(p.paymentId)}`, { headers }),
+    ]);
+  } catch {
+    return fail(504, 'Razorpay verification timed out. Please try again.');
+  }
   if (!orderRes.ok || !paymentRes.ok) return fail(502, 'Could not verify payment with Razorpay');
   const order = (await orderRes.json()) as Record<string, any>;
   const payment = (await paymentRes.json()) as Record<string, any>;
 
-  if (payment.order_id !== p.orderId || !['captured', 'authorized'].includes(payment.status)) {
+  // Authorized-but-uncaptured payments can be voided later — only captured counts as paid.
+  if (payment.order_id !== p.orderId || payment.status !== 'captured') {
     return fail(402, 'Payment has not been completed');
   }
   const notes = (order.notes || {}) as Record<string, unknown>;
@@ -116,11 +158,15 @@ export async function verifyRazorpayPayment(p: {
     return fail(400, 'Payment does not match this purchase');
   }
 
-  const price = await resolveRazorpayProductPrice(p.productId);
-  if (!price || Number(payment.amount) < Math.round(price.priceInr * 100)) {
-    return fail(400, 'Payment amount does not match the price');
+  const orderAmount = Number(order.amount);
+  const paidAmount = Number(payment.amount);
+  if (!Number.isFinite(orderAmount) || !Number.isFinite(paidAmount) || paidAmount !== orderAmount) {
+    return fail(400, 'Payment amount does not match the order');
   }
-  return { ok: true, amountPaise: Number(payment.amount), durationDays: price.durationDays };
+
+  // Duration comes from the product catalog; amount already locked at order creation time.
+  const price = await resolveRazorpayProductPrice(p.productId);
+  return { ok: true, amountPaise: paidAmount, durationDays: price?.durationDays };
 }
 
 /**

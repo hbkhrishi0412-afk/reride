@@ -263,23 +263,25 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
   const progressPct = Math.round((doneCount / DEAL_TIMELINE_STAGES.length) * 100);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3 mb-3 shadow-sm">
+    <div className="rounded-lg border border-slate-200/80 bg-slate-50/50 px-2.5 py-2 mb-1">
       <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileUpload} />
 
-      <div className="flex items-start justify-between gap-2 mb-2">
+      <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[11px] text-slate-500">
-            Step {Math.min(doneCount + 1, DEAL_TIMELINE_STAGES.length)} of {DEAL_TIMELINE_STAGES.length} · {lead.id}
+          <p className="text-[11px] text-slate-500 truncate">
+            Step {Math.min(doneCount + 1, DEAL_TIMELINE_STAGES.length)} of {DEAL_TIMELINE_STAGES.length}
+            <span className="text-slate-300"> · </span>
+            <span className="font-mono">{lead.id}</span>
           </p>
           {nextStep && (
             <p className="text-sm font-semibold text-slate-800 truncate">Next: {nextStep.label}</p>
           )}
         </div>
-        <span className="shrink-0 text-xs font-semibold text-green-700">{progressPct}%</span>
+        <span className="shrink-0 text-xs font-semibold tabular-nums text-green-700">{progressPct}%</span>
       </div>
 
       <div
-        className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden mb-3"
+        className="mt-1.5 h-1 w-full rounded-full bg-slate-200/80 overflow-hidden"
         role="progressbar"
         aria-valuenow={progressPct}
         aria-valuemin={0}
@@ -289,9 +291,8 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
         <div className="h-full bg-green-500 transition-all" style={{ width: `${progressPct}%` }} />
       </div>
 
-      <section aria-label="Your action" className="rounded-lg border border-orange-100 bg-orange-50/60 p-2.5 mb-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-reride-orange mb-2">Your action</p>
-        <div className="peer flex flex-col gap-2">
+      <section aria-label="Your action" className="mt-2">
+        <div className="peer flex flex-col gap-2 empty:hidden">
           {lead.chatStatus === 'pending' && isSeller && (
             <button onClick={handleAcceptChat} disabled={loading} className={btnPrimary}>
               Accept Chat
@@ -350,22 +351,7 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
             </>
           )}
 
-          {isStageDone(effectiveStageIndex, 'offer_accepted') && !isStageDone(effectiveStageIndex, 'inspection_completed') && isBuyer && (
-            <>
-              {!lead.metadata.inspection?.requestedAt && (
-                <button onClick={() => handleAdvance('inspection_requested')} disabled={loading} className={btnPrimary}>
-                  Need Inspection
-                </button>
-              )}
-              {lead.metadata.inspection?.requestedAt && !lead.metadata.inspection?.completedAt && (
-                <button onClick={() => triggerUpload('inspection')} disabled={loading} className={btnPrimary}>
-                  Upload Inspection Report
-                </button>
-              )}
-            </>
-          )}
-
-          {isStageDone(effectiveStageIndex, 'inspection_completed') && !isStageDone(effectiveStageIndex, 'test_drive_scheduled') && isBuyer && (
+          {isStageDone(effectiveStageIndex, 'offer_accepted') && !isStageDone(effectiveStageIndex, 'test_drive_scheduled') && isBuyer && (
             <p className="text-xs text-slate-600">
               Request a test drive from the listing page. Once the seller confirms it in chat, it appears here.
             </p>
@@ -381,7 +367,22 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
             </button>
           )}
 
-          {isStageDone(effectiveStageIndex, 'test_drive_completed') && !isStageDone(effectiveStageIndex, 'token_confirmed') && (
+          {isStageDone(effectiveStageIndex, 'test_drive_completed') && !isStageDone(effectiveStageIndex, 'inspection_completed') && isBuyer && (
+            <>
+              {!lead.metadata.inspection?.requestedAt && (
+                <button onClick={() => handleAdvance('inspection_requested')} disabled={loading} className={btnPrimary}>
+                  Need Inspection
+                </button>
+              )}
+              {lead.metadata.inspection?.requestedAt && !lead.metadata.inspection?.completedAt && (
+                <button onClick={() => triggerUpload('inspection')} disabled={loading} className={btnPrimary}>
+                  Upload Inspection Report
+                </button>
+              )}
+            </>
+          )}
+
+          {isStageDone(effectiveStageIndex, 'inspection_completed') && !isStageDone(effectiveStageIndex, 'token_confirmed') && (
             <>
               {isBuyer && !lead.metadata.token?.receiptUrl && (
                 <div className="flex gap-2 items-center">
@@ -452,12 +453,12 @@ export const DealTimelinePanel: React.FC<DealTimelinePanelProps> = ({
             </>
           )}
         </div>
-        <p className="hidden peer-empty:block text-xs text-slate-600">
-          Nothing needed from you right now. Waiting for the {isBuyer ? 'seller' : 'buyer'}.
+        <p className="mt-1.5 hidden peer-empty:block text-xs text-slate-500">
+          Waiting for the {isBuyer ? 'seller' : 'buyer'}.
         </p>
       </section>
 
-      <details className="mb-2">
+      <details className="mt-1.5">
         <summary className="cursor-pointer select-none text-xs font-medium text-slate-500 hover:text-slate-700">
           View all steps ({doneCount}/{DEAL_TIMELINE_STAGES.length} done)
         </summary>

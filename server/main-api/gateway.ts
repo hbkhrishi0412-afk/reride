@@ -8,7 +8,6 @@ import {
   attachApiCors,
   authenticateRequestDual,
   errorToPublicMessage,
-  firstQueryParam,
   generateCsrfToken,
   getClientIP,
   getCsrfCookieName,
@@ -31,40 +30,72 @@ import {
   dispatchPlatformRoute,
 } from './routes-platform.js';
 import { verifyProductionSecurityReadiness } from '../production-security.js';
+import {
+  isApiRewriteDestination,
+  matchesApiRoute,
+} from '../../utils/api-path-routing.js';
 
 export type ApiBundle = 'marketplace' | 'platform';
 
-const HEALTH_PATHS = new Set(['/api/health', '/health', '/api/db-health', '/db-health']);
+// Lightweight liveness only — db-health hits the DB and must stay rate-limited.
+const HEALTH_PATHS = new Set(['/api/health', '/health']);
 const LOGIN_PATHS = new Set(['/api/login', '/login', '/api/admin/login', '/admin/login']);
+const CSRF_TOKEN_PATHS = new Set(['/api/csrf-token', '/csrf-token']);
+const USERS_AUTH_ACTIONS = new Set([
+  'login',
+  'register',
+  'refresh-token',
+  'request-password-reset',
+  'complete-password-reset',
+  'oauth-login',
+  'oauth-service-provider',
+  'logout',
+]);
 
+function pathOnlyFromRaw(requestUrl: string, host: string): string {
+  if (!requestUrl) return '';
+  try {
+    if (requestUrl.startsWith('http://') || requestUrl.startsWith('https://')) {
+      return new URL(requestUrl).pathname;
+    }
+    if (requestUrl.startsWith('/')) {
+      return requestUrl.split('?')[0];
+    }
+    return new URL(requestUrl, `http://${host || 'localhost'}`).pathname;
+  } catch {
+    const match = requestUrl.match(/^([^?]+)/);
+    return match ? match[1] : '';
+  }
+}
+
+/**
+ * Prefer req.url when it is a concrete API path. Spoofable x-vercel-original-path /
+ * x-invoke-path are only used to recover the route after a rewrite to /api/main|/api/platform.
+ */
 function resolvePathname(req: VercelRequest): string {
-  let pathname = '/';
+  const host = String(req.headers.host || 'localhost');
+  const urlPath = pathOnlyFromRaw(typeof req.url === 'string' ? req.url : '', host) || '/';
+
+  if (urlPath.startsWith('/api/') && !isApiRewriteDestination(urlPath)) {
+    return resolveEffectiveApiPathname(req, urlPath);
+  }
+
+  let pathname = urlPath;
   try {
     const originalPath = req.headers['x-vercel-original-path'] as string;
     const invokePath = req.headers['x-invoke-path'] as string;
-    const requestUrl = originalPath || invokePath || req.url || '';
-    if (requestUrl.startsWith('http://') || requestUrl.startsWith('https://')) {
-      pathname = new URL(requestUrl).pathname;
-    } else if (requestUrl.startsWith('/')) {
-      pathname = requestUrl.split('?')[0];
-    } else {
-      pathname = new URL(requestUrl, `http://${req.headers.host || 'localhost'}`).pathname;
+    const fromHeader = pathOnlyFromRaw(originalPath || invokePath || '', host);
+    if (fromHeader) {
+      pathname = fromHeader;
     }
   } catch {
-    if (req.url) {
-      const match = req.url.match(/^([^?]+)/);
-      if (match) pathname = match[1];
-    }
+    /* keep urlPath */
   }
-  if (
-    (pathname === '/api/main' || pathname === '/main' || pathname === '/api/platform' || pathname === '/platform') &&
-    req.url &&
-    req.url.startsWith('/api/') &&
-    req.url !== '/api/main' &&
-    req.url !== '/api/platform'
-  ) {
-    pathname = req.url.split('?')[0];
+
+  if (isApiRewriteDestination(pathname) && urlPath.startsWith('/api/') && !isApiRewriteDestination(urlPath)) {
+    pathname = urlPath;
   }
+
   return resolveEffectiveApiPathname(req, pathname);
 }
 
@@ -93,7 +124,7 @@ async function runApiCore(
     logInfo(`📍 [${bundle}] ${req.method} ${pathname}`);
   }
 
-  if (req.method === 'GET' && (pathname.includes('/csrf-token') || pathname.endsWith('/csrf-token'))) {
+  if (req.method === 'GET' && CSRF_TOKEN_PATHS.has(pathname)) {
     const token = generateCsrfToken();
     const cookieName = getCsrfCookieName();
     const forwardedProto = (req.headers['x-forwarded-proto'] as string) || '';
@@ -107,7 +138,7 @@ async function runApiCore(
     return res.status(200).json({ token });
   }
 
-  // Exact matches only: routing is substring-based, so `/api/users/health` must not skip limits/CSRF.
+  // Exact matches only: routing must not treat `/api/users/health` as the health probe.
   const isHealthEndpoint = HEALTH_PATHS.has(pathname);
 
   if (!isHealthEndpoint) {
@@ -190,19 +221,12 @@ async function runApiCore(
     typeof (req.body as { action?: unknown }).action === 'string'
       ? String((req.body as { action: string }).action)
       : '';
-  const isUsersPost =
-    req.method === 'POST' && (pathname.includes('/users') || pathname.endsWith('/users'));
+  // CSRF exempt only for explicit auth actions — empty/missing action is NOT exempt
+  // (handleUsers already 400s bodyless POSTs; do not open a CSRF hole for future handlers).
   const isUsersAuthAction =
-    isUsersPost &&
-    (bodyAction === 'login' ||
-      bodyAction === 'register' ||
-      bodyAction === 'refresh-token' ||
-      bodyAction === 'request-password-reset' ||
-      bodyAction === 'complete-password-reset' ||
-      bodyAction === 'oauth-login' ||
-      bodyAction === 'oauth-service-provider' ||
-      bodyAction === 'logout' ||
-      bodyAction === '');
+    req.method === 'POST' &&
+    matchesApiRoute(pathname, '/api/users') &&
+    USERS_AUTH_ACTIONS.has(bodyAction);
   const isCsrfExempt =
     LOGIN_PATHS.has(pathname) ||
     isHealthEndpoint ||
@@ -239,7 +263,8 @@ async function runApiCore(
       pathOnly === '/api/platform.ts' ||
       pathOnly.endsWith('/platform');
     const urlPath = pathOnly.startsWith('/api/') && !isRewrittenDest ? pathOnly : '';
-    const checkPath = originalPath || invokePath || urlPath;
+    // Prefer non-rewrite req.url over spoofable headers when both are present.
+    const checkPath = urlPath || originalPath || invokePath;
     if (checkPath) {
       const rewriteResult =
         bundle === 'marketplace'
@@ -260,7 +285,7 @@ async function runApiCore(
         typeof b.city === 'string' &&
         typeof b.name === 'string'
       ) {
-        const { handleServiceProviderRegister } = await import('../../api/service-providers.js');
+        const { handleServiceProviderRegister } = await import('../handlers/service-providers.js');
         return await handleServiceProviderRegister(req, res);
       }
     }

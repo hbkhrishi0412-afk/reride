@@ -39,20 +39,40 @@
       ]
     },
     {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "private, no-cache, must-revalidate"
-        }
-      ]
-    },
-    {
       "source": "/api/vehicles",
       "headers": [
         {
           "key": "Cache-Control",
           "value": "public, max-age=30, s-maxage=60, stale-while-revalidate=120"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
+        },
+        {
+          "key": "Vary",
+          "value": "Origin, Accept-Encoding, Authorization, Cookie"
+        }
+      ]
+    },
+    {
+      "source": "/api/vehicle-data",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=7200"
         },
         {
           "key": "X-Content-Type-Options",
@@ -65,15 +85,27 @@
       ]
     },
     {
-      "source": "/api/vehicle-data",
+      "source": "/api/((?!vehicles$|vehicle-data$).*)",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=7200"
+          "value": "private, no-cache, must-revalidate"
         },
         {
-          "key": "Vary",
-          "value": "Origin, Accept-Encoding"
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
         }
       ]
     },
@@ -111,7 +143,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' blob: https://www.googletagmanager.com https://www.google-analytics.com https://www.gstatic.com https://apis.google.com https://www.google.com; worker-src 'self' blob:; child-src 'self' blob:; frame-src 'self' https://www.googletagmanager.com https://www.google.com https://www.gstatic.com https://accounts.google.com https://*.google.com https://*.gstatic.com https://www.recaptcha.net https://recaptcha.net https://*.supabase.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http:; connect-src 'self' https://www.reride.co.in https://reride.co.in https://*.vercel.app https://*.supabase.co wss://*.supabase.co https://*.ingest.sentry.io https://*.sentry.io https://nominatim.openstreetmap.org https://generativelanguage.googleapis.com https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://api.qrserver.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.google.com https://www.recaptcha.net https://recaptcha.net; frame-ancestors 'self'; form-action 'self' https:;"
+          "value": "default-src 'self'; script-src 'self' blob: https://www.googletagmanager.com https://www.google-analytics.com https://www.gstatic.com https://apis.google.com https://www.google.com; worker-src 'self' blob:; child-src 'self' blob:; frame-src 'self' https://www.googletagmanager.com https://www.google.com https://www.gstatic.com https://accounts.google.com https://*.google.com https://*.gstatic.com https://www.recaptcha.net https://recaptcha.net https://*.supabase.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://www.reride.co.in https://reride.co.in https://*.supabase.co wss://*.supabase.co https://*.ingest.sentry.io https://*.sentry.io https://nominatim.openstreetmap.org https://generativelanguage.googleapis.com https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://api.qrserver.com https://www.googletagmanager.com https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.google.com https://www.recaptcha.net https://recaptcha.net; frame-ancestors 'self'; form-action 'self';"
         },
         {
           "key": "Permissions-Policy",

@@ -3,7 +3,7 @@
  * Set RESEND_API_KEY in production; in development without a key we log the link to server logs.
  */
 
-import { logInfo } from '../../utils/logger.js';
+import { logInfo } from '../utils/logger.js';
 
 export function getPublicAppOriginForPasswordReset(): string {
   const explicit =

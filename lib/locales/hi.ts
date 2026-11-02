@@ -787,8 +787,6 @@ const hi: Record<string, string> = {
   'vehicle.detail.compare': 'तुलना करें',
   'vehicle.detail.comparing': 'तुलना हो रही है',
   'vehicle.detail.reportThisListing': 'इस लिस्टिंग की रिपोर्ट करें',
-  'vehicle.detail.price.saveExtraLoanInterest':
-    '1.25% कम दर के साथ लोन इंटरेस्ट में अतिरिक्त ₹{{amount}} बचाएं',
   'vehicle.detail.tabs.overview': 'ओवरव्यू',
   'vehicle.detail.tabs.report': 'रिपोर्ट',
   'vehicle.detail.tabs.featureSpecs': 'फीचर और स्पेसिफिकेशन',

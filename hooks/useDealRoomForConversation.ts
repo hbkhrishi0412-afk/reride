@@ -18,8 +18,16 @@ export function useDealRoomForConversation(
     initialDealLead ?? dealLeadCache.get(conversation.id) ?? null,
   );
   const [dealLeadLoading, setDealLeadLoading] = useState(false);
-  const [dealPanelOpen, setDealPanelOpen] = useState(true);
+  // Buyer waiting on accept: keep chat primary. Seller / active deal: open for actions.
+  const [dealPanelOpen, setDealPanelOpen] = useState(() => {
+    const lead = initialDealLead ?? dealLeadCache.get(conversation.id) ?? null;
+    if (lead && currentUserRole === 'customer' && lead.chatStatus === 'pending') return false;
+    return true;
+  });
   const [dealRoomError, setDealRoomError] = useState<string | null>(null);
+  const panelDefaultedForLead = useRef<string | null>(
+    (initialDealLead ?? dealLeadCache.get(conversation.id))?.id ?? null,
+  );
 
   const chatBlockedByDeal =
     dealLead?.chatStatus === 'pending' && currentUserRole === 'customer';
@@ -27,6 +35,19 @@ export function useDealRoomForConversation(
   useEffect(() => {
     setDealLead(initialDealLead ?? dealLeadCache.get(conversation.id) ?? null);
   }, [initialDealLead, conversation.id]);
+
+  useEffect(() => {
+    panelDefaultedForLead.current = null;
+  }, [conversation.id]);
+
+  // Once per lead: collapse when buyer has nothing to do yet (skip if already claimed, e.g. after Open Deal Room)
+  useEffect(() => {
+    if (!dealLead || panelDefaultedForLead.current === dealLead.id) return;
+    panelDefaultedForLead.current = dealLead.id;
+    if (currentUserRole === 'customer' && dealLead.chatStatus === 'pending') {
+      setDealPanelOpen(false);
+    }
+  }, [dealLead, currentUserRole]);
 
   useEffect(() => {
     if (dealLead && dealLead.conversationId === conversation.id) dealLeadCache.set(conversation.id, dealLead);
@@ -98,6 +119,7 @@ export function useDealRoomForConversation(
         buyerName: conversation.customerName,
       });
       setDealLead(lead);
+      panelDefaultedForLead.current = lead.id;
       setDealPanelOpen(true);
     } catch {
       setDealRoomError('Could not open Deal Room. Please try again.');

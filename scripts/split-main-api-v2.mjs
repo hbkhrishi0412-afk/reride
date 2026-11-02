@@ -32,7 +32,7 @@ function fixPathsForServerHandlers(content) {
     .replace(/from '\.\.\/server\/handlers\/admin\.js'/g, "from '../handlers/admin.js'")
     .replace(/from '\.\.\/server\/handlers\/system\.js'/g, "from '../handlers/system.js'")
     .replace(/from '\.\.\/server\/refresh-cookie\.js'/g, "from '../refresh-cookie.js'")
-    .replace(/from '\.\/lib\/send-password-reset-email\.js'/g, "from '../../api/lib/send-password-reset-email.js'")
+    .replace(/from '\.\/lib\/send-password-reset-email\.js'/g, "from '../../lib/send-password-reset-email.js'")
     .replace(
       /\/\*\*[\s\S]*?api\/ \*\//,
       '/** Shared state and utilities for main API handlers (extracted from api/main.ts). */',

@@ -1,20 +1,21 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { authenticateRequestDual } from './auth.js';
-import { supabaseServiceRequestService } from '../services/supabase-service-request-service.js';
-import type { ServiceLineItem, ServiceRequestPayload } from '../services/supabase-service-request-service.js';
-import { supabaseUserService } from '../services/supabase-user-service.js';
-import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
-import { serviceRequestAuditService } from '../services/service-request-audit-service.js';
-import { applyCors } from '../lib/api-route-cors.js';
-import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
+import { authenticateRequestDual } from '../auth-request.js';
+import { supabaseServiceRequestService } from '../../services/supabase-service-request-service.js';
+import type { ServiceLineItem, ServiceRequestPayload } from '../../services/supabase-service-request-service.js';
+import { supabaseUserService } from '../../services/supabase-user-service.js';
+import { supabaseServiceProviderService } from '../../services/supabase-service-provider-service.js';
+import { serviceRequestAuditService } from '../../services/service-request-audit-service.js';
+import { applyCors } from '../../lib/api-route-cors.js';
+import { getSupabaseAdminClient } from '../../lib/supabase-admin.js';
 import {
   assignedWorkshopId,
   collectProviderIdAliases,
   incomingVisibleToProvider,
   providerMatchesActor,
-} from '../utils/workshopBooking.js';
-import { completeLineTotal } from '../utils/pricedServiceTotal.js';
-import { insertAppNotifications } from '../server/insert-app-notification.js';
+} from '../../utils/workshopBooking.js';
+import { completeLineTotal } from '../../utils/pricedServiceTotal.js';
+import { insertAppNotifications } from '../insert-app-notification.js';
+import { SESSION_REVOKED_ERROR } from '../../lib/token-revocation.js';
 
 type ProviderCatalogService = {
   price?: number;
@@ -83,6 +84,8 @@ async function resolvePricedServices(
  */
 type ActorInfo = {
   id: string;
+  /** Raw JWT subject — may differ from public.users.id across login types. */
+  jwtId: string;
   role: string;
   email?: string;
   canonicalProviderId: string;
@@ -191,6 +194,7 @@ const STATUS_LABELS: Record<string, string> = {
   in_progress: 'In Progress',
   completed: 'Completed',
   cancelled: 'Cancelled',
+  declined: 'Declined',
 };
 
 async function notifyCustomerOnStatusChange(
@@ -250,6 +254,12 @@ async function notifyCustomerOnStatusChange(
       case 'cancelled':
         title = 'Service request cancelled';
         message = `Your ${serviceLabel} request has been cancelled`;
+        break;
+      case 'declined':
+        title = 'Workshop declined your request';
+        message = providerName
+          ? `${providerName} declined your ${serviceLabel} request. You can book another workshop.`
+          : `A workshop declined your ${serviceLabel} request. You can book another workshop.`;
         break;
       default:
         title = `Request status: ${statusLabel}`;
@@ -316,12 +326,31 @@ async function resolveServiceRequestActor(req: VercelRequest): Promise<ActorInfo
   let resolvedRole = auth.user.role || 'customer';
   const aliasParts: Array<string | undefined> = [jwtId, email];
   let canonicalProviderId = jwtId;
+  // Prefer public.users.id so customerId is stable across Supabase vs legacy JWTs.
+  let actorId = jwtId;
+
+  if (email) {
+    try {
+      const user = await supabaseUserService.findByEmail(email);
+      if (user?.id) {
+        actorId = String(user.id);
+        aliasParts.push(user.id);
+      }
+      if (user?.firebaseUid) aliasParts.push(user.firebaseUid);
+      if (user?.role === 'admin') resolvedRole = 'admin';
+    } catch {
+      /* ignore */
+    }
+  }
 
   try {
     const byId = await supabaseServiceProviderService.findById(jwtId);
     const byEmail = !byId && email ? await supabaseServiceProviderService.findByEmail(email) : byId;
     if (byEmail) {
-      resolvedRole = 'service_provider';
+      // Never demote admins who also have a provider row.
+      if (String(resolvedRole).toLowerCase() !== 'admin') {
+        resolvedRole = 'service_provider';
+      }
       canonicalProviderId = String((byEmail as { id?: string }).id || jwtId);
       aliasParts.push(canonicalProviderId, byEmail.email);
     }
@@ -329,18 +358,9 @@ async function resolveServiceRequestActor(req: VercelRequest): Promise<ActorInfo
     /* ignore */
   }
 
-  if (isServiceProviderRole(String(resolvedRole)) && email) {
-    try {
-      const user = await supabaseUserService.findByEmail(email);
-      if (user?.id) aliasParts.push(user.id);
-      if (user?.firebaseUid) aliasParts.push(user.firebaseUid);
-    } catch {
-      /* ignore */
-    }
-  }
-
   return {
-    id: jwtId,
+    id: actorId,
+    jwtId,
     role: String(resolvedRole),
     email,
     canonicalProviderId,
@@ -425,8 +445,25 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
       }
 
       if (scope === 'customer') {
-        const customerRecords = await supabaseServiceRequestService.findByCustomerId(actorId);
-        return res.status(200).json(normalizeServiceRequestListResponse(customerRecords));
+        const primary = await supabaseServiceRequestService.findByCustomerId(actorId);
+        const secondaryIds = [actor.jwtId, actor.email].filter(
+          (v): v is string => Boolean(v) && v !== actorId,
+        );
+        const extras = secondaryIds.length
+          ? (
+              await Promise.all(
+                secondaryIds.map((id) => supabaseServiceRequestService.findByCustomerId(id)),
+              )
+            ).flat()
+          : [];
+        const seen = new Set<string>();
+        const merged = [...primary, ...extras].filter((row) => {
+          const id = String(row.id || '');
+          if (!id || seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+        return res.status(200).json(normalizeServiceRequestListResponse(merged));
       }
 
       const records = await supabaseServiceRequestService.findByProviderIds(actor.aliases);
@@ -454,9 +491,10 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           !byId && requestedWorkshop.includes('@')
             ? await supabaseServiceProviderService.findByEmail(requestedWorkshop)
             : byId;
-        if (byEmail) {
-          canonicalAssigned = String((byEmail as { id?: string }).id || requestedWorkshop);
+        if (!byEmail) {
+          return res.status(404).json({ error: 'Chosen workshop was not found' });
         }
+        canonicalAssigned = String((byEmail as { id?: string }).id || requestedWorkshop);
       }
 
       let customerName = '';
@@ -487,30 +525,51 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
       const rawServices = Array.isArray(body.services) ? (body.services as ServiceLineItem[]) : undefined;
       const priced = await resolvePricedServices(canonicalAssigned, rawServices);
 
+      const notes = String(body.notes || '').trim().slice(0, 2000);
+      const addressLine = String(body.addressLine || '').trim().slice(0, 500);
+      const title = String(body.title || '').trim().slice(0, 200);
+      if (!title) {
+        return res.status(400).json({ error: 'Missing required field: title' });
+      }
+      const scheduledAtRaw = typeof body.scheduledAt === 'string' ? body.scheduledAt.trim() : '';
+      const scheduledDateRaw = typeof body.scheduledDate === 'string' ? body.scheduledDate.trim() : '';
+      const scheduleCandidate = scheduledAtRaw || scheduledDateRaw;
+      if (scheduleCandidate) {
+        const when = new Date(scheduleCandidate);
+        if (!Number.isFinite(when.getTime())) {
+          return res.status(400).json({ error: 'Invalid scheduled date' });
+        }
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        if (when.getTime() < startOfToday.getTime()) {
+          return res.status(400).json({ error: 'Scheduled date cannot be in the past' });
+        }
+      }
+
       const payload: ServiceRequestPayload = {
         providerId: canonicalAssigned,
         customerId: actorId,
         candidateProviderIds: canonicalAssigned ? [canonicalAssigned] : [],
-        title: body.title,
-        serviceType: body.serviceType || 'General',
-        customerName,
-        customerPhone,
-        customerEmail,
-        vehicle: normalizeVehicleText(body.vehicle),
-        city: body.city || '',
-        addressLine: body.addressLine || '',
-        pincode: body.pincode || '',
+        title,
+        serviceType: String(body.serviceType || 'General').trim().slice(0, 100) || 'General',
+        customerName: customerName.slice(0, 200),
+        customerPhone: customerPhone.slice(0, 30),
+        customerEmail: customerEmail.slice(0, 320),
+        vehicle: normalizeVehicleText(body.vehicle).slice(0, 500),
+        city: String(body.city || '').trim().slice(0, 100),
+        addressLine,
+        pincode: String(body.pincode || '').trim().slice(0, 20),
         status: isAdmin && body.status ? (body.status as ServiceRequestPayload['status']) : 'open',
-        scheduledAt: body.scheduledAt || '',
-        notes: body.notes || '',
-        carDetails: normalizeVehicleText(body.carDetails),
+        scheduledAt: scheduledAtRaw.slice(0, 64),
+        notes,
+        carDetails: normalizeVehicleText(body.carDetails).slice(0, 500),
         services: priced.services,
-        addressId: typeof body.addressId === 'string' ? body.addressId : undefined,
-        slotId: typeof body.slotId === 'string' ? body.slotId : undefined,
-        scheduledDate: typeof body.scheduledDate === 'string' ? body.scheduledDate : undefined,
-        slotTimeLabel: typeof body.slotTimeLabel === 'string' ? body.slotTimeLabel : undefined,
+        addressId: typeof body.addressId === 'string' ? body.addressId.slice(0, 128) : undefined,
+        slotId: typeof body.slotId === 'string' ? body.slotId.slice(0, 128) : undefined,
+        scheduledDate: scheduledDateRaw ? scheduledDateRaw.slice(0, 64) : undefined,
+        slotTimeLabel: typeof body.slotTimeLabel === 'string' ? body.slotTimeLabel.slice(0, 64) : undefined,
         total: priced.total,
-        couponCode: typeof body.couponCode === 'string' ? body.couponCode : undefined,
+        couponCode: typeof body.couponCode === 'string' ? body.couponCode.trim().slice(0, 64) : undefined,
       };
 
       const created = await supabaseServiceRequestService.create(payload);
@@ -546,12 +605,16 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         return res.status(404).json({ error: 'Request not found' });
       }
 
-      const isCustomerOwner = existing.customerId === actorId;
+      const isCustomerOwner =
+        existing.customerId === actorId ||
+        existing.customerId === actor.jwtId ||
+        (actor.email &&
+          String(existing.customerEmail || '').toLowerCase().trim() === actor.email);
       const customerWantsCancel =
-        action === 'cancel' || (isCustomerOwner && updates.status === 'cancelled');
+        action === 'cancel' || ((isCustomerOwner || isAdmin) && updates.status === 'cancelled');
 
       if (customerWantsCancel) {
-        if (!isCustomerOwner) {
+        if (!isCustomerOwner && !isAdmin) {
           return res.status(403).json({ error: 'Not allowed to cancel this request' });
         }
         if (existing.status === 'cancelled') {
@@ -699,13 +762,19 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           details: { providerId: actor.canonicalProviderId },
         });
         await notifyCustomerOnStatusChange(
-          existing,
+          { ...existing, status: 'cancelled' },
           existing.status || 'open',
-          'cancelled',
+          'declined',
           actor.canonicalProviderId,
         );
         const updatedDecline = await supabaseServiceRequestService.findById(id);
         return res.status(200).json(normalizeServiceRequestResponse(updatedDecline || existing));
+      }
+
+      if (action != null && action !== '') {
+        return res.status(400).json({
+          error: 'Unknown action. Use claim, accept, decline, cancel, or submit_review.',
+        });
       }
 
       const providerOwnsRequest = providerMatchesActor(existing.providerId, actor.aliases);
@@ -714,7 +783,10 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
       }
 
       const normalizedStatus = updates.status as ServiceRequestPayload['status'] | undefined;
-      if (normalizedStatus && normalizedStatus !== existing.status) {
+      if (!normalizedStatus) {
+        return res.status(400).json({ error: 'Nothing to update. Provide status or a valid action.' });
+      }
+      if (normalizedStatus !== existing.status) {
         if (existing.status === 'cancelled') {
           return res.status(409).json({ error: 'Cancelled requests are locked and cannot be updated' });
         }
@@ -723,7 +795,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         }
       }
 
-      // Only the customer cancellation flow (action=cancel) can set cancelled status.
+      // Only the customer/admin cancellation flow (action=cancel) can set cancelled status.
       if (
         normalizedStatus === 'cancelled' &&
         !isAdmin &&
@@ -736,17 +808,21 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
       if (normalizedStatus) {
         const current = existing.status;
         const allowedTransitions: Record<string, string[]> = {
-          accepted: ['in_progress'],
+          accepted: ['in_progress', 'cancelled'],
           in_progress: ['completed'],
           completed: [],
           cancelled: [],
-          open: ['accepted'],
+          open: ['accepted', 'cancelled'],
         };
         const nextAllowed = (current ? allowedTransitions[current] : undefined) || [];
         if (normalizedStatus !== current && !nextAllowed.includes(normalizedStatus)) {
           return res.status(409).json({
             error: `Invalid status transition from ${current} to ${normalizedStatus}`,
           });
+        }
+        // cancelled via status field is admin-only; customers use action=cancel above.
+        if (normalizedStatus === 'cancelled' && !isAdmin) {
+          return res.status(403).json({ error: 'Use action=cancel to cancel a request' });
         }
       }
       if (normalizedStatus === 'in_progress' && !updates.startedAt) {
@@ -817,10 +893,9 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         return res.status(404).json({ error: 'Request not found' });
       }
 
-      const isProviderOwner = providerMatchesActor(existing.providerId, actor.aliases);
-      const isCustomerOwner = existing.customerId === actorId;
-      if (!isAdmin && !isProviderOwner && !isCustomerOwner) {
-        return res.status(403).json({ error: 'Not allowed to delete this request' });
+      // Hard delete erases customer history — admin only. Providers/customers keep cancelled rows.
+      if (!isAdmin) {
+        return res.status(403).json({ error: 'Only admins can permanently delete requests' });
       }
       if (existing.status !== 'cancelled') {
         return res.status(409).json({ error: 'Only cancelled requests can be deleted' });
@@ -842,22 +917,18 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
   } catch (error) {
     console.error('Service requests API error:', error);
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    const lower = message.toLowerCase();
-    const isAuthFailure =
-      lower.includes('missing bearer') ||
-      lower.includes('authentication') ||
-      lower.includes('authorization') ||
-      lower.includes('invalid or expired') ||
-      lower.includes('token has expired') ||
-      lower.includes('invalid token') ||
-      lower.includes('no valid authorization');
-    if (isAuthFailure) {
+    // Exact auth failures only — never map arbitrary "token"/"auth" substrings to 401.
+    if (
+      message === 'Authentication required' ||
+      message === 'No valid authorization header' ||
+      message === 'Invalid or expired token' ||
+      message === SESSION_REVOKED_ERROR ||
+      message.startsWith('Token has expired') ||
+      message.startsWith('Invalid token')
+    ) {
       return res.status(401).json({ error: 'Authentication required' });
     }
     return res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 }
-
-// Vercel serverless expects a default export when the module is loaded directly
-export default handleServiceRequests;
 

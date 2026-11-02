@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
-import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
-import { supabaseUserService } from '../services/supabase-user-service.js';
-import type { ServiceProviderPayload } from '../services/supabase-service-provider-service.js';
-import { applyCors } from '../lib/api-route-cors.js';
-import { sanitizeServiceCategories } from '../constants/serviceProviderCatalog.js';
-import { authenticateRequestDual } from './auth.js';
-import { hashPassword, validateEmail } from '../utils/security.js';
-import { logInfo } from '../utils/logger.js';
+import { getSupabaseAdminClient } from '../../lib/supabase-admin.js';
+import { supabaseServiceProviderService } from '../../services/supabase-service-provider-service.js';
+import { supabaseUserService } from '../../services/supabase-user-service.js';
+import type { ServiceProviderPayload } from '../../services/supabase-service-provider-service.js';
+import { applyCors } from '../../lib/api-route-cors.js';
+import { sanitizeServiceCategories } from '../../constants/serviceProviderCatalog.js';
+import { authenticateRequestDual } from '../auth-request.js';
+import { hashPassword, validateEmail } from '../../utils/security.js';
+import { logInfo } from '../../utils/logger.js';
 
 function parseStringList(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -381,21 +381,21 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
   } catch (error) {
     console.error('Service provider API error:', error);
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    
-    // Provide more specific error codes
-    if (message.includes('Missing bearer token') || message.includes('Invalid or expired token')) {
+
+    if (
+      message === 'Authentication required' ||
+      message === 'No valid authorization header' ||
+      message === 'Invalid or expired token' ||
+      message.startsWith('Token has expired') ||
+      message.startsWith('Invalid token')
+    ) {
       return res.status(401).json({ error: 'Authentication required. Please sign up or log in first.' });
     }
-    
+
     if (message.includes('SUPABASE_SERVICE_ROLE_KEY')) {
       return res.status(500).json({ error: 'Server configuration error. Please contact support.' });
     }
-    
-    // Default to 401 for auth errors, 500 for others
-    const statusCode = message.includes('token') || message.includes('auth') ? 401 : 500;
-    return res.status(statusCode).json({ error: message });
+
+    return res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 }
-
-// Vercel serverless expects a default export when the module is loaded directly
-export default handleServiceProviders;

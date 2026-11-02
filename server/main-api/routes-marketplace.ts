@@ -8,31 +8,17 @@ import {
   handleVehicleData,
 } from './marketplace-handlers.js';
 import {
-  attachApiCors,
-  authenticateRequestDual,
-  checkRateLimit,
-  checkUpstashRateLimit,
-  errorToPublicMessage,
   firstQueryParam,
-  getClientIP,
-  getCsrfCookieName,
-  generateCsrfToken,
-  getEffectivePathnameForErrorFallback,
   handleAdmin,
   handleHealth,
   handleSystem,
   handleUtils,
   logError,
   logInfo,
-  logWarn,
-  mergeQueryStringFromRequestUrl,
-  resolveEffectiveApiPathname,
-  securityConfig,
-  shouldSkipCsrfForCapacitorNative,
-  validateCsrfToken,
   respondServiceUnavailable,
   type HandlerOptions,
 } from './shared.js';
+import { matchesApiRoute } from '../../utils/api-path-routing.js';
 
 export async function dispatchMarketplaceRoute(
   req: VercelRequest,
@@ -40,13 +26,17 @@ export async function dispatchMarketplaceRoute(
   pathname: string,
   handlerOptions: HandlerOptions,
 ): Promise<void | VercelResponse> {
-  if (pathname.includes('/users') || pathname.endsWith('/users') || pathname === '/api/users' || pathname === '/users') {
+  // Admin before users/vehicles so /api/admin/* never shadows into public handlers.
+  if (matchesApiRoute(pathname, '/api/admin') && !matchesApiRoute(pathname, '/api/admin/login')) {
+    return await handleAdmin(req, res, handlerOptions);
+  }
+  if (matchesApiRoute(pathname, '/api/users')) {
     if (process.env.NODE_ENV !== 'production') {
       logInfo(`✅ Routing ${req.method} request to handleUsers handler`);
     }
     return await handleUsers(req, res, handlerOptions);
   }
-  if (pathname.includes('/vehicles') || pathname.endsWith('/vehicles')) {
+  if (matchesApiRoute(pathname, '/api/vehicles')) {
     try {
       return await handleVehicles(req, res, handlerOptions);
     } catch (error) {
@@ -57,46 +47,43 @@ export async function dispatchMarketplaceRoute(
       throw error;
     }
   }
-  if ((pathname.includes('/api/admin') || pathname === '/api/admin' || pathname.endsWith('/api/admin')) && !pathname.includes('/admin/login')) {
-    return await handleAdmin(req, res, handlerOptions);
-  }
-  if ((pathname.includes('/health') || pathname.endsWith('/health')) && !pathname.includes('/db-health')) {
+  if (matchesApiRoute(pathname, '/api/health')) {
     return res.status(200).json({
       status: 'ok',
       message: 'API is running',
       timestamp: new Date().toISOString(),
     });
   }
-  if (pathname.includes('/db-health') || pathname.endsWith('/db-health')) {
+  if (matchesApiRoute(pathname, '/api/db-health')) {
     return await handleHealth(req, res);
   }
-  if (pathname.includes('/seed') || pathname.endsWith('/seed')) {
+  if (matchesApiRoute(pathname, '/api/seed')) {
     return await handleSeed(req, res, handlerOptions);
   }
-  if (pathname.includes('/vehicle-specs') || pathname.endsWith('/vehicle-specs')) {
+  if (matchesApiRoute(pathname, '/api/vehicle-specs')) {
     return await handleVehicleSpecs(req, res);
   }
-  if (pathname.includes('/vehicle-pricing') || pathname.endsWith('/vehicle-pricing')) {
+  if (matchesApiRoute(pathname, '/api/vehicle-pricing')) {
     const { handleVehiclePricing } = await import('../handlers/vehicle-pricing.js');
     return await handleVehiclePricing(req, res, handlerOptions);
   }
-  if (pathname.includes('/geocode') || pathname.endsWith('/geocode')) {
+  if (matchesApiRoute(pathname, '/api/geocode')) {
     const { handleGeocode } = await import('../handlers/geocode.js');
     return await handleGeocode(req, res);
   }
-  if (pathname.includes('/vehicle-trust') || pathname.endsWith('/vehicle-trust')) {
+  if (matchesApiRoute(pathname, '/api/vehicle-trust')) {
     const { handleVehicleTrust } = await import('../handlers/vehicle-trust.js');
     return await handleVehicleTrust(req, res, handlerOptions);
   }
-  if (pathname.includes('/deals') || pathname.endsWith('/deals')) {
+  if (matchesApiRoute(pathname, '/api/deals')) {
     const { handleDeals } = await import('../handlers/deals.js');
     return await handleDeals(req, res, handlerOptions);
   }
-  if (pathname.includes('/complaints') || pathname.endsWith('/complaints')) {
+  if (matchesApiRoute(pathname, '/api/complaints')) {
     const { handleComplaints } = await import('../handlers/complaints.js');
     return await handleComplaints(req, res, handlerOptions);
   }
-  if (pathname.includes('/vehicle-data') || pathname.endsWith('/vehicle-data')) {
+  if (matchesApiRoute(pathname, '/api/vehicle-data')) {
     try {
       return await handleVehicleData(req, res, handlerOptions);
     } catch (error) {
@@ -104,37 +91,41 @@ export async function dispatchMarketplaceRoute(
       return respondServiceUnavailable(res, error, 'Vehicle catalog data is temporarily unavailable.');
     }
   }
-  if (pathname.includes('/system') || pathname.endsWith('/system')) {
+  if (matchesApiRoute(pathname, '/api/system')) {
     return await handleSystem(req, res, handlerOptions);
   }
-  if (pathname.includes('/utils') || pathname.endsWith('/utils') || pathname.includes('/test-connection') || pathname.includes('/test-firebase-writes')) {
+  if (
+    matchesApiRoute(pathname, '/api/utils') ||
+    matchesApiRoute(pathname, '/api/test-connection') ||
+    matchesApiRoute(pathname, '/api/test-firebase-writes')
+  ) {
     return await handleUtils(req, res, handlerOptions);
   }
-  if (pathname.includes('/login') || pathname.endsWith('/login')) {
-    const { handleLogin } = await import('../../api/login.js');
+  if (matchesApiRoute(pathname, '/api/login')) {
+    const { handleLogin } = await import('../handlers/login.js');
     return await handleLogin(req, res);
   }
-  if (pathname.includes('/upload-image') || pathname.endsWith('/upload-image')) {
+  if (matchesApiRoute(pathname, '/api/upload-image')) {
     return await handleUploadImage(req, res);
   }
-  if (pathname.includes('/services') && !pathname.includes('/service-')) {
-    const { handleServices } = await import('../../api/services.js');
+  if (matchesApiRoute(pathname, '/api/services')) {
+    const { handleServices } = await import('../handlers/services.js');
     return await handleServices(req, res);
   }
-  if (pathname.includes('/provider-services') || pathname.endsWith('/provider-services')) {
-    const { handleProviderServices } = await import('../../api/provider-services.js');
+  if (matchesApiRoute(pathname, '/api/provider-services')) {
+    const { handleProviderServices } = await import('../handlers/provider-services.js');
     return await handleProviderServices(req, res);
   }
-  if (pathname.includes('/service-providers/register') || pathname.endsWith('/service-providers/register')) {
-    const { handleServiceProviderRegister } = await import('../../api/service-providers.js');
+  if (matchesApiRoute(pathname, '/api/service-providers/register')) {
+    const { handleServiceProviderRegister } = await import('../handlers/service-providers.js');
     return await handleServiceProviderRegister(req, res);
   }
-  if (pathname.includes('/service-providers') || pathname.endsWith('/service-providers')) {
-    const { handleServiceProviders } = await import('../../api/service-providers.js');
+  if (matchesApiRoute(pathname, '/api/service-providers')) {
+    const { handleServiceProviders } = await import('../handlers/service-providers.js');
     return await handleServiceProviders(req, res);
   }
-  if (pathname.includes('/service-requests') || pathname.endsWith('/service-requests')) {
-    const { handleServiceRequests } = await import('../../api/service-requests.js');
+  if (matchesApiRoute(pathname, '/api/service-requests')) {
+    const { handleServiceRequests } = await import('../handlers/service-requests.js');
     return await handleServiceRequests(req, res);
   }
 
@@ -152,34 +143,53 @@ export async function dispatchMarketplaceRewrite(
   checkPath: string,
   handlerOptions: HandlerOptions,
 ): Promise<void | VercelResponse> {
-  if (checkPath.includes('/users') || checkPath.endsWith('/users')) {
+  if (matchesApiRoute(checkPath, '/api/admin') && !matchesApiRoute(checkPath, '/api/admin/login')) {
+    return await handleAdmin(req, res, handlerOptions);
+  }
+  if (matchesApiRoute(checkPath, '/api/users')) {
     return await handleUsers(req, res, handlerOptions);
   }
-  if (checkPath.includes('/vehicles') || checkPath.endsWith('/vehicles')) {
+  if (matchesApiRoute(checkPath, '/api/vehicles')) {
     return await handleVehicles(req, res, handlerOptions);
   }
-  if (checkPath.includes('/login') || checkPath.endsWith('/login')) {
-    const { handleLogin } = await import('../../api/login.js');
+  if (matchesApiRoute(checkPath, '/api/login')) {
+    const { handleLogin } = await import('../handlers/login.js');
     return await handleLogin(req, res);
   }
-  if (checkPath.includes('/upload-image') || checkPath.endsWith('/upload-image')) {
+  if (matchesApiRoute(checkPath, '/api/upload-image')) {
     return await handleUploadImage(req, res);
   }
-  if (checkPath.includes('/deals') || checkPath.endsWith('/deals')) {
+  if (matchesApiRoute(checkPath, '/api/deals')) {
     const { handleDeals } = await import('../handlers/deals.js');
     return await handleDeals(req, res, handlerOptions);
   }
-  if (checkPath.includes('/vehicle-trust') || checkPath.endsWith('/vehicle-trust')) {
+  if (matchesApiRoute(checkPath, '/api/vehicle-trust')) {
     const { handleVehicleTrust } = await import('../handlers/vehicle-trust.js');
     return await handleVehicleTrust(req, res, handlerOptions);
   }
-  if (checkPath.includes('/complaints') || checkPath.endsWith('/complaints')) {
+  if (matchesApiRoute(checkPath, '/api/complaints')) {
     const { handleComplaints } = await import('../handlers/complaints.js');
     return await handleComplaints(req, res, handlerOptions);
   }
-  if (checkPath.includes('/service-providers/register')) {
-    const { handleServiceProviderRegister } = await import('../../api/service-providers.js');
+  if (matchesApiRoute(checkPath, '/api/service-providers/register')) {
+    const { handleServiceProviderRegister } = await import('../handlers/service-providers.js');
     return await handleServiceProviderRegister(req, res);
+  }
+  if (matchesApiRoute(checkPath, '/api/service-providers')) {
+    const { handleServiceProviders } = await import('../handlers/service-providers.js');
+    return await handleServiceProviders(req, res);
+  }
+  if (matchesApiRoute(checkPath, '/api/service-requests')) {
+    const { handleServiceRequests } = await import('../handlers/service-requests.js');
+    return await handleServiceRequests(req, res);
+  }
+  if (matchesApiRoute(checkPath, '/api/services')) {
+    const { handleServices } = await import('../handlers/services.js');
+    return await handleServices(req, res);
+  }
+  if (matchesApiRoute(checkPath, '/api/provider-services')) {
+    const { handleProviderServices } = await import('../handlers/provider-services.js');
+    return await handleProviderServices(req, res);
   }
   return undefined;
 }

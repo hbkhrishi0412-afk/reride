@@ -1,8 +1,19 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as core from './shared.js';
 import type { ChatMessage, Conversation } from '../../types.js';
-import { claimRazorpayPayment, createRazorpayOrder, verifyRazorpayPayment } from '../../lib/razorpay.js';
+import { randomBytes } from 'crypto';
+import {
+  claimRazorpayPayment,
+  computeStackedPlanExpiry,
+  createRazorpayOrder,
+  resolveRazorpayProductPrice,
+  verifyRazorpayPayment,
+} from '../../lib/razorpay.js';
 import { insertAppNotifications } from '../insert-app-notification.js';
+
+function newEntityId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${randomBytes(4).toString('hex')}`;
+}
 
 async function handleAI(req: VercelRequest, res: VercelResponse, _options: core.HandlerOptions) {
   return res.status(410).json({
@@ -99,7 +110,7 @@ async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, faqsPath
       });
     }
 
-    const id = `faq_${Date.now()}`;
+    const id = newEntityId('faq');
     const faq = {
       ...faqData,
       id,
@@ -205,7 +216,7 @@ async function handleSupportTickets(req: VercelRequest, res: VercelResponse) {
   // panel showed 0 tickets because the legacy-only auth rejected Supabase tokens).
   const auth = await core.authenticateRequestDual(req);
   if (!auth.isValid) {
-    core.logWarn('âš ï¸ Support tickets - Authentication failed:', auth.error);
+    core.logWarn(' Support tickets - Authentication failed:', auth.error);
     res.status(401).json({
       success: false,
       reason: auth.error || 'Authentication required.',
@@ -312,26 +323,28 @@ async function handleCreateSupportTicket(
       return res.status(403).json({ success: false, error: 'Unauthorized support ticket creation' });
     }
 
-    const id = `ticket_${Date.now()}`;
+    const id = newEntityId('ticket');
     const ticket = {
-      ...ticketData,
       userEmail: isAdmin ? sanitizedEmail : normalizedAuthEmail,
+      userName: String(ticketData.userName || '').slice(0, 200),
+      subject: String(ticketData.subject || '').slice(0, 300),
+      message: String(ticketData.message || '').slice(0, 5000),
       id,
       status: 'Open',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      replies: []
+      replies: [] as unknown[],
     };
 
     await core.adminCreate(ticketsPath, ticket, id);
 
     // Fan out a notification to every admin so the admin panel shows a real-time
     // alert when a new support ticket arrives. Failures here must not block the
-    // ticket response â€” admins will still see the ticket in the list.
+    // ticket response — admins will still see the ticket in the list.
     try {
       await notifyAdminsOfSupportTicket(ticket);
     } catch (notifyErr) {
-      core.logWarn('âš ï¸ Failed to notify admins of new support ticket (non-fatal):', notifyErr);
+      core.logWarn('Failed to notify admins of new support ticket (non-fatal):', notifyErr);
     }
 
     return res.status(201).json({
@@ -427,12 +440,43 @@ async function handleUpdateSupportTicket(
       return res.status(403).json({ success: false, error: 'Unauthorized support ticket update' });
     }
 
-    if (!isAdmin && updateData?.userEmail) {
-      delete updateData.userEmail;
+    // Customers may only append their own reply text — never status, staff replies, or ownership.
+    let safeUpdate: Record<string, unknown>;
+    if (isAdmin) {
+      safeUpdate = { ...(updateData || {}) };
+      delete safeUpdate.userEmail;
+      delete safeUpdate.id;
+      delete safeUpdate.createdAt;
+    } else {
+      const replyText =
+        typeof updateData?.customerReply === 'string'
+          ? updateData.customerReply.trim().slice(0, 4000)
+          : typeof updateData?.message === 'string'
+            ? updateData.message.trim().slice(0, 4000)
+            : '';
+      if (!replyText) {
+        return res.status(403).json({
+          success: false,
+          error: 'Customers can only add a reply to their ticket.',
+        });
+      }
+      const prevReplies = Array.isArray(existing.replies) ? existing.replies : [];
+      safeUpdate = {
+        replies: [
+          ...prevReplies,
+          {
+            id: newEntityId('reply'),
+            author: 'customer',
+            authorEmail: normalizedAuthEmail,
+            message: replyText,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
     }
 
     await core.adminUpdate(ticketsPath, String(id), {
-      ...updateData,
+      ...safeUpdate,
       updatedAt: new Date().toISOString()
     });
 
@@ -493,13 +537,13 @@ async function handleDeleteSupportTicket(
 }
 
 // ============================================================================
-// Platform Settings handler â€” reads/writes the single `platform_settings` row
+// Platform Settings handler — reads/writes the single `platform_settings` row
 // (table created by scripts/add-platform-settings-and-audit-log.sql).
 // ============================================================================
 const PLATFORM_SETTINGS_ID = 'singleton';
 const DEFAULT_PLATFORM_SETTINGS = {
   listingFee: 25,
-  siteAnnouncement: 'Welcome to ReRide! All EVs are 10% off this week.',
+  siteAnnouncement: '',
 } as const;
 
 async function handlePlatformSettings(
@@ -529,10 +573,13 @@ async function handlePlatformSettings(
         .maybeSingle();
 
       if (error) {
-        // If the table is missing, fall back to defaults so the app keeps working.
-        core.logWarn('platform_settings read failed, returning defaults:', error.message);
+        // Table missing/errors must not invent a promo announcement.
+        core.logWarn('platform_settings read failed, returning empty defaults:', error.message);
         res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json({ success: true, settings: { ...DEFAULT_PLATFORM_SETTINGS } });
+        return res.status(200).json({
+          success: true,
+          settings: { listingFee: DEFAULT_PLATFORM_SETTINGS.listingFee, siteAnnouncement: '' },
+        });
       }
 
       const settings = data
@@ -598,7 +645,7 @@ async function handlePlatformSettings(
 
       if (error) {
         core.logError('platform_settings upsert failed:', error.message);
-        return res.status(500).json({ success: false, reason: error.message });
+        return res.status(500).json({ success: false, reason: 'Failed to update platform settings.' });
       }
 
       return res.status(200).json({
@@ -618,18 +665,20 @@ async function handlePlatformSettings(
 
     return res.status(405).json({ success: false, reason: 'Method not allowed.' });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    core.logError('handlePlatformSettings error:', message);
+    core.logError('handlePlatformSettings error:', error);
     if (req.method === 'GET') {
       res.setHeader('X-Data-Fallback', 'true');
-      return res.status(200).json({ success: true, settings: { ...DEFAULT_PLATFORM_SETTINGS } });
+      return res.status(200).json({
+        success: true,
+        settings: { listingFee: DEFAULT_PLATFORM_SETTINGS.listingFee, siteAnnouncement: '' },
+      });
     }
-    return res.status(500).json({ success: false, reason: message });
+    return res.status(500).json({ success: false, reason: 'Failed to update platform settings.' });
   }
 }
 
 // ============================================================================
-// Audit Log handler â€” admin-only append-and-list over `audit_log` table
+// Audit Log handler — admin-only append-and-list over `audit_log` table
 // (table created by scripts/add-platform-settings-and-audit-log.sql).
 // ============================================================================
 async function handleAuditLog(
@@ -688,25 +737,24 @@ async function handleAuditLog(
       const rawEntries = Array.isArray(body.entries)
         ? (body.entries as Record<string, unknown>[])
         : [body];
+      const actorFromToken = String(admin.user?.email || '').toLowerCase().trim();
+      const nowIso = new Date().toISOString();
 
+      // Append-only: ignore client id/actor/timestamp so history cannot be overwritten or spoofed.
       const rows = rawEntries
-        .map((entry) => {
-          const id = typeof entry.id === 'number'
-            ? entry.id
-            : typeof entry.id === 'string'
-              ? Number(entry.id)
-              : Date.now();
-          const actor = typeof entry.actor === 'string' ? entry.actor.slice(0, 255) : '';
+        .map((entry, index) => {
           const action = typeof entry.action === 'string' ? entry.action.slice(0, 255) : '';
           const target = typeof entry.target === 'string' ? entry.target.slice(0, 500) : '';
           const details = typeof entry.details === 'string' ? entry.details.slice(0, 2000) : null;
-          const timestamp = typeof entry.timestamp === 'string'
-            ? entry.timestamp
-            : new Date().toISOString();
-          if (!Number.isFinite(id) || !actor || !action || !target) {
-            return null;
-          }
-          return { id, timestamp, actor, action, target, details };
+          if (!actorFromToken || !action || !target) return null;
+          return {
+            id: Date.now() * 1000 + index + randomBytes(2).readUInt16BE(0),
+            timestamp: nowIso,
+            actor: actorFromToken.slice(0, 255),
+            action,
+            target,
+            details,
+          };
         })
         .filter((row): row is {
           id: number;
@@ -720,17 +768,15 @@ async function handleAuditLog(
       if (rows.length === 0) {
         return res.status(400).json({
           success: false,
-          reason: 'At least one valid entry with actor/action/target is required.',
+          reason: 'At least one valid entry with action/target is required.',
         });
       }
 
-      const { error } = await supabase
-        .from('audit_log')
-        .upsert(rows, { onConflict: 'id' });
+      const { error } = await supabase.from('audit_log').insert(rows);
 
       if (error) {
         core.logError('audit_log insert failed:', error.message);
-        return res.status(500).json({ success: false, reason: error.message });
+        return res.status(500).json({ success: false, reason: 'Failed to write audit log.' });
       }
 
       return res.status(200).json({ success: true, inserted: rows.length });
@@ -738,13 +784,12 @@ async function handleAuditLog(
 
     return res.status(405).json({ success: false, reason: 'Method not allowed.' });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    core.logError('handleAuditLog error:', message);
+    core.logError('handleAuditLog error:', error);
     if (req.method === 'GET') {
       res.setHeader('X-Data-Fallback', 'true');
       return res.status(200).json({ success: true, entries: [] });
     }
-    return res.status(500).json({ success: false, reason: message });
+    return res.status(500).json({ success: false, reason: 'Failed to write audit log.' });
   }
 }
 
@@ -834,13 +879,25 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           });
         }
 
+        const catalog = await resolveRazorpayProductPrice(String(plan));
+        const clientAmount = Number(amount);
+        if (!Number.isFinite(clientAmount) || clientAmount <= 0) {
+          return res.status(400).json({ success: false, reason: 'Invalid payment amount.' });
+        }
+        if (catalog && Math.round(clientAmount) !== Math.round(catalog.priceInr)) {
+          return res.status(400).json({
+            success: false,
+            reason: 'Payment amount does not match the selected plan price.',
+          });
+        }
+
         const now = new Date().toISOString();
-        const id = `payment_${Date.now()}`;
+        const id = newEntityId('payment');
         // Persist payment request in Supabase (planId mirrors client types; plan kept for older rows)
         const paymentRequest = {
           id,
-          sellerEmail,
-          amount: Number(amount),
+          sellerEmail: normSeller,
+          amount: clientAmount,
           plan,
           planId: plan,
           packageId,
@@ -865,7 +922,6 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
         return res.status(500).json({
           success: false,
           reason: 'Failed to create payment request',
-          error: error instanceof Error ? error.message : 'Unknown error'
         });
       }
     }
@@ -906,10 +962,10 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           currency: order.currency,
           keyId: order.keyId,
         });
-      } catch (error) {
+      } catch {
         return res.status(500).json({
           success: false,
-          reason: error instanceof Error ? error.message : 'Failed to create Razorpay order',
+          reason: 'Failed to create Razorpay order',
         });
       }
     }
@@ -954,16 +1010,18 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           return res.status(verified.status).json({ success: false, reason: verified.reason });
         }
 
-        const now = new Date().toISOString();
+        const nowDate = new Date();
+        const now = nowDate.toISOString();
+        const paymentId = String(razorpay_payment_id);
         const paymentRequest = {
-          id: `payment_rzp_${String(razorpay_payment_id)}`,
+          id: `payment_rzp_${paymentId}`,
           sellerEmail: normSeller,
           amount: verified.amountPaise / 100,
           plan: planStr,
           planId: planStr,
           status: 'approved',
           paymentMethod: 'razorpay',
-          transactionId: String(razorpay_payment_id),
+          transactionId: paymentId,
           razorpayOrderId: String(razorpay_order_id),
           createdAt: now,
           requestedAt: now,
@@ -972,52 +1030,66 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           notes: 'Verified via Razorpay',
         };
 
-        if (!(await claimRazorpayPayment(paymentRequest))) {
-          return res.status(409).json({ success: false, reason: 'This payment has already been applied.' });
-        }
-
-        // Upgrade the seller's subscription plan immediately after a verified payment.
-        // Previously this only happened after an admin manually approved the payment_requests row,
-        // which meant paying sellers waited indefinitely for access. With a verified Razorpay
-        // signature we can safely activate the plan right here.
-        //
-        // IMPORTANT: Do NOT upgrade the user's subscription when the plan is actually a boost
-        // package â€“ boosts use the same create-order endpoint but a different confirmation path
-        // (/api/vehicles?action=boost). If we ever receive one here, just record the payment.
+        // Upgrade before claim so a failed upgrade can be retried (claim-first caused silent 409s).
+        // Boosts / deal-assist use other confirmation paths — only record payment here.
         let updatedUser: Record<string, unknown> | null = null;
         const planLowerCandidate = planStr.toLowerCase();
         const normalizedPlanCandidate = planLowerCandidate === 'basic' ? 'free' : planLowerCandidate;
         const isBoostPlan = planLowerCandidate.startsWith('boost');
         const isDealAssistPlan = planLowerCandidate.startsWith('deal_assist');
-        // Only allow supported subscription tiers to land in the user row.
         const ALLOWED_SUBSCRIPTION_PLANS = new Set(['free', 'pro', 'premium']);
         const isKnownPlan = ALLOWED_SUBSCRIPTION_PLANS.has(normalizedPlanCandidate);
-        try {
-          const existingUser = (!isBoostPlan && !isDealAssistPlan && isKnownPlan)
-            ? await core.userService.findByEmail(String(sellerEmail))
-            : null;
-          if (existingUser) {
-            const planLower = normalizedPlanCandidate;
-            const planDurationDays = verified.durationDays ?? 30;
-            const expiry = new Date();
-            expiry.setDate(expiry.getDate() + planDurationDays);
 
+        if (!isBoostPlan && !isDealAssistPlan && isKnownPlan) {
+          const existingUser = await core.userService.findByEmail(normSeller);
+          if (!existingUser) {
+            return res.status(404).json({
+              success: false,
+              reason: 'Seller account not found. Payment was not applied.',
+            });
+          }
+          if (String((existingUser as { lastPaymentId?: string }).lastPaymentId || '') === paymentId) {
+            return res.status(200).json({
+              success: true,
+              paymentRequest,
+              user: existingUser,
+              alreadyApplied: true,
+            });
+          }
+          try {
+            const planDurationDays = verified.durationDays ?? 30;
+            const expiry = computeStackedPlanExpiry(
+              (existingUser as { planExpiryDate?: string }).planExpiryDate,
+              planDurationDays,
+              nowDate,
+            );
             const userUpdate: Record<string, unknown> = {
-              subscriptionPlan: planLower,
+              subscriptionPlan: normalizedPlanCandidate,
               planExpiryDate: expiry.toISOString(),
               planUpdatedAt: now,
-              lastPaymentId: String(razorpay_payment_id),
+              lastPaymentId: paymentId,
             };
             await core.userService.update(normSeller, userUpdate);
             updatedUser = { ...(existingUser as unknown as Record<string, unknown>), ...userUpdate };
-          } else if (!isBoostPlan && !isDealAssistPlan && !isKnownPlan) {
-            core.logWarn('confirm-razorpay-payment: unknown plan id, skipping user upgrade:', planStr);
-          } else if (!isBoostPlan && !isDealAssistPlan) {
-            core.logWarn('confirm-razorpay-payment: seller not found in users table:', sellerEmail);
+          } catch (planUpgradeErr) {
+            core.logWarn('Failed to auto-upgrade plan after Razorpay confirm:', planUpgradeErr);
+            return res.status(500).json({
+              success: false,
+              reason: 'Payment verified but plan upgrade failed. Please retry or contact support.',
+            });
           }
-        } catch (planUpgradeErr) {
-          core.logWarn('Failed to auto-upgrade plan after Razorpay confirm:', planUpgradeErr);
-          // We still return success for the payment itself; the admin can retroactively fix the user.
+        } else if (!isBoostPlan && !isDealAssistPlan && !isKnownPlan) {
+          core.logWarn('confirm-razorpay-payment: unknown plan id, skipping user upgrade:', planStr);
+        }
+
+        if (!(await claimRazorpayPayment(paymentRequest))) {
+          // Concurrent confirm already claimed — upgrade above is idempotent via lastPaymentId.
+          return res.status(200).json({
+            success: true,
+            paymentRequest,
+            user: updatedUser,
+            alreadyApplied: true,
+          });
         }
 
         return res.status(201).json({
@@ -1025,10 +1097,10 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           paymentRequest,
           user: updatedUser,
         });
-      } catch (error) {
+      } catch {
         return res.status(500).json({
           success: false,
-          reason: error instanceof Error ? error.message : 'Failed to confirm payment',
+          reason: 'Failed to confirm payment',
         });
       }
     }
@@ -1132,32 +1204,43 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           });
         }
 
-        const now = new Date().toISOString();
-        const adminEmail = req.body?.adminEmail != null ? String(req.body.adminEmail) : undefined;
-
-        await core.adminUpdate(paymentRequestsPath, String(paymentRequestId), {
-          status: 'approved',
-          approvedAt: now,
-          approvedBy: adminEmail,
-          reviewedAt: now,
-          updatedAt: now,
-          notes: req.body?.notes,
-          adminEmail,
-        });
+        const currentStatus = String(existing.status || '').toLowerCase().trim();
+        if (currentStatus !== 'pending') {
+          return res.status(409).json({
+            success: false,
+            reason: `Payment request is already ${currentStatus || 'processed'}.`,
+          });
+        }
 
         const planRaw = existing.planId ?? existing.plan;
         const sellerEmail = String(existing.sellerEmail || '').toLowerCase().trim();
         const planLower = String(planRaw || '').toLowerCase();
         const normalizedPlan = planLower === 'basic' ? 'free' : planLower;
         const ALLOWED_SUBSCRIPTION_PLANS = new Set(['free', 'pro', 'premium']);
+        const catalog = planRaw ? await resolveRazorpayProductPrice(String(planRaw)) : null;
+        const storedAmount = Number(existing.amount);
+        if (catalog && Number.isFinite(storedAmount) && Math.round(storedAmount) !== Math.round(catalog.priceInr)) {
+          return res.status(400).json({
+            success: false,
+            reason: 'Stored payment amount does not match the current plan price. Reject and recreate the request.',
+          });
+        }
+
+        const nowDate = new Date();
+        const now = nowDate.toISOString();
+        const adminEmail = String(approveAdmin.user?.email || '').toLowerCase().trim() || undefined;
         let updatedUser: Record<string, unknown> | null = null;
 
         if (sellerEmail && ALLOWED_SUBSCRIPTION_PLANS.has(normalizedPlan)) {
           try {
             const existingUser = await core.userService.findByEmail(sellerEmail);
             if (existingUser) {
-              const expiry = new Date();
-              expiry.setDate(expiry.getDate() + 30);
+              const durationDays = catalog?.durationDays ?? 30;
+              const expiry = computeStackedPlanExpiry(
+                (existingUser as { planExpiryDate?: string }).planExpiryDate,
+                durationDays,
+                nowDate,
+              );
               const userUpdate: Record<string, unknown> = {
                 subscriptionPlan: normalizedPlan,
                 planExpiryDate: expiry.toISOString(),
@@ -1168,8 +1251,22 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
             }
           } catch (planUpgradeErr) {
             core.logWarn('Failed to upgrade plan after manual payment approval:', planUpgradeErr);
+            return res.status(500).json({
+              success: false,
+              reason: 'Plan upgrade failed; payment left pending. Please retry.',
+            });
           }
         }
+
+        await core.adminUpdate(paymentRequestsPath, String(paymentRequestId), {
+          status: 'approved',
+          approvedAt: now,
+          approvedBy: adminEmail,
+          reviewedAt: now,
+          updatedAt: now,
+          notes: req.body?.notes != null ? String(req.body.notes).slice(0, 2000) : undefined,
+          adminEmail,
+        });
 
         return res.status(200).json({
           success: true,
@@ -1178,11 +1275,10 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           user: updatedUser,
         });
 
-      } catch (error) {
+      } catch {
         return res.status(500).json({
           success: false,
           reason: 'Failed to approve payment request',
-          error: error instanceof Error ? error.message : 'Unknown error'
         });
       }
     }
@@ -1207,14 +1303,33 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           });
         }
 
+        const existing = await core.adminRead<Record<string, unknown>>(
+          paymentRequestsPath,
+          String(paymentRequestId),
+        );
+        if (!existing) {
+          return res.status(404).json({ success: false, reason: 'Payment request not found' });
+        }
+        const currentStatus = String(existing.status || '').toLowerCase().trim();
+        if (currentStatus !== 'pending') {
+          return res.status(409).json({
+            success: false,
+            reason:
+              currentStatus === 'approved'
+                ? 'Cannot reject an already-approved payment without revoking the plan first.'
+                : `Payment request is already ${currentStatus || 'processed'}.`,
+          });
+        }
+
+        const adminEmail = String(rejectAdmin.user?.email || '').toLowerCase().trim() || undefined;
         await core.adminUpdate(paymentRequestsPath, String(paymentRequestId), {
           status: 'rejected',
           rejectedAt: new Date().toISOString(),
-          rejectedBy: req.body?.adminEmail != null ? String(req.body.adminEmail) : undefined,
+          rejectedBy: adminEmail,
           reviewedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          rejectionReason: rejectionReason || 'No reason provided',
-          adminEmail: req.body?.adminEmail
+          rejectionReason: String(rejectionReason || 'No reason provided').slice(0, 2000),
+          adminEmail,
         });
 
         return res.status(200).json({
@@ -1224,11 +1339,10 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           reason: rejectionReason || 'No reason provided'
         });
 
-      } catch (error) {
+      } catch {
         return res.status(500).json({
           success: false,
           reason: 'Failed to reject payment request',
-          error: error instanceof Error ? error.message : 'Unknown error'
         });
       }
     }
@@ -1290,8 +1404,13 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
     // Ensure we always return JSON
     res.setHeader('Content-Type', 'application/json');
     
-    // If it's a database connection error, return 503
-    if (error instanceof Error && (error.message.includes('FIREBASE') || error.message.includes('Firebase') || error.message.includes('connect'))) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('SUPABASE') ||
+        error.message.includes('Supabase') ||
+        error.message.includes('ECONNREFUSED') ||
+        error.message.includes('fetch failed'))
+    ) {
       return res.status(503).json({
         success: false,
         reason: 'Database is currently unavailable. Please try again later.',
@@ -1302,7 +1421,6 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
     return res.status(500).json({
       success: false,
       reason: 'Payments handler failed',
-      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }
@@ -1337,7 +1455,7 @@ async function insertConversationMessageNotification(params: {
       },
     }]);
   } catch (notifErr) {
-    console.warn('âš ï¸ API: Failed to create message notification (non-fatal):', notifErr);
+    console.warn(' API: Failed to create message notification (non-fatal):', notifErr);
   }
 }
 
@@ -1381,7 +1499,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
     if (!core.USE_SUPABASE) {
       return res.status(503).json({
         success: false,
-        reason: 'Firebase is not configured. Please set Firebase environment variables.'
+        reason: 'Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
       });
     }
 
@@ -1402,7 +1520,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
     } else {
       auth = await core.authenticateRequestDual(req);
       if (!auth.isValid || !auth.user) {
-        core.logWarn('âš ï¸ Conversations - Authentication failed:', auth.error);
+        core.logWarn('Conversations - Authentication failed:', auth.error);
         return res.status(401).json({
           success: false,
           reason: auth.error || 'Authentication required.',
@@ -1469,7 +1587,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         
         // Log for debugging in development
         if (process.env.NODE_ENV === 'development') {
-          core.logInfo('ðŸ” API: Fetching conversations for seller', {
+          core.logInfo(' API: Fetching conversations for seller', {
             originalSellerId: String(sellerId),
             normalizedSellerId,
             foundCount: conversations?.length || 0
@@ -1495,7 +1613,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         const { enrichConversationsWithDealFlags } = await import('../handlers/conversation-lifecycle.js');
         conversations = await enrichConversationsWithDealFlags(conversations);
       } catch (enrichErr) {
-        core.logWarn('âš ï¸ Failed to enrich conversations with deal flags (non-fatal):', enrichErr);
+        core.logWarn(' Failed to enrich conversations with deal flags (non-fatal):', enrichErr);
       }
       
       return res.status(200).json({ success: true, data: conversations });
@@ -1503,20 +1621,14 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
 
     // POST - Create or update conversation
     if (req.method === 'POST') {
-      const conversationData = req.body;
+      const conversationData = { ...(req.body || {}) } as Record<string, unknown>;
       
       if (!conversationData.id) {
         return res.status(400).json({ success: false, reason: 'Conversation ID is required' });
       }
 
-      const normalizedCustomerId = String(conversationData.customerId || '').toLowerCase().trim();
-      const normalizedSellerId = String(conversationData.sellerId || '').toLowerCase().trim();
-      if (!isAdmin && !isAuthParticipant(normalizedCustomerId) && !isAuthParticipant(normalizedSellerId)) {
-        return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
-      }
-
       // Check if conversation exists (by client id / metadata alias, uuid, or vehicle + customer)
-      let existing = await core.conversationService.findById(conversationData.id);
+      let existing = await core.conversationService.findById(String(conversationData.id));
       if (!existing && conversationData.vehicleId != null && conversationData.customerId) {
         existing = await core.conversationService.findByVehicleAndCustomer(
           String(conversationData.vehicleId),
@@ -1537,13 +1649,45 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         const updated = await core.conversationService.findById(existing.id);
         return res.status(200).json({ success: true, data: updated });
       } else {
-        if (!isAdmin && Array.isArray(conversationData.messages)) {
-          const ownSender = isAuthParticipant(normalizedCustomerId) ? 'user' : 'seller';
-          conversationData.messages = conversationData.messages.filter(
-            (m: { sender?: string } | null) => m?.sender === ownSender,
-          );
+        // New threads: bind customer to the authenticated buyer; seller from the listing — never trust body roles.
+        if (!isAdmin) {
+          if (!normalizedAuthEmail && !normalizedAuthUserId) {
+            return res.status(401).json({ success: false, reason: 'Authentication required' });
+          }
+          const customerKey = normalizedAuthEmail || normalizedAuthUserId;
+          conversationData.customerId = customerKey;
+
+          let sellerFromListing = '';
+          if (conversationData.vehicleId != null) {
+            try {
+              const mutation = await core.resolveVehicleForMutation({
+                vehicleId: conversationData.vehicleId,
+                databaseId: conversationData.vehicleDatabaseId,
+              });
+              if (mutation.ok) {
+                sellerFromListing = String(mutation.vehicle.sellerEmail || '').toLowerCase().trim();
+              }
+            } catch {
+              /* fall through */
+            }
+          }
+          if (!sellerFromListing) {
+            return res.status(400).json({
+              success: false,
+              reason: 'A valid vehicle listing is required to start a conversation.',
+            });
+          }
+          conversationData.sellerId = sellerFromListing;
+          conversationData.messages = [];
         }
-        const conversation = await core.conversationService.create(conversationData);
+
+        const normalizedCustomerId = String(conversationData.customerId || '').toLowerCase().trim();
+        const normalizedSellerId = String(conversationData.sellerId || '').toLowerCase().trim();
+        if (!isAdmin && !isAuthParticipant(normalizedCustomerId) && !isAuthParticipant(normalizedSellerId)) {
+          return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
+        }
+
+        const conversation = await core.conversationService.create(conversationData as never);
 
         if (conversationData.vehicleId != null) {
           try {
@@ -1554,12 +1698,21 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
             if (mutation.ok) {
               const currentInquiries =
                 typeof mutation.vehicle.inquiriesCount === 'number' ? mutation.vehicle.inquiriesCount : 0;
-              await core.vehicleService.update(mutation.primaryKey, {
-                inquiriesCount: currentInquiries + 1,
-              });
+              // Optimistic lock: only bump if count is unchanged (avoids lost updates under concurrency).
+              const supabase = core.getSupabaseAdminClient();
+              const { error: incErr } = await supabase
+                .from('vehicles')
+                .update({ inquiries_count: currentInquiries + 1 })
+                .eq('id', mutation.primaryKey)
+                .eq('inquiries_count', currentInquiries);
+              if (incErr) {
+                await core.vehicleService.update(mutation.primaryKey, {
+                  inquiriesCount: currentInquiries + 1,
+                });
+              }
             }
           } catch (inquiryError) {
-            core.logWarn('âš ï¸ Failed to increment inquiry count (non-fatal):', inquiryError);
+            core.logWarn('Failed to increment inquiry count (non-fatal):', inquiryError);
           }
         }
 
@@ -1595,7 +1748,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(400).json({ success: false, reason: 'Conversation ID and message are required' });
       }
 
-      // Sender is derived from the authenticated participant, never trusted from the client.
+      // Sender/id/type/timestamp are server-authored — never trust the client for these.
       if (isAuthParticipant(normalizedCustomerId)) {
         message.sender = 'user';
       } else if (isAuthParticipant(normalizedSellerId)) {
@@ -1603,18 +1756,28 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       } else {
         message.sender = 'system';
       }
+      message.id = newEntityId('msg');
+      message.timestamp = new Date().toISOString();
+      if (typeof message.type !== 'string' || !message.type.trim()) {
+        message.type = 'text';
+      } else {
+        message.type = String(message.type).slice(0, 64);
+      }
+      if (message.payload != null && typeof message.payload !== 'object') {
+        delete message.payload;
+      }
 
       if (typeof message.text === 'string') {
         message.text = await core.sanitizeString(message.text.slice(0, 4000));
       }
 
       try {
-        core.logInfo('ðŸ’¾ API: Adding message to conversation:', { conversationId, messageId: message?.id });
+        core.logInfo('API: Adding message to conversation:', { conversationId, messageId: message?.id });
         await core.conversationService.addMessage(String(conversationId), message);
         const updatedConversation = await core.conversationService.findById(String(conversationId));
         
         if (!updatedConversation) {
-          console.error('âŒ API: Conversation not found after adding message:', conversationId);
+          console.error('API: Conversation not found after adding message:', conversationId);
           return res.status(500).json({ success: false, reason: 'Failed to retrieve updated conversation' });
         }
         
@@ -1645,50 +1808,53 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
             actingAsCustomer && sellerRecipientEmail && recipientEmail.toLowerCase().trim() === sellerRecipientEmail;
           if (isSellerRecipient && sellerRecipientEmail) {
             const vehicleTitle = String(conversation.vehicleName || 'your listing');
-            const preview = messageText.length > 140 ? messageText.substring(0, 140) + 'â€¦' : messageText;
+            const preview = messageText.length > 140 ? `${messageText.substring(0, 140)}…` : messageText;
             void core.sendInquiryNotificationToSeller(
               sellerRecipientEmail,
               senderName || 'A buyer',
               vehicleTitle,
               preview || '(new message)',
             ).catch((mailErr) => {
-              console.warn('âš ï¸ API: inquiry email failed (non-fatal):', mailErr);
+              console.warn('API: inquiry email failed (non-fatal):', mailErr);
             });
 
             const msgType = typeof message.type === 'string' ? message.type : 'text';
             const payload = message.payload && typeof message.payload === 'object' ? message.payload as Record<string, unknown> : {};
-            core.notifySellerInquiryChannels({
-              sellerEmail: recipientEmail,
-              buyerName: senderName || 'A buyer',
-              vehicleTitle,
-              messagePreview: preview || '(new message)',
-              conversationId: String(conversationId),
-              isTestDrive: msgType === 'test_drive_request',
-              testDriveDate: typeof payload.date === 'string' ? payload.date : undefined,
-              testDriveTime: typeof payload.time === 'string' ? payload.time : undefined,
+            void Promise.resolve(
+              core.notifySellerInquiryChannels({
+                sellerEmail: recipientEmail,
+                buyerName: senderName || 'A buyer',
+                vehicleTitle,
+                messagePreview: preview || '(new message)',
+                conversationId: String(conversationId),
+                isTestDrive: msgType === 'test_drive_request',
+                testDriveDate: typeof payload.date === 'string' ? payload.date : undefined,
+                testDriveTime: typeof payload.time === 'string' ? payload.time : undefined,
+              }),
+            ).catch((mailErr) => {
+              console.warn('API: seller inquiry alerts failed (non-fatal):', mailErr);
             });
           }
         } catch (mailErr) {
-          console.warn('âš ï¸ API: seller inquiry alerts failed (non-fatal):', mailErr);
+          console.warn('API: seller inquiry alerts failed (non-fatal):', mailErr);
         }
 
-        core.logInfo('âœ… API: Message added successfully:', { conversationId, messageId: message?.id, messageCount: updatedConversation.messages?.length });
+        core.logInfo('API: Message added successfully:', { conversationId, messageId: message?.id, messageCount: updatedConversation.messages?.length });
         return res.status(200).json({ success: true, data: updatedConversation });
       } catch (error) {
-        console.error('âŒ API: Error adding message:', {
+        console.error('API: Error adding message:', {
           conversationId,
           messageId: message?.id,
           error: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined
         });
         return res.status(500).json({ 
           success: false, 
-          reason: error instanceof Error ? error.message : 'Failed to add message to conversation' 
+          reason: 'Failed to add message to conversation' 
         });
       }
     }
 
-    // PATCH â€” mark messages read and/or clear message history (participants only)
+    // PATCH — mark messages read and/or clear message history (participants only)
     if (req.method === 'PATCH') {
       let body = req.body as
         | {
@@ -1790,7 +1956,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         }
         return res.status(200).json({ success: true, data: updatedConversation });
       } catch (error) {
-        console.error('âŒ API: PATCH conversation error:', error);
+        console.error(' API: PATCH conversation error:', error);
         return res.status(500).json({
           success: false,
           reason: error instanceof Error ? error.message : 'Failed to update conversation',
@@ -1890,7 +2056,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
     if (!core.USE_SUPABASE) {
       return res.status(503).json({
         success: false,
-        reason: 'Firebase is not configured. Please set Firebase environment variables.'
+        reason: 'Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
       });
     }
 
@@ -1960,67 +2126,53 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         return res.status(200).json({ success: true, data: notification });
       }
       
-      // Get all notifications from Supabase and filter
-      const supabase = core.getSupabaseAdminClient();
-      const { data: allNotifications, error: fetchError } = await supabase
-        .from('notifications')
-        .select('*');
-      
-      if (fetchError) {
-        core.logError('âŒ Failed to fetch notifications:', fetchError);
-        return res.status(500).json({ success: false, reason: 'Failed to fetch notifications' });
+      if (!auth || !auth.isValid) {
+        return res.status(200).json({ success: true, data: [] });
       }
-      
-      let notifications = (allNotifications || []).map((notif: any) => ({
-        ...notif,
-        id: notif.id,
-        recipientEmail: notif.recipient_email || notif.user_id,
-        isRead: notif.read || notif.is_read
-      }));
-      
+
+      const supabase = core.getSupabaseAdminClient();
+      let query = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(200);
+
       if (recipientEmail) {
         const emailValue = Array.isArray(recipientEmail) ? recipientEmail[0] : recipientEmail;
-        const normalizedEmail = emailValue.toLowerCase().trim();
-        // If not authenticated or not admin, only return notifications for the authenticated user
-        if (!auth || !auth.isValid) {
-          // No auth token - return empty array instead of 401
-          return res.status(200).json({ success: true, data: [] });
-        }
+        const normalizedEmail = String(emailValue).toLowerCase().trim();
         if (
           !isAdmin &&
           !core.participantIdMatchesAppUser(normalizedEmail, normalizedAuthEmail, normalizedAuthUserId)
         ) {
           return res.status(200).json({ success: true, data: [] });
         }
-        notifications = notifications.filter((n) => {
-          const recipient = n.recipientEmail || n.recipient_email || n.user_id || '';
-          return core.participantIdMatchesAppUser(
-            recipient.toString(),
-            normalizedEmail,
-            undefined,
-          );
-        });
-      } else {
-        // No recipientEmail specified - only admins can see all notifications
-        if (!auth || !auth.isValid || !isAdmin) {
-          // Return empty array instead of 401/403 for unauthenticated or non-admin requests
+        query = query.eq('recipient_email', normalizedEmail);
+      } else if (!isAdmin) {
+        if (normalizedAuthEmail) {
+          query = query.eq('recipient_email', normalizedAuthEmail);
+        } else if (normalizedAuthUserId) {
+          query = query.eq('user_id', normalizedAuthUserId);
+        } else {
           return res.status(200).json({ success: true, data: [] });
         }
       }
-      
+
       if (isRead !== undefined) {
         const isReadValue = Array.isArray(isRead) ? isRead[0] : isRead;
         const isReadBool = isReadValue === 'true';
-        notifications = notifications.filter(n => (n.isRead || n.read) === isReadBool);
+        query = query.eq('is_read', isReadBool);
       }
-      
-      // Sort by timestamp descending
-      notifications = notifications.sort((a, b) => {
-        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return bTime - aTime;
-      });
-      
+
+      const { data: allNotifications, error: fetchError } = await query;
+      if (fetchError) {
+        core.logError('Failed to fetch notifications:', fetchError);
+        return res.status(500).json({ success: false, reason: 'Failed to fetch notifications' });
+      }
+
+      const notifications = (allNotifications || []).map((notif: Record<string, unknown>) => ({
+        ...notif,
+        id: notif.id,
+        recipientEmail: notif.recipient_email || notif.user_id,
+        isRead: Boolean(notif.read || notif.is_read),
+        read: Boolean(notif.read || notif.is_read),
+      }));
+
       return res.status(200).json({ success: true, data: notifications });
     }
 
@@ -2062,7 +2214,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         .single();
       
       if (createError) {
-        core.logError('âŒ Failed to create notification:', createError);
+        core.logError(' Failed to create notification:', createError);
         return res.status(500).json({ success: false, reason: 'Failed to create notification' });
       }
       
@@ -2071,10 +2223,14 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
 
     // PUT - Update notification (mark as read, etc.)
     if (req.method === 'PUT') {
-      const { notificationId, updates } = req.body;
+      const body = (req.body || {}) as { notificationId?: unknown; updates?: Record<string, unknown> };
+      const { notificationId, updates } = body;
       
       if (!notificationId) {
         return res.status(400).json({ success: false, reason: 'Notification ID is required' });
+      }
+      if (!updates || typeof updates !== 'object') {
+        return res.status(400).json({ success: false, reason: 'updates object is required' });
       }
 
       // Get existing notification from Supabase
@@ -2090,17 +2246,25 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       }
       
       const recipient = (existing.recipient_email || existing.user_id || '').toString().toLowerCase().trim();
-      if (!isAdmin && recipient && recipient !== normalizedAuthEmail) {
+      if (
+        !isAdmin &&
+        (!recipient ||
+          !core.participantIdMatchesAppUser(recipient, normalizedAuthEmail, normalizedAuthUserId))
+      ) {
         return res.status(403).json({ success: false, reason: 'Unauthorized notification update' });
       }
 
       // Update notification in Supabase
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         updated_at: new Date().toISOString()
       };
       
-      // Map updates to Supabase column names
-      if (updates.isRead !== undefined) updateData.read = updates.isRead;
+      // Keep read + is_read in sync — GET maps both columns.
+      if (updates.isRead !== undefined || updates.read !== undefined) {
+        const readVal = Boolean(updates.isRead ?? updates.read);
+        updateData.read = readVal;
+        updateData.is_read = readVal;
+      }
       if (updates.message !== undefined) updateData.message = updates.message;
       if (updates.title !== undefined) updateData.title = updates.title;
       
@@ -2112,7 +2276,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         .single();
       
       if (updateError) {
-        core.logError('âŒ Failed to update notification:', updateError);
+        core.logError('Failed to update notification:', updateError);
         return res.status(500).json({ success: false, reason: 'Failed to update notification' });
       }
       
@@ -2139,7 +2303,11 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       }
       
       const recipient = (existing.recipient_email || existing.user_id || '').toString().toLowerCase().trim();
-      if (!isAdmin && recipient && recipient !== normalizedAuthEmail) {
+      if (
+        !isAdmin &&
+        (!recipient ||
+          !core.participantIdMatchesAppUser(recipient, normalizedAuthEmail, normalizedAuthUserId))
+      ) {
         return res.status(403).json({ success: false, reason: 'Unauthorized notification deletion' });
       }
 
@@ -2150,7 +2318,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         .eq('id', String(notificationId));
       
       if (deleteError) {
-        core.logError('âŒ Failed to delete notification:', deleteError);
+        core.logError('Failed to delete notification:', deleteError);
         return res.status(500).json({ success: false, reason: 'Failed to delete notification' });
       }
       
@@ -2244,27 +2412,25 @@ async function handleContentReports(
     });
 
     if (core.USE_SUPABASE) {
-      try {
-        const supabase = core.getSupabaseAdminClient();
-        await supabase.from('audit_log').insert({
-          id: Date.now(),
-          timestamp:
-            typeof body.createdAt === 'string' ? body.createdAt : new Date().toISOString(),
-          actor: reportedBy,
-          action: 'content-report',
-          target: `${targetType}:${targetId}`,
-          details: reason || null,
-        });
-      } catch (dbErr) {
-        core.logWarn('content-report audit_log insert failed (non-fatal):', dbErr);
+      const supabase = core.getSupabaseAdminClient();
+      const { error } = await supabase.from('audit_log').insert({
+        id: Date.now() * 1000 + randomBytes(2).readUInt16BE(0),
+        timestamp: new Date().toISOString(),
+        actor: reportedBy,
+        action: 'content-report',
+        target: `${targetType}:${targetId}`,
+        details: reason || null,
+      });
+      if (error) {
+        core.logError('content-report audit_log insert failed:', error);
+        return res.status(500).json({ success: false, reason: 'Failed to record content report.' });
       }
     }
 
     return res.status(200).json({ success: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    core.logError('handleContentReports error:', message);
-    return res.status(500).json({ success: false, reason: message });
+    core.logError('handleContentReports error:', error);
+    return res.status(500).json({ success: false, reason: 'Failed to record content report.' });
   }
 }
 
@@ -2274,7 +2440,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: co
     if (!core.USE_SUPABASE) {
       return res.status(503).json({
         success: false,
-        reason: 'Firebase is not configured. Please set Firebase environment variables.'
+        reason: 'Supabase is not configured. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
       });
     }
     const plansPath = 'plans';
@@ -2294,6 +2460,11 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: co
       return fallback;
     };
 
+    const toDurationDays = (value: unknown, fallback: number): number => {
+      const n = Number(value);
+      return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+    };
+
     const toPlanDetails = (id: string, row: Record<string, unknown>) => {
       const basePlan = core.PLAN_DETAILS[id as keyof typeof core.PLAN_DETAILS];
       const metadata = (row.metadata as Record<string, unknown> | undefined) || {};
@@ -2302,6 +2473,10 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: co
         id,
         name: String(row.name || basePlan?.name || 'Custom Plan'),
         price: toNumber(row.price, basePlan?.price ?? 0),
+        durationDays: toDurationDays(
+          row.duration_days ?? row.durationDays ?? metadata.durationDays,
+          basePlan?.durationDays ?? 30,
+        ),
         // Keep base plan marketing/features canonical from code constants.
         // This prevents stale DB-edited feature text from drifting across pages.
         features: isBasePlan
@@ -2327,6 +2502,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: co
             id,
             name: plan.name,
             price: plan.price,
+            durationDays: plan.durationDays ?? 30,
             features: plan.features,
             listingLimit: plan.listingLimit,
             featuredCredits: plan.featuredCredits,
@@ -2355,11 +2531,12 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: co
           return res.status(400).json({ error: 'Plan name is required' });
         }
 
-        const planId = String(newPlanData.id || `custom_${Date.now()}`);
+        const planId = String(newPlanData.id || newEntityId('custom'));
         const record = {
           id: planId,
           name: String(newPlanData.name),
           price: toNumber(newPlanData.price, 0),
+          duration_days: toDurationDays(newPlanData.durationDays ?? newPlanData.duration_days, 30),
           features: Array.isArray(newPlanData.features) ? newPlanData.features : [],
           listingLimit: toNumber(newPlanData.listingLimit, 0),
           featuredCredits: toNumber(newPlanData.featuredCredits, 0),
@@ -2391,6 +2568,10 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: co
           id: updatePlanId,
           name: String(updateData.name ?? existing?.name ?? basePlan?.name ?? 'Plan'),
           price: toNumber(updateData.price ?? existing?.price, basePlan?.price ?? 0),
+          duration_days: toDurationDays(
+            updateData.durationDays ?? updateData.duration_days ?? existing?.duration_days ?? existing?.durationDays,
+            basePlan?.durationDays ?? 30,
+          ),
           features: basePlan
             ? (basePlan.features || [])
             : (Array.isArray(updateData.features)
@@ -2438,7 +2619,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: co
     console.error('Plans Handler Error:', error);
     return res.status(500).json({ 
       error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: 'Failed to process plans request',
     });
   }
 }

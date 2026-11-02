@@ -3,7 +3,7 @@
  */
 import { randomBytes } from 'crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { authenticateRequestDual } from '../../api/auth.js';
+import { authenticateRequestDual } from '../auth-request.js';
 import { sanitizeString } from '../../utils/security.js';
 import { resolveRateLimit } from '../../lib/rate-limit-resolver.js';
 import { getSecurityConfig } from '../../utils/security-config.js';

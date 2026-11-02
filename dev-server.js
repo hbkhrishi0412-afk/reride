@@ -1,7 +1,6 @@
-// Development server that handles API routes
+// Legacy static SPA host. Prefer `dev-api-server.js` for local API + Vite proxy.
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { createProxyMiddleware } from 'http-proxy-middleware';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -11,13 +10,6 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
-// Import API handlers
-import authHandler from './api/auth.js';
-import seedHandler from './api/seed.js';
-import usersHandler from './api/users.js';
-import vehiclesHandler from './api/vehicles.js';
-
-// Middleware
 app.use(express.json());
 
 const apiLimiter = rateLimit({
@@ -35,26 +27,17 @@ const spaFallbackLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// API routes
-app.use('/api/auth', authHandler);
-app.use('/api/seed', seedHandler);
-app.use('/api/users', usersHandler);
-app.use('/api/vehicles', vehiclesHandler);
-
-// Health check
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'API server is running' });
 });
 
-// Serve static files from dist directory
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Fallback for SPA (rate-limited; API routes are covered by /api limiter above)
 app.get('*', spaFallbackLimiter, (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 API server running on http://localhost:${PORT}`);
-  console.log(`📁 Serving API routes: /api/auth, /api/seed, /api/users, /api/vehicles`);
+  console.log(`🚀 Static server on http://localhost:${PORT}`);
+  console.log(`📁 For API routes use: node dev-api-server.js`);
 });

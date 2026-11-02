@@ -1,20 +1,22 @@
 import type { VercelRequest } from '@vercel/node';
 import { verifyToken } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
-import { verifySupabaseToken } from '../server/supabase-auth.js';
+import { verifySupabaseToken } from './supabase-auth.js';
 import { resolveAuthRoleFromEmail } from '../utils/resolveAuthRole.js';
 import { isTokenRevokedForUser, SESSION_REVOKED_ERROR } from '../lib/token-revocation.js';
 
-// Authentication middleware
 export interface AuthResult {
   isValid: boolean;
-  user?: { userId: string; email: string; role: string; type?: string }; // role includes service_provider from JWT
+  user?: { userId: string; email: string; role: string; type?: string };
   error?: string;
 }
 
+/** Per-request cache so gateway rate-limit auth and handlers share one verify. */
+const dualAuthByRequest = new WeakMap<VercelRequest, Promise<AuthResult>>();
+
 export const authenticateRequest = (req: VercelRequest): AuthResult => {
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return { isValid: false, error: 'No valid authorization header' };
   }
@@ -22,19 +24,18 @@ export const authenticateRequest = (req: VercelRequest): AuthResult => {
   const securityConfig = getSecurityConfig();
   const secret = securityConfig.JWT.SECRET;
   if (!secret) {
-    return { 
-      isValid: false, 
-      error: 'Server configuration error: JWT secret is missing' 
+    return {
+      isValid: false,
+      error: 'Server configuration error: JWT secret is missing',
     };
   }
 
   try {
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    const token = authHeader.substring(7);
     const decoded = verifyToken(token);
-    // Ensure role is present for the user object
     const user = {
       ...decoded,
-      role: decoded.role || 'customer' as 'customer' | 'seller' | 'admin'
+      role: decoded.role || ('customer' as 'customer' | 'seller' | 'admin'),
     };
     return { isValid: true, user };
   } catch (error) {
@@ -43,8 +44,7 @@ export const authenticateRequest = (req: VercelRequest): AuthResult => {
   }
 };
 
-/** App JWT (reRideAccessToken) or Supabase access_token in Authorization header. */
-export const authenticateRequestDual = async (req: VercelRequest): Promise<AuthResult> => {
+async function authenticateRequestDualUncached(req: VercelRequest): Promise<AuthResult> {
   const legacy = authenticateRequest(req);
   if (legacy.isValid) {
     return (await isTokenRevokedForUser(req.headers.authorization, legacy.user?.email))
@@ -75,22 +75,14 @@ export const authenticateRequestDual = async (req: VercelRequest): Promise<AuthR
   } catch {
     return { isValid: false, error: legacy.error || 'Authentication required' };
   }
+}
+
+/** App JWT (reRideAccessToken) or Supabase access_token in Authorization header. */
+export const authenticateRequestDual = (req: VercelRequest): Promise<AuthResult> => {
+  let pending = dualAuthByRequest.get(req);
+  if (!pending) {
+    pending = authenticateRequestDualUncached(req);
+    dualAuthByRequest.set(req, pending);
+  }
+  return pending;
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

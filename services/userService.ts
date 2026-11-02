@@ -387,7 +387,7 @@ const deleteUserLocal = async (email: string): Promise<{ success: boolean, email
 
 const loginLocal = async (
     credentials: { email?: string; password?: string; role?: string; skipRoleCheck?: boolean }
-): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string }> => {
+): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string, code?: number }> => {
     const { email, password, role, skipRoleCheck } = credentials;
     
     const normalizedEmail = (email || '').trim().toLowerCase();
@@ -399,7 +399,7 @@ const loginLocal = async (
     const user = users.find(u => (u.email || '').trim().toLowerCase() === normalizedEmail);
     
     if (!user) {
-        return { success: false, reason: 'Invalid credentials.' };
+        return { success: false, reason: 'Invalid credentials.', code: 1004 };
     }
     
     // Development localStorage uses plain-text password comparison only.
@@ -408,14 +408,15 @@ const loginLocal = async (
     const isPasswordValid = storedPassword === normalizedPassword;
     
     if (!isPasswordValid) {
-        return { success: false, reason: 'Invalid credentials.' };
+        return { success: false, reason: 'Invalid credentials.', code: 1004 };
     }
     
     if (!skipRoleCheck && role && user.role !== role) {
         return { 
             success: false, 
             reason: `User is not a registered ${role}.`,
-            detectedRole: user.role 
+            detectedRole: user.role,
+            code: 1005,
         };
     }
     
@@ -618,8 +619,10 @@ const authApi = async (body: any): Promise<any> => {
                     console.error('❌ Database connection failed:', errorMessage);
                     throw new Error(errorMessage);
                 }
-                
-                throw new Error(errorMessage);
+
+                const err: Error & { code?: number } = new Error(errorMessage);
+                if (typeof errorDetails?.code === 'number') err.code = errorDetails.code;
+                throw err;
             }
             
             // Parse successful response
@@ -812,14 +815,15 @@ export const deleteUser = isDevelopment ? deleteUserLocal : deleteUserApi;
 
 /** Apply login API response: store JWTs and session user. */
 async function applyLoginApiResult(
-  result: { success: boolean; user?: User; reason?: string; detectedRole?: string; accessToken?: string; refreshToken?: string },
+  result: { success: boolean; user?: User; reason?: string; detectedRole?: string; accessToken?: string; refreshToken?: string; code?: number },
   credentials: { email?: string; password?: string; role?: string },
-): Promise<{ success: boolean; user?: User; reason?: string; detectedRole?: string }> {
+): Promise<{ success: boolean; user?: User; reason?: string; detectedRole?: string; code?: number }> {
   if (!result.success) {
     return {
       success: result.success,
       reason: result.reason,
       detectedRole: result.detectedRole,
+      code: result.code,
     };
   }
 
@@ -832,6 +836,7 @@ async function applyLoginApiResult(
       success: false,
       reason: `User is not a registered ${credentials.role}.`,
       detectedRole: result.user.role,
+      code: 1005,
     };
   }
 
@@ -858,7 +863,7 @@ async function applyLoginApiResult(
   };
 }
 
-export const login = async (credentials: { email?: string; password?: string; role?: string; [key: string]: unknown }): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string }> => {
+export const login = async (credentials: { email?: string; password?: string; role?: string; [key: string]: unknown }): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string, code?: number }> => {
   // Validate required fields
   if (!credentials.email || String(credentials.email).trim() === '') {
     return { success: false, reason: 'Email is required.' };
@@ -879,6 +884,10 @@ export const login = async (credentials: { email?: string; password?: string; ro
       return await applyLoginApiResult(result, credentials);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? Number((error as { code?: unknown }).code)
+          : undefined;
       // Clear stale caches on failure
       try {
         localStorage.removeItem('reRideUsers');
@@ -887,7 +896,11 @@ export const login = async (credentials: { email?: string; password?: string; ro
       } catch {
         // ignore storage errors
       }
-      return { success: false, reason: errorMessage || 'Login failed. Please try again.' };
+      return {
+        success: false,
+        reason: errorMessage || 'Login failed. Please try again.',
+        code: Number.isFinite(code) ? code : undefined,
+      };
     }
   }
 

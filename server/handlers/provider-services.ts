@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { authenticateRequestDual } from './auth.js';
-import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
-import { applyCors } from '../lib/api-route-cors.js';
-import { isValidServiceType } from '../constants/serviceProviderCatalog.js';
+import { authenticateRequestDual } from '../auth-request.js';
+import { getSupabaseAdminClient } from '../../lib/supabase-admin.js';
+import { applyCors } from '../../lib/api-route-cors.js';
+import { isValidServiceType } from '../../constants/serviceProviderCatalog.js';
 
 interface ProviderService {
   serviceType: string;
@@ -99,13 +99,14 @@ async function resolveProviderId(req: VercelRequest): Promise<string> {
 }
 
 function isAuthFailure(message: string): boolean {
-  const lower = message.toLowerCase();
-  return lower.includes('missing bearer token')
-    || lower.includes('authentication required')
-    || lower.includes('no valid authorization')
-    || lower.includes('not authenticated')
-    || lower.includes('invalid or expired')
-    || lower.includes('session revoked');
+  return (
+    message === 'Authentication required' ||
+    message === 'No valid authorization header' ||
+    message === 'Invalid or expired token' ||
+    message.startsWith('Token has expired') ||
+    message.startsWith('Invalid token') ||
+    message.toLowerCase().includes('session revoked')
+  );
 }
 
 function nonNegativePrice(value: unknown): { ok: true; price?: number } | { ok: false } {
@@ -320,12 +321,11 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
   } catch (error) {
     console.error('Provider services API error:', error);
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    const status = isAuthFailure(message) ? 401 : 500;
-    return res.status(status).json({ error: message });
+    if (isAuthFailure(message)) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    return res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 }
-
-// Vercel serverless expects a default export when the module is loaded directly
-export default handleProviderServices;
 
 

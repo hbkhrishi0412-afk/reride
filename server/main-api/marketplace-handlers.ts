@@ -540,7 +540,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         if (!user) {
           await core.recordFailedLogin(normalizedEmail);
           // Don't reveal whether email exists or not (security best practice)
-          return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
+          return res.status(401).json({ success: false, reason: 'Invalid credentials.', code: 1004 });
         }
       }
       
@@ -596,7 +596,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         }
         
         await core.recordFailedLogin(normalizedEmail);
-        return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
+        return res.status(401).json({ success: false, reason: 'Invalid credentials.', code: 1004 });
       }
 
       // Upgrade legacy plaintext password rows to bcrypt on successful login.
@@ -641,7 +641,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
       }
       
       if (sanitizedData.role && !core.userRolesEqual(user.role, sanitizedData.role)) {
-        return res.status(403).json({ success: false, reason: `User is not a registered ${sanitizedData.role}.` });
+        return res.status(403).json({
+          success: false,
+          reason: `User is not a registered ${sanitizedData.role}.`,
+          code: 1005,
+        });
       }
       if (user.status === 'inactive') {
         return res.status(403).json({ success: false, reason: 'Your account has been deactivated.' });
@@ -3326,6 +3330,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       // SELLER ENDPOINT: Return all of the authenticated seller's vehicles (any status)
       if (action === 'seller-mine') {
+        // Override vercel.json public /api/vehicles cache — this response is per-user.
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.setHeader('Vary', 'Authorization, Cookie');
         const sellerAuth = await core.authenticateRequestDual(req);
         if (!sellerAuth.isValid || !sellerAuth.user?.email) {
           return res.status(401).json({ success: false, reason: sellerAuth.error || 'Authentication required' });
@@ -3362,6 +3369,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       // ADMIN ENDPOINT: Return all vehicles including unpublished/sold (requires admin auth)
       if (action === 'admin-all') {
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.setHeader('Vary', 'Authorization, Cookie');
         const adminAuth = await core.authenticateRequestDual(req);
         if (!adminAuth.isValid) {
           return res.status(401).json({ success: false, reason: adminAuth.error || 'Authentication required' });

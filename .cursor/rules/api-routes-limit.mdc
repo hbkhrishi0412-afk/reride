@@ -8,22 +8,15 @@ alwaysApply: false
 
 **Hard limit:** The `api/` directory may have **at most 12 top-level items** (route files + folders combined). Do not add a 13th entry.
 
-## Current inventory (10 — two slots free)
+## Current inventory (3 — nine slots free)
 
 | # | Entry | Role |
 |---|--------|------|
 | 1 | `main.ts` | Marketplace API entry (users, vehicles, deals, services) |
 | 2 | `platform.ts` | Platform API entry (chat, payments, AI, notifications) |
 | 3 | `send-sms-hook.ts` | Dedicated webhook (`/api/send-sms-hook`) |
-| 3 | `auth.ts` | Auth helpers / route module (imported by main) |
-| 4 | `login.ts` | Login route module |
-| 5 | `services.ts` | Car-services catalog |
-| 6 | `service-providers.ts` | Provider CRUD + register |
-| 7 | `service-requests.ts` | Service requests |
-| 8 | `provider-services.ts` | Provider service listings |
-| 9 | `lib/` | Shared API-only helpers (e.g. password-reset email) |
 
-Support chat is handled by `server/handlers/support-chat.ts` (Supabase). Legacy `chat.js` / `chat-websocket.js` removed.
+All other handlers live under `server/handlers/` (login, services, service-providers, service-requests, provider-services, …). Auth helpers: `server/auth-request.ts`. Password-reset email: `lib/send-password-reset-email.ts`.
 
 ## Rules
 
@@ -32,11 +25,11 @@ Support chat is handled by `server/handlers/support-chat.ts` (Supabase). Legacy 
 3. **Do not create `api/handlers/`** — use `server/handlers/` for extracted handlers (does not count toward the 12).
 4. **Prefer one catch-all** (`main.ts`) + a few domain modules over many thin Vercel functions.
 5. **Shared code** → `server/`, `lib/`, `services/` — not new top-level `api/*` files.
+6. **Never add `export default` on modules under `server/handlers/`** — only the three `api/` entry files should be Vercel functions.
 
 ## If you need a new API area
 
-- Merge into the closest existing module (`services.ts`, `service-requests.ts`, etc.), **or**
-- Replace/remove a deprecated module, **or**
-- Implement in `server/handlers/<domain>.ts` and wire from `main.ts` only.
+- Merge into the closest existing module, **or**
+- Implement in `server/handlers/<domain>.ts` and wire from `main.ts` / routes only.
 
 Never add `api/users.ts`, `api/vehicles.ts`, etc. as separate top-level entries unless something else was removed first.

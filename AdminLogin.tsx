@@ -3,10 +3,21 @@ import { View, User } from './types';
 import { login } from './services/userService';
 import PasswordInput from './components/PasswordInput';
 import AuthLayout from './components/AuthLayout';
+import { ErrorCode } from './utils/errorUtils';
 
 interface AdminLoginProps {
   onLogin: (user: User) => void;
   onNavigate: (view: View) => void;
+}
+
+function adminLoginErrorMessage(code?: number, reason?: string): string {
+  if (code === ErrorCode.AUTH_INVALID_CREDENTIALS) {
+    return 'Invalid email or password. Please check your credentials and try again.';
+  }
+  if (code === ErrorCode.AUTH_INSUFFICIENT_PERMISSIONS) {
+    return 'This account does not have admin privileges.';
+  }
+  return reason || 'Failed to authenticate.';
 }
 
 const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onNavigate }) => {
@@ -27,30 +38,20 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onNavigate }) => {
     }
 
     try {
-        // SECURITY: Removed hardcoded credentials - all authentication must go through proper API
-        
-        // Try normal login flow
         const result = await login({ email, password, role: 'admin' });
 
         if (result.success && result.user) {
             onLogin(result.user);
         } else {
-            throw new Error(result.reason || 'Invalid admin credentials.');
+            setError(adminLoginErrorMessage(result.code, result.reason || 'Invalid admin credentials.'));
         }
     } catch (err) {
-        let errorMessage = 'Failed to authenticate.';
-        
-        if (err instanceof Error) {
-            errorMessage = err.message;
-            // Provide more helpful error messages
-            if (errorMessage.includes('Invalid credentials')) {
-                errorMessage = 'Invalid email or password. Please check your credentials and try again.';
-            } else if (errorMessage.includes('not a registered')) {
-                errorMessage = 'This account does not have admin privileges.';
-            }
-        }
-        
-        setError(errorMessage);
+        const code =
+          err && typeof err === 'object' && 'code' in err
+            ? Number((err as { code?: unknown }).code)
+            : undefined;
+        const reason = err instanceof Error ? err.message : undefined;
+        setError(adminLoginErrorMessage(Number.isFinite(code) ? code : undefined, reason));
     } finally {
         setIsLoading(false);
     }

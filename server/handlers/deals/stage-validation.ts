@@ -36,8 +36,8 @@ export function validateAdvanceStage(params: {
 
   switch (stage) {
     case 'test_drive_scheduled':
-      if (pipelineStageIndex(currentStage) < pipelineStageIndex('inspection_completed')) {
-        return 'Inspection must be completed before scheduling a test drive';
+      if (pipelineStageIndex(currentStage) < pipelineStageIndex('offer_accepted')) {
+        return 'Price must be agreed before scheduling a test drive';
       }
       if (pipelineStageIndex(currentStage) >= pipelineStageIndex('test_drive_completed')) {
         return 'Test drive is already completed for this deal';
@@ -62,8 +62,8 @@ export function validateAdvanceStage(params: {
     }
     case 'inspection_requested':
       if (!isBuyer) return 'Only the buyer can request inspection';
-      if (pipelineStageIndex(currentStage) < pipelineStageIndex('offer_accepted')) {
-        return 'Price must be agreed before requesting inspection';
+      if (pipelineStageIndex(currentStage) < pipelineStageIndex('test_drive_completed')) {
+        return 'Test drive must be completed before requesting inspection';
       }
       break;
     case 'inspection_completed':
@@ -73,8 +73,8 @@ export function validateAdvanceStage(params: {
     case 'token_uploaded':
       if (!isBuyer) return 'Only the buyer can upload token receipt';
       if (!payload.receiptUrl) return 'Token receipt is required';
-      if (pipelineStageIndex(currentStage) < pipelineStageIndex('test_drive_completed')) {
-        return 'Test drive must be completed before uploading token';
+      if (pipelineStageIndex(currentStage) < pipelineStageIndex('inspection_completed')) {
+        return 'Inspection must be completed before uploading token';
       }
       break;
     case 'token_confirmed':

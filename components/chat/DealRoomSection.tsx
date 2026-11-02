@@ -67,6 +67,8 @@ export const DealRoomSection: React.FC<DealRoomSectionProps> = ({
     return null;
   }
 
+  const sellerNeedsAccept = currentUserRole === 'seller' && dealLead.chatStatus === 'pending';
+
   return (
     <div
       id={`deal-room-${conversation.id}`}
@@ -83,35 +85,28 @@ export const DealRoomSection: React.FC<DealRoomSectionProps> = ({
         <button
           type="button"
           onClick={onTogglePanel}
-          className={`text-xs font-semibold ${toggleAccentClass}`}
+          className={`shrink-0 text-xs font-semibold ${toggleAccentClass}`}
           aria-expanded={dealPanelOpen}
         >
           {dealPanelOpen
             ? t('deal.hideTimeline', { defaultValue: 'Hide deal' })
-            : t('deal.showTimeline', { defaultValue: 'Show deal' })}
+            : sellerNeedsAccept
+              ? t('deal.showTimelineAccept', { defaultValue: 'Accept chat' })
+              : t('deal.showTimeline', { defaultValue: 'Show deal' })}
         </button>
       </div>
 
-      {currentUserRole === 'customer' && dealLead.chatStatus === 'pending' ? (
-        <p className="mx-3 mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-          {t('deal.awaitingSellerChat', {
-            defaultValue:
-              'Your tracked deal is active. The seller must accept chat before you can message — track progress below.',
-          })}
-        </p>
-      ) : null}
-
-      {currentUserRole === 'seller' && dealLead.chatStatus === 'pending' ? (
-        <p className="mx-3 mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-          {t('deal.sellerAcceptChat', {
-            defaultValue:
-              'A buyer started a tracked deal. Accept chat in the Deal Room below to unlock messaging.',
+      {/* One short cue when collapsed — chip already carries status while open */}
+      {!dealPanelOpen && sellerNeedsAccept ? (
+        <p className="px-3 pb-2 text-[11px] text-amber-800">
+          {t('deal.sellerAcceptChatShort', {
+            defaultValue: 'Buyer is waiting — open Deal Room to accept chat.',
           })}
         </p>
       ) : null}
 
       {dealPanelOpen ? (
-        <div className={`px-2 pb-2 overflow-y-auto ${panelMaxHeightClass}`}>
+        <div className={`px-3 pb-2 overflow-y-auto ${panelMaxHeightClass}`}>
           <DealTimelinePanel
             lead={dealLead}
             currentUser={currentUser}

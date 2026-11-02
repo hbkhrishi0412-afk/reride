@@ -1475,10 +1475,10 @@ export const DEAL_PIPELINE_STAGES: readonly DealStage[] = [
   'chat_accepted',
   'offer_made',
   'offer_accepted',
-  'inspection_requested',
-  'inspection_completed',
   'test_drive_scheduled',
   'test_drive_completed',
+  'inspection_requested',
+  'inspection_completed',
   'token_uploaded',
   'token_confirmed',
   'delivery_pending',
@@ -1500,13 +1500,31 @@ export function pipelineStageProgressPercent(stage: DealStage | string): number 
   return Math.round(((idx + 1) / DEAL_PIPELINE_STAGES.length) * 100);
 }
 
+/** Listing CTA for test drive — locked until price agreed; hidden once scheduled or with no deal. */
+export function testDriveBookingState(
+  lead: { currentStage: DealStage | string; chatStatus?: string } | null | undefined,
+): 'hidden' | 'locked' | 'available' {
+  if (!lead || lead.chatStatus !== 'accepted') return 'hidden';
+  const idx = pipelineStageIndex(lead.currentStage);
+  if (idx < 0) return 'hidden';
+  if (idx >= pipelineStageIndex('test_drive_scheduled')) return 'hidden';
+  if (idx < pipelineStageIndex('offer_accepted')) return 'locked';
+  return 'available';
+}
+
+export function canBookTestDrive(
+  lead: { currentStage: DealStage | string; chatStatus?: string } | null | undefined,
+): boolean {
+  return testDriveBookingState(lead) === 'available';
+}
+
 export const DEAL_TIMELINE_STAGES: { stage: DealStage; label: string }[] = [
   { stage: 'lead_created', label: 'Lead Created' },
   { stage: 'chat_accepted', label: 'Chat Started' },
   { stage: 'offer_accepted', label: 'Negotiation' },
-  { stage: 'inspection_completed', label: 'Inspection Completed' },
   { stage: 'test_drive_scheduled', label: 'Test Drive Scheduled' },
   { stage: 'test_drive_completed', label: 'Test Drive Completed' },
+  { stage: 'inspection_completed', label: 'Inspection Completed' },
   { stage: 'token_confirmed', label: 'Token Confirmed' },
   { stage: 'delivery_completed', label: 'Delivery Completed' },
   { stage: 'documents_completed', label: 'Documents Completed' },

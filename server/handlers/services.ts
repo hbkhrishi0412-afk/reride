@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSupabaseAdminClient } from '../lib/supabase-admin.js';
-import { authenticateRequestDual } from './auth.js';
-import { applyCors } from '../lib/api-route-cors.js';
+import { getSupabaseAdminClient } from '../../lib/supabase-admin.js';
+import { authenticateRequestDual } from '../auth-request.js';
+import { applyCors } from '../../lib/api-route-cors.js';
 
 interface Service {
   id: string;
@@ -67,12 +67,14 @@ async function getAuthContext(req: VercelRequest, supabase: ReturnType<typeof ge
   };
 }
 
-function getErrorStatusCode(message: string): number {
-  const lower = message.toLowerCase();
-  if (lower.includes('auth') || lower.includes('token') || lower.includes('access')) {
-    return 403;
-  }
-  return 500;
+function isAuthFailure(message: string): boolean {
+  return (
+    message === 'Authentication required' ||
+    message === 'No valid authorization header' ||
+    message === 'Invalid or expired token' ||
+    message.startsWith('Token has expired') ||
+    message.startsWith('Invalid token')
+  );
 }
 
 export async function handleServices(req: VercelRequest, res: VercelResponse) {
@@ -196,11 +198,10 @@ export async function handleServices(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Services API error:', error);
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    const status = getErrorStatusCode(message);
-    return res.status(status).json({ error: message });
+    if (isAuthFailure(message)) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    return res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 }
-
-// Vercel serverless expects a default export when the module is loaded directly
-export default handleServices;
 

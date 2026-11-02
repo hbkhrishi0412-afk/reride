@@ -921,6 +921,10 @@ const en = {
   'vehicle.detail.call': 'Call',
   'vehicle.detail.whatsapp': 'WhatsApp',
   'vehicle.detail.bookTestDrive': 'Book test drive',
+  'vehicle.detail.testDriveLocked':
+    'Test drive unlocks after price is agreed in the deal room.',
+  'toast.testDrive.stageLocked':
+    'Complete negotiation in the deal room before booking a test drive.',
   'chat.testDrive.request': 'Test drive request',
   'chat.testDrive.status.pending': 'Pending',
   'chat.testDrive.status.confirmed': 'Confirmed',
@@ -991,8 +995,6 @@ const en = {
   'vehicle.detail.compare': 'Compare',
   'vehicle.detail.comparing': 'Comparing',
   'vehicle.detail.reportThisListing': 'Report this listing',
-  'vehicle.detail.price.saveExtraLoanInterest':
-    'Save extra ₹{{amount}} in loan interest with 1.25% lower rate',
   'vehicle.detail.tabs.overview': 'Overview',
   'vehicle.detail.tabs.report': 'Report',
   'vehicle.detail.tabs.featureSpecs': 'Feature & Specs',

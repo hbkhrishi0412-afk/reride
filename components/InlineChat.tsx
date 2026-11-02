@@ -379,14 +379,18 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
         className={`flex-grow p-4 overflow-y-auto bg-gray-50 space-y-4 ${height}`}
       >
         {visibleMessages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-500">
+          <div className="flex items-center justify-center h-full text-gray-500 px-4">
             <div className="text-center">
-              <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
-              <p>No messages yet. Start the conversation!</p>
+              {chatBlockedByDeal ? (
+                <p className="text-sm text-gray-600">Waiting for the seller to accept chat.</p>
+              ) : (
+                <p className="text-sm text-gray-600">No messages yet. Start the conversation!</p>
+              )}
               {dealLead && currentUserRole === 'customer' && !chatBlockedByDeal ? (
-                <p className="text-sm text-gray-600 mt-3">Use the Deal Room above to make or counter offers.</p>
+                <p className="mt-2 text-xs text-gray-500">Use Deal Room above for offers.</p>
               ) : null}
             </div>
           </div>

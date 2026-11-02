@@ -36,7 +36,7 @@ import MobilePushNotificationManager from './components/MobilePushNotificationMa
 import NativePushRegistration from './components/NativePushRegistration';
 import WebPushRegistration from './components/WebPushRegistration';
 import AppRatingPrompt from './components/AppRatingPrompt';
-import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates, VehicleCategory, type SearchFilters } from './types';
+import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates, VehicleCategory, type SearchFilters, canBookTestDrive } from './types';
 import { persistReRideNotifications } from './utils/notificationLocalStorage';
 import { countUnreadMessageThreads } from './utils/unreadCounts';
 import {
@@ -384,6 +384,11 @@ const AppContent: React.FC = () => {
         savePostLoginDetailContext(vehicle);
         addToast(t('toast.testDrive.loginRequired'), 'info');
         navigate(ViewEnum.CUSTOMER_LOGIN);
+        return;
+      }
+      const lead = await getDealLead({ vehicleId: vehicle.id }).catch(() => null);
+      if (!canBookTestDrive(lead)) {
+        addToast(t('toast.testDrive.stageLocked'), 'info');
         return;
       }
       const conversation = await openOrCreateVehicleConversation({

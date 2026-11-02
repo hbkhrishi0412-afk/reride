@@ -815,7 +815,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
               onSendMessage(messageText, type as ChatMessage['type'], payload)
             }
             onStartDealRoom={() => void handleStartDealRoom()}
-            panelMaxHeightClass="max-h-[min(36vh,280px)]"
+            panelMaxHeightClass="max-h-[min(28vh,220px)]"
             toggleAccentClass="text-purple-600"
           />
         ) : null}
@@ -827,16 +827,20 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
           style={{ backgroundColor: '#F7F7F9' }}
         >
             {visibleMessages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                <div className="text-center mb-6">
-                  <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex flex-col items-center justify-center h-full text-gray-500 px-4">
+                <div className="text-center">
+                  <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
-                  <p className="text-gray-600 mb-2">No messages yet. Start the conversation!</p>
+                  {chatBlockedByDeal ? (
+                    <p className="text-sm text-gray-600">Waiting for the seller to accept chat.</p>
+                  ) : (
+                    <p className="text-sm text-gray-600">No messages yet. Start the conversation!</p>
+                  )}
+                  {dealLead && currentUserRole === 'customer' && !chatBlockedByDeal ? (
+                    <p className="mt-2 text-xs text-gray-500">Use Deal Room above for offers.</p>
+                  ) : null}
                 </div>
-                {dealLead && currentUserRole === 'customer' && !chatBlockedByDeal ? (
-                  <p className="text-gray-600 text-sm">Use the Deal Room above to make or counter offers.</p>
-                ) : null}
               </div>
             ) : (
               <>

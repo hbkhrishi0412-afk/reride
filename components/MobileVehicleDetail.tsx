@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import type { Vehicle, User, RatingEligibility, DealLead, CertifiedInspection } from '../types';
+import { testDriveBookingState, type Vehicle, type User, type RatingEligibility, type DealLead, type CertifiedInspection } from '../types';
 import { useTranslatedText, useTranslatedArray, useTranslatedFields } from '../hooks/useTranslatedText';
 import { useTrackVehicleView } from '../hooks/useTrackVehicleView';
 import { getFirstValidImage, getValidImages, swapToPlaceholderOnError } from '../utils/imageUtils';
@@ -396,10 +396,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     return Math.round((loanAmount * monthlyRate * Math.pow(1 + monthlyRate, tenure)) / (Math.pow(1 + monthlyRate, tenure) - 1));
   }, [safeVehicle.price]);
 
-  const saveExtraLoanInterest = useMemo(() => {
-    return Math.round((baseEMI * 60) - (baseEMI * 0.95 * 60)).toLocaleString();
-  }, [baseEMI]);
-
   const rawCallPhone = (seller?.mobile || safeVehicle.sellerPhone || '').trim();
   const callHref = useMemo(() => telHrefFromRawPhone(rawCallPhone), [rawCallPhone]);
   const callPhoneLabel = phoneDisplayCompact(rawCallPhone);
@@ -421,6 +417,8 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     ? getFollowersCount(seller?.email || safeVehicle.sellerEmail)
     : 0;
 
+  const testDriveCta = testDriveBookingState(vehicleDealLead);
+
   /** Portaled to body: PageTransition/framer-motion uses transform, which breaks `fixed` inside scroll main. */
   const contactToolbar =
     typeof document !== 'undefined'
@@ -438,7 +436,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 </button>
               </div>
             ) : null}
-            {onRequestTestDrive && listingAvailable ? (
+            {onRequestTestDrive && listingAvailable && testDriveCta === 'available' ? (
               <div className="border-b border-gray-100 px-4 py-2">
                 {showTestDriveForm ? (
                   <form className="space-y-2" onSubmit={handleRequestTestDriveSubmit}>
@@ -501,6 +499,10 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                   </button>
                 )}
               </div>
+            ) : onRequestTestDrive && listingAvailable && testDriveCta === 'locked' ? (
+              <p className="border-b border-gray-100 px-4 py-2 text-xs text-slate-600">
+                {t('vehicle.detail.testDriveLocked')}
+              </p>
             ) : null}
           <div
             className="flex gap-3 px-4 pt-3"
@@ -778,16 +780,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
             >
               {t('vehicle.detail.price.calculateEmi')}
             </button>
-          </div>
-
-          {/* Loan Offer Banner */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
-            <svg className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
-            <p className="text-sm text-gray-800">
-              {t('vehicle.detail.price.saveExtraLoanInterest', { amount: saveExtraLoanInterest })}
-            </p>
           </div>
 
           <div className="mt-3">

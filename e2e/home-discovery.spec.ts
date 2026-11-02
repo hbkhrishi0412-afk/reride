@@ -63,7 +63,8 @@ test.describe('Vehicle detail — stock & contact CTAs', () => {
     await expect(detailBadge).toBeVisible({ timeout: 20_000 });
     await expect(detailBadge).toHaveAttribute('data-stock-status', 'in_stock');
     await expect(page.getByRole('button', { name: 'Chat with Seller' }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Book test drive' }).first()).toBeVisible();
+    // Test drive unlocks only after price is agreed in an active deal room.
+    await expect(page.getByRole('button', { name: 'Book test drive' })).toHaveCount(0);
   });
 
   test('sold listing hides book test drive and marks stock sold', async ({ page, request }) => {

@@ -10,6 +10,7 @@ import {
   handlePlatformSettings,
 } from './platform-handlers.js';
 import { ensureMutableRequestQuery, logInfo, type HandlerOptions } from './shared.js';
+import { pathHasSegment } from '../../utils/api-path-routing.js';
 
 function setContentQueryType(req: VercelRequest, type: string): void {
   ensureMutableRequestQuery(req);
@@ -36,7 +37,11 @@ export async function dispatchPlatformRoute(
     setContentQueryType(req, 'support-tickets');
     return await handleContent(req, res, handlerOptions);
   }
-  if (pathname.includes('/content') || pathname.endsWith('/content')) {
+  // content-reports before content — segment match so /content does not swallow /content-reports
+  if (pathHasSegment(pathname, '/content-reports')) {
+    return await handleContentReports(req, res, handlerOptions);
+  }
+  if (pathHasSegment(pathname, '/content')) {
     return await handleContent(req, res, handlerOptions);
   }
   if (pathname.includes('/sell-car') || pathname.endsWith('/sell-car')) {
@@ -61,9 +66,6 @@ export async function dispatchPlatformRoute(
   if (pathname.includes('/buyer-activity') || pathname.endsWith('/buyer-activity')) {
     const { handleBuyerActivity } = await import('../handlers/buyer-activity.js');
     return await handleBuyerActivity(req, res, handlerOptions);
-  }
-  if (pathname.includes('/content-reports') || pathname.endsWith('/content-reports')) {
-    return await handleContentReports(req, res, handlerOptions);
   }
   if (pathname.includes('/chat') && !pathname.includes('/chat-websocket')) {
     const { handleSupportChat } = await import('../handlers/support-chat.js');
@@ -98,7 +100,10 @@ export async function dispatchPlatformRewrite(
     setContentQueryType(req, 'support-tickets');
     return await handleContent(req, res, handlerOptions);
   }
-  if (checkPath.includes('/content') || checkPath.endsWith('/content')) {
+  if (pathHasSegment(checkPath, '/content-reports')) {
+    return await handleContentReports(req, res, handlerOptions);
+  }
+  if (pathHasSegment(checkPath, '/content')) {
     return await handleContent(req, res, handlerOptions);
   }
   if (checkPath.includes('/audit-log') || checkPath.endsWith('/audit-log')) {
@@ -111,9 +116,6 @@ export async function dispatchPlatformRewrite(
     const { handleBuyerActivity } = await import('../handlers/buyer-activity.js');
     return await handleBuyerActivity(req, res, handlerOptions);
   }
-  if (checkPath.includes('/content-reports') || checkPath.endsWith('/content-reports')) {
-    return await handleContentReports(req, res, handlerOptions);
-  }
   if (checkPath.includes('/notifications') || checkPath.endsWith('/notifications')) {
     return await handleNotifications(req, res, handlerOptions);
   }
@@ -123,49 +125,53 @@ export async function dispatchPlatformRewrite(
   return undefined;
 }
 
+const PLATFORM_SEGMENTS = [
+  '/ai',
+  '/gemini',
+  '/faqs',
+  '/support-tickets',
+  '/content-reports',
+  '/content',
+  '/sell-car',
+  '/payments',
+  '/plans',
+  '/business',
+  '/conversations',
+  '/notifications',
+  '/buyer-activity',
+  '/chat',
+  '/audit-log',
+  '/settings',
+] as const;
+
+const MARKETPLACE_SEGMENTS = [
+  '/users',
+  '/vehicles',
+  '/admin',
+  '/seed',
+  '/vehicle-specs',
+  '/vehicle-pricing',
+  '/geocode',
+  '/vehicle-trust',
+  '/deals',
+  '/complaints',
+  '/vehicle-data',
+  '/system',
+  '/utils',
+  '/login',
+  '/upload-image',
+  '/services',
+  '/provider-services',
+  '/service-providers',
+  '/service-requests',
+  '/db-health',
+  '/health',
+] as const;
+
 export function isPlatformPath(pathname: string): boolean {
-  return (
-    pathname.includes('/ai') ||
-    pathname.includes('/gemini') ||
-    pathname.includes('/faqs') ||
-    pathname.includes('/support-tickets') ||
-    pathname.includes('/content') ||
-    pathname.includes('/sell-car') ||
-    pathname.includes('/payments') ||
-    pathname.includes('/plans') ||
-    pathname.includes('/business') ||
-    pathname.includes('/conversations') ||
-    pathname.includes('/notifications') ||
-    pathname.includes('/buyer-activity') ||
-    pathname.includes('/content-reports') ||
-    pathname.includes('/chat') ||
-    pathname.includes('/audit-log') ||
-    pathname.includes('/settings')
-  );
+  return PLATFORM_SEGMENTS.some((seg) => pathHasSegment(pathname, seg));
 }
 
 export function isMarketplacePath(pathname: string): boolean {
-  return (
-    pathname.includes('/users') ||
-    pathname.includes('/vehicles') ||
-    pathname.includes('/admin') ||
-    pathname.includes('/seed') ||
-    pathname.includes('/vehicle-specs') ||
-    pathname.includes('/vehicle-pricing') ||
-    pathname.includes('/geocode') ||
-    pathname.includes('/vehicle-trust') ||
-    pathname.includes('/deals') ||
-    pathname.includes('/complaints') ||
-    pathname.includes('/vehicle-data') ||
-    pathname.includes('/system') ||
-    pathname.includes('/utils') ||
-    pathname.includes('/login') ||
-    pathname.includes('/upload-image') ||
-    (pathname.includes('/services') && !pathname.includes('/service-')) ||
-    pathname.includes('/provider-services') ||
-    pathname.includes('/service-providers') ||
-    pathname.includes('/service-requests') ||
-    pathname.includes('/health') ||
-    pathname.includes('/db-health')
-  );
+  return MARKETPLACE_SEGMENTS.some((seg) => pathHasSegment(pathname, seg));
 }
