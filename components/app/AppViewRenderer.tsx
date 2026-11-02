@@ -2,7 +2,6 @@ import * as React from 'react';
 import { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View as ViewEnum, Vehicle, User, Notification, Conversation, ChatMessage, SubscriptionPlan, type SearchFilters } from '../../types';
-import { MARKETPLACE_VIEWS, CAR_SERVICE_VIEWS, DEAL_PIPELINE_VIEWS } from '../../features';
 import { useApp } from '../AppProvider';
 import { useChat } from '../../contexts/ChatContext';
 import { useNotifications } from '../../contexts/NotificationContext';
@@ -23,7 +22,7 @@ import { logInfo, logWarn, logError } from '../../utils/logger';
 import { isPublicBuyListing } from '../../services/listingLifecycleService';
 import { getPublishedCatalogTotal } from '../../services/dataService';
 import { runBackgroundSync } from '../../utils/toastPolicy.js';
-import { parseDeepLink } from '../../utils/mobileFeatures';
+import { getPendingDeepLinkVehicleId, matchDeepLinkView, parseDeepLink } from '../../utils/mobileFeatures';
 import { randomIntBelow } from '../../utils/secureRandom.js';
 import { isCapacitorNativeApp } from '../../utils/isCapacitorNative';
 import { currentUserForLocalSessionJson } from '../../utils/userLocalStorageSnapshot';
@@ -390,16 +389,8 @@ export const AppViewRenderer: React.FC<AppViewRendererLocals> = (locals) => {
     setVehicles,
   ]);
 
-  const productScope =
-    (MARKETPLACE_VIEWS as readonly string[]).includes(currentView)
-      ? 'marketplace'
-      : (CAR_SERVICE_VIEWS as readonly string[]).includes(currentView)
-        ? 'car-services'
-        : (DEAL_PIPELINE_VIEWS as readonly string[]).includes(currentView)
-          ? 'deals'
-          : 'platform';
-  void productScope;
-
+  // One case per view. When isMobileApp, return the Mobile* screen and nothing else —
+  // MobileLayout in App.tsx is the only phone frame. Desktop is the fall-through return.
 switch (currentView) {
   case ViewEnum.HOME:
     if (isMobileApp) {
@@ -607,8 +598,10 @@ switch (currentView) {
     if (!vehicleToDisplay) {
       const pendingDetailId = (() => {
         try {
+          const stashed = getPendingDeepLinkVehicleId();
+          if (stashed != null) return stashed;
           const params = parseDeepLink();
-          if (params.view === ViewEnum.DETAIL && params.id != null) {
+          if (matchDeepLinkView(String(params.view || ''), Object.values(ViewEnum)) === ViewEnum.DETAIL && params.id != null) {
             const id = typeof params.id === 'string' ? parseInt(params.id, 10) : Number(params.id);
             return Number.isFinite(id) ? id : null;
           }

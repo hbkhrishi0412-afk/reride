@@ -159,7 +159,7 @@ type Props = {
         slotTimeLabel: string;
         couponCode?: string;
         providerId: string;
-        total: number;
+        total?: number;
         note?: string;
         carDetails?: { make: string; model: string; year: string; fuel: string; reg?: string; city?: string };
     }) => Promise<void> | void;

@@ -38,8 +38,9 @@ let hydrateStarted = false;
 
 /**
  * Resolves when native session keys have been mirrored into WebView localStorage
- * (or immediately on web). Auth restore must await this so cold starts don't
- * briefly treat a logged-in user as logged out.
+ * and the Remember me policy has been applied (or immediately on web).
+ * Auth restore must await this so a cold start cannot sign a user back in
+ * after they opted out.
  * Caps wait at 2s so a hung Preferences/SecureStorage bridge can't stall login UI.
  */
 export function whenNativeSessionReady(): Promise<void> {
@@ -52,6 +53,17 @@ export function whenNativeSessionReady(): Promise<void> {
   ]);
 }
 
+async function mirrorKeyIntoLocalStorage(key: SessionMirrorKey): Promise<void> {
+  try {
+    const value = await nativeKvGet(nativeMirrorKey(key));
+    if (value != null) {
+      localStorage.setItem(key, value);
+    }
+  } catch {
+    /* ignore per-key failures */
+  }
+}
+
 /** Restore mirrored session keys from native storage into WebView localStorage before auth boot. */
 export async function hydrateNativeSessionMirror(): Promise<void> {
   if (!isCapacitorNative() || typeof localStorage === 'undefined') {
@@ -62,18 +74,22 @@ export async function hydrateNativeSessionMirror(): Promise<void> {
   hydrateStarted = true;
 
   try {
-    await Promise.all(
-      SESSION_MIRROR_KEYS.map(async (key) => {
-        try {
-          const value = await nativeKvGet(nativeMirrorKey(key));
-          if (value != null) {
-            localStorage.setItem(key, value);
-          }
-        } catch {
-          /* ignore per-key failures */
-        }
-      }),
-    );
+    // Pref first → wipe if needed → only then mirror the user. Avoids a
+    // whenNativeSessionReady 2s timeout restoring someone who opted out.
+    await mirrorKeyIntoLocalStorage('reride_remember_me');
+    const { enforceRememberMePolicyOnBoot } = await import('./rememberMe.js');
+    const wiped = await enforceRememberMePolicyOnBoot();
+    if (!wiped) {
+      await Promise.all([
+        mirrorKeyIntoLocalStorage('reRideCurrentUser'),
+        mirrorKeyIntoLocalStorage('reride_last_login_role'),
+      ]);
+    }
+    // Tokens only after policy. Parallel Preferences reads can rewrite memory
+    // after clearNativeTokens if these run beside the wipe.
+    const { hydrateNativeTokensFromPreferences } = await import('./nativeTokenStorage.js');
+    const { hydrateSupabaseAuthTokenCache } = await import('./supabaseNativeAuthStorage.js');
+    await Promise.all([hydrateNativeTokensFromPreferences(), hydrateSupabaseAuthTokenCache()]);
   } finally {
     readyGate.resolve();
   }

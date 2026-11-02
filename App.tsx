@@ -11,7 +11,6 @@ import SEO from './components/SEO';
 import CookieConsentBanner from './components/CookieConsentBanner';
 import { 
   VehicleListErrorBoundary, 
-  ChatErrorBoundary, 
   DashboardErrorBoundary, 
   AdminPanelErrorBoundary,
   AuthenticationErrorBoundary
@@ -19,23 +18,16 @@ import {
 import Header from './components/Header';
 import Footer from './components/Footer';
 import ToastContainer from './components/ToastContainer';
-import AppChatWidgetHost from './components/AppChatWidgetHost';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import useIsMobileApp from './hooks/useIsMobileApp';
 import { CLIENT_POLL_INTERVALS_MS } from './utils/clientPolling.js';
 import { isCapacitorNativeApp } from './utils/isCapacitorNative';
 import { setCapacitorAndroidBackHandler } from './utils/capacitorAndroidBack';
 import { tryHardwareBack } from './utils/hardwareBackRegistry';
-import ShareTargetHandler from './components/ShareTargetHandler';
-import OfflineIndicator from './components/OfflineIndicator';
 // Layout/utility components that are always needed - keep as eager imports
 import MobileLayout from './components/MobileLayout';
 import MobileLocationModalHost from './components/MobileLocationModalHost';
 import MobileSearch from './components/MobileSearch';
-import MobilePushNotificationManager from './components/MobilePushNotificationManager';
-import NativePushRegistration from './components/NativePushRegistration';
-import WebPushRegistration from './components/WebPushRegistration';
-import AppRatingPrompt from './components/AppRatingPrompt';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates, VehicleCategory, type SearchFilters, canBookTestDrive } from './types';
 import { persistReRideNotifications } from './utils/notificationLocalStorage';
 import { countUnreadMessageThreads } from './utils/unreadCounts';
@@ -45,7 +37,13 @@ import {
   normalizeInboxRole,
   participantIdMatchesAppUser,
 } from './utils/conversationParticipants';
-import { parseDeepLink } from './utils/mobileFeatures';
+import {
+  consumeDeepLinkParams,
+  getPendingDeepLinkVehicleId,
+  matchDeepLinkView,
+  parseDeepLink,
+  setPendingDeepLinkVehicleId,
+} from './utils/mobileFeatures';
 import {
   applyNotificationDeepLinkUrl,
   normalizeNativePushPayload,
@@ -70,7 +68,8 @@ import { openOrCreateVehicleConversation } from './utils/vehicleConversationFlow
 import { stringifyVehicleForSession } from './utils/vehicleSessionCache.js';
 import { createDealLead, getDealLead, advanceDealStage, fetchPendingDealSurveys, acceptDealChat } from './services/dealService.js';
 import { invalidateMyDealLeadsCache } from './hooks/useMyDealLeads.js';
-import DealSurveyModal from './components/DealSurveyModal.js';
+import { AppSharedChrome } from './components/app/AppSharedChrome';
+import { mobileChromeForView } from './utils/mobileChrome';
 import { RERIDE_PRICE_DROP_EVENT, type ReridePriceDropDetail } from './services/buyerService';
 import type {
   AppApiResponse,
@@ -1557,42 +1556,57 @@ const AppContent: React.FC = () => {
     hasRestoredChatRef.current = null;
   }, [currentUser?.email]);
 
-  // Query-string deep links (?view=detail&id=) once catalog can resolve id — never override /vehicle/:id SPA routes.
+  // Query-string deep links (?view=detail&id=) — strip URL immediately; resolve id from stash when catalog loads.
+  // Never override /vehicle/:id SPA routes. Pending resolve is a separate effect so location churn
+  // after consume cannot skip selectVehicle.
   useEffect(() => {
-    const handleDeepLink = () => {
-      const path = routerLocation.pathname || '';
-      if (path.includes('/vehicle/')) {
-        return;
-      }
-      if (typeof window !== 'undefined' && window.location.hash && window.location.hash.includes('/vehicle/')) {
-        return;
-      }
-      const st = window.history.state as { usr?: { view?: unknown }; view?: unknown } | null;
-      const embedded = st?.usr ?? st;
-      if (embedded && typeof embedded === 'object' && embedded !== null && 'view' in embedded) {
-        return;
-      }
+    const path = routerLocation.pathname || '';
+    if (path.includes('/vehicle/')) return;
+    if (typeof window !== 'undefined' && window.location.hash && window.location.hash.includes('/vehicle/')) {
+      return;
+    }
 
-      const params = parseDeepLink();
-      if (params.view) {
-        const viewEnum = Object.values(ViewEnum).find(v => v === params.view) as ViewEnum | undefined;
-        if (viewEnum) {
-          setCurrentView(viewEnum);
-          if (params.id && viewEnum === ViewEnum.DETAIL) {
-            const vehicleId = typeof params.id === 'string' ? parseInt(params.id, 10) : Number(params.id);
-            if (Number.isFinite(vehicleId)) {
-              const vehicle = vehicles.find(v => Number(v.id) === vehicleId);
-              if (vehicle) {
-                selectVehicle(vehicle);
-              }
-            }
-          }
-        }
+    const params = parseDeepLink();
+    if (!params.view) return;
+    // Explicit ?view= wins over stale history.state.view from an earlier screen.
+    const viewEnum = matchDeepLinkView(String(params.view), Object.values(ViewEnum));
+    // Strip immediately so later hash/search churn cannot bounce back to this listing.
+    consumeDeepLinkParams();
+    if (!viewEnum) return;
+    if (params.id && viewEnum === ViewEnum.DETAIL) {
+      const vehicleId =
+        typeof params.id === 'string' ? parseInt(params.id, 10) : Number(params.id);
+      if (Number.isFinite(vehicleId)) {
+        setPendingDeepLinkVehicleId(vehicleId);
       }
-    };
+    }
+    setCurrentView(viewEnum);
+    // search/hash: HashRouter keeps ?view=detail&id= in the hash, so pathname stays "/".
+  }, [setCurrentView, routerLocation.pathname, routerLocation.search, routerLocation.hash]);
 
-    handleDeepLink();
-  }, [vehicles, setCurrentView, selectVehicle, routerLocation.pathname]);
+  const deepLinkSawDetailRef = React.useRef(false);
+  useEffect(() => {
+    const pendingId = getPendingDeepLinkVehicleId();
+    if (currentView === ViewEnum.DETAIL) {
+      deepLinkSawDetailRef.current = true;
+      if (pendingId == null) return;
+      const vehicle = vehicles.find(v => Number(v.id) === pendingId);
+      if (vehicle) {
+        setPendingDeepLinkVehicleId(null);
+        selectVehicle(vehicle);
+        return;
+      }
+      if (vehicles.length > 0) {
+        setPendingDeepLinkVehicleId(null);
+      }
+      return;
+    }
+    // Left DETAIL (or never reached it after a prior visit) — drop a stale stash.
+    if (deepLinkSawDetailRef.current && pendingId != null) {
+      setPendingDeepLinkVehicleId(null);
+    }
+    deepLinkSawDetailRef.current = false;
+  }, [vehicles, currentView, selectVehicle]);
 
   // Session restore is owned by AppProvider (validatePersistedSession). Only redirect off login screens.
   useEffect(() => {
@@ -2194,53 +2208,30 @@ const AppContent: React.FC = () => {
     
     // For ALL other views (Home, Browse, Detail, etc.), show mobile UI using MobileLayout
     // Hide header for HOME view since it has its own hero section
-    const mobileAuthViews: ViewEnum[] = [
-      ViewEnum.LOGIN_PORTAL,
-      ViewEnum.CUSTOMER_LOGIN,
-      ViewEnum.SELLER_LOGIN,
-      ViewEnum.ADMIN_LOGIN,
-      ViewEnum.FORGOT_PASSWORD,
-      ViewEnum.CAR_SERVICE_LOGIN,
-    ];
-    const isMobileAuthView = mobileAuthViews.includes(currentView);
-    // Title bar removed — brand top bar + bottom nav cover navigation; pages own back/search UI.
-    const hideBottomNavOnDetail =
-      currentView === ViewEnum.DETAIL ||
-      currentView === ViewEnum.NOTIFICATIONS_CENTER ||
-      isMobileAuthView;
+    const chrome = mobileChromeForView(currentView);
     return (
       <>
-        <SEO {...seoMeta} />
-        <NativePushRegistration userEmail={currentUser?.email} />
-        <WebPushRegistration
+        <AppSharedChrome
+          seo={<SEO {...seoMeta} />}
           userEmail={currentUser?.email}
-          enabled={currentUser?.role === 'seller'}
-        />
-        <AppRatingPrompt />
-        {/* Mobile Feature Managers */}
-        <MobilePushNotificationManager
+          sellerPushEnabled={currentUser?.role === 'seller'}
           notifications={pushNotificationsForCurrentUser}
           onNotificationClick={handleNotificationClick}
           profileMuteKeys={currentUser?.notificationMuteKeys}
-        />
-        <ShareTargetHandler
           onNavigate={navigate}
+          pendingSurvey={pendingSurvey}
+          onSurveyDone={() => setPendingSurvey(null)}
+          chatInlineLaunch={chatInlineLaunch}
+          onCloseChat={handleCloseChat}
+          onTestDriveResponse={handleTestDriveResponse}
         />
-        <OfflineIndicator />
-        
         <MobileLayout
           showHeader={false}
-          showBottomNav={!hideBottomNavOnDetail}
-          showBrandBar={!isMobileAuthView}
+          showBottomNav={chrome.showBottomNav}
+          showBrandBar={chrome.showBrandBar}
           headerTitle={getPageTitle()}
-          showBack={
-            currentView === ViewEnum.DETAIL || currentView === ViewEnum.NOTIFICATIONS_CENTER
-          }
-          onBack={() =>
-            currentView === ViewEnum.NOTIFICATIONS_CENTER
-              ? goBack(ViewEnum.HOME)
-              : goBack(ViewEnum.USED_CARS)
-          }
+          showBack={chrome.showBack}
+          onBack={() => goBack(chrome.backTarget)}
           currentView={currentView}
           onNavigate={navigate}
           currentUser={currentUser}
@@ -2275,21 +2266,6 @@ const AppContent: React.FC = () => {
           addToast={addToast}
         />
         <ToastContainer />
-        {pendingSurvey && (
-          <DealSurveyModal
-            surveyId={pendingSurvey.surveyId}
-            leadId={pendingSurvey.leadId}
-            vehicleName={pendingSurvey.vehicleName}
-            onClose={() => setPendingSurvey(null)}
-            onSubmitted={() => setPendingSurvey(null)}
-          />
-        )}
-        <AppChatWidgetHost
-          chatInlineLaunch={chatInlineLaunch}
-          onClose={handleCloseChat}
-          onTestDriveResponse={handleTestDriveResponse}
-          ChatErrorBoundary={ChatErrorBoundary}
-        />
       </>
     );
   }
@@ -2305,23 +2281,20 @@ const AppContent: React.FC = () => {
 
   return (
     <>
-      <SEO {...seoMeta} />
-      <NativePushRegistration userEmail={currentUser?.email} />
-      <WebPushRegistration
+      <AppSharedChrome
+        seo={<SEO {...seoMeta} />}
         userEmail={currentUser?.email}
-        enabled={currentUser?.role === 'seller'}
-      />
-      <AppRatingPrompt />
-      {/* Mobile Feature Managers (also work on desktop) */}
-      <MobilePushNotificationManager
+        sellerPushEnabled={currentUser?.role === 'seller'}
         notifications={pushNotificationsForCurrentUser}
         onNotificationClick={handleNotificationClick}
         profileMuteKeys={currentUser?.notificationMuteKeys}
-      />
-      <ShareTargetHandler
         onNavigate={navigate}
+        pendingSurvey={pendingSurvey}
+        onSurveyDone={() => setPendingSurvey(null)}
+        chatInlineLaunch={chatInlineLaunch}
+        onCloseChat={handleCloseChat}
+        onTestDriveResponse={handleTestDriveResponse}
       />
-      <OfflineIndicator />
       <div className={`min-h-screen ${isDesktopAdminNoFooter ? 'bg-slate-100' : 'bg-gray-50'}`}>
         {!isDesktopRoleWorkspace && (
           <Header 
@@ -2369,15 +2342,6 @@ const AppContent: React.FC = () => {
         {/* Desktop Global Components */}
         <PWAInstallPrompt />
         <ToastContainer />
-        {pendingSurvey && (
-          <DealSurveyModal
-            surveyId={pendingSurvey.surveyId}
-            leadId={pendingSurvey.leadId}
-            vehicleName={pendingSurvey.vehicleName}
-            onClose={() => setPendingSurvey(null)}
-            onSubmitted={() => setPendingSurvey(null)}
-          />
-        )}
         <Suspense fallback={<MinimalLoader />}>
           <CommandPalette 
             isOpen={isCommandPaletteOpen}
@@ -2393,12 +2357,6 @@ const AppContent: React.FC = () => {
             onClose={() => setIsKeyboardShortcutsOpen(false)}
           />
         </Suspense>
-        <AppChatWidgetHost
-          chatInlineLaunch={chatInlineLaunch}
-          onClose={handleCloseChat}
-          onTestDriveResponse={handleTestDriveResponse}
-          ChatErrorBoundary={ChatErrorBoundary}
-        />
       </div>
     </>
   );

@@ -225,7 +225,7 @@
       document.getElementsByTagName('head')[0].appendChild(viewport);
     }
     viewport.content =
-      'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover, shrink-to-fit=no';
+      'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover, interactive-widget=resizes-content';
 
     if (document.documentElement) document.documentElement.style.zoom = '1';
     if (document.body) {

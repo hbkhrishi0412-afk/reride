@@ -91,6 +91,7 @@ firebase-service-account.json
 *firebase-adminsdk*.json
 *service-account*.json
 reride-ade6a-*.json
+android/app/google-services.json
 
 # Firebase configuration (contains project-specific settings)
 .firebaserc

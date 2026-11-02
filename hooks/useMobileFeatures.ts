@@ -280,15 +280,19 @@ export function useDeepLinking() {
   const [params, setParams] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const parsed = parseDeepLink();
-    // Convert DeepLinkParams to Record<string, string> (URL params are always strings)
-    const stringParams: Record<string, string> = {};
-    Object.entries(parsed).forEach(([key, value]) => {
-      if (value !== undefined) {
-        stringParams[key] = String(value);
-      }
-    });
-    setParams(stringParams);
+    const read = () => {
+      const parsed = parseDeepLink();
+      const stringParams: Record<string, string> = {};
+      Object.entries(parsed).forEach(([key, value]) => {
+        if (value !== undefined) {
+          stringParams[key] = String(value);
+        }
+      });
+      setParams(stringParams);
+    };
+    read();
+    window.addEventListener('hashchange', read);
+    return () => window.removeEventListener('hashchange', read);
   }, []);
 
   const createLink = useCallback((params: Record<string, string | number>) => {

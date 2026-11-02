@@ -65,21 +65,21 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   const { lang: uiLang, epoch: langEpoch } = useTranslationRefresh();
   const [showMenu, setShowMenu] = useState(false);
   const shouldRenderHeader = showHeader || showMenu;
-  const headerRowPx = showHeader ? 56 : 0;
-  const brandBarInnerPx = showBrandBar ? 48 : 0;
+  const headerRow = showHeader ? 'var(--mobile-header)' : '0px';
+  const brandBar = showBrandBar ? 'var(--mobile-brand-bar)' : '0px';
 
-  // Memoize computed styles to prevent recalculation
+  // Spacers use the same px variables as the fixed bars. Height is 100% of the
+  // fixed shell, not 100vh, so a short phone and a tall phone keep the same frame.
   const mainStyles = useMemo(() => {
     const safeAreaTop = 'env(safe-area-inset-top, 0px)';
     const safeAreaBottom = 'env(safe-area-inset-bottom, 0px)';
-    const topChrome = `calc(${safeAreaTop} + ${brandBarInnerPx}px + ${headerRowPx}px)`;
-    /** Must match MobileBottomNav: 56px tab row + safe-area below the row */
+    const topChrome = `calc(${safeAreaTop} + ${brandBar} + ${headerRow})`;
     const bottomNavReserve = showBottomNav
-      ? 'calc(56px + env(safe-area-inset-bottom, 0px))'
+      ? 'calc(var(--mobile-tab-bar) + env(safe-area-inset-bottom, 0px))'
       : '0px';
 
     return {
-      height: `calc(100vh - ${safeAreaTop} - ${brandBarInnerPx}px - ${headerRowPx}px - ${bottomNavReserve})`,
+      height: `calc(100% - ${topChrome} - ${bottomNavReserve})`,
       marginTop: topChrome,
       marginBottom: bottomNavReserve,
       paddingTop: 0,
@@ -89,7 +89,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
       WebkitOverflowScrolling: 'touch' as const,
       overscrollBehavior: 'contain' as const,
     };
-  }, [brandBarInnerPx, headerRowPx, showBottomNav]);
+  }, [brandBar, headerRow, showBottomNav]);
 
   // Check if this is the Home or Login view to allow gradient background
   const shouldShowGradient = useMemo(() => {

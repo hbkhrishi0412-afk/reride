@@ -1,16 +1,14 @@
 /**
  * Persist login email when the user checks "Remember me".
  *
- * Web: localStorage stores email only (never passwords).
- * Capacitor: email + password may be stored in native secure/preferences KV
- * so credentials survive WebView localStorage clears — passwords are never
- * written to localStorage.
+ * Email only, on web and on Capacitor. Passwords are never written to
+ * localStorage or native KV — the OS password manager fills them back in.
+ * Any legacy native password key is deleted the next time credentials load.
  */
 import { isCapacitorNative } from './apiConfig.js';
 import { mirrorSessionKeyToNative, mirrorSessionKeyToNativeSync } from './nativeSessionMirror.js';
 import { nativeKvGet, nativeKvRemove, nativeKvSet } from './nativeKeyValueStorage.js';
 
-const PWD_PREFIX = 'v1:';
 export const LAST_ROLE_KEY = 'reride_last_login_role';
 
 export interface RememberedCredentials {
@@ -37,23 +35,6 @@ function nativeEmailKey(role: string): string {
 
 function nativePasswordKey(role: string): string {
   return `reride_remembered_${role}_password`;
-}
-
-function encodePassword(password: string): string {
-  try {
-    return `${PWD_PREFIX}${btoa(encodeURIComponent(password))}`;
-  } catch {
-    return '';
-  }
-}
-
-function decodePassword(encoded: string | null): string {
-  if (!encoded || !encoded.startsWith(PWD_PREFIX)) return '';
-  try {
-    return decodeURIComponent(atob(encoded.slice(PWD_PREFIX.length)));
-  } catch {
-    return '';
-  }
 }
 
 /** Remove legacy plaintext/obfuscated passwords from web localStorage. */
@@ -167,12 +148,9 @@ export async function hydrateRememberedCredentialsFromNative(
     return loadRememberedCredentialsSync(role);
   }
   try {
-    const [email, pwdEnc] = await Promise.all([
-      nativeKvGet(nativeEmailKey(role)),
-      nativeKvGet(nativePasswordKey(role)),
-    ]);
+    const email = await nativeKvGet(nativeEmailKey(role));
+    await nativeKvRemove(nativePasswordKey(role));
     if (!email) return loadRememberedCredentialsSync(role);
-    const password = decodePassword(pwdEnc);
     const ls = getLocal();
     if (ls) {
       ls.setItem(rememberedEmailKey(role), email);
@@ -180,7 +158,7 @@ export async function hydrateRememberedCredentialsFromNative(
       ls.removeItem(rememberedPasswordKey(role));
       writeLastLoginRole(role);
     }
-    return { email, password };
+    return { email, password: '' };
   } catch {
     return loadRememberedCredentialsSync(role);
   }
@@ -189,18 +167,14 @@ export async function hydrateRememberedCredentialsFromNative(
 async function persistRememberedCredentialsNative(
   role: string,
   email: string,
-  password: string,
+  _password: string,
   remember: boolean,
 ): Promise<void> {
   const nek = nativeEmailKey(role);
   const npk = nativePasswordKey(role);
   if (remember && email.trim()) {
     await nativeKvSet(nek, email.trim());
-    if (password) {
-      await nativeKvSet(npk, encodePassword(password));
-    } else {
-      await nativeKvRemove(npk);
-    }
+    await nativeKvRemove(npk);
     await mirrorSessionKeyToNative('reride_last_login_role', role);
   } else {
     await nativeKvRemove(nek);
@@ -212,7 +186,7 @@ async function persistRememberedCredentialsNative(
   }
 }
 
-/** Save or clear remembered email (+ native password on Capacitor only). */
+/** Save or clear the remembered email. The password argument is ignored. */
 export function saveRememberedCredentials(
   role: string,
   email: string,

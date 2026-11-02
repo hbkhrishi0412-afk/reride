@@ -7,16 +7,13 @@ import { warmUpNativeGoogleSignIn } from './nativeGoogleSignIn.js';
 import { initNativeGoogleOAuthReturnHandler } from './oauthMobile.js';
 import { initUniversalLinksHandler } from './universalLinks.js';
 import { initCapacitorAndroidBack } from './capacitorAndroidBack.js';
-import { hydrateNativeTokensFromPreferences } from './nativeTokenStorage.js';
-import { hydrateSupabaseAuthTokenCache } from './supabaseNativeAuthStorage.js';
 import { startNativeSessionHydrate } from './nativeSessionMirror.js';
 
 ensureRerideWebCanonicalHost();
 restoreOAuthRoleFromUrl();
 patchFetchForCapacitor();
-void hydrateNativeTokensFromPreferences();
-void hydrateSupabaseAuthTokenCache();
-// Session mirror runs in parallel with React mount (auth awaits whenNativeSessionReady).
+// Mirror → remember-me clear → token hydrate, in that order (see hydrateNativeSessionMirror).
+// Auth awaits whenNativeSessionReady(); do not start token hydrates in parallel.
 void startNativeSessionHydrate();
 initNativeGoogleOAuthReturnHandler();
 initUniversalLinksHandler();

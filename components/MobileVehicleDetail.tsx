@@ -13,7 +13,7 @@ import { scrollAppToTop } from '../utils/scrollAppToTop';
 import { getFollowersCount } from '../services/buyerEngagementService';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 import { MobileVehicleTrustStrip } from './MobileVehicleTrustStrip';
-import { buildSellerWhatsAppUrl } from '../utils/sellerContact.js';
+import { buildSellerWhatsAppUrl, openExternalUrl } from '../utils/sellerContact.js';
 import { trackPhoneView } from '../services/listingService.js';
 import { ListingTrustChips } from './ListingTrustChips.js';
 import { ListingTrustStatusBar } from './ListingTrustStatusBar.js';
@@ -411,7 +411,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
       return;
     }
     trackPhoneView(safeVehicle.id);
-    if (sellerWhatsAppUrl) window.open(sellerWhatsAppUrl, '_blank', 'noopener,noreferrer');
+    if (sellerWhatsAppUrl) void openExternalUrl(sellerWhatsAppUrl);
   };
   const followersForSeller = safeVehicle.sellerEmail
     ? getFollowersCount(seller?.email || safeVehicle.sellerEmail)

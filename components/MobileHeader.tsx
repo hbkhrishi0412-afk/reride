@@ -217,10 +217,11 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
     <>
       {showTitleBar && (
       <header
-        className="fixed left-0 right-0 z-[50] h-14"
+        className="fixed left-0 right-0 z-[50]"
         data-testid="mobile-header"
         style={{
-        top: 'calc(env(safe-area-inset-top, 0px) + 3rem)',
+        top: 'calc(env(safe-area-inset-top, 0px) + var(--mobile-brand-bar))',
+        height: 'var(--mobile-header)',
         paddingTop: 0,
         background: isGradientView
           ? 'linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.1) 100%)'
@@ -278,7 +279,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
 
             {/* Center Title - Premium Typography */}
             <h1
-              className="text-base font-bold absolute left-1/2 transform -translate-x-1/2 max-w-[240px] sm:max-w-[280px] truncate tracking-tight"
+              className="text-base font-bold absolute left-1/2 transform -translate-x-1/2 max-w-[min(240px,46vw)] truncate tracking-tight"
               style={{
                 letterSpacing: '-0.01em',
                 color: isGradientView ? '#FFFFFF' : '#1A1A1A'

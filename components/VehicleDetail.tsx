@@ -15,7 +15,7 @@ import { useApp } from './AppProvider';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import { scrollAppToTop } from '../utils/scrollAppToTop';
 import { getVehicleListingUrl } from '../utils/whatsappShare.js';
-import { buildSellerWhatsAppUrl, getSellerCallPhone } from '../utils/sellerContact.js';
+import { buildSellerWhatsAppUrl, getSellerCallPhone, openExternalUrl } from '../utils/sellerContact.js';
 import { trackPhoneView } from '../services/listingService.js';
 import { telHrefFromRawPhone } from '../utils/numberUtils.js';
 import { ListingStockBadge } from './ListingStockBadge.js';
@@ -597,7 +597,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
       return;
     }
     trackPhoneView(safeVehicle.id);
-    if (sellerWhatsAppUrl) window.open(sellerWhatsAppUrl, '_blank', 'noopener,noreferrer');
+    if (sellerWhatsAppUrl) void openExternalUrl(sellerWhatsAppUrl);
   };
 
   const handleChatWithSeller = async () => {

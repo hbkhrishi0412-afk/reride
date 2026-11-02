@@ -19,16 +19,8 @@ export const resetViewportZoom = (): void => {
   }
 
   try {
-    // Reset CSS zoom (body may be null before DOM is ready, e.g. Capacitor WebView)
-    document.documentElement.style.zoom = '1';
-    if (document.body) {
-      document.body.style.zoom = '1';
-      document.body.style.transform = 'scale(1)';
-    }
-
-    document.documentElement.style.transform = 'scale(1)';
-    
-    // Ensure viewport meta tag is correct
+    // viewport-fit=cover is required for env(safe-area-inset-*) on notched phones.
+    // Dropping it made those insets 0 after boot, so notched phones and plain phones diverged.
     let viewport = document.querySelector('meta[name="viewport"]');
     if (!viewport) {
       viewport = document.createElement('meta');
@@ -38,7 +30,7 @@ export const resetViewportZoom = (): void => {
     
     viewport.setAttribute(
       'content',
-      'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, shrink-to-fit=no'
+      'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover, interactive-widget=resizes-content'
     );
     
     // Prevent text size adjustment that causes zooming

@@ -135,7 +135,8 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
         />
         
         <div 
-          className="grid h-14 w-full max-w-3xl mx-auto grid-cols-6 items-stretch gap-0 px-0.5 sm:px-2" 
+          className="grid w-full max-w-3xl mx-auto grid-cols-6 items-stretch gap-0 px-1"
+          style={{ height: 'var(--mobile-tab-bar)' }} 
         >
           {navItems.map((item) => {
             const messagesTabActive =
@@ -303,7 +304,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                 </div>
                 
                 <span 
-                  className="relative z-10 block max-w-full truncate text-center text-xs font-semibold leading-tight text-gray-900 transition-colors duration-200 sm:text-[13px]"
+                  className="relative z-10 block max-w-full truncate text-center text-[10px] font-semibold leading-tight text-gray-900 transition-colors duration-200"
                   style={{ 
                     letterSpacing: '-0.01em',
                     fontWeight: isActive ? 700 : 600,

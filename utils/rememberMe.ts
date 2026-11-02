@@ -86,11 +86,12 @@ function clearSupabaseAuthTokens(): void {
  * Run once at app bootstrap (before Supabase client and user restoration).
  * Drops stale auth data when the user opted out of "Remember me" in the
  * previous browser session.
+ * @returns true when this boot wiped a stale session
  */
-export function enforceRememberMePolicyOnBoot(): void {
+export async function enforceRememberMePolicyOnBoot(): Promise<boolean> {
   const ls = getLocal();
   const ss = getSession();
-  if (!ls || !ss) return;
+  if (!ls || !ss) return false;
 
   // Supabase PKCE OAuth return (?code= / ?state=): never wipe auth storage here —
   // the code_verifier lives in localStorage and must survive until exchangeCodeForSession runs.
@@ -103,7 +104,7 @@ export function enforceRememberMePolicyOnBoot(): void {
         } catch {
           /* ignore */
         }
-        return;
+        return false;
       }
     } catch {
       /* ignore */
@@ -114,7 +115,7 @@ export function enforceRememberMePolicyOnBoot(): void {
   try {
     pref = ls.getItem(PREF_KEY);
   } catch {
-    return;
+    return false;
   }
 
   // Default (no preference recorded yet) and explicit "true" → keep session.
@@ -124,7 +125,7 @@ export function enforceRememberMePolicyOnBoot(): void {
     } catch {
       /* ignore */
     }
-    return;
+    return false;
   }
 
   // Preference is "don't remember".
@@ -137,7 +138,7 @@ export function enforceRememberMePolicyOnBoot(): void {
 
   if (alive === '1') {
     // Same tab / same navigation — keep session.
-    return;
+    return false;
   }
 
   // New browser session for a user who did NOT check remember me — log them out.
@@ -156,16 +157,14 @@ export function enforceRememberMePolicyOnBoot(): void {
   clearSupabaseAuthTokens();
 
   if (isCapacitorNative()) {
-    void (async () => {
-      try {
-        const { clearNativeTokens } = await import('./nativeTokenStorage.js');
-        const { clearSupabaseSecureAuthStorage } = await import('./supabaseNativeAuthStorage.js');
-        await Promise.all([clearNativeTokens(), clearSupabaseSecureAuthStorage()]);
-        await clearNativeSessionMirrorExceptPref();
-      } catch {
-        /* ignore */
-      }
-    })();
+    try {
+      const { clearNativeTokens } = await import('./nativeTokenStorage.js');
+      const { clearSupabaseSecureAuthStorage } = await import('./supabaseNativeAuthStorage.js');
+      await Promise.all([clearNativeTokens(), clearSupabaseSecureAuthStorage()]);
+      await clearNativeSessionMirrorExceptPref();
+    } catch {
+      /* ignore */
+    }
   }
 
   try {
@@ -173,6 +172,7 @@ export function enforceRememberMePolicyOnBoot(): void {
   } catch {
     /* ignore */
   }
+  return true;
 }
 
 function writeRememberMePreference(remember: boolean): void {

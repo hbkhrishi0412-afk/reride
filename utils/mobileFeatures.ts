@@ -44,6 +44,47 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 /**
+ * `serviceWorker.ready` never settles when nothing is registered. Capacitor
+ * skips the service worker, and Chromium still exposes the API, so waiting
+ * here hangs in-app alerts. Prefer a registration (first visit before control)
+ * over requiring controller.
+ */
+const SW_READY_MS = 1500;
+
+function serviceWorkerApiAvailable(): boolean {
+  return typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
+}
+
+async function activeServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (!serviceWorkerApiAvailable()) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const existing = await navigator.serviceWorker.getRegistration();
+    if (existing) return existing;
+    return await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), SW_READY_MS);
+      }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function showPageNotification(options: PushNotificationOptions): void {
+  if (typeof Notification === 'undefined') return;
+  new Notification(options.title, {
+    body: options.body,
+    icon: options.icon || '/icon-192.png',
+    tag: options.tag,
+    data: options.data,
+  });
+}
+
+/**
  * Show a local notification
  */
 export async function showNotification(options: PushNotificationOptions): Promise<void> {
@@ -54,9 +95,9 @@ export async function showNotification(options: PushNotificationOptions): Promis
     return;
   }
 
-  if ('serviceWorker' in navigator) {
+  const registration = await activeServiceWorker();
+  if (registration) {
     try {
-      const registration = await navigator.serviceWorker.ready;
       const notificationOptions: NotificationOptions & { vibrate?: number[]; actions?: Array<{ action: string; title: string; icon?: string }> } = {
         body: options.body,
         icon: options.icon || '/icon-192.png',
@@ -75,36 +116,25 @@ export async function showNotification(options: PushNotificationOptions): Promis
       await registration.showNotification(options.title, notificationOptions);
     } catch (error) {
       console.error('Failed to show notification via service worker:', error);
-      if (typeof Notification !== 'undefined') {
-        new Notification(options.title, {
-          body: options.body,
-          icon: options.icon || '/icon-192.png',
-          tag: options.tag,
-          data: options.data
-        });
-      }
+      showPageNotification(options);
     }
-  } else if (typeof Notification !== 'undefined') {
-    new Notification(options.title, {
-      body: options.body,
-      icon: options.icon || '/icon-192.png',
-      tag: options.tag,
-      data: options.data
-    });
+    return;
   }
+  showPageNotification(options);
 }
 
 /**
  * Subscribe to push notifications
  */
 export async function subscribeToPushNotifications(): Promise<PushSubscription | null> {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+  if (!serviceWorkerApiAvailable() || !('PushManager' in window)) {
     console.warn('Push notifications are not supported');
     return null;
   }
 
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await activeServiceWorker();
+    if (!registration) return null;
     const vapidKey = getVapidPublicKey();
     if (!vapidKey) {
       console.warn('VAPID public key not configured');
@@ -126,12 +156,13 @@ export async function subscribeToPushNotifications(): Promise<PushSubscription |
  * Get current push subscription
  */
 export async function getPushSubscription(): Promise<PushSubscription | null> {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+  if (!serviceWorkerApiAvailable() || !('PushManager' in window)) {
     return null;
   }
 
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await activeServiceWorker();
+    if (!registration) return null;
     return await registration.pushManager.getSubscription();
   } catch (error) {
     console.error('Failed to get push subscription:', error);
@@ -609,15 +640,108 @@ export function createDeepLink(params: DeepLinkParams): string {
 /**
  * Parse deep link parameters from URL
  */
-export function parseDeepLink(): DeepLinkParams {
-  const params: DeepLinkParams = {};
-  const searchParams = new URLSearchParams(window.location.search);
-  
-  searchParams.forEach((value, key) => {
+function assignSearchParams(params: DeepLinkParams, search: string): void {
+  const query = search.startsWith('?') ? search.slice(1) : search;
+  if (!query) return;
+  new URLSearchParams(query).forEach((value, key) => {
     params[key] = value;
   });
-  
+}
+
+/**
+ * Query params from the real URL and from the hash.
+ * Capacitor uses HashRouter, so `/?view=detail&id=` arrives as `#/?view=detail&id=`
+ * and `window.location.search` is empty.
+ */
+export function parseDeepLink(): DeepLinkParams {
+  const params: DeepLinkParams = {};
+  if (typeof window === 'undefined') return params;
+  assignSearchParams(params, window.location.search);
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  const q = hash.indexOf('?');
+  if (q >= 0) assignSearchParams(params, hash.slice(q + 1));
   return params;
+}
+
+const CONSUMED_DEEP_LINK_KEYS = ['view', 'id'] as const;
+
+function stripKeysFromSearch(search: string, keys: readonly string[]): string {
+  const query = search.startsWith('?') ? search.slice(1) : search;
+  if (!query) return '';
+  const params = new URLSearchParams(query);
+  let changed = false;
+  for (const key of keys) {
+    if (params.has(key)) {
+      params.delete(key);
+      changed = true;
+    }
+  }
+  if (!changed) return search.startsWith('?') ? search : search ? `?${search}` : '';
+  const next = params.toString();
+  return next ? `?${next}` : '';
+}
+
+/**
+ * Drop legacy `view` / `id` query keys from document search and the hash query
+ * so a later catalog refresh cannot re-apply the same deep link.
+ */
+export function consumeDeepLinkParams(keys: readonly string[] = CONSUMED_DEEP_LINK_KEYS): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const url = new URL(window.location.href);
+    const nextSearch = stripKeysFromSearch(url.search, keys);
+    const hashBody = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+    const q = hashBody.indexOf('?');
+    let nextHash = url.hash;
+    if (q >= 0) {
+      const pathPart = hashBody.slice(0, q);
+      const stripped = stripKeysFromSearch(hashBody.slice(q), keys);
+      nextHash = `#${pathPart}${stripped}`;
+    }
+    if (nextSearch === url.search && nextHash === url.hash) return;
+    url.search = nextSearch;
+    url.hash = nextHash;
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+const PENDING_DEEP_LINK_VEHICLE_KEY = 'reride_pending_deeplink_vehicle';
+
+/** Stash listing id while URL `view`/`id` are stripped and the catalog loads. */
+export function setPendingDeepLinkVehicleId(id: number | null): void {
+  if (typeof sessionStorage === 'undefined') return;
+  try {
+    if (id == null) sessionStorage.removeItem(PENDING_DEEP_LINK_VEHICLE_KEY);
+    else sessionStorage.setItem(PENDING_DEEP_LINK_VEHICLE_KEY, String(id));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getPendingDeepLinkVehicleId(): number | null {
+  if (typeof sessionStorage === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(PENDING_DEEP_LINK_VEHICLE_KEY);
+    if (raw == null || raw === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Share links use `view=detail`; the View enum value is `DETAIL`. */
+export function matchDeepLinkView<T extends string>(
+  raw: string | undefined,
+  views: readonly T[],
+): T | undefined {
+  if (!raw) return undefined;
+  const needle = raw.toLowerCase();
+  return views.find((v) => String(v).toLowerCase() === needle);
 }
 
 /**
@@ -687,23 +811,24 @@ export async function queueOfflineAction(
     }
   }
 
-  // Queue for background sync
-  if ('serviceWorker' in navigator && 'sync' in (ServiceWorkerRegistration.prototype as any)) {
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      const db = await openIndexedDB();
-      const actionId = `action_${Date.now()}_${randomAlphanumeric(9)}`;
-      
-      await saveToIndexedDB(db, 'pendingActions', {
-        id: actionId,
-        ...action,
-        timestamp: Date.now()
-      });
-      
-      await (registration as any).sync.register('sync-vehicle-actions');
-    } catch (error) {
-      console.error('Failed to queue offline action:', error);
+  // Always persist; background sync is best-effort once a worker exists.
+  try {
+    const db = await openIndexedDB();
+    const actionId = `action_${Date.now()}_${randomAlphanumeric(9)}`;
+    await saveToIndexedDB(db, 'pendingActions', {
+      id: actionId,
+      ...action,
+      timestamp: Date.now(),
+    });
+
+    if ('sync' in (ServiceWorkerRegistration.prototype as any)) {
+      const registration = await activeServiceWorker();
+      if (registration) {
+        await (registration as any).sync.register('sync-vehicle-actions');
+      }
     }
+  } catch (error) {
+    console.error('Failed to queue offline action:', error);
   }
 }
 

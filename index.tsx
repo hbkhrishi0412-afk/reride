@@ -167,21 +167,9 @@ const queryClient = new QueryClient({
 // (paths like /used-cars 404). Hash routes work for the packaged app; web keeps clean URLs.
 const AppRouter = isCapacitorNative() ? HashRouter : BrowserRouter;
 
-// Cap cold start: native session mirror already started in capacitorInit (parallel with paint).
-// Auth restore awaits whenNativeSessionReady() so logged-in users still hydrate correctly.
+// Session hydrate starts in capacitorInit and applies Remember me before
+// whenNativeSessionReady() resolves. This block only arms the splash fallback.
 if (typeof window !== 'undefined' && isCapacitorNative()) {
-  void import('./utils/nativeSessionMirror')
-    .then(({ startNativeSessionHydrate }) => startNativeSessionHydrate())
-    .then(() => {
-      try {
-        enforceRememberMePolicyOnBoot();
-      } catch {
-        /* non-fatal */
-      }
-    })
-    .catch(() => {
-      /* non-fatal */
-    });
   void import('./utils/hideNativeSplash').then(({ scheduleNativeSplashFallbackHide }) => {
     scheduleNativeSplashFallbackHide(4000);
   });

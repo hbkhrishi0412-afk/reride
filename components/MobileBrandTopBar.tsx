@@ -58,11 +58,14 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-[52] border-b border-gray-200/90 bg-white/95 backdrop-blur-md"
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      className="fixed top-0 left-0 right-0 z-[52] box-border border-b border-gray-200/90 bg-white/95 backdrop-blur-md"
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        height: 'calc(env(safe-area-inset-top, 0px) + var(--mobile-brand-bar))',
+      }}
       data-testid="mobile-brand-top-bar"
     >
-      <div className="grid h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-2">
+      <div className="grid h-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-2">
         {/* Left: language + location */}
         <div className="flex min-w-0 items-center gap-1 justify-self-start">
           <LanguageSwitcher compact />
