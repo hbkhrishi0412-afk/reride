@@ -41,7 +41,7 @@ import {
   MUTATION_IDENTITY_REFRESH_MESSAGE,
   sanitizeVehicleMediaUrls,
 } from '../../utils/vehicleIdentity.js';
-import { isPublicBuyListing } from '../../services/listingLifecycleService.js';
+import { isPublicBuyListing, isListingUnderModeration } from '../../services/listingLifecycleService.js';
 import { lookupVehicleSpecsFromCarQuery } from '../../lib/carquerySpecs.js';
 import { participantIdMatchesAppUser } from '../../utils/conversationParticipants.js';
 import {
@@ -650,7 +650,7 @@ export {
   userRolesEqual, normalizeUserRoleString, verifySupabaseToken, readVehicleCatalogFromSupabase,
   writeVehicleCatalogToSupabase, sendInquiryNotificationToSeller, notifySellerInquiryChannels,
   parseVehicleIdentityFromBody, hasResolvableVehicleIdentity, normalizeVehiclesList,
-  MUTATION_IDENTITY_REFRESH_MESSAGE, sanitizeVehicleMediaUrls, isPublicBuyListing,
+  MUTATION_IDENTITY_REFRESH_MESSAGE, sanitizeVehicleMediaUrls, isPublicBuyListing, isListingUnderModeration,
   lookupVehicleSpecsFromCarQuery, participantIdMatchesAppUser, detectBufferContentType,
   adminRead, adminReadAll, adminCreate, adminUpdate, adminDelete, DB_PATHS,
   handleAdmin, seedUsers, seedVehicles, handleHealth, handleSystem, handleUtils,

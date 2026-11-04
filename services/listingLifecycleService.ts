@@ -83,6 +83,15 @@ export function filterActiveListings(vehicles: Vehicle[], sellerPlan?: { subscri
 }
 
 /**
+ * A seller may not republish a listing only while it is under genuine moderation
+ * (flagged by admins/reports). Plan-limit demotion is NOT moderation and must stay
+ * republishable — the publish path re-checks plan limits separately.
+ */
+export function isListingUnderModeration(vehicle: Pick<Vehicle, 'isFlagged'>): boolean {
+  return vehicle?.isFlagged === true;
+}
+
+/**
  * Whether a listing should appear in the public buy/sale catalog.
  * This is the single source of truth for listing visibility across the app.
  */

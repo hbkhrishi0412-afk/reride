@@ -3907,7 +3907,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
                 vehicleUpdates.push({
                   id: v.id,
                   primaryKey: v.databaseId || String(v.id),
-                  updates: { status: 'unpublished', listingStatus: 'suspended' }
+                  // Plan-limit overflow is a recoverable draft, not a moderation suspension.
+                  updates: { status: 'unpublished', listingStatus: 'draft' }
                 });
               }
             });
@@ -4984,13 +4985,16 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
 
       const nextStatus = sanitizedUpdate.status as string | undefined;
+      // Block republish only for genuinely moderated (flagged) listings. A listing that was
+      // auto-unpublished for plan limits is NOT under review and must stay republishable —
+      // the plan-limit check below is the real gate.
       if (
         nextStatus === 'published' &&
         existingVehicle.status !== 'published' &&
         auth.user?.role !== 'admin' &&
-        existingVehicle.listingStatus === 'suspended'
+        core.isListingUnderModeration(existingVehicle)
       ) {
-        return res.status(403).json({ success: false, reason: 'This listing is under review and cannot be republished.' });
+        return res.status(403).json({ success: false, reason: 'This listing is under review by our team and cannot be republished yet.' });
       }
       if (nextStatus === 'published' && existingVehicle.status !== 'published' && normalizedVehicleSellerEmail) {
         const seller = await core.userService.findByEmail(normalizedVehicleSellerEmail);
