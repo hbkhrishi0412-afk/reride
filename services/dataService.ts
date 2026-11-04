@@ -62,6 +62,8 @@ function logServiceUnavailableDetails(errorData: {
 class DataService {
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  /** Listing reads stay fresh so a seller save shows on the public site within seconds, not five minutes. */
+  private readonly VEHICLE_CATALOG_CACHE_MS = 10_000;
   private vehicleCacheMigrated = false;
   /** Coalesce concurrent identical getVehicles() calls (mount + listeners, strict mode, etc.). */
   private vehiclesFetchInflight = new Map<string, Promise<Vehicle[]>>();
@@ -109,6 +111,15 @@ class DataService {
       return isLocalhost || protocol === 'file:';
     } catch {
       return false;
+    }
+  }
+
+  /** Drop cached public vehicle GETs after a listing create/update/delete. */
+  invalidatePublicVehicleReads(): void {
+    for (const key of this.cache.keys()) {
+      if (key.includes('/vehicles') && !key.includes('type=data')) {
+        this.cache.delete(key);
+      }
     }
   }
 
@@ -166,9 +177,18 @@ class DataService {
         const cacheKey = isUserScopedGet
           ? `${endpoint}_${authFingerprint}_${JSON.stringify(options)}`
           : `${endpoint}_${JSON.stringify(options)}`;
+        if (method !== 'GET' && method !== 'HEAD' && endpoint.includes('/vehicles')) {
+          this.invalidatePublicVehicleReads();
+        }
+        const vehicleCatalogRead =
+          method === 'GET' &&
+          !isUserScopedGet &&
+          endpoint.includes('/vehicles') &&
+          !endpoint.includes('type=data');
         if (method === 'GET' && !isUserScopedGet) {
           const cached = this.cache.get(cacheKey);
-          if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+          const ttl = vehicleCatalogRead ? this.VEHICLE_CATALOG_CACHE_MS : this.CACHE_DURATION;
+          if (cached && Date.now() - cached.timestamp < ttl) {
             // Return cached data immediately to avoid redundant API calls
             if (process.env.NODE_ENV === 'development') {
               logInfo(`✅ Using cached data for ${endpoint}`);
@@ -1039,16 +1059,20 @@ class DataService {
             }
             if (Array.isArray(vehicles) && vehicles.length >= 0) {
               const normalized = this.finalizeVehicleList(vehicles);
-              // Upsert into cache instead of replacing a larger catalog with page 1.
+              // A finished page (hasMore false, or a raw full list) is the live catalog:
+              // drop listings the server no longer returns. A partial page only upserts.
+              const authoritative =
+                !includeAllStatuses && (pagination == null || pagination.hasMore === false);
               const prevCache = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
-              const toStore =
-                !includeAllStatuses && normalized.length < prevCache.length
-                  ? mergeVehicleCatalog(prevCache, normalized, false)
-                  : normalized;
+              const toStore = mergeVehicleCatalog(prevCache, normalized, includeAllStatuses, {
+                authoritative,
+              });
               this.setLocalStorageData(cacheKey, toStore);
               logInfo(`✅ Background refresh: Updated cache with ${toStore.length} vehicles (page refresh)`);
               if (typeof window !== 'undefined' && window.dispatchEvent) {
-                window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles: toStore } }));
+                window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', {
+                  detail: { vehicles: toStore, authoritative },
+                }));
               }
             } else if (vehicles.length === 0) {
               console.warn('⚠️ Background refresh returned 0 vehicles. Keeping cached data.');

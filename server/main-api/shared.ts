@@ -134,10 +134,15 @@ function setVehicleApiCacheHeaders(req: VercelRequest, res: VercelResponse): voi
   const hasAuth =
     Boolean(req.headers.authorization) ||
     Boolean(req.headers.cookie && String(req.headers.cookie).includes('refreshToken'));
-  if (hasAuth) {
-    res.setHeader('Cache-Control', 'private, no-cache, must-revalidate');
-    res.setHeader('Vary', 'Authorization, Cookie');
-  }
+  // Anonymous catalog must revalidate. A long stale-while-revalidate window kept
+  // seller edits off the public site for minutes after a successful save.
+  res.setHeader(
+    'Cache-Control',
+    hasAuth
+      ? 'private, no-cache, must-revalidate'
+      : 'public, max-age=0, s-maxage=10, must-revalidate',
+  );
+  res.setHeader('Vary', 'Authorization, Cookie');
 }
 import { 
   hashPassword, 

@@ -49,6 +49,7 @@ import {
 } from '../utils/toastPolicy.js';
 import {
   vehicleMissingCanonicalId,
+  vehicleIdsEqual,
 } from '../utils/vehicleIdentity';
 import { deduplicateRequest } from '../utils/requestDeduplication';
 import { enrichVehicleWithSellerInfo } from '../utils/vehicleEnrichment';
@@ -395,7 +396,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
         const updatedVehicles = cachedVehicles
           .map((vehicle: Vehicle) => {
-            if (!vehicle || vehicle.id !== id) return vehicle;
+            if (!vehicle || !vehicleIdsEqual(vehicle.id, id)) return vehicle;
             return updater(vehicle);
           })
           .filter(Boolean);
@@ -1015,6 +1016,16 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
           logError('Failed to parse vehicle data from storage event:', error);
         }
       }
+      if ((e.key === 'reRideVehicles_prod' || e.key === 'reRideVehicles') && e.newValue) {
+        try {
+          const list = JSON.parse(e.newValue);
+          if (Array.isArray(list)) {
+            setVehicles((prev) => mergeVehicleCatalog(prev, list, false));
+          }
+        } catch (error) {
+          logError('Failed to parse vehicle catalog from storage event:', error);
+        }
+      }
     };
 
     // Add custom event listener for same-tab updates (fires when localStorage is updated in same tab)
@@ -1034,7 +1045,9 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
           const raw = localStorage.getItem('reRideCurrentUser');
           if (raw) admin = JSON.parse(raw)?.role === 'admin';
         } catch { /* ignore */ }
-        setVehicles((prev) => mergeVehicleCatalog(prev, detail.vehicles, admin));
+        setVehicles((prev) => mergeVehicleCatalog(prev, detail.vehicles, admin, {
+          authoritative: detail.authoritative === true,
+        }));
         logInfo('✅ Vehicle list updated from background refresh');
       }
     };
@@ -1082,7 +1095,7 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
         .catch((err) => {
           logWarn('Periodic vehicle list refresh failed:', err);
         });
-    }, vehicleRefreshMs); // 1 minute on web, 3 minutes on native
+    }, vehicleRefreshMs);
 
     // Periodic refresh of vehicle data (makes/models etc) from API (every 5 minutes)
     const refreshInterval = setInterval(() => {

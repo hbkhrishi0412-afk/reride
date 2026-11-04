@@ -18,8 +18,8 @@ export const CLIENT_POLL_INTERVALS_MS = {
   serviceProviderCatalog: 60_000,
   /** Public catalog refresh on native WebView (battery-friendly). */
   vehicleCatalogNative: 5 * 60_000,
-  /** Public catalog refresh on website. */
-  vehicleCatalogWeb: 2 * 60_000,
+  /** Public catalog refresh on website — short enough that a seller save shows up while the tab is open. */
+  vehicleCatalogWeb: 30_000,
   vehicleDataCatalog: 10 * 60_000,
   supportTickets: 60_000,
   /** UI-only clocks (expiry badges) — no API traffic. */

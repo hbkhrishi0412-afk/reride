@@ -228,6 +228,7 @@ const addVehicleApi = async (vehicleData: Vehicle, attempt = 0): Promise<Vehicle
   if (!result.success) {
     throw new Error(result.reason || result.error || 'Failed to add vehicle');
   }
+  await invalidatePublicVehicleReads();
   return result.data!;
 };
 
@@ -255,6 +256,7 @@ const updateVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {
   if (!result.success) {
     throw new Error(result.reason || result.error || 'Failed to update vehicle');
   }
+  await invalidatePublicVehicleReads();
   return result.data!;
 };
 
@@ -274,6 +276,7 @@ const deleteVehicleApi = async (
   if (!result.success) {
     throw new Error(result.reason || result.error || 'Failed to delete vehicle');
   }
+  await invalidatePublicVehicleReads();
   return result.data!;
 };
 
@@ -281,6 +284,15 @@ const deleteVehicleApi = async (
 // --- Environment Detection ---
 // Browser mutations go through the API (Vite proxies /api in dev) so auth and plan limits apply.
 const preferApiForMutations = (): boolean => typeof window !== 'undefined';
+
+async function invalidatePublicVehicleReads(): Promise<void> {
+  try {
+    const { dataService } = await import('./dataService');
+    dataService.invalidatePublicVehicleReads();
+  } catch {
+    /* next catalog read expires on its own short TTL */
+  }
+}
 
 // --- Exported Environment-Aware Service Functions ---
 
@@ -372,6 +384,7 @@ async function postVehicleAction(
     throw new Error(result.reason || result.error || `Failed to mark vehicle as ${action}`);
   }
 
+  await invalidatePublicVehicleReads();
   return result.vehicle;
 }
 

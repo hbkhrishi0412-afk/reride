@@ -3239,7 +3239,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           if (!vehicle || !core.isPublicBuyListing(vehicle)) {
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
           }
-          res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
+          res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=10, must-revalidate');
           return res.status(200).json(vehicle);
         } catch (detailErr) {
           console.error('❌ Error fetching vehicle detail:', detailErr);
