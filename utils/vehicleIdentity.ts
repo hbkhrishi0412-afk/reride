@@ -6,7 +6,7 @@
 
 import type { Vehicle } from '../types.js';
 
-export const VEHICLE_LIST_CACHE_VERSION = 5;
+export const VEHICLE_LIST_CACHE_VERSION = 6;
 export const VEHICLE_LIST_CACHE_VERSION_KEY = 'reRideVehicleListSchemaVersion';
 
 export const SAFE_VEHICLE_ID_MULTIPLIER = 1000;
