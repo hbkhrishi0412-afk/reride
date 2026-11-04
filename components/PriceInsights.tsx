@@ -130,10 +130,10 @@ const PriceMeter: React.FC<{
   marketAverage: number;
   buyerFacing?: boolean;
 }> = ({ price, marketLow, marketHigh, marketAverage, buyerFacing = true }) => {
-  const range = marketHigh - marketLow;
-  const extendedLow = marketLow - range * 0.2;
-  const extendedHigh = marketHigh + range * 0.2;
-  const totalRange = extendedHigh - extendedLow;
+  const range = Math.max(marketHigh - marketLow, 1);
+  const extendedLow = Math.min(marketLow - range * 0.2, price);
+  const extendedHigh = Math.max(marketHigh + range * 0.2, price);
+  const totalRange = Math.max(extendedHigh - extendedLow, 1);
 
   const pricePosition = Math.min(100, Math.max(0, ((price - extendedLow) / totalRange) * 100));
   const avgPosition = ((marketAverage - extendedLow) / totalRange) * 100;

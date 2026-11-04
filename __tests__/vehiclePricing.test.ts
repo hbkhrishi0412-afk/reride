@@ -89,6 +89,42 @@ describe('vehiclePricing sanity anchors', () => {
     expect(fair!).toBeLessThan(1250000);
   });
 
+  it('values a high-km 2024 XUV300 W4 near OBV (~7L), not mid-trim ~9L', () => {
+    expect(getReferenceOnRoadPrice('Mahindra', 'XUV300', 2024, 'W4')).toBe(1000000);
+
+    const fair = estimateFairUsedPrice({
+      make: 'Mahindra',
+      model: 'XUV300',
+      variant: 'W4',
+      year: 2024,
+      mileage: 47072,
+    });
+    expect(fair).not.toBeNull();
+    // OBV W4 @~45k km ≈ ₹6.8–7.3L; asking ₹10.15L must read clearly above market.
+    expect(fair!).toBeGreaterThan(620000);
+    expect(fair!).toBeLessThan(780000);
+
+    const analysis = analyzeVehiclePricing(
+      {
+        ...kicks,
+        make: 'Mahindra',
+        model: 'XUV300',
+        variant: 'W4',
+        year: 2024,
+        price: 1015000,
+        mileage: 47072,
+        noOfOwners: 1,
+        fuelType: 'Petrol',
+      },
+      [],
+    );
+    expect(analysis.marketAverage).toBeLessThan(800000);
+    expect(analysis.buyerVisibleLabel).toBeNull();
+    expect(analysis.fairnessLabel === 'Above Market' || analysis.fairnessLabel === 'Overpriced').toBe(
+      true,
+    );
+  });
+
   it('still rewards genuinely cheap listings against fair value', () => {
     const cheapKicks = { ...kicks, price: 550000 };
     const analysis = analyzeVehiclePricing(cheapKicks, []);

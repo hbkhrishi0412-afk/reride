@@ -939,6 +939,26 @@ class DataService {
     return run;
   }
 
+  /** Full published listing by canonical id (includes sellerDisclosureChecklist). */
+  async getPublishedVehicleDetail(id: number | string, databaseId?: string): Promise<Vehicle | null> {
+    const pk = String(databaseId || id || '').trim();
+    if (!pk) return null;
+    try {
+      const vehicle = await this.makeApiRequest<Vehicle | { success?: boolean; reason?: string }>(
+        `/vehicles?action=detail&id=${encodeURIComponent(pk)}`,
+        { method: 'GET' },
+        12,
+      );
+      if (!vehicle || typeof vehicle !== 'object' || Array.isArray(vehicle)) return null;
+      if ('success' in vehicle && vehicle.success === false) return null;
+      if (!('id' in vehicle) || (vehicle as Vehicle).id == null) return null;
+      return this.finalizeVehicleList([vehicle as Vehicle])[0] || null;
+    } catch (error) {
+      console.warn('⚠️ getPublishedVehicleDetail failed:', error);
+      return null;
+    }
+  }
+
   /** Seller dashboard inventory — all statuses for the authenticated seller. */
   async getSellerVehicles(sellerEmail?: string): Promise<Vehicle[]> {
     const normalizedEmail = (sellerEmail || this.getCurrentUser()?.email || '')
@@ -1959,6 +1979,8 @@ export const fetchPublishedVehiclesWithFilters = (
 ) => dataService.fetchPublishedVehiclesWithFilters(filters);
 export const getPublishedCatalogHasMore = () => dataService.getPublishedCatalogHasMore();
 export const getPublishedCatalogTotal = () => dataService.getPublishedCatalogTotal();
+export const getPublishedVehicleDetail = (id: number | string, databaseId?: string) =>
+  dataService.getPublishedVehicleDetail(id, databaseId);
 export const getSellerVehicles = () => dataService.getSellerVehicles();
 export const addVehicle = (vehicleData: Vehicle) => dataService.addVehicle(vehicleData);
 export const updateVehicle = (vehicleData: Vehicle) => dataService.updateVehicle(vehicleData);

@@ -623,6 +623,7 @@ const ta: Record<string, string> = {
   'vehicle.detail.comparing': 'ஒப்பிடப்படுகிறது',
   'vehicle.detail.reportThisListing': 'இந்த பட்டியலை அறிக்கையிடு',
   'vehicle.detail.tabs.overview': 'மேலோட்டம்',
+  'vehicle.detail.tabs.disclosure': 'விற்பனையாளர் வெளிப்படுத்தல்',
   'vehicle.detail.tabs.report': 'அறிக்கை',
   'vehicle.detail.tabs.featureSpecs': 'அம்சங்கள் & விபரங்கள்',
   'vehicle.detail.tabs.features': 'அம்சங்கள்',

@@ -66,7 +66,7 @@ export interface AppContextType {
 
   setCurrentView: (view: View) => void;
   setPreviousView: (view: View) => void;
-  setSelectedVehicle: (vehicle: Vehicle | null) => void;
+  setSelectedVehicle: React.Dispatch<React.SetStateAction<Vehicle | null>>;
   setVehicles: (vehicles: Vehicle[] | ((prev: Vehicle[]) => Vehicle[])) => void;
   setSellerInventory: (vehicles: Vehicle[] | ((prev: Vehicle[]) => Vehicle[])) => void;
   setIsLoading: (loading: boolean) => void;

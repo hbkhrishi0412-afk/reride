@@ -788,6 +788,7 @@ const hi: Record<string, string> = {
   'vehicle.detail.comparing': 'तुलना हो रही है',
   'vehicle.detail.reportThisListing': 'इस लिस्टिंग की रिपोर्ट करें',
   'vehicle.detail.tabs.overview': 'ओवरव्यू',
+  'vehicle.detail.tabs.disclosure': 'विक्रेता प्रकटीकरण',
   'vehicle.detail.tabs.report': 'रिपोर्ट',
   'vehicle.detail.tabs.featureSpecs': 'फीचर और स्पेसिफिकेशन',
   'vehicle.detail.tabs.features': 'फीचर्स',

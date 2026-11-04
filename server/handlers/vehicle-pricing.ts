@@ -54,9 +54,14 @@ async function fetchPlatformComparables(
 }
 
 function buildEstimateBenchmark(
-  vehicle: Pick<Vehicle, 'make' | 'model' | 'year' | 'mileage'>,
+  vehicle: Pick<Vehicle, 'make' | 'model' | 'year' | 'mileage'> & Partial<Pick<Vehicle, 'variant'>>,
 ): ExternalMarketBenchmark {
-  const newOnRoadPrice = getReferenceOnRoadPrice(vehicle.make, vehicle.model, vehicle.year);
+  const newOnRoadPrice = getReferenceOnRoadPrice(
+    vehicle.make,
+    vehicle.model,
+    vehicle.year,
+    vehicle.variant,
+  );
   const fair = estimateFairUsedPrice(vehicle);
   return {
     newOnRoadPrice: newOnRoadPrice ?? null,
@@ -90,7 +95,12 @@ export async function buildMarketPricingResponse(
           const low = prices[Math.floor(prices.length * 0.2)] ?? prices[0];
           const high = prices[Math.floor(prices.length * 0.8)] ?? prices[prices.length - 1];
           return {
-            newOnRoadPrice: getReferenceOnRoadPrice(vehicle.make, vehicle.model, vehicle.year),
+            newOnRoadPrice: getReferenceOnRoadPrice(
+              vehicle.make,
+              vehicle.model,
+              vehicle.year,
+              vehicle.variant,
+            ),
             usedFairLow: Math.round(low),
             usedFairHigh: Math.round(high),
             usedFairAverage: Math.round(avg),

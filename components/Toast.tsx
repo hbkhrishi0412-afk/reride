@@ -66,7 +66,7 @@ const Toast: React.FC<ToastProps> = ({ toast, onRemove }) => {
       }`}
     >
       {ICONS[toast.type]}
-      <p className="flex-1 text-sm font-medium leading-snug">{toast.message}</p>
+      <p className="flex-1 text-sm font-medium leading-snug text-white">{toast.message}</p>
       <button
         type="button"
         className="shrink-0 rounded-md p-1 hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"

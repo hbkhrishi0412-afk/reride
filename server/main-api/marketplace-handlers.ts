@@ -3224,6 +3224,29 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
   // VEHICLE CRUD OPERATIONS
   if (req.method === 'GET') {
     try {
+      // Single published listing (full metadata incl. sellerDisclosureChecklist) for VDP hydration.
+      if (action === 'detail') {
+        const detailId =
+          core.firstQueryParam(req.query.id) ||
+          core.firstQueryParam(req.query.databaseId) ||
+          '';
+        const pk = String(detailId).trim();
+        if (!pk) {
+          return res.status(400).json({ success: false, reason: 'Missing id' });
+        }
+        try {
+          const vehicle = await core.vehicleService.findByPrimaryKey(pk);
+          if (!vehicle || !core.isPublicBuyListing(vehicle)) {
+            return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+          }
+          res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
+          return res.status(200).json(vehicle);
+        } catch (detailErr) {
+          console.error('❌ Error fetching vehicle detail:', detailErr);
+          return res.status(500).json({ success: false, reason: 'Failed to fetch vehicle' });
+        }
+      }
+
       if (core.firstQueryParam(req.query.aggregate) === 'storefront') {
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');

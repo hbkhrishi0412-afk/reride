@@ -983,6 +983,7 @@ const en = {
   'vehicle.detail.comparing': 'Comparing',
   'vehicle.detail.reportThisListing': 'Report this listing',
   'vehicle.detail.tabs.overview': 'Overview',
+  'vehicle.detail.tabs.disclosure': 'Seller Disclosure',
   'vehicle.detail.tabs.report': 'Report',
   'vehicle.detail.tabs.featureSpecs': 'Feature & Specs',
   'vehicle.detail.tabs.features': 'Features',

@@ -36,6 +36,10 @@ import { getDealLead } from '../services/dealService';
 import DealStageChip from './DealStageChip';
 import { maskVehicleIdentifier } from '../utils/vehiclePrivacy';
 import VehicleJsonLd from './VehicleJsonLd';
+import { hasSellerDisclosureReport } from '../utils/listingTrust.js';
+import { getPublishedVehicleDetail } from '../services/dataService.js';
+import { findVehicleByIdentity, getCanonicalPrimaryKey, vehicleIdsEqual } from '../utils/vehicleIdentity.js';
+import { stringifyVehicleForSession } from '../utils/vehicleSessionCache.js';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -297,6 +301,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     vehicles: contextVehicles,
     navigate,
     setCurrentView,
+    setSelectedVehicle,
     addToast,
     runIfConfirmed,
   } = context;
@@ -304,12 +309,24 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   // ✅ FIX: Memoize safeVehicle to prevent unnecessary re-renders
   const safeVehicle = useMemo(() => {
     const sellerEmail = resolveVehicleSellerEmail(vehicle, contextVehicles);
+    const catalogMatch = findVehicleByIdentity(contextVehicles, vehicle.id, vehicle.databaseId);
     const enriched = enrichVehicleWithSellerInfo({ ...vehicle, sellerEmail }, users);
+    const sellerDisclosureChecklist =
+      enriched.sellerDisclosureChecklist?.items?.length
+        ? enriched.sellerDisclosureChecklist
+        : catalogMatch?.sellerDisclosureChecklist;
+    const description =
+      (enriched.description || '').trim() ||
+      (catalogMatch?.description || '').trim() ||
+      '';
     return {
     ...enriched,
+    sellerDisclosureChecklist,
+    vahanSnapshot: enriched.vahanSnapshot ?? catalogMatch?.vahanSnapshot,
+    certifiedInspection: enriched.certifiedInspection ?? catalogMatch?.certifiedInspection,
     images: enriched.images || [],
     features: enriched.features || [],
-    description: enriched.description || '',
+    description,
     engine: enriched.engine || '',
     transmission: enriched.transmission || '',
     fuelType: enriched.fuelType || '',
@@ -336,6 +353,44 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     mileage: typeof enriched.mileage === 'number' ? enriched.mileage : 0
   };
   }, [vehicle, contextVehicles, users]);
+
+  // Hydrate disclosure / full metadata — catalog cards can be stale after seller completes checklist.
+  useEffect(() => {
+    let cancelled = false;
+    const pk = getCanonicalPrimaryKey(vehicle) || String(vehicle.databaseId || vehicle.id || '').trim();
+    if (!pk) return;
+    void getPublishedVehicleDetail(pk, vehicle.databaseId).then((fresh) => {
+      if (cancelled || !fresh || !vehicleIdsEqual(fresh.id, vehicle.id)) return;
+      const hasUseful =
+        Boolean(fresh.sellerDisclosureChecklist?.items?.length) ||
+        Boolean(fresh.certifiedInspection) ||
+        Boolean(fresh.description?.trim()) ||
+        Boolean(fresh.vahanSnapshot);
+      if (!hasUseful) return;
+      setSelectedVehicle((prev) => {
+        if (!prev || !vehicleIdsEqual(prev.id, fresh.id)) return prev;
+        const merged: Vehicle = {
+          ...prev,
+          sellerDisclosureChecklist: fresh.sellerDisclosureChecklist ?? prev.sellerDisclosureChecklist,
+          certifiedInspection: fresh.certifiedInspection ?? prev.certifiedInspection,
+          vahanSnapshot: fresh.vahanSnapshot ?? prev.vahanSnapshot,
+          description: (fresh.description || '').trim() || prev.description,
+          images: Array.isArray(fresh.images) && fresh.images.length > (prev.images?.length || 0)
+            ? fresh.images
+            : prev.images,
+        };
+        try {
+          sessionStorage.setItem('selectedVehicle', stringifyVehicleForSession(merged));
+        } catch {
+          /* ignore */
+        }
+        return merged;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [vehicle.id, vehicle.databaseId, setSelectedVehicle]);
 
   const translatedDescription = useTranslatedText(safeVehicle.description);
   const translatedFeatures = useTranslatedArray(safeVehicle.features as string[]);
@@ -367,7 +422,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<'images' | 'video'>('images');
-  const [activeTab, setActiveTab] = useState<'overview' | 'report' | 'features' | 'vahan' | 'price'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'disclosure' | 'report' | 'features' | 'vahan' | 'price'>('overview');
   const detailTabsRef = useRef<HTMLDivElement>(null);
   const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
   const [showEMICalculator, setShowEMICalculator] = useState<boolean>(false);
@@ -890,6 +945,21 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
                             )}
                           </button>
+                          {hasSellerDisclosureReport(safeVehicle) && (
+                            <button
+                              onClick={() => setActiveTab('disclosure')}
+                              className={`px-3 sm:px-4 py-2.5 font-bold text-xs sm:text-sm uppercase transition-colors relative ${
+                                activeTab === 'disclosure'
+                                  ? 'text-purple-600'
+                                  : 'text-gray-600 hover:text-gray-900'
+                              }`}
+                            >
+                              {t('vehicle.detail.tabs.disclosure')}
+                              {activeTab === 'disclosure' && (
+                                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
+                              )}
+                            </button>
+                          )}
                           {safeVehicle.certifiedInspection && (
                             <button
                               onClick={() => setActiveTab('report')}
@@ -955,11 +1025,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               {/* Left Column - Overview Content */}
                               <div className="lg:col-span-2 space-y-4">
                                 <VehicleDetailTrustStrip />
-                                <SellerDisclosureDisplay
-                                  checklist={safeVehicle.sellerDisclosureChecklist}
-                                  category={safeVehicle.category}
-                                  vahanSnapshot={safeVehicle.vahanSnapshot}
-                                />
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                                   <KeySpec label={t('vehicle.year')} value={safeVehicle.year} />
                                   <KeySpec
@@ -1090,7 +1155,16 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           </div>
                         )}
 
-                        {/* Certified Physical Inspection Report Tab */}
+                        {activeTab === 'disclosure' && hasSellerDisclosureReport(safeVehicle) && (
+                          <div className="p-4 sm:p-5">
+                            <SellerDisclosureDisplay
+                              checklist={safeVehicle.sellerDisclosureChecklist}
+                              category={safeVehicle.category}
+                              vahanSnapshot={safeVehicle.vahanSnapshot}
+                            />
+                          </div>
+                        )}
+
                         {activeTab === 'report' && safeVehicle.certifiedInspection && (
                           <div className="p-4 sm:p-5">
                             <CertifiedInspectionReport report={safeVehicle.certifiedInspection} />
@@ -1470,7 +1544,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                     </span>
                                   ) : null}
                                 </div>
-                                <p className="font-bold text-[15px] leading-snug truncate text-white !text-white">
+                                <p className="font-bold text-[15px] leading-snug truncate text-white">
                                   {sellerDisplayName}
                                 </p>
                                 <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-purple-100">

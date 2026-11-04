@@ -14,6 +14,16 @@ export function hasFullDisclosure(vehicle: Vehicle | null | undefined): boolean 
   return getListingChecklistTier(vehicle) === 'verified';
 }
 
+/** True when the seller answered at least one Universal Checklist item (buyer-visible report). */
+export function hasSellerDisclosureReport(vehicle: Vehicle | null | undefined): boolean {
+  return Boolean(vehicle?.sellerDisclosureChecklist?.items?.some((item) => Boolean(item?.status)));
+}
+
+/** Report tab: certified inspection and/or answered seller disclosure. */
+export function hasVehicleDetailReport(vehicle: Vehicle | null | undefined): boolean {
+  return Boolean(vehicle?.certifiedInspection) || hasSellerDisclosureReport(vehicle);
+}
+
 /** Always derived from the items; a stored `listingTier` is never trusted. */
 export function getListingChecklistTier(vehicle: Vehicle | null | undefined): 'verified' | 'basic' | null {
   if (!vehicle?.sellerDisclosureChecklist?.items?.length) return null;

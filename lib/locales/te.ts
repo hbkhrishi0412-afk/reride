@@ -622,6 +622,7 @@ const te: Record<string, string> = {
   'vehicle.detail.comparing': 'పోలుస్తోంది',
   'vehicle.detail.reportThisListing': 'ఈ లిస్టింగ్‌ను రిపోర్ట్ చేయండి',
   'vehicle.detail.tabs.overview': 'అవలోకనం',
+  'vehicle.detail.tabs.disclosure': 'విక్రేత డిస్క్లోజర్',
   'vehicle.detail.tabs.report': 'రిపోర్ట్',
   'vehicle.detail.tabs.featureSpecs': 'ఫీచర్లు & స్పెక్స్',
   'vehicle.detail.tabs.features': 'ఫీచర్లు',

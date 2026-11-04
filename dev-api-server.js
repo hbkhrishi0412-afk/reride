@@ -660,6 +660,66 @@ function isSupabaseDevConfigured() {
   return Boolean(supabaseUrl && supabaseKey);
 }
 
+/** Map a vehicles table row the same way production does (include metadata checklist). */
+function mapSupabaseVehicleRow(r, overrides = {}) {
+  const rawId = r.id != null ? String(r.id).trim() : '';
+  const id = rawId && !Number.isNaN(Number(rawId)) ? Number(rawId) : 0;
+  const images = Array.isArray(r.images) ? r.images : [];
+  const imageUrls = images
+    .map((img) => {
+      if (typeof img !== 'string' || !img.trim()) return null;
+      if (img.startsWith('http://') || img.startsWith('https://')) return img;
+      const path = img.includes('/') ? img : id ? `vehicles/${id}/${img}` : `vehicles/${img}`;
+      return buildStoragePublicUrl(path) || img;
+    })
+    .filter(Boolean);
+  const meta = r.metadata && typeof r.metadata === 'object' ? { ...r.metadata } : {};
+  return {
+    ...meta,
+    id,
+    databaseId: rawId || undefined,
+    make: r.make || '',
+    model: r.model || '',
+    variant: r.variant,
+    year: r.year || 0,
+    price: Number(r.price) || 0,
+    mileage: Number(r.mileage) || 0,
+    images: imageUrls,
+    features: r.features || [],
+    description: r.description || '',
+    sellerEmail: r.seller_email || '',
+    sellerName: r.seller_name,
+    engine: r.engine || '',
+    transmission: r.transmission || '',
+    fuelType: r.fuel_type || '',
+    fuelEfficiency: r.fuel_efficiency || '',
+    color: r.color || '',
+    status: r.status || 'published',
+    isFeatured: !!r.is_featured,
+    views: r.views || 0,
+    inquiriesCount: r.inquiries_count || 0,
+    registrationYear: r.registration_year,
+    insuranceValidity: r.insurance_validity,
+    insuranceType: r.insurance_type,
+    rto: r.rto,
+    city: r.city,
+    state: r.state,
+    location: r.location,
+    noOfOwners: r.no_of_owners,
+    displacement: r.displacement,
+    groundClearance: r.ground_clearance,
+    bootSpace: r.boot_space,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    listingExpiresAt: r.listing_expires_at || meta.listingExpiresAt,
+    listingStatus: r.listing_status || meta.listingStatus || 'active',
+    certifiedInspection: r.certified_inspection ?? meta.certifiedInspection,
+    // Prefer DB category; metadata must not leave a wrong enum like FOUR_WHEELER.
+    category: r.category || 'four-wheeler',
+    ...overrides,
+  };
+}
+
 // Fetch vehicles from Supabase when env is set (so local dev shows real images)
 async function fetchVehiclesFromSupabase() {
   if (!isSupabaseDevConfigured()) return null;
@@ -673,55 +733,7 @@ async function fetchVehiclesFromSupabase() {
       .select('*')
       .order('created_at', { ascending: false });
     if (error || !rows?.length) return null;
-    const vehicles = rows.map((r) => {
-      const rawId = r.id != null ? String(r.id).trim() : '';
-      const id = rawId && !Number.isNaN(Number(rawId)) ? Number(rawId) : 0;
-      const images = Array.isArray(r.images) ? r.images : [];
-      const imageUrls = images.map((img) => {
-        if (typeof img !== 'string' || !img.trim()) return null;
-        if (img.startsWith('http://') || img.startsWith('https://')) return img;
-        const path = img.includes('/') ? img : (id ? `vehicles/${id}/${img}` : `vehicles/${img}`);
-        return buildStoragePublicUrl(path) || img;
-      }).filter(Boolean);
-      return {
-        id,
-        databaseId: rawId || undefined,
-        make: r.make || '',
-        model: r.model || '',
-        variant: r.variant,
-        year: r.year || 0,
-        price: Number(r.price) || 0,
-        mileage: Number(r.mileage) || 0,
-        images: imageUrls,
-        features: r.features || [],
-        description: r.description || '',
-        sellerEmail: r.seller_email || '',
-        sellerName: r.seller_name,
-        engine: r.engine || '',
-        transmission: r.transmission || '',
-        fuelType: r.fuel_type || '',
-        fuelEfficiency: r.fuel_efficiency || '',
-        color: r.color || '',
-        status: (r.status || 'published'),
-        isFeatured: !!r.is_featured,
-        views: r.views || 0,
-        inquiriesCount: r.inquiries_count || 0,
-        registrationYear: r.registration_year,
-        insuranceValidity: r.insurance_validity,
-        insuranceType: r.insurance_type,
-        rto: r.rto,
-        city: r.city,
-        state: r.state,
-        location: r.location,
-        noOfOwners: r.no_of_owners,
-        displacement: r.displacement,
-        groundClearance: r.ground_clearance,
-        bootSpace: r.boot_space,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-        category: r.category || 'FOUR_WHEELER',
-      };
-    });
+    const vehicles = rows.map((r) => mapSupabaseVehicleRow(r));
     return vehicles;
   } catch (e) {
     console.warn('Supabase vehicles fetch failed, using mock:', e?.message || e);
@@ -748,55 +760,7 @@ async function markVehicleSoldInSupabase(vehicleId, databaseId) {
       .select('*')
       .maybeSingle();
     if (error || !row) return null;
-    const rawId = row.id != null ? String(row.id).trim() : '';
-    const id = rawId && !Number.isNaN(Number(rawId)) ? Number(rawId) : 0;
-    const images = Array.isArray(row.images) ? row.images : [];
-    const imageUrls = images.map((img) => {
-      if (typeof img !== 'string' || !img.trim()) return null;
-      if (img.startsWith('http://') || img.startsWith('https://')) return img;
-      const path = img.includes('/') ? img : (id ? `vehicles/${id}/${img}` : `vehicles/${img}`);
-      return buildStoragePublicUrl(path) || img;
-    }).filter(Boolean);
-    return {
-      id,
-      databaseId: rawId || undefined,
-      make: row.make || '',
-      model: row.model || '',
-      variant: row.variant,
-      year: row.year || 0,
-      price: Number(row.price) || 0,
-      mileage: Number(row.mileage) || 0,
-      images: imageUrls,
-      features: row.features || [],
-      description: row.description || '',
-      sellerEmail: row.seller_email || '',
-      sellerName: row.seller_name,
-      engine: row.engine || '',
-      transmission: row.transmission || '',
-      fuelType: row.fuel_type || '',
-      fuelEfficiency: row.fuel_efficiency || '',
-      color: row.color || '',
-      status: 'sold',
-      listingStatus: 'sold',
-      soldAt: new Date().toISOString(),
-      isFeatured: !!row.is_featured,
-      views: row.views || 0,
-      inquiriesCount: row.inquiries_count || 0,
-      registrationYear: row.registration_year,
-      insuranceValidity: row.insurance_validity,
-      insuranceType: row.insurance_type,
-      rto: row.rto,
-      city: row.city,
-      state: row.state,
-      location: row.location,
-      noOfOwners: row.no_of_owners,
-      displacement: row.displacement,
-      groundClearance: row.ground_clearance,
-      bootSpace: row.boot_space,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      category: row.category || 'FOUR_WHEELER',
-    };
+    return mapSupabaseVehicleRow(row, { status: 'sold' });
   } catch (e) {
     console.warn('markVehicleSoldInSupabase failed:', e?.message || e);
     return null;
@@ -913,9 +877,24 @@ app.get('/api/vehicles', async (req, res) => {
 
   if (
     isSupabaseDevConfigured() &&
-    (action === 'seller-mine' || action === 'resolve')
+    (action === 'seller-mine' || action === 'resolve' || action === 'detail')
   ) {
     return delegateToMainHandler(req, res);
+  }
+
+  // Local detail without main-handler: still return metadata checklist.
+  if (action === 'detail') {
+    const pk = String(req.query.id || req.query.databaseId || '').trim();
+    if (!pk) return res.status(400).json({ success: false, reason: 'Missing id' });
+    const supabaseVehicles = await fetchVehiclesFromSupabase();
+    const list = supabaseVehicles && supabaseVehicles.length > 0 ? supabaseVehicles : mockVehicles;
+    const vehicle = list.find(
+      (v) => String(v.databaseId || '') === pk || String(v.id) === pk,
+    );
+    if (!vehicle || vehicle.status !== 'published') {
+      return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+    }
+    return res.json(vehicle);
   }
 
   if (action === 'track-view') {

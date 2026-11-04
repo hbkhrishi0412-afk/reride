@@ -90,8 +90,20 @@ const REFERENCE_ON_ROAD_BY_YEAR: Record<string, Record<number, number>> = {
   'hyundai_exter': { 2023: 1100000, 2024: 1150000, 2025: 1180000 },
 };
 
+/**
+ * Trim-level on-road anchors — base REFERENCE_ON_ROAD is mid-trim;
+ * base/top variants diverge enough to skew used-value estimates without this.
+ */
+const REFERENCE_ON_ROAD_BY_VARIANT: Record<string, Record<string, number>> = {
+  // Last 2024 on-road band (petrol-leaning); diesel sits higher but trim rank still holds.
+  'mahindra_xuv300': { w2: 900000, w4: 1000000, w6: 1150000, w8: 1300000, w8o: 1450000 },
+};
+
 const DEPRECIATION_PER_10K_KM = 0.012;
 const LOW_MILEAGE_BONUS_CAP = 0.06;
+/** High-km haircut per unit over expected mileage (ratio−1). Floor keeps extreme outliers finite. */
+const HIGH_MILEAGE_PENALTY = 0.12;
+const HIGH_MILEAGE_FLOOR = 0.78;
 
 /** Approximate on-road prices (INR) for popular Indian models — used as sanity anchor. */
 const REFERENCE_ON_ROAD: Record<string, number> = {
@@ -158,8 +170,29 @@ function lookupKey(make: string, model: string): string {
   return `${make.toLowerCase().trim()}_${model.toLowerCase().trim()}`;
 }
 
-export function getReferenceOnRoadPrice(make: string, model: string, year?: number): number | null {
+/** Collapse listing variant strings (e.g. "W8 (O) Dual Tone") to a trim key. */
+export function normalizeVariantKey(variant?: string | null): string | null {
+  if (!variant?.trim()) return null;
+  const v = variant.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (/w8(o|opt|option)/.test(v) || v.includes('w8o')) return 'w8o';
+  if (v.includes('w8')) return 'w8';
+  if (v.includes('w6')) return 'w6';
+  if (v.includes('w4')) return 'w4';
+  if (v.includes('w2')) return 'w2';
+  return null;
+}
+
+export function getReferenceOnRoadPrice(
+  make: string,
+  model: string,
+  year?: number,
+  variant?: string | null,
+): number | null {
   const key = lookupKey(make, model);
+  const variantKey = normalizeVariantKey(variant);
+  const variantTable = REFERENCE_ON_ROAD_BY_VARIANT[key];
+  if (variantKey && variantTable?.[variantKey]) return variantTable[variantKey];
+
   const yearTable = REFERENCE_ON_ROAD_BY_YEAR[key];
   if (year && yearTable) {
     const years = Object.keys(yearTable)
@@ -192,9 +225,10 @@ export function getReferenceOnRoadPrice(make: string, model: string, year?: numb
 }
 
 export function estimateFairUsedPrice(
-  vehicle: Pick<Vehicle, 'make' | 'model' | 'year' | 'mileage'>,
+  vehicle: Pick<Vehicle, 'make' | 'model' | 'year' | 'mileage'> &
+    Partial<Pick<Vehicle, 'variant'>>,
 ): number | null {
-  const onRoad = getReferenceOnRoadPrice(vehicle.make, vehicle.model, vehicle.year);
+  const onRoad = getReferenceOnRoadPrice(vehicle.make, vehicle.model, vehicle.year, vehicle.variant);
   if (!onRoad) return null;
 
   const yearsOld = Math.max(0, new Date().getFullYear() - vehicle.year);
@@ -204,7 +238,7 @@ export function estimateFairUsedPrice(
   const mileageRatio = vehicle.mileage / expectedMileage;
   let kmFactor = 1;
   if (mileageRatio > 1.3) {
-    kmFactor = Math.max(0.82, 1 - (mileageRatio - 1) * 0.08);
+    kmFactor = Math.max(HIGH_MILEAGE_FLOOR, 1 - (mileageRatio - 1) * HIGH_MILEAGE_PENALTY);
   } else if (mileageRatio < 0.75) {
     kmFactor = Math.min(1 + LOW_MILEAGE_BONUS_CAP, 1 + (0.75 - mileageRatio) * 0.12);
   } else {
@@ -358,7 +392,7 @@ function analyzeVehiclePricingInternal(
   const competitorCount = similarVehicles.length;
   const referenceOnRoadPrice =
     externalMarket?.newOnRoadPrice ??
-    getReferenceOnRoadPrice(vehicle.make, vehicle.model, vehicle.year) ??
+    getReferenceOnRoadPrice(vehicle.make, vehicle.model, vehicle.year, vehicle.variant) ??
     undefined;
   const fairUsedPrice =
     externalMarket?.usedFairAverage ??
