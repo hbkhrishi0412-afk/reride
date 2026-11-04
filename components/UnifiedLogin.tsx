@@ -6,11 +6,11 @@ import { runGoogleSignInButtonFlow } from '../services/authService';
 import { syncWithBackend } from '../services/supabase-auth-service';
 import { loginServiceProviderWithUsersTable } from '../services/serviceProviderLoginSupport';
 import { getSupabaseClient } from '../lib/supabase.js';
-import { setRememberMePreferenceAsync } from '../utils/rememberMe';
+import { setRememberMePreference } from '../utils/rememberMe';
 import {
   loadLastRememberedLoginRole,
   resolveLastRememberedLoginRole,
-  saveRememberedCredentialsAsync,
+  saveRememberedCredentials,
   resolveRememberedCredentials,
 } from '../utils/rememberedCredentials';
 import OTPLogin from './OTPLogin';
@@ -308,7 +308,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       );
       if (result.success && result.user) {
         setShowGoogleRolePicker(false);
-        await setRememberMePreferenceAsync(rememberMe);
+        // Sync local + fire-and-forget native (same pattern as applyLoginApiResult JWTs).
+        setRememberMePreference(rememberMe);
         onLogin(result.user);
       } else {
         setError(result.reason || t('auth.error.googleSignInFailed'));
@@ -364,8 +365,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           if (!sp.ok) {
             throw new Error(sp.message);
           }
-          await saveRememberedCredentialsAsync(selectedRole, emailTrim, password, rememberMe);
-          await setRememberMePreferenceAsync(rememberMe);
+          saveRememberedCredentials(selectedRole, emailTrim, password, rememberMe);
+          setRememberMePreference(rememberMe);
           onServiceProviderLogin(sp.provider);
           return;
         }
@@ -399,11 +400,12 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
       if (result.success && result.user) {
         if (mode === 'login') {
-          await saveRememberedCredentialsAsync(selectedRole, email.trim(), password, rememberMe);
-          await setRememberMePreferenceAsync(rememberMe);
+          // Don't await native Preferences — that held the spinner after auth already succeeded.
+          saveRememberedCredentials(selectedRole, email.trim(), password, rememberMe);
+          setRememberMePreference(rememberMe);
           onLogin(result.user);
         } else {
-          await setRememberMePreferenceAsync(true);
+          setRememberMePreference(true);
           onRegister(result.user);
         }
       } else {
@@ -417,8 +419,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           const sp = await loginServiceProviderWithUsersTable(email.trim(), password);
           if (sp.ok) {
             setSelectedRole('service_provider');
-            await saveRememberedCredentialsAsync('service_provider', email.trim(), password, rememberMe);
-            await setRememberMePreferenceAsync(rememberMe);
+            saveRememberedCredentials('service_provider', email.trim(), password, rememberMe);
+            setRememberMePreference(rememberMe);
             onServiceProviderLogin(sp.provider);
             return;
           }

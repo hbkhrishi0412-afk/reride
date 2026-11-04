@@ -6,10 +6,19 @@ import {
   privacyEmail,
   supportEmail,
 } from '../constants/legalContact';
+import { View as ViewEnum } from '../types';
 
-const MobilePrivacyPolicyPage: React.FC = () => {
+interface MobilePrivacyPolicyPageProps {
+  onNavigate?: (view: ViewEnum) => void;
+}
+
+const MobilePrivacyPolicyPage: React.FC<MobilePrivacyPolicyPageProps> = ({ onNavigate }) => {
+  const go = (view: ViewEnum) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    onNavigate?.(view);
+  };
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-full bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-4 sticky top-0 z-10">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Privacy Policy</h1>
@@ -122,7 +131,11 @@ const MobilePrivacyPolicyPage: React.FC = () => {
             <ul className="list-disc list-inside text-gray-700 text-sm space-y-1 mb-3 ml-2">
               <li><strong>Access:</strong> Request access to your personal information</li>
               <li><strong>Correction:</strong> Request correction of inaccurate information</li>
-              <li><strong>Deletion:</strong> Request deletion of your personal information (<a href="/delete-account" className="text-blue-600 hover:underline">how to delete your account</a>)</li>
+              <li><strong>Deletion:</strong> Request deletion of your personal information ({onNavigate ? (
+                <button type="button" onClick={go(ViewEnum.DELETE_ACCOUNT)} className="text-blue-600 underline">how to delete your account</button>
+              ) : (
+                <a href="/delete-account" className="text-blue-600 hover:underline">how to delete your account</a>
+              )})</li>
               <li><strong>Portability:</strong> Request transfer of your data to another service</li>
               <li><strong>Objection:</strong> Object to processing of your personal information</li>
               <li><strong>Withdrawal of Consent:</strong> Withdraw consent where processing is based on consent</li>
@@ -210,13 +223,19 @@ const MobilePrivacyPolicyPage: React.FC = () => {
             <h2 className="text-lg font-bold text-gray-900 mb-2">Related policies</h2>
             <p className="text-gray-700 text-sm leading-relaxed">
               See also our{' '}
-              <a href="/cookie-policy" className="text-blue-600 hover:underline">
-                Cookie Policy
-              </a>{' '}
-              and{' '}
-              <a href="/terms-of-service" className="text-blue-600 hover:underline">
-                Terms of Service
-              </a>
+              {onNavigate ? (
+                <>
+                  <button type="button" onClick={go(ViewEnum.COOKIE_POLICY)} className="text-blue-600 underline">Cookie Policy</button>
+                  {' '}and{' '}
+                  <button type="button" onClick={go(ViewEnum.TERMS_OF_SERVICE)} className="text-blue-600 underline">Terms of Service</button>
+                </>
+              ) : (
+                <>
+                  <a href="/cookie-policy" className="text-blue-600 hover:underline">Cookie Policy</a>
+                  {' '}and{' '}
+                  <a href="/terms-of-service" className="text-blue-600 hover:underline">Terms of Service</a>
+                </>
+              )}
               .
             </p>
           </section>

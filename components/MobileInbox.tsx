@@ -71,7 +71,6 @@ interface MobileInboxProps {
  * Mobile-Optimized Inbox Component
  * Features:
  * - Swipe actions: right → report (left panel), left → delete (right panel)
- * - Pull-to-refresh
  * - Mobile-friendly message bubbles
  * - Full-screen chat view
  */
@@ -885,7 +884,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
 
   // Show conversation list
   return (
-    <div className="min-h-screen pb-24" style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%)' }}>
+    <div className="min-h-full" style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%)' }}>
       {/* Premium obsidian header */}
       <div
         className="px-5 sticky top-0 z-30 relative overflow-hidden"

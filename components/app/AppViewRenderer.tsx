@@ -1382,13 +1382,14 @@ switch (currentView) {
     );
 
   case ViewEnum.FAQ:
-    return (
-      <React.Suspense fallback={<LoadingSpinner />}>
-        <HelpCenterPage faqItems={faqItems} onNavigate={navigate} />
-      </React.Suspense>
-    );
-
   case ViewEnum.HELP_CENTER:
+    if (isMobileApp) {
+      return (
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <MobileFAQPage faqItems={faqItems} onNavigate={navigate} />
+        </React.Suspense>
+      );
+    }
     return (
       <React.Suspense fallback={<LoadingSpinner />}>
         <HelpCenterPage faqItems={faqItems} onNavigate={navigate} />
@@ -1398,7 +1399,7 @@ switch (currentView) {
   case ViewEnum.PRIVACY_POLICY:
     if (isMobileApp) {
       return (
-        <MobilePrivacyPolicyPage />
+        <MobilePrivacyPolicyPage onNavigate={navigate} />
       );
     }
     return (
@@ -1408,7 +1409,7 @@ switch (currentView) {
   case ViewEnum.TERMS_OF_SERVICE:
     if (isMobileApp) {
       return (
-        <MobileTermsOfServicePage />
+        <MobileTermsOfServicePage onNavigate={navigate} />
       );
     }
     return (

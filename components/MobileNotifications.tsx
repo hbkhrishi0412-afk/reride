@@ -302,7 +302,7 @@ export const MobileNotifications: React.FC<MobileNotificationsProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-full bg-gray-50">
       {onBack ? (
         <div className="flex items-center justify-between border-b border-gray-200 bg-white p-4">
           <div className="flex items-center gap-3">

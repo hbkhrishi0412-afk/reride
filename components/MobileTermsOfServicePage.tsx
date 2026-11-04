@@ -1,8 +1,17 @@
 import React from 'react';
+import { View as ViewEnum } from '../types';
 
-const MobileTermsOfServicePage: React.FC = () => {
+interface MobileTermsOfServicePageProps {
+  onNavigate?: (view: ViewEnum) => void;
+}
+
+const MobileTermsOfServicePage: React.FC<MobileTermsOfServicePageProps> = ({ onNavigate }) => {
+  const go = (view: ViewEnum) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    onNavigate?.(view);
+  };
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-full bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-4 sticky top-0 z-10">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Terms of Service</h1>
@@ -149,10 +158,21 @@ const MobileTermsOfServicePage: React.FC = () => {
           <section className="border-t border-gray-200 pt-6 mt-2">
             <h2 className="text-lg font-bold text-gray-900 mb-2">Related policies</h2>
             <ul className="list-disc list-inside space-y-1 text-sm text-blue-600">
-              <li><a href="/privacy-policy" className="hover:underline">Privacy Policy</a></li>
-              <li><a href="/refund-policy" className="hover:underline">Refund Policy</a></li>
-              <li><a href="/complaint-resolution" className="hover:underline">Complaint Resolution</a></li>
-              <li><a href="/fraud-policy" className="hover:underline">Fraud Policy</a></li>
+              {onNavigate ? (
+                <>
+                  <li><button type="button" onClick={go(ViewEnum.PRIVACY_POLICY)} className="underline">Privacy Policy</button></li>
+                  <li><button type="button" onClick={go(ViewEnum.REFUND_POLICY)} className="underline">Refund Policy</button></li>
+                  <li><button type="button" onClick={go(ViewEnum.COMPLAINT_RESOLUTION)} className="underline">Complaint Resolution</button></li>
+                  <li><button type="button" onClick={go(ViewEnum.FRAUD_POLICY)} className="underline">Fraud Policy</button></li>
+                </>
+              ) : (
+                <>
+                  <li><a href="/privacy-policy" className="hover:underline">Privacy Policy</a></li>
+                  <li><a href="/refund-policy" className="hover:underline">Refund Policy</a></li>
+                  <li><a href="/complaint-resolution" className="hover:underline">Complaint Resolution</a></li>
+                  <li><a href="/fraud-policy" className="hover:underline">Fraud Policy</a></li>
+                </>
+              )}
             </ul>
           </section>
         </div>

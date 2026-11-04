@@ -4,6 +4,7 @@ import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
 import { triggerSelectionHaptic } from '../utils/haptics';
 import { homeViewForActor } from '../utils/serviceProviderAccess.js';
+import { mobileSellDestination } from '../utils/mobileSellNav';
 
 interface MobileBottomNavProps {
   currentView: ViewEnum;
@@ -24,7 +25,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
   currentView,
   onNavigate,
   currentUser,
-  wishlistCount = 0,
+  wishlistCount: _wishlistCount = 0,
   inboxCount = 0,
   onToggleMenu,
   serviceProvider = null,
@@ -43,7 +44,6 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
       ),
-      badge: wishlistCount > 0 ? wishlistCount : undefined // Show wishlist count on home icon
     },
     {
       id: 'buy',
@@ -68,10 +68,10 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
     {
       id: 'sell',
       label: t('nav.bottomSell'),
-      view: ViewEnum.SELL_CAR, // Navigate to seller type selection page first
+      view: mobileSellDestination(currentUser?.role),
       icon: (active: boolean) => (
         <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-          <rect x="4" y="4" width="16" height="16" rx="3" fill={active ? '#FF6B35' : '#FF6B35'} opacity={active ? 1 : 0.9} />
+          <rect x="4" y="4" width="16" height="16" rx="3" fill="#FF6B35" opacity={active ? 1 : 0.9} />
           <path d="M12 8v8M8 12h8" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
         </svg>
       ),
@@ -106,7 +106,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
     }
   ];
     return items;
-  }, [t, i18n.language, inboxCount, wishlistCount, currentUser?.role, homeView]);
+  }, [t, i18n.language, inboxCount, currentUser?.role, homeView]);
 
   return (
     <>
@@ -179,11 +179,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                 return;
               }
               if (item.id === 'sell') {
-                if (currentUser?.role === 'seller') {
-                  onNavigate(ViewEnum.SELLER_DASHBOARD);
-                } else {
-                  onNavigate(ViewEnum.SELL_CAR);
-                }
+                onNavigate(mobileSellDestination(currentUser?.role));
                 return;
               }
               if (item.view === ViewEnum.INBOX && !currentUser) {
@@ -221,130 +217,53 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                   }, 150);
                 }}
               >
-                {/* Active Background Pill - Enhanced Premium Design */}
                 {isActive && (
-                  <>
-                    <div 
-                      className="absolute inset-0 rounded-2xl"
-                      style={{
-                        background: 'linear-gradient(135deg, rgba(255, 107, 53, 0.15) 0%, rgba(255, 132, 86, 0.1) 100%)',
-                        boxShadow: '0 6px 16px rgba(255, 107, 53, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.7)',
-                        animation: 'fadeInScale 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                        margin: '3px 4px'
-                      }}
-                    />
-                    {/* Subtle inner glow */}
-                    <div 
-                      className="absolute inset-0 rounded-2xl opacity-50"
-                      style={{
-                        background: 'radial-gradient(circle at center, rgba(255, 107, 53, 0.1) 0%, transparent 70%)',
-                        margin: '3px 4px',
-                        pointerEvents: 'none'
-                      }}
-                    />
-                  </>
-                )}
-                
-                {/* Inactive Hover State */}
-                {!isActive && (
-                  <div 
-                    className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                  <div
+                    className="absolute inset-0 rounded-2xl"
                     style={{
-                      background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.02) 0%, rgba(0, 0, 0, 0.01) 100%)',
+                      background: 'rgba(255, 107, 53, 0.1)',
                       margin: '3px 4px',
-                      pointerEvents: 'none'
                     }}
                   />
                 )}
-                
+
                 {/* Icon — fixed box keeps every tab vertically aligned across devices */}
                 <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center">
-                  <div 
-                    className="relative transition-transform duration-200 ease-out"
-                    style={{ 
-                      color: item.isSpecial ? (isActive ? '#FF6B35' : '#FF6B35') : (isActive ? '#FF6B35' : '#6B7280'),
-                      transform: isActive ? 'scale(1.08)' : 'scale(1)',
-                      transformOrigin: 'center center',
-                      filter: isActive ? 'drop-shadow(0 2px 4px rgba(255, 107, 53, 0.35))' : (item.isSpecial ? 'drop-shadow(0 2px 4px rgba(255, 107, 53, 0.3))' : 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1))')
+                  <div
+                    className="relative"
+                    style={{
+                      color: isActive || item.isSpecial ? '#FF6B35' : '#6B7280',
                     }}
                   >
                     {item.icon(isActive)}
-                    
-                    {/* Icon glow effect when active */}
-                    {isActive && (
-                      <div 
-                        className="absolute inset-0 rounded-full blur-lg opacity-40"
-                        style={{
-                          background: 'radial-gradient(circle, #FF6B35 0%, transparent 70%)',
-                          transform: 'scale(1.8)',
-                          animation: 'pulse 2s ease-in-out infinite'
-                        }}
-                      />
-                    )}
                   </div>
-                  
-                  {/* Premium Badge - Only show when count > 0 */}
+
                   {item.badge !== undefined && item.badge > 0 && (
-                    <span 
-                      className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center text-white text-[9px] font-black rounded-full px-1 z-20"
-                      style={{
-                        background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 50%, #EF4444 100%)',
-                        backgroundSize: '200% 100%',
-                        boxShadow: '0 2px 6px rgba(239, 68, 68, 0.5), 0 1px 2px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
-                        border: '1.5px solid rgba(255, 255, 255, 0.4)',
-                        animation: 'badgePulse 2s ease-in-out infinite, shimmer 3s linear infinite',
-                        letterSpacing: '-0.01em',
-                        fontWeight: 900,
-                        lineHeight: '1'
-                      }}
+                    <span
+                      className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center text-white text-[9px] font-bold rounded-full px-1 z-20 bg-red-500"
+                      style={{ lineHeight: '1' }}
                     >
                       {item.badge > 99 ? '99+' : item.badge > 9 ? '9+' : item.badge}
                     </span>
                   )}
                 </div>
-                
-                <span 
-                  className="relative z-10 block max-w-full truncate text-center text-[10px] font-semibold leading-tight text-gray-900 transition-colors duration-200"
-                  style={{ 
+
+                <span
+                  className="relative z-10 block max-w-full truncate text-center text-[10px] leading-tight text-gray-900"
+                  style={{
                     letterSpacing: '-0.01em',
                     fontWeight: isActive ? 700 : 600,
                   }}
                 >
                   {item.label}
                 </span>
-                
-                {/* Premium Active Indicator - Refined Dot or Line */}
+
                 {isActive && (
-                  <div 
-                    className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full"
-                    style={{
-                      width: item.id === 'buy' ? '24px' : '5px',
-                      height: item.id === 'buy' ? '2px' : '5px',
-                      background: item.id === 'buy' 
-                        ? 'linear-gradient(90deg, transparent 0%, #FFD700 50%, transparent 100%)'
-                        : item.id === 'sell'
-                        ? 'linear-gradient(90deg, transparent 0%, #3B82F6 50%, transparent 100%)'
-                        : 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
-                      boxShadow: item.id === 'buy' || item.id === 'sell'
-                        ? 'none'
-                        : '0 0 10px rgba(255, 107, 53, 0.7), 0 2px 4px rgba(255, 107, 53, 0.5)',
-                      animation: item.id === 'buy' || item.id === 'sell' 
-                        ? 'none' 
-                        : 'badgePulse 2s ease-in-out infinite, slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                      borderRadius: item.id === 'buy' || item.id === 'sell' ? '2px' : '50%'
-                    }}
+                  <div
+                    className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-[#FF6B35]"
+                    style={{ width: '16px', height: '2px' }}
                   />
                 )}
-                
-                {/* Hover Ripple Effect */}
-                <div 
-                  className="absolute inset-0 rounded-2xl opacity-0 group-active:opacity-100 transition-opacity duration-200"
-                  style={{
-                    background: 'radial-gradient(circle, rgba(255, 107, 53, 0.1) 0%, transparent 70%)',
-                    transform: 'scale(0)',
-                    animation: isActive ? 'none' : 'ripple 0.6s ease-out'
-                  }}
-                />
               </button>
             );
           })}

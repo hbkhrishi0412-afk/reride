@@ -31,14 +31,14 @@ const toListingLimit = (value: unknown, fallback: number | 'unlimited'): number 
 function toPlanDetails(id: string, row: Record<string, unknown>): PlanDetails {
   const basePlan = PLAN_DETAILS[id as SubscriptionPlan];
   const metadata = (row.metadata as Record<string, unknown> | undefined) || {};
-  const isBasePlan = Boolean(basePlan);
   return {
     id: id as SubscriptionPlan,
     name: String(row.name || basePlan?.name || 'Custom Plan'),
     price: toNumber(row.price, basePlan?.price ?? 0),
-    features: isBasePlan
-      ? (basePlan?.features || [])
-      : (Array.isArray(row.features) ? row.features.map(String) : []),
+    features:
+      Array.isArray(row.features) && row.features.length > 0
+        ? row.features.map(String)
+        : (basePlan?.features || []),
     listingLimit: toListingLimit(row.listingLimit ?? metadata.listingLimit, basePlan?.listingLimit ?? 1),
     featuredCredits: toNumber(row.featuredCredits ?? metadata.featuredCredits, basePlan?.featuredCredits ?? 0),
     freeCertifications: toNumber(

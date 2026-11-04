@@ -101,7 +101,6 @@ const MobileCertifiedInspectionReport: React.FC<{ report: CertifiedInspection }>
  * - Sticky action buttons (Call, Chat, Share)
  * - Collapsible sections
  * - Mobile-friendly specs layout
- * - Pull-to-refresh support
  */
 export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   vehicle,
@@ -574,7 +573,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 e.stopPropagation();
                 handleChat();
               }}
-              className="flex flex-[1.4] flex-col items-center justify-center gap-0.5 rounded-xl bg-purple-600 py-2.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-purple-700 active:scale-[0.99]"
+              className="flex flex-[1.4] flex-col items-center justify-center gap-0.5 rounded-xl bg-[#FF6B35] py-2.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-[#E85A28] active:scale-[0.99]"
               style={{ minHeight: '52px' }}
             >
               <span className="flex items-center gap-2">
@@ -761,7 +760,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
             </div>
           </div>
           <div className="mb-2">
-            <span className="text-3xl font-bold text-purple-600">{formatCurrency(safeVehicle.price)}</span>
+            <span className="text-3xl font-bold text-[#FF6B35]">{formatCurrency(safeVehicle.price)}</span>
           </div>
           
           {/* EMI Information */}
@@ -770,7 +769,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               <p className="text-sm text-gray-600 mb-1">
                 {t('vehicle.detail.price.monthlyEmi')}
               </p>
-              <p className="text-xl font-bold text-purple-600">
+              <p className="text-xl font-bold text-[#FF6B35]">
                 {formatCurrency(baseEMI)}/m
               </p>
             </div>
@@ -911,7 +910,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 {!currentUser ? (
                   <div className="flex flex-col items-center justify-center py-10 px-4">
                     <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#FF6B35]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                       </svg>
                     </div>
@@ -924,7 +923,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                     <button
                       type="button"
                       onClick={onRequestLogin}
-                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-6 rounded-lg transition-colors flex items-center gap-2 text-sm"
+                      className="bg-[#FF6B35] hover:bg-[#E85A28] text-white font-bold py-2.5 px-6 rounded-lg transition-colors flex items-center gap-2 text-sm"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
@@ -997,7 +996,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 {/* Registration Details */}
                 <div className="bg-gray-50 rounded-xl p-4">
                   <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-600" viewBox="0 0 20 20" fill="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#FF6B35]" viewBox="0 0 20 20" fill="currentColor">
                       <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
                     </svg>
                     {t('vehicle.detail.vahan.registrationDetails')}
@@ -1035,7 +1034,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 {/* Ownership & Insurance */}
                 <div className="bg-gray-50 rounded-xl p-4">
                   <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-600" viewBox="0 0 20 20" fill="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#FF6B35]" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
                     </svg>
                     {t('vehicle.detail.vahan.ownershipStatus')}

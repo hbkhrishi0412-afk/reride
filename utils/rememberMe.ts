@@ -197,7 +197,10 @@ export function setRememberMePreference(remember: boolean): void {
   writeRememberMePreference(remember);
 }
 
-/** Await native mirror — use on Capacitor before post-login navigation. */
+/**
+ * Await native mirror. Use before page unload (OAuth redirect); after password
+ * login prefer `setRememberMePreference` so the spinner isn't held on KV I/O.
+ */
 export async function setRememberMePreferenceAsync(remember: boolean): Promise<void> {
   writeRememberMePreference(remember);
   if (isCapacitorNative()) {

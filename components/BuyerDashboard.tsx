@@ -358,9 +358,8 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                     vehicles={publishedVehicles}
                     onSelectVehicle={onSelectVehicle}
                     onBrowseVehicles={() => onNavigate(View.USED_CARS)}
-                    onOpenDeal={(leadId, vehicle) => {
+                    onOpenDeal={(leadId) => {
                       setSelectedDealId(leadId);
-                      if (vehicle) onSelectVehicle(vehicle);
                     }}
                   />
                 </div>

@@ -204,8 +204,9 @@ export function saveRememberedCredentials(
 }
 
 /**
- * Save credentials and await native persistence (required on Capacitor production
- * builds where navigation after login can interrupt fire-and-forget writes).
+ * Await native Preferences write. Use only when the page may unload before a
+ * fire-and-forget write finishes (e.g. browser OAuth redirect). Post-login UI
+ * should call `saveRememberedCredentials` instead so auth isn't blocked on KV I/O.
  */
 export async function saveRememberedCredentialsAsync(
   role: string,

@@ -4773,12 +4773,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   };
 
   return (
-    <div className="w-full bg-gradient-to-b from-gray-50 to-white min-h-screen">
-      {/* Premium Tab Navigation — Refined pills */}
+    <div className="w-full bg-gradient-to-b from-gray-50 to-white min-h-full">
+      {/* Sticky tabs pin to the scroll root — MobileLayout already cleared safe-area + brand bar. */}
       <div
-        className="px-4 sticky z-20 safe-top"
+        className="px-4 sticky z-20 top-0"
         style={{
-          top: 'env(safe-area-inset-top, 0px)',
           background: 'rgba(255,255,255,0.85)',
           backdropFilter: 'saturate(180%) blur(14px)',
           WebkitBackdropFilter: 'saturate(180%) blur(14px)',

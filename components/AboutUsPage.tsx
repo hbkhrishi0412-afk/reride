@@ -4,6 +4,7 @@ import { formatSupportPhoneDisplay, supportTelHref } from '../utils/whatsappShar
 import { View } from '../types.js';
 import AutoT from './AutoT';
 import { useAutoT } from '../hooks/useAutoT';
+import { useIsMobileApp } from '../hooks/useIsMobileApp';
 
 interface AboutUsPageProps {
   onNavigate?: (view: View) => void;
@@ -233,6 +234,7 @@ function FeatureGlyph({ tone }: { tone: 'orange' | 'blue' | 'teal' }) {
 }
 
 const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
+  const { isMobileApp } = useIsMobileApp();
   const supportTel = supportTelHref();
   const whatWeDoBody = useAutoT('about.whatWeDo.body');
   const stageRef = useRef<HTMLDivElement>(null);
@@ -255,7 +257,7 @@ const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div className="au-root animate-fade-in pb-24 lg:pb-12 overflow-x-hidden">
+    <div className={`au-root animate-fade-in overflow-x-hidden ${isMobileApp ? 'pb-4' : 'pb-24 lg:pb-12'}`}>
       <style>{`
         .au-root {
           --au-ink: #0B1220;

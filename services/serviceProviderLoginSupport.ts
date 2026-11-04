@@ -32,9 +32,30 @@ export async function fetchServiceProviderProfileWithAppJwt(): Promise<Record<st
   }
 }
 
+/** Prefer API profile when present; otherwise build a dashboard stub from the users row. */
+export function providerFromLoginUser(
+  user: User,
+  apiProfile?: Record<string, unknown> | null,
+): Record<string, unknown> {
+  return apiProfile ?? userToServiceProviderProfile(user);
+}
+
+function enrichServiceProviderProfileInBackground(): void {
+  void fetchServiceProviderProfileWithAppJwt().then((apiProfile) => {
+    if (!apiProfile || typeof window === 'undefined') return;
+    try {
+      window.dispatchEvent(
+        new CustomEvent('serviceProviderProfileUpdated', { detail: { profile: apiProfile } }),
+      );
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
 /**
- * Service provider email/password sign-in via `public.users` (bcrypt) + JWT from POST /api/users,
- * then loads extended profile from `service_providers` when present.
+ * Service provider email/password sign-in via `public.users` (bcrypt) + JWT from POST /api/users.
+ * Returns a usable provider immediately; extended `service_providers` fields hydrate in the background.
  */
 export async function loginServiceProviderWithUsersTable(
   email: string,
@@ -44,9 +65,7 @@ export async function loginServiceProviderWithUsersTable(
   if (!result.success || !result.user) {
     return { ok: false, message: result.reason || 'Login failed' };
   }
-  const apiProfile = await fetchServiceProviderProfileWithAppJwt();
-  if (apiProfile) {
-    return { ok: true, provider: apiProfile };
-  }
-  return { ok: true, provider: userToServiceProviderProfile(result.user) };
+  const provider = providerFromLoginUser(result.user);
+  enrichServiceProviderProfileInBackground();
+  return { ok: true, provider };
 }

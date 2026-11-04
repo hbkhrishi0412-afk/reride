@@ -188,7 +188,8 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
   userLocation,
 }) => {
   const { isMobileApp } = useIsMobileApp();
-  const bottomPad = isMobileApp ? 'calc(56px + env(safe-area-inset-bottom, 0px) + 0.75rem)' : '1.5rem';
+  // MobileLayout already reserves the tab bar; only add a small content gap.
+  const bottomPad = isMobileApp ? '0.75rem' : '1.5rem';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [companyTypeFilter, setCompanyTypeFilter] = useState<CompanyType>('all');

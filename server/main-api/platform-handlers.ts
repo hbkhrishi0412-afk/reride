@@ -2468,7 +2468,6 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: co
     const toPlanDetails = (id: string, row: Record<string, unknown>) => {
       const basePlan = core.PLAN_DETAILS[id as keyof typeof core.PLAN_DETAILS];
       const metadata = (row.metadata as Record<string, unknown> | undefined) || {};
-      const isBasePlan = Boolean(basePlan);
       return {
         id,
         name: String(row.name || basePlan?.name || 'Custom Plan'),
@@ -2477,11 +2476,11 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: co
           row.duration_days ?? row.durationDays ?? metadata.durationDays,
           basePlan?.durationDays ?? 30,
         ),
-        // Keep base plan marketing/features canonical from code constants.
-        // This prevents stale DB-edited feature text from drifting across pages.
-        features: isBasePlan
-          ? (basePlan?.features || [])
-          : (Array.isArray(row.features) ? row.features.map(String) : []),
+        // Prefer DB features when set so admin Plan Management edits reach seller dashboards.
+        features:
+          Array.isArray(row.features) && row.features.length > 0
+            ? row.features.map(String)
+            : (basePlan?.features || []),
         listingLimit: toListingLimit(row.listingLimit ?? metadata.listingLimit, basePlan?.listingLimit ?? 0),
         featuredCredits: toNumber(row.featuredCredits ?? metadata.featuredCredits, basePlan?.featuredCredits ?? 0),
         freeCertifications: toNumber(row.freeCertifications ?? metadata.freeCertifications, basePlan?.freeCertifications ?? 0),
@@ -2563,6 +2562,11 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: co
 
         const existing = await core.adminRead<Record<string, unknown>>(plansPath, updatePlanId);
         const basePlan = core.PLAN_DETAILS[updatePlanId as keyof typeof core.PLAN_DETAILS];
+        const nextFeatures = Array.isArray(updateData.features)
+          ? updateData.features
+          : (Array.isArray(existing?.features)
+            ? existing.features
+            : (basePlan?.features || []));
         const merged = {
           ...(existing || {}),
           id: updatePlanId,
@@ -2572,11 +2576,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: co
             updateData.durationDays ?? updateData.duration_days ?? existing?.duration_days ?? existing?.durationDays,
             basePlan?.durationDays ?? 30,
           ),
-          features: basePlan
-            ? (basePlan.features || [])
-            : (Array.isArray(updateData.features)
-              ? updateData.features
-              : (Array.isArray(existing?.features) ? existing?.features : [])),
+          features: nextFeatures,
           listingLimit: toListingLimit(updateData.listingLimit ?? existing?.listingLimit, basePlan?.listingLimit ?? 0),
           featuredCredits: toNumber(updateData.featuredCredits ?? existing?.featuredCredits, basePlan?.featuredCredits ?? 0),
           freeCertifications: toNumber(updateData.freeCertifications ?? existing?.freeCertifications, basePlan?.freeCertifications ?? 0),

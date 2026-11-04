@@ -2,9 +2,15 @@ import React, { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '../../types';
 import { View } from '../../types';
-import { planService } from '../../services/planService';
+import { invalidateBrowserPlansCache, planService } from '../../services/planService';
 import { planDetailsForSeller } from '../../utils/listingPlanRules.js';
 import { CLIENT_POLL_INTERVALS_MS } from '../../utils/clientPolling.js';
+import {
+    fetchOwnSellerProfile,
+    mergeSellerPlanFields,
+    publishCurrentUserPlanUpdate,
+    sellerPlanFieldsChanged,
+} from '../../utils/sellerPlanSync.js';
 
 export const PlanStatusCard: React.FC<{
     seller: User;
@@ -30,9 +36,17 @@ export const PlanStatusCard: React.FC<{
     useEffect(() => {
         let active = true;
 
-        const loadPlan = async (silent = false) => {
+        const syncSellerProfile = async () => {
+            const fresh = await fetchOwnSellerProfile(seller.email);
+            if (!active || !fresh) return;
+            if (!sellerPlanFieldsChanged(seller, fresh)) return;
+            publishCurrentUserPlanUpdate(mergeSellerPlanFields(seller, fresh));
+        };
+
+        const loadPlan = async (silent = false, bustCache = false) => {
             if (!silent) setLoading(true);
             try {
+                if (bustCache) invalidateBrowserPlansCache();
                 const planDetails = await planService.getPlanDetails(seller.subscriptionPlan || 'free');
                 if (!active) return;
                 setPlan(planDetails);
@@ -50,27 +64,32 @@ export const PlanStatusCard: React.FC<{
 
         const reloadOnVisibility = () => {
             if (document.visibilityState === 'visible') {
-                void loadPlan(true);
+                void syncSellerProfile();
+                void loadPlan(true, true);
             }
         };
-        const reloadOnPlanConfigUpdate = () => {
-            void loadPlan(true);
-        };
+        const reloadOnPlanConfigUpdate = () => void loadPlan(true, true);
         const reloadOnStoragePlanUpdate = (event: StorageEvent) => {
-            if (event.key === 'reRidePlanConfigUpdatedAt') {
-                void loadPlan(true);
-            }
+            if (event.key === 'reRidePlanConfigUpdatedAt') void loadPlan(true, true);
         };
 
         setPlan(planDetailsForSeller(seller));
+        void syncSellerProfile();
         void loadPlan(false);
         window.addEventListener('focus', reloadOnVisibility);
         document.addEventListener('visibilitychange', reloadOnVisibility);
         window.addEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);
         window.addEventListener('storage', reloadOnStoragePlanUpdate);
+        const pollId = window.setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                void syncSellerProfile();
+                void loadPlan(true);
+            }
+        }, CLIENT_POLL_INTERVALS_MS.sellerConversations);
 
         return () => {
             active = false;
+            window.clearInterval(pollId);
             window.removeEventListener('focus', reloadOnVisibility);
             document.removeEventListener('visibilitychange', reloadOnVisibility);
             window.removeEventListener('planConfigUpdated', reloadOnPlanConfigUpdate as EventListener);

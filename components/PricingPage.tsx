@@ -150,6 +150,13 @@ const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onSelectPlan, ad
       return;
     }
     setSelectedPlan(planId);
+    // Use already-loaded catalog — don't await another /api/plans round-trip before opening the modal.
+    const fromList = plans.find((p) => p.id === planId);
+    if (fromList) {
+      setSelectedAmount(fromList.price);
+      setShowPaymentModal(true);
+      return;
+    }
     try {
       const planDetails = await planService.getPlanDetails(planId);
       setSelectedAmount(planDetails.price);

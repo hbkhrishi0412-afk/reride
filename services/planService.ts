@@ -60,7 +60,6 @@ function parseListingLimit(
 const normalizePlan = (raw: any): PlanDetails => {
     const id = String(raw?.id || raw?.planId || 'free') as SubscriptionPlan;
     const base = PLAN_DETAILS[id];
-    const isBasePlan = Boolean(base);
     const fallbackLimit = base?.listingLimit ?? 1;
     const rawPrice = Number(raw?.price ?? base?.price ?? 0);
     const safePrice = Number.isFinite(rawPrice) ? rawPrice : 0;
@@ -68,10 +67,10 @@ const normalizePlan = (raw: any): PlanDetails => {
         id,
         name: String(raw?.name || base?.name || 'Custom Plan'),
         price: safePrice,
-        // Keep base plans aligned with canonical constants, regardless of stale API payload.
-        features: isBasePlan
-            ? (base?.features ?? [])
-            : (Array.isArray(raw?.features) ? raw.features.map(String) : []),
+        // Prefer API/DB features when present so admin plan edits reach seller dashboards.
+        features: Array.isArray(raw?.features) && raw.features.length > 0
+            ? raw.features.map(String)
+            : (base?.features ?? []),
         listingLimit: parseListingLimit(raw?.listingLimit, fallbackLimit),
         featuredCredits: Number(
             raw?.featuredCredits ?? base?.featuredCredits ?? 0
@@ -82,6 +81,12 @@ const normalizePlan = (raw: any): PlanDetails => {
         isMostPopular: Boolean(raw?.isMostPopular ?? base?.isMostPopular),
     };
 };
+
+/** Drop in-memory browser plans cache (call after admin plan edits / before forced reload). */
+export function invalidateBrowserPlansCache(): void {
+    browserPlansCache = null;
+    browserPlansPromise = null;
+}
 
 export const planService = {
     // Get plan details with any updates applied
@@ -265,7 +270,8 @@ export const planService = {
             const parsed = await handleApiResponse<{ success?: boolean; reason?: string; error?: string }>(response);
             if (!parsed.success) throw new Error(parsed.reason || parsed.error || `Failed to update plan (${response.status})`);
             if (parsed.data?.success === false) throw new Error(parsed.data.reason || parsed.data.error || `Failed to update plan (${response.status})`);
-            browserPlansCache = null;
+            // Always drop cache so other tabs/sessions refetch admin edits (in-place patch only helps this tab).
+            invalidateBrowserPlansCache();
             return;
         }
 
@@ -313,7 +319,7 @@ export const planService = {
             const parsed = await handleApiResponse<{ id?: string; success?: boolean; reason?: string; error?: string }>(response);
             if (!parsed.success) throw new Error(parsed.reason || parsed.error || `Failed to create plan (${response.status})`);
             if (parsed.data?.success === false) throw new Error(parsed.data.reason || parsed.data.error || `Failed to create plan (${response.status})`);
-            browserPlansCache = null;
+            invalidateBrowserPlansCache();
             return String(parsed.data?.id || `custom_${Date.now()}`);
         }
 
@@ -354,7 +360,7 @@ export const planService = {
                 method: 'DELETE',
             });
             if (response.ok) {
-                browserPlansCache = null;
+                invalidateBrowserPlansCache();
             }
             return response.ok;
         }

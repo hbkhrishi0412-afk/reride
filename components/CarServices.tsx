@@ -197,9 +197,8 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
   const supportTel = supportTelHref();
   const { isMobileApp } = useIsMobileApp();
   const { t, i18n: i18nFromHook } = useTranslation(undefined, { i18n });
-  const mobileScrollPadding = isMobileApp
-    ? 'calc(56px + env(safe-area-inset-bottom, 0px))'
-    : '5rem';
+  // MobileLayout already reserves the tab bar; only leave a small content gap.
+  const mobileScrollPadding = isMobileApp ? '1.5rem' : '5rem';
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [workshops, setWorkshops] = useState<ServiceProviderDirectoryEntry[]>([]);
   const servicesSectionRef = useRef<HTMLDivElement>(null);

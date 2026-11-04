@@ -83,11 +83,9 @@ interface MobileHomePageProps {
 /**
  * Mobile-Optimized Home Page
  * Features:
- * - Full-screen hero with search
+ * - Hero with search + budget/brand chips
  * - Swipeable featured vehicles carousel
  * - Touch-friendly category/city selection
- * - Pull-to-refresh ready
- * - Optimized for mobile performance
  */
 export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   onSearch,
@@ -533,9 +531,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           <p className="text-white/85 text-[13px] text-center mb-5 px-2 leading-snug hero-rise hero-rise-3">
             {t('mobile.home.heroSub')}
           </p>
-          <div className="mb-5 hero-rise hero-rise-3">
-            <DealRoomHeroPreview compact />
-          </div>
 
           {/* Search Bar */}
           <div
@@ -585,20 +580,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               </button>
             </div>
           </div>
-
-          {onBrowseAllIndia ? (
-            <PopularCitiesChips
-              className="hero-rise hero-rise-4 mt-3 mb-1"
-              variant="light"
-              cities={cities.map((c) => ({ name: c.name, count: c.total }))}
-              selectedCity={selectedCity}
-              onSelectCity={(name) => {
-                const city = cities.find((c) => c.name === name);
-                handleCityCardClick({ name, total: city?.total ?? 0 });
-              }}
-              onBrowseAllIndia={onBrowseAllIndia}
-            />
-          ) : null}
 
           {/* Budget quick-filter chips — the most-used filter on a mobile
               used-car app. Placed above brands so budget-first shoppers
@@ -665,8 +646,23 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         </div>
       </div>
 
+      <div className="px-4 pt-4 pb-2 space-y-3">
+        <DealRoomHeroPreview compact />
+        {onBrowseAllIndia ? (
+          <PopularCitiesChips
+            cities={cities.map((c) => ({ name: c.name, count: c.total }))}
+            selectedCity={selectedCity}
+            onSelectCity={(name) => {
+              const city = cities.find((c) => c.name === name);
+              handleCityCardClick({ name, total: city?.total ?? 0 });
+            }}
+            onBrowseAllIndia={onBrowseAllIndia}
+          />
+        ) : null}
+      </div>
+
       {currentUser?.role === 'customer' ? (
-        <div className="px-4 pt-4">
+        <div className="px-4 pt-2">
           <ActiveDealsHomeBanner onNavigate={onNavigate} />
         </div>
       ) : null}
@@ -1055,7 +1051,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           <div className="space-y-1">
             <div className="inline-flex items-center gap-1.5 text-orange-600 text-[10px] font-semibold uppercase tracking-wider">
               <span className="h-px w-4 bg-orange-300" />
-              Browse
+              {t('mobile.home.eyebrow.browse', { defaultValue: 'Browse' })}
             </div>
             <h2 id="mobile-home-categories-heading" className="text-[20px] font-bold text-gray-900 tracking-tight leading-tight">
               {t('home.categories.title')}
@@ -1129,7 +1125,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             <div className="space-y-1">
               <div className="inline-flex items-center gap-1.5 text-orange-600 text-[10px] font-semibold uppercase tracking-wider">
                 <span className="h-px w-4 bg-orange-300" />
-                For You
+                {t('mobile.home.eyebrow.forYou', { defaultValue: 'For You' })}
               </div>
               <h2 className="text-[20px] font-bold text-gray-900 tracking-tight leading-tight">{t('mobile.home.recommended')}</h2>
             </div>
@@ -1172,7 +1168,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           <div className="relative">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 backdrop-blur-sm text-[10px] font-semibold uppercase tracking-wider mb-2 border border-white/20">
               <span className="w-1 h-1 bg-green-400 rounded-full sparkle-pulse" />
-              List in 60s
+              {t('mobile.home.eyebrow.listFast', { defaultValue: 'List in 60s' })}
             </div>
             <h2 className="text-[20px] font-bold mb-1 tracking-tight leading-tight">{t('mobile.home.readyToSell')}</h2>
             <p className="text-white/85 text-[13px] leading-snug mb-4">{t('mobile.home.listVehicle')}</p>

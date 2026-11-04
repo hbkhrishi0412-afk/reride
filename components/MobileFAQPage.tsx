@@ -1,19 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { FAQItem } from '../types';
+import { View as ViewEnum } from '../types';
 
 interface MobileFAQPageProps {
   faqItems: FAQItem[];
+  onNavigate?: (view: ViewEnum) => void;
 }
 
 /**
  * Mobile-Optimized FAQ Page
- * Features:
- * - Accordion-style questions
- * - Touch-friendly expand/collapse
- * - Search functionality
+ * Accordion + Support / grievance / safety shortcuts (parity with Help Center).
  */
-export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
+export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems, onNavigate }) => {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [openItem, setOpenItem] = useState<number | string | null>(null);
@@ -40,10 +39,11 @@ export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      {/* Header */}
+    <div className="min-h-full bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-4 py-4">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Frequently Asked Questions</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          {t('faq.page.title', { defaultValue: 'Frequently Asked Questions' })}
+        </h1>
         <p className="text-gray-600 text-sm">
           {t('faq.page.subtitle', {
             defaultValue:
@@ -52,11 +52,10 @@ export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
         </p>
       </div>
 
-      {/* Search */}
       <div className="px-4 py-4 bg-white border-b border-gray-200 sticky top-0 z-10">
         <input
           type="search"
-          placeholder="Search questions..."
+          placeholder={t('faq.searchPlaceholder', { defaultValue: 'Search questions...' })}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-orange-500 focus:outline-none"
@@ -64,11 +63,12 @@ export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
         />
       </div>
 
-      {/* FAQ List */}
       <div className="px-4 py-4">
         {Object.keys(filteredAndGroupedFAQs).length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-600">No questions found</p>
+            <p className="text-gray-600">
+              {t('help.noResults', { defaultValue: 'No questions found' })}
+            </p>
           </div>
         ) : (
           <div className="space-y-6">
@@ -82,6 +82,7 @@ export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
                       className="bg-white rounded-xl border border-gray-200 overflow-hidden"
                     >
                       <button
+                        type="button"
                         onClick={() => toggleItem(item.id)}
                         className="w-full flex justify-between items-center text-left p-4 active:bg-gray-50"
                         style={{ minHeight: '56px' }}
@@ -96,6 +97,7 @@ export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
+                          aria-hidden
                         >
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
@@ -112,50 +114,53 @@ export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
             ))}
           </div>
         )}
+
+        {onNavigate && (
+          <div className="mt-8 grid gap-3">
+            <button
+              type="button"
+              onClick={() => onNavigate(ViewEnum.SUPPORT)}
+              className="rounded-xl border border-gray-200 bg-white p-4 text-left active:bg-gray-50"
+              style={{ minHeight: '56px' }}
+            >
+              <div className="font-bold text-gray-900">
+                {t('help.card.support.title', { defaultValue: 'Contact support' })}
+              </div>
+              <p className="mt-1 text-sm text-gray-600">
+                {t('help.card.support.desc', { defaultValue: 'Open a ticket for account or listing issues.' })}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate(ViewEnum.COMPLAINT_RESOLUTION)}
+              className="rounded-xl border border-gray-200 bg-white p-4 text-left active:bg-gray-50"
+              style={{ minHeight: '56px' }}
+            >
+              <div className="font-bold text-gray-900">
+                {t('help.card.grievance.title', { defaultValue: 'File a grievance' })}
+              </div>
+              <p className="mt-1 text-sm text-gray-600">
+                {t('help.card.grievance.desc', { defaultValue: 'Formal complaint resolution process.' })}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate(ViewEnum.SAFETY_CENTER)}
+              className="rounded-xl border border-gray-200 bg-white p-4 text-left active:bg-gray-50"
+              style={{ minHeight: '56px' }}
+            >
+              <div className="font-bold text-gray-900">
+                {t('help.card.safety.title', { defaultValue: 'Trust & safety' })}
+              </div>
+              <p className="mt-1 text-sm text-gray-600">
+                {t('help.card.safety.desc', { defaultValue: 'Tips for safe buying, selling, and RC transfer.' })}
+              </p>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 export default MobileFAQPage;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

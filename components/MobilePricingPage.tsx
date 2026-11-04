@@ -164,6 +164,13 @@ export const MobilePricingPage: React.FC<MobilePricingPageProps> = ({
       return;
     }
     setSelectedPlan(planId);
+    // Use already-loaded catalog — don't await another /api/plans round-trip before opening the modal.
+    const fromList = plans.find((p) => p.id === planId);
+    if (fromList) {
+      setSelectedAmount(fromList.price);
+      setShowPaymentModal(true);
+      return;
+    }
     try {
       const planDetails = await planService.getPlanDetails(planId);
       setSelectedAmount(planDetails.price);
@@ -178,7 +185,7 @@ export const MobilePricingPage: React.FC<MobilePricingPageProps> = ({
 
   if (isLoading) {
     return (
-      <div className="min-h-screen pb-24" style={{ background: '#F8FAFC' }} aria-busy="true">
+      <div className="min-h-full" style={{ background: '#F8FAFC' }} aria-busy="true">
         <div
           className="px-5 pt-6 pb-8"
           style={{
@@ -207,7 +214,7 @@ export const MobilePricingPage: React.FC<MobilePricingPageProps> = ({
 
   if (loadError || plans.length === 0) {
     return (
-      <div className="min-h-screen pb-24 flex flex-col" style={{ background: '#F8FAFC' }}>
+      <div className="min-h-full flex flex-col" style={{ background: '#F8FAFC' }}>
         <div
           className="px-5 pt-6 pb-8"
           style={{

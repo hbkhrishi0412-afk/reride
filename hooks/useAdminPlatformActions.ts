@@ -182,23 +182,18 @@ export function useAdminPlatformActions(args: UseAdminPlatformActionsArgs) {
         
         await updateUserService(apiUpdateData);
         
-        // CRITICAL: Refresh users list from API after successful update to ensure sync
-        try {
-          const { getUsers: getUsersService } = await import('../services/userService');
-          const refreshedUsers = await getUsersService();
-          
-          // Update the users state with fresh data from API
-          setUsers(refreshedUsers);
-          
-          // Also update all user caches immediately
-          syncAllUserCaches(refreshedUsers);
-          
-          logInfo('✅ Users list refreshed from API after verification update');
-        } catch (refreshError) {
-          logWarn('⚠️ Failed to refresh users list after update:', refreshError);
-          // Don't fail the update if refresh fails - the API update already succeeded
-          // The error is logged but not thrown to prevent breaking the update flow
-        }
+        // Local state already updated above — refresh from API in the background so toasts/modals aren't blocked.
+        void (async () => {
+          try {
+            const { getUsers: getUsersService } = await import('../services/userService');
+            const refreshedUsers = await getUsersService();
+            setUsers(refreshedUsers);
+            syncAllUserCaches(refreshedUsers);
+            logInfo('✅ Users list refreshed from API after verification update');
+          } catch (refreshError) {
+            logWarn('⚠️ Failed to refresh users list after update:', refreshError);
+          }
+        })();
       } catch (error) {
         logError('❌ Failed to sync user update to API:', error);
         addToast(

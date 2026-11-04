@@ -342,6 +342,26 @@ const AppProviderCore: React.FC<{ children: React.ReactNode }> = ({ children }) 
       }
     }
 
+    // If admin updated the logged-in seller (or same-browser session), push plan fields into currentUser.
+    try {
+      const rawCurrent = localStorage.getItem('reRideCurrentUser');
+      if (rawCurrent) {
+        const current = JSON.parse(rawCurrent) as User;
+        if (current?.email?.toLowerCase().trim() === normalizedEmail) {
+          const merged = { ...current, ...updates };
+          localStorage.setItem('reRideCurrentUser', currentUserForLocalSessionJson(merged));
+          try {
+            sessionStorage.setItem('currentUser', currentUserForLocalSessionJson(merged));
+          } catch {
+            /* ignore */
+          }
+          window.dispatchEvent(new CustomEvent('userDataUpdated', { detail: { user: merged } }));
+        }
+      }
+    } catch (error) {
+      logWarn('⚠️ Failed to sync reRideCurrentUser after admin user update:', error);
+    }
+
     if (eventPayloadUsers && window.dispatchEvent) {
       window.dispatchEvent(new CustomEvent('usersCacheUpdated', { detail: { users: eventPayloadUsers } }));
       window.dispatchEvent(new Event('storage'));

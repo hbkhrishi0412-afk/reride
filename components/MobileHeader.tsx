@@ -4,6 +4,7 @@ import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
 import { HELP_NAV_ITEMS } from '../constants/helpLegalNav.js';
 import { homeViewForActor, isServiceProviderActor } from '../utils/serviceProviderAccess.js';
+import { mobileSellDestination } from '../utils/mobileSellNav';
 
 interface MobileHeaderProps {
   onNavigate: (view: ViewEnum) => void;
@@ -112,7 +113,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
       {
         icon: <SellCarIcon />,
         label: t('nav.sellCar'),
-        view: currentUser?.role === 'seller' ? ViewEnum.SELL_CAR : ViewEnum.SELLER_LOGIN,
+        view: mobileSellDestination(currentUser?.role),
         tint: '#334155',
         hidden: isProviderActor,
       },

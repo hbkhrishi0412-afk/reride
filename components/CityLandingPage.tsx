@@ -60,7 +60,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
 
   if (isMobileApp) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-24">
+      <div className="min-h-full bg-gray-50">
         <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-4 py-8">
           <h1 className="text-3xl font-bold mb-2">Used Cars in {city}</h1>
           <p className="text-white/90 mb-4">

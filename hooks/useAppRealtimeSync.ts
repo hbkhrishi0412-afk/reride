@@ -16,6 +16,12 @@ import {
   postgrestEqQuoted,
   mergeConversationMessagesForRealtime,
 } from '../components/AppProvider/helpers';
+import {
+  fetchOwnSellerProfile,
+  mergeSellerPlanFields,
+  publishCurrentUserPlanUpdate,
+  sellerPlanFieldsChanged,
+} from '../utils/sellerPlanSync.js';
 
 export type UseAppRealtimeSyncArgs = {
   currentUser: User | null;
@@ -215,12 +221,32 @@ export function useAppRealtimeSync(args: UseAppRealtimeSyncArgs) {
   });
 
   const usersRealtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleUsersRealtimeRefresh = useCallback(() => {
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+
+  const refreshOwnPlanFromRealtime = useCallback((row: Record<string, unknown> | null | undefined) => {
+    const me = currentUserRef.current;
+    if (!me?.email || me.role !== 'seller') return;
+    const rowEmail = String(row?.email || '').toLowerCase().trim();
+    const myEmail = me.email.toLowerCase().trim();
+    if (rowEmail && rowEmail !== myEmail) return;
+
+    void fetchOwnSellerProfile(myEmail).then((fresh) => {
+      if (!fresh) return;
+      const latest = currentUserRef.current;
+      if (!latest || latest.email?.toLowerCase().trim() !== myEmail) return;
+      if (!sellerPlanFieldsChanged(latest, fresh)) return;
+      publishCurrentUserPlanUpdate(mergeSellerPlanFields(latest, fresh));
+    });
+  }, []);
+
+  const scheduleUsersRealtimeRefresh = useCallback((row?: Record<string, unknown>) => {
     if (usersRealtimeDebounceRef.current) {
       clearTimeout(usersRealtimeDebounceRef.current);
     }
     usersRealtimeDebounceRef.current = setTimeout(() => {
       usersRealtimeDebounceRef.current = null;
+      refreshOwnPlanFromRealtime(row);
       void dataService
         .getUsers(true)
         .then((fresh) => {
@@ -230,7 +256,7 @@ export function useAppRealtimeSync(args: UseAppRealtimeSyncArgs) {
         })
         .catch(() => {});
     }, 2000);
-  }, []);
+  }, [refreshOwnPlanFromRealtime]);
 
   useSupabaseRealtime({
     table: 'users',

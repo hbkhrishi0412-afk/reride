@@ -10,7 +10,6 @@ import { ChatMessageImage } from './ChatMessageImage';
 import { ChatMessageVoice } from './ChatMessageVoice';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { filterMessagesForViewer } from '../utils/conversationView';
-import { isCapacitorNativeApp } from '../utils/isCapacitorNative';
 import { isOfferChatMessage } from '../utils/isOfferChatMessage';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 import {
@@ -20,6 +19,8 @@ import {
 import { DealRoomSection } from './chat/DealRoomSection';
 import { useDealRoomForConversation } from '../hooks/useDealRoomForConversation';
 import { useApp } from './AppProvider';
+import { useIsMobileApp } from '../hooks/useIsMobileApp';
+import { mobileChatBottomClearancePx } from '../utils/mobileChatClearance';
 
 interface ChatWidgetProps {
   conversation: Conversation;
@@ -91,7 +92,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     uploaderEmail,
     onSetConversationReadState,
   }) => {
-  const { runIfConfirmed } = useApp();
+  const { runIfConfirmed, currentView } = useApp();
   const [inputText, setInputText] = useState('');
   const [isMinimized, setIsMinimized] = useState(!isInlineLaunch); // Inline launches (CTA click) start opened
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -146,8 +147,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  /** Capacitor: sit above tab row (56px) + same safe-area as MobileBottomNav (env added in calc). */
-  const bottomTabBarRowPx = isMobile && isCapacitorNativeApp() ? 56 : 0;
+  const { isMobileApp } = useIsMobileApp();
+  const bottomTabBarRowPx = mobileChatBottomClearancePx(isMobile, isMobileApp, currentView);
   const keyboardInset = useVisualViewportBottomInset();
   // Auto-open chat when conversation starts (even with no messages) or has new messages
   // BUT only if user hasn't manually closed it

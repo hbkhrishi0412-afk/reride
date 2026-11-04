@@ -172,7 +172,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
 
   if (selectedDealId) {
     return (
-      <div className="min-h-screen bg-gray-50 px-4 py-4 pb-24">
+      <div className="min-h-full bg-gray-50 px-4 py-4">
         <Suspense fallback={<div className="animate-pulse h-40 rounded-2xl bg-gray-100" />}>
           <DealDetailPage
             leadId={selectedDealId}
@@ -192,7 +192,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-full bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-4">
         <div className="flex items-start justify-between">
@@ -374,9 +374,8 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
               vehicles={vehicles}
               onSelectVehicle={onSelectVehicle}
               onBrowseVehicles={() => onNavigate(ViewEnum.USED_CARS)}
-              onOpenDeal={(leadId, vehicle) => {
+              onOpenDeal={(leadId) => {
                 setSelectedDealId(leadId);
-                if (vehicle) onSelectVehicle(vehicle);
               }}
             />
           </div>

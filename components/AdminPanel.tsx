@@ -3995,8 +3995,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             }
         };
 
-        const handleAddNewPlan = async () => {
-            if (!(await planService.canAddNewPlan())) {
+        const handleAddNewPlan = () => {
+            if ((plans || []).length >= 4) {
                 notify('Maximum of 4 plans allowed. Please delete an existing custom plan first.', 'error');
                 return;
             }
@@ -4005,11 +4005,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
         const handleSavePlan = async (updatedPlan: PlanDetails) => {
             try {
-                // Persist first, then refresh so Admin + seller views read the latest values.
                 await planService.updatePlan(updatedPlan.id, updatedPlan);
-
-                const allPlans = await planService.getAllPlans();
-                setPlans(allPlans);
+                // Close + toast immediately; keep local catalog in sync without a blocking refetch.
+                setPlans((prev) => (prev || []).map((p) => (p.id === updatedPlan.id ? updatedPlan : p)));
                 setShowPlanModal(false);
                 setEditingPlan(null);
                 notifyPlanConfigUpdated();
@@ -4022,9 +4020,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
         const handleCreatePlan = async (newPlanData: Omit<PlanDetails, 'id'>) => {
             try {
-                await planService.createPlan(newPlanData);
-                const allPlans = await planService.getAllPlans();
-                setPlans(allPlans);
+                const id = await planService.createPlan(newPlanData);
+                setPlans((prev) => [...(prev || []), { ...newPlanData, id }].slice(0, 4));
                 setShowAddPlanModal(false);
                 notifyPlanConfigUpdated();
                 notify(`Plan "${newPlanData.name}" has been created successfully!`, 'success');
@@ -4246,15 +4243,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                     defaultExpiry.setDate(defaultExpiry.getDate() + 30);
                                     updateData.planExpiryDate = defaultExpiry.toISOString();
                                 }
-                                
-                                // This triggers vehicle expiry cascade in the API
-                                await onAdminUpdateUser(editingExpiryUser.email, updateData);
-                                
-                                // Close modal
+
+                                const email = editingExpiryUser.email;
                                 setShowExpiryEditModal(false);
                                 setEditingExpiryUser(null);
                                 
-                                // Show success message
+                                // Vehicle expiry cascade can be slow — don't keep the modal open for it.
+                                await onAdminUpdateUser(email, updateData);
+                                
                                 const successMsg = expiryDate 
                                     ? `Expiry date set to ${new Date(expiryDate).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`
                                     : 'Expiry date removed successfully';
@@ -4297,18 +4293,19 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             setAssigningPlan(null);
                         }}
                         onAssign={async (activatedDate: string, expiryDate: string | null) => {
+                            const planLabel = assigningPlan;
+                            const email = assigningUser.email;
+                            // Close first so the modal isn't stuck open while the user PUT (+ listing sync) runs.
+                            setShowPlanAssignmentModal(false);
+                            setAssigningUser(null);
+                            setAssigningPlan(null);
                             try {
-                                await onAdminUpdateUser(assigningUser.email, {
-                                    subscriptionPlan: assigningPlan,
+                                await onAdminUpdateUser(email, {
+                                    subscriptionPlan: planLabel,
                                     planActivatedDate: activatedDate,
                                     planExpiryDate: expiryDate || undefined,
                                 });
-
-                                setShowPlanAssignmentModal(false);
-                                setAssigningUser(null);
-                                setAssigningPlan(null);
-
-                                notify(`Plan "${assigningPlan}" assigned successfully. Vehicle listing expiry dates have been updated.`, 'success');
+                                notify(`Plan "${planLabel}" assigned successfully. Vehicle listing expiry dates have been updated.`, 'success');
                             } catch (error) {
                                 console.error('Failed to assign plan with dates:', error);
                                 notify('Failed to save plan dates. Please try again.', 'error');

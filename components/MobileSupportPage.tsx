@@ -149,7 +149,7 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
   });
 
   return (
-    <div className="min-h-screen pb-24" style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%)' }}>
+    <div className="min-h-full" style={{ background: 'linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%)' }}>
       {/* Premium obsidian header */}
       <div
         className="px-5 sticky top-0 z-30 relative overflow-hidden"

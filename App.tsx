@@ -27,7 +27,6 @@ import { tryHardwareBack } from './utils/hardwareBackRegistry';
 // Layout/utility components that are always needed - keep as eager imports
 import MobileLayout from './components/MobileLayout';
 import MobileLocationModalHost from './components/MobileLocationModalHost';
-import MobileSearch from './components/MobileSearch';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates, VehicleCategory, type SearchFilters, canBookTestDrive } from './types';
 import { persistReRideNotifications } from './utils/notificationLocalStorage';
 import { countUnreadMessageThreads } from './utils/unreadCounts';
@@ -312,6 +311,7 @@ const AppContent: React.FC = () => {
       }
       let hasDeal = false;
       let dealAlreadyTracked = false;
+      let existingLeadId: string | null = null;
       try {
         const { lead, existing } = await createDealLead({
           vehicleId: vehicle.id,
@@ -321,7 +321,7 @@ const AppContent: React.FC = () => {
         hasDeal = true;
         dealAlreadyTracked = Boolean(existing);
         if (existing) {
-          addToast(`You're already interested. Lead ${lead.id}`, 'info');
+          existingLeadId = lead.id;
         } else {
           addToast(`Interest sent! Lead ${lead.id} created.`, 'success');
         }
@@ -329,6 +329,17 @@ const AppContent: React.FC = () => {
       } catch (err) {
         logWarn('Deal lead creation failed (chat still opened):', err);
         addToast('Could not start deal tracking. Try again in a moment.', 'warning');
+      }
+      // Existing deal: open Deal Room (buyer dashboard detail), not the floating chat bubble.
+      if (existingLeadId) {
+        try {
+          localStorage.removeItem('reRideActiveChat');
+        } catch {
+          /* ignore */
+        }
+        setActiveChat(null);
+        navigate(ViewEnum.BUYER_DASHBOARD, { dealId: existingLeadId });
+        return;
       }
       const chatConversation = hasDeal ? { ...conversation, hasDeal: true } : conversation;
       const stayOnDetailListing =
@@ -2253,13 +2264,6 @@ const AppContent: React.FC = () => {
           </ErrorBoundary>
         </MobileLayout>
 
-        <MobileSearch
-          onNavigate={navigate}
-          onSearch={(query) => {
-            setInitialSearchQuery(query);
-            navigate(ViewEnum.USED_CARS);
-          }}
-        />
         <MobileLocationModalHost
           userLocation={userLocation}
           onLocationChange={setUserLocation}

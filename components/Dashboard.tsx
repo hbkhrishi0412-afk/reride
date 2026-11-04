@@ -7,7 +7,7 @@ import { findUserByParticipantId } from '../utils/chatContact';
 // FIX: ChatWidget is a named export, not a default. Corrected the import syntax.
 import { ChatWidget } from './ChatWidget';
 // Removed blocking import - will lazy load location data when needed
-import { planService } from '../services/planService';
+import { invalidateBrowserPlansCache, planService } from '../services/planService';
 import BulkUploadModal from './BulkUploadModal';
 import MarkSoldDealModal from './MarkSoldDealModal';
 import SellerCommandHome from './command-center/SellerCommandHome';
@@ -663,15 +663,24 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     let active = true;
     const loadPlan = async () => {
       try {
+        invalidateBrowserPlansCache();
         const details = await planService.getPlanDetails((seller?.subscriptionPlan || 'free') as SubscriptionPlan);
         if (active) setSellerPlanDetails(details);
       } catch {
         if (active) setSellerPlanDetails(null);
       }
     };
+    const onPlanConfigUpdated = () => void loadPlan();
+    const onStoragePlanUpdate = (event: StorageEvent) => {
+      if (event.key === 'reRidePlanConfigUpdatedAt') void loadPlan();
+    };
     void loadPlan();
+    window.addEventListener('planConfigUpdated', onPlanConfigUpdated as EventListener);
+    window.addEventListener('storage', onStoragePlanUpdate);
     return () => {
       active = false;
+      window.removeEventListener('planConfigUpdated', onPlanConfigUpdated as EventListener);
+      window.removeEventListener('storage', onStoragePlanUpdate);
     };
   }, [seller?.subscriptionPlan]);
 

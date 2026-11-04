@@ -27,7 +27,7 @@ interface MobileBrandTopBarProps {
 const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
   onNavigate,
   wishlistCount = 0,
-  compareCount = 0,
+  compareCount: _compareCount = 0,
   unreadNotificationCount = 0,
   showNotifications = false,
   onLogin,
@@ -54,7 +54,7 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
   }, []);
 
   const iconButtonClass =
-    'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-800 shadow-sm transition-colors hover:bg-gray-50 active:scale-95';
+    'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-800 shadow-sm transition-colors hover:bg-gray-50 active:scale-95';
 
   return (
     <header
@@ -101,42 +101,18 @@ const MobileBrandTopBar: React.FC<MobileBrandTopBarProps> = ({
           />
         </div>
 
-        {/* Right: compare, notifications, wishlist */}
+        {/* Right: login / notifications / wishlist (compare lives in the drawer) */}
         <div className="flex min-w-0 items-center justify-end gap-1 justify-self-end">
           {showLogin && onLogin ? (
             <button
               type="button"
               onClick={onLogin}
-              className="shrink-0 rounded-lg bg-orange-500 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-sm active:scale-95"
+              className="shrink-0 rounded-lg bg-orange-500 px-3 py-2.5 text-[12px] font-bold text-white shadow-sm active:scale-95"
+              style={{ minHeight: '44px' }}
             >
               {t('nav.login')}
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => onNavigate(ViewEnum.COMPARISON)}
-            className={iconButtonClass}
-            aria-label={
-              compareCount > 0
-                ? t('nav.compareCount', { count: compareCount })
-                : t('compare.pageTitle')
-            }
-            data-testid="mobile-brand-compare-button"
-          >
-            <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.75}
-                d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
-              />
-            </svg>
-            {compareCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
-                {compareCount}
-              </span>
-            )}
-          </button>
           {showNotifications ? (
             <button
               type="button"

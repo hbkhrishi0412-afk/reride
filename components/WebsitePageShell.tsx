@@ -1,4 +1,5 @@
 import React from 'react';
+import { useIsMobileApp } from '../hooks/useIsMobileApp';
 
 /** Matches `Header.tsx` — single source of truth for site-wide horizontal alignment. */
 export const WEBSITE_PAGE_GUTTERS = 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8';
@@ -33,19 +34,24 @@ export function WebsitePageGutters({
   );
 }
 
-/** Standard desktop marketing / content page wrapper. */
+/** Standard content page wrapper. On the phone shell, skip marketing pb-24 — MobileLayout already reserves the tab bar. */
 const WebsitePageShell: React.FC<WebsitePageShellProps> = ({
   children,
   className = '',
   narrow,
   style,
   noPadding = false,
-}) => (
-  <div className={`animate-fade-in pb-24 lg:pb-12 ${className}`} style={style}>
-    <WebsitePageGutters className={noPadding ? '' : 'py-6 sm:py-8'} narrow={narrow}>
-      {children}
-    </WebsitePageGutters>
-  </div>
-);
+}) => {
+  const { isMobileApp } = useIsMobileApp();
+  const padBottom = isMobileApp ? 'pb-4' : 'pb-24 lg:pb-12';
+  const padY = noPadding ? '' : isMobileApp ? 'py-4' : 'py-6 sm:py-8';
+  return (
+    <div className={`animate-fade-in ${padBottom} ${className}`} style={style}>
+      <WebsitePageGutters className={padY} narrow={narrow}>
+        {children}
+      </WebsitePageGutters>
+    </div>
+  );
+};
 
 export default WebsitePageShell;
