@@ -223,6 +223,16 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     };
   }, []);
 
+  // Pre-warm CSRF + Google Identity Services so the Google tap isn't blocked on first I/O.
+  useEffect(() => {
+    void import('../utils/authenticatedFetch').then(({ ensureCsrfToken }) => {
+      void ensureCsrfToken();
+    });
+    void import('../utils/webGoogleSignIn').then(({ warmUpWebGoogleSignIn }) => {
+      warmUpWebGoogleSignIn();
+    });
+  }, []);
+
   const canUseGoogle =
     selectedRole === 'customer' ||
     selectedRole === 'seller' ||

@@ -1,4 +1,4 @@
-import { View } from '../types';
+import { View } from '../types.js';
 
 /**
  * Bottom offset (px) for the floating chat control on the phone shell.

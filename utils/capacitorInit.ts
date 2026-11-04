@@ -4,6 +4,7 @@
  */
 import { ensureRerideWebCanonicalHost, restoreOAuthRoleFromUrl, patchFetchForCapacitor } from './apiConfig.js';
 import { warmUpNativeGoogleSignIn } from './nativeGoogleSignIn.js';
+import { warmUpWebGoogleSignIn } from './webGoogleSignIn.js';
 import { initNativeGoogleOAuthReturnHandler } from './oauthMobile.js';
 import { initUniversalLinksHandler } from './universalLinks.js';
 import { initCapacitorAndroidBack } from './capacitorAndroidBack.js';
@@ -18,4 +19,5 @@ void startNativeSessionHydrate();
 initNativeGoogleOAuthReturnHandler();
 initUniversalLinksHandler();
 warmUpNativeGoogleSignIn();
+warmUpWebGoogleSignIn();
 initCapacitorAndroidBack();

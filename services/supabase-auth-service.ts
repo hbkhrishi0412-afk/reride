@@ -20,6 +20,10 @@ import {
   signOutGoogleNativeIfAvailable,
 } from '../utils/nativeGoogleSignIn.js';
 import {
+  shouldTryWebGoogleIdToken,
+  signInWithGoogleWebIdToken,
+} from '../utils/webGoogleSignIn.js';
+import {
   getNativeOAuthRedirectUrl,
   openGoogleOAuthUrl,
   shouldUseNativeGoogleOAuthFlow,
@@ -151,7 +155,30 @@ function mapGoogleProviderError(message: string): string | undefined {
   return undefined;
 }
 
-const NATIVE_GOOGLE_SIGN_IN_TIMEOUT_MS = 60_000;
+const NATIVE_GOOGLE_SIGN_IN_TIMEOUT_MS = 45_000;
+const WEB_GOOGLE_ID_TOKEN_TIMEOUT_MS = 45_000;
+
+async function exchangeGoogleIdToken(
+  idToken: string,
+  accessToken?: string | null,
+): Promise<OAuthSignInResult> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.auth.signInWithIdToken({
+    provider: 'google',
+    token: idToken,
+    access_token: accessToken ?? undefined,
+  });
+  if (error) {
+    const mapped = mapGoogleProviderError(error.message || '');
+    return {
+      success: false,
+      reason:
+        mapped ||
+        formatSupabaseError(error.message || 'Failed to sign in with Google'),
+    };
+  }
+  return { success: true, user: { redirectUrl: null }, session: data.session ?? null };
+}
 
 export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
   try {
@@ -170,21 +197,7 @@ export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
             );
           }),
         ]);
-        const { data, error } = await supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: idToken,
-          access_token: accessToken ?? undefined,
-        });
-        if (error) {
-          const mapped = mapGoogleProviderError(error.message || '');
-          return {
-            success: false,
-            reason:
-              mapped ||
-              formatSupabaseError(error.message || 'Failed to sign in with Google'),
-          };
-        }
-        return { success: true, user: { redirectUrl: null }, session: data.session ?? null };
+        return await exchangeGoogleIdToken(idToken, accessToken);
       } catch (nativeErr: unknown) {
         const name = nativeErr instanceof Error ? nativeErr.name : '';
         if (name === 'AbortError') {
@@ -201,6 +214,31 @@ export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
           '[ReRide] Native Google Sign-In failed; falling back to Supabase browser OAuth.',
           nativeErr,
         );
+      }
+    }
+
+    // Website: GIS FedCM / One Tap → id token (same speed class as native Credential Manager).
+    // Fall back to full-page OAuth only when the prompt cannot be shown.
+    if (!useExternalBrowser && shouldTryWebGoogleIdToken()) {
+      try {
+        const { idToken } = await Promise.race([
+          signInWithGoogleWebIdToken(),
+          new Promise<never>((_, reject) => {
+            setTimeout(
+              () => reject(new Error('Google sign-in timed out. Please try again.')),
+              WEB_GOOGLE_ID_TOKEN_TIMEOUT_MS,
+            );
+          }),
+        ]);
+        return await exchangeGoogleIdToken(idToken);
+      } catch (webErr: unknown) {
+        const name = webErr instanceof Error ? webErr.name : '';
+        if (name === 'AbortError') {
+          return { success: false, reason: 'Sign in was canceled' };
+        }
+        if (name !== 'GisUnavailableError') {
+          console.warn('[ReRide] Web Google ID-token sign-in failed; falling back to OAuth.', webErr);
+        }
       }
     }
 
@@ -555,6 +593,9 @@ export type ServiceProviderOAuthPayload = Record<string, unknown> & {
  * row exists and return profile for the car-services dashboard.
  */
 const OAUTH_API_FETCH_TIMEOUT_MS = 12_000;
+
+// Preload so oauth-login sync doesn't wait on a dynamic import after Google returns.
+void import('./userService.js').catch(() => {});
 
 async function oauthApiAuthHeaders(accessTokenOverride?: string): Promise<Record<string, string>> {
   const token =

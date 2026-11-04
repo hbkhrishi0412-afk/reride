@@ -1,4 +1,4 @@
-import { View } from '../types';
+import { View } from '../types.js';
 
 const AUTH_VIEWS = new Set<View>([
   View.LOGIN_PORTAL,

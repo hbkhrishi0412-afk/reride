@@ -42,17 +42,21 @@ export async function completeWebSupabaseOAuthCallbackIfNeeded(): Promise<void> 
     };
     if (typeof auth.exchangeCodeForSession !== 'function') return;
 
-    const {
-      data: { session: before },
-    } = await auth.getSession();
-    if (before) {
-      stripOAuthParamsFromUrl();
-      return;
-    }
-
+    // Exchange immediately — don't wait on getSession()/detectSessionInUrl first (that race
+    // often adds a full second before the profile sync can start).
     const { error } = await auth.exchangeCodeForSession(code);
     if (error) {
       const m = (error.message || '').toLowerCase();
+      // detectSessionInUrl may have already consumed the code; treat that as success.
+      if (m.includes('already') || m.includes('invalid_grant') || m.includes('bad request')) {
+        const {
+          data: { session: existing },
+        } = await auth.getSession();
+        if (existing) {
+          stripOAuthParamsFromUrl();
+          return;
+        }
+      }
       if (!m.includes('already') && !m.includes('invalid_grant') && !m.includes('bad request')) {
         console.warn('[ReRide OAuth] Web exchangeCodeForSession:', error.message);
         try {

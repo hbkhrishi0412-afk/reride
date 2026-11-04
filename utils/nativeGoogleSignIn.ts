@@ -17,6 +17,12 @@ const GOOGLE_SCOPES = [
 ] as const;
 
 let initPromise: Promise<void> | null = null;
+type GoogleSignInPlugin = {
+  initialize: (opts: { clientId: string; scopes: string[] }) => Promise<void>;
+  signIn: () => Promise<{ idToken?: string; accessToken?: string | null }>;
+  signOut: () => Promise<void>;
+};
+let googleSignInPlugin: GoogleSignInPlugin | null = null;
 
 export function getNativeGoogleWebClientId(): string | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -32,11 +38,18 @@ export function shouldTryNativeGoogleSignIn(): boolean {
   return p === 'android' || p === 'ios';
 }
 
-async function ensureGoogleSignInInitialized(clientId: string): Promise<void> {
+async function loadGoogleSignInPlugin(): Promise<GoogleSignInPlugin> {
+  if (googleSignInPlugin) return googleSignInPlugin;
+  const mod = await import('@capawesome/capacitor-google-sign-in');
+  googleSignInPlugin = mod.GoogleSignIn as GoogleSignInPlugin;
+  return googleSignInPlugin;
+}
+
+async function ensureGoogleSignInInitialized(clientId: string): Promise<GoogleSignInPlugin> {
   if (!initPromise) {
     initPromise = (async () => {
-      const { GoogleSignIn } = await import('@capawesome/capacitor-google-sign-in');
-      await GoogleSignIn.initialize({
+      const plugin = await loadGoogleSignInPlugin();
+      await plugin.initialize({
         clientId,
         scopes: [...GOOGLE_SCOPES],
       });
@@ -46,6 +59,7 @@ async function ensureGoogleSignInInitialized(clientId: string): Promise<void> {
     });
   }
   await initPromise;
+  return loadGoogleSignInPlugin();
 }
 
 /**
@@ -115,14 +129,13 @@ export async function signInWithGoogleNative(): Promise<{
   if (!clientId) {
     throw new Error('VITE_GOOGLE_WEB_CLIENT_ID is not set');
   }
-  await ensureGoogleSignInInitialized(clientId);
-  const { GoogleSignIn } = await import('@capawesome/capacitor-google-sign-in');
+  const GoogleSignIn = await ensureGoogleSignInInitialized(clientId);
   try {
     const result = await GoogleSignIn.signIn();
     if (!result?.idToken) {
       throw new Error('Google did not return an ID token');
     }
-    return { idToken: result.idToken, accessToken: result.accessToken };
+    return { idToken: result.idToken, accessToken: result.accessToken ?? null };
   } catch (e: unknown) {
     if (isUserCanceledError(e)) {
       const err = new Error('Sign in was canceled');
@@ -137,7 +150,7 @@ export async function signInWithGoogleNative(): Promise<{
 export async function signOutGoogleNativeIfAvailable(): Promise<void> {
   if (!shouldTryNativeGoogleSignIn()) return;
   try {
-    const { GoogleSignIn } = await import('@capawesome/capacitor-google-sign-in');
+    const GoogleSignIn = await loadGoogleSignInPlugin();
     await GoogleSignIn.signOut();
   } catch {
     /* ignore */

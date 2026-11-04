@@ -15,12 +15,13 @@ import { getSupabaseClient } from '../lib/supabase.js';
 import type { User } from '../types.js';
 import { authenticatedFetch } from '../utils/authenticatedFetch.js';
 import { clearSupabaseAuthStorage, resolveSupabaseAccessTokenForApi } from '../utils/authStorage.js';
-import { setRememberMePreferenceAsync } from '../utils/rememberMe.js';
+import { setRememberMePreference, setRememberMePreferenceAsync } from '../utils/rememberMe.js';
+import { isCapacitorNative } from '../utils/apiConfig.js';
 
 export type GoogleOAuthRole = 'customer' | 'seller' | 'service_provider';
 
-const GOOGLE_SIGN_IN_TIMEOUT_MS = 65_000;
-const GOOGLE_BACKEND_SYNC_TIMEOUT_MS = 30_000;
+const GOOGLE_SIGN_IN_TIMEOUT_MS = 50_000;
+const GOOGLE_BACKEND_SYNC_TIMEOUT_MS = 20_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return Promise.race([
@@ -38,7 +39,7 @@ async function resolveSessionForGoogleSync(
   const supabase = getSupabaseClient();
   const { data } = await supabase.auth.getSession();
   if (data.session?.user) return data.session;
-  const token = await resolveSupabaseAccessTokenForApi(4000);
+  const token = await resolveSupabaseAccessTokenForApi(1500);
   if (!token) return null;
   const { data: retry } = await supabase.auth.getSession();
   return retry.session ?? null;
@@ -160,8 +161,12 @@ export async function runGoogleSignInButtonFlow(
 ): Promise<string | null> {
   persistGoogleOAuthRole(role);
   persistGoogleOAuthMode(mode);
-  // Persist before browser OAuth redirect so PKCE + remember-me survive the round-trip.
-  await setRememberMePreferenceAsync(mode === 'register' ? true : rememberMe);
+  // Sync localStorage immediately; don't block the Google account picker on Capacitor Keychain I/O.
+  const remember = mode === 'register' ? true : rememberMe;
+  setRememberMePreference(remember);
+  const rememberMirror = isCapacitorNative()
+    ? setRememberMePreferenceAsync(remember)
+    : Promise.resolve();
 
   const result = await Promise.race([
     supabaseGoogleSignIn(),
@@ -177,6 +182,11 @@ export async function runGoogleSignInButtonFlow(
 
   const redirectUrl = extractGoogleRedirectUrl(result);
   if (redirectUrl) {
+    // Full-page OAuth: finish native mirror briefly so preference survives the round-trip.
+    await Promise.race([
+      rememberMirror,
+      new Promise<void>((resolve) => setTimeout(resolve, 400)),
+    ]);
     window.location.replace(redirectUrl);
     return null;
   }
@@ -184,6 +194,10 @@ export async function runGoogleSignInButtonFlow(
   if (result.pendingExternalAuth) {
     return null;
   }
+
+  // Id-token path (native / web GIS): clear intent before sync so AppProvider's
+  // onAuthStateChange does not fire a second oauth-login in parallel.
+  clearGoogleOAuthRole();
 
   const completed = await completeGoogleSignInForRole(
     role,

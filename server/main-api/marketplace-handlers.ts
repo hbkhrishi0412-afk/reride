@@ -1120,44 +1120,18 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: co
         core.logInfo('💾 Saving OAuth user to Supabase...');
         user = await core.userService.create(userData);
         core.logInfo('✅ OAuth user saved to Supabase:', normalizedEmail);
-        
-        // CRITICAL FIX: Add retry logic for OAuth user verification
-        let verifyUser = await core.userService.findByEmail(normalizedEmail);
-        let retryCount = 0;
-        const maxRetries = 3;
-        
-        while (!verifyUser && retryCount < maxRetries) {
-          core.logWarn(`⚠️ OAuth user not found after save, retrying... (${retryCount + 1}/${maxRetries})`);
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-          verifyUser = await core.userService.findByEmail(normalizedEmail);
-          retryCount++;
-        }
-        
-        if (!verifyUser) {
-          // CRITICAL FIX: Check if user was actually created (might be a race condition)
-          // Try one more time to find the user, and if found, use it
-          const finalCheck = await core.userService.findByEmail(normalizedEmail);
-          if (finalCheck) {
-            core.logWarn('⚠️ OAuth user found on final check - race condition resolved');
-            user = finalCheck;
+        // Trust create() — the old 1s×3 verify loop made first-time Google sign-in feel broken.
+        if (!user || user.email !== normalizedEmail) {
+          const verifyUser = await core.userService.findByEmail(normalizedEmail);
+          if (verifyUser) {
+            user = verifyUser;
           } else {
-            core.logError('❌ OAuth user registration verification failed - user not found after save and retries');
-            // CRITICAL: Check if user might have been created but verification is failing
-            // In this case, we should still try to proceed if user was set from create()
-            if (user && user.email === normalizedEmail) {
-              core.logWarn('⚠️ Using OAuth user from create() despite verification failure - user may exist');
-              // Continue with user from create() - verification might be a timing issue
-            } else {
-              return res.status(500).json({ 
-                success: false, 
-                reason: 'OAuth registration failed - user was not saved to database. Please try again.' 
-              });
-            }
+            core.logError('❌ OAuth user registration failed - user was not saved');
+            return res.status(500).json({
+              success: false,
+              reason: 'OAuth registration failed - user was not saved to database. Please try again.',
+            });
           }
-        } else {
-          core.logInfo('✅ OAuth user registration verified in database. User ID:', verifyUser.id);
-          // Use the verified user to ensure we have the latest data
-          user = verifyUser;
         }
       } else {
         core.logInfo('✅ OAuth login - Existing user found:', sanitizedData.email);
