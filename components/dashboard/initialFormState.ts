@@ -25,12 +25,4 @@ export const initialFormState: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCou
   },
   certifiedInspection: null,
   certificationStatus: 'none',
-  offerEnabled: false,
-  offerTitle: '',
-  offerStartDate: '',
-  offerEndDate: '',
-  offerDateLabel: '',
-  offerDescription: '',
-  offerHighlight: '',
-  offerDisclaimer: '',
 };

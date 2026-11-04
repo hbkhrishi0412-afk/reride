@@ -12,7 +12,10 @@ export default {
     "./contexts/**/*.{js,ts,jsx,tsx}",
     "./lib/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class',
+  // Light product UI only. Incomplete dark: text/bg pairs made ink unreadable on
+  // white pages when OS dark mode toggled <html class="dark">. Opt-in via
+  // .reride-dark if a real dark theme is built later.
+  darkMode: ['selector', '.reride-dark'],
   theme: {
     extend: {
       colors: {

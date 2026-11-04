@@ -8,7 +8,6 @@ import { useTrackVehicleView } from '../hooks/useTrackVehicleView';
 import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
 import VerificationBadge from './VerificationBadge';
-import { VehicleOfferBanner } from './VehicleOfferBanner';
 import VehicleHistory from './VehicleHistory';
 import { getFollowersCount } from '../services/buyerEngagementService';
 import { useApp } from './AppProvider';
@@ -700,8 +699,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                 </svg>
                 {t('vehicle.detail.backToListings')}
               </button>
-
-              <VehicleOfferBanner vehicle={safeVehicle} className="mb-4" />
 
               {/* Listing header — primary identity (title, key specs, location), full-width above the gallery */}
               <div className="mb-4 flex items-start justify-between gap-3">

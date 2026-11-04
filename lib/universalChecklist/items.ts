@@ -10,6 +10,7 @@ type ItemInput = {
   photoRequired: PhotoRequirement;
   scope: UniversalChecklistItemDef['scope'];
   buyerHint?: string;
+  answerType?: UniversalChecklistItemDef['answerType'];
 };
 
 function item(input: ItemInput): UniversalChecklistItemDef {
@@ -18,43 +19,40 @@ function item(input: ItemInput): UniversalChecklistItemDef {
 
 /** Core checklist — applies to every vehicle category */
 export const CORE_CHECKLIST_ITEMS: UniversalChecklistItemDef[] = [
-  // 1.1 Documents & Legal
-  item({ id: 'core.docs.rc_photo', sectionId: 'core.docs', sectionTitle: '1.1 Documents & Legal', label: 'Registration Certificate (RC) photo, both sides', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.docs.rc_vahan_match', sectionId: 'core.docs', sectionTitle: '1.1 Documents & Legal', label: 'RC details match VAHAN database (number, owner name, class)', filledBy: 'S/B', photoRequired: false, scope: 'core', buyerHint: 'Cross-check RC with VAHAN tab on listing' }),
-  item({ id: 'core.docs.hypothecation', sectionId: 'core.docs', sectionTitle: '1.1 Documents & Legal', label: 'Hypothecation / loan status on RC (any active lien?)', filledBy: 'S/B', photoRequired: false, scope: 'core' }),
-  item({ id: 'core.docs.owner_count', sectionId: 'core.docs', sectionTitle: '1.1 Documents & Legal', label: 'Number of previous owners', filledBy: 'S', photoRequired: false, scope: 'core' }),
-  item({ id: 'core.docs.insurance_cert', sectionId: 'core.docs', sectionTitle: '1.1 Documents & Legal', label: 'Insurance certificate, valid and current', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.docs.insurance_type', sectionId: 'core.docs', sectionTitle: '1.1 Documents & Legal', label: 'Insurance type (comprehensive / third-party only)', filledBy: 'S', photoRequired: false, scope: 'core' }),
-  item({ id: 'core.docs.puc', sectionId: 'core.docs', sectionTitle: '1.1 Documents & Legal', label: 'Pollution Under Control (PUC) certificate, valid', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.docs.road_tax', sectionId: 'core.docs', sectionTitle: '1.1 Documents & Legal', label: 'Road tax payment status (one-time / current)', filledBy: 'S', photoRequired: false, scope: 'core' }),
-  item({ id: 'core.docs.challans', sectionId: 'core.docs', sectionTitle: '1.1 Documents & Legal', label: 'Pending traffic challans (e-challan check)', filledBy: 'S/B', photoRequired: false, scope: 'core' }),
-  item({ id: 'core.docs.fitness_cert', sectionId: 'core.docs', sectionTitle: '1.1 Documents & Legal', label: 'Fitness certificate (mandatory for commercial categories)', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  // Documents
+  item({ id: 'core.docs.rc_photo', sectionId: 'core.docs', sectionTitle: 'Documents', label: 'RC photo (both sides)', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.docs.hypothecation', sectionId: 'core.docs', sectionTitle: 'Documents', label: 'Loan / hypothecation on RC?', filledBy: 'S/B', photoRequired: false, scope: 'core' }),
+  item({ id: 'core.docs.insurance_cert', sectionId: 'core.docs', sectionTitle: 'Documents', label: 'Insurance certificate (valid)', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.docs.puc', sectionId: 'core.docs', sectionTitle: 'Documents', label: 'PUC certificate (valid)', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.docs.challans', sectionId: 'core.docs', sectionTitle: 'Documents', label: 'Pending traffic challans?', filledBy: 'S/B', photoRequired: false, scope: 'core' }),
+  item({ id: 'core.docs.fitness_cert', sectionId: 'core.docs', sectionTitle: 'Documents', label: 'Fitness certificate (if commercial)', filledBy: 'S', photoRequired: 'if_applicable', scope: 'core' }),
 
-  // 1.2 General Condition & History
-  item({ id: 'core.history.odometer_photo', sectionId: 'core.history', sectionTitle: '1.2 General Condition & History', label: 'Odometer / hour-meter reading (photo of display)', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.history.odometer_service_match', sectionId: 'core.history', sectionTitle: '1.2 General Condition & History', label: 'Odometer reading consistent with service record history', filledBy: 'B', photoRequired: false, scope: 'core', buyerHint: 'Compare odometer photo with service stamps' }),
-  item({ id: 'core.history.year_match', sectionId: 'core.history', sectionTitle: '1.2 General Condition & History', label: 'Year of manufacture vs. year of registration match', filledBy: 'S/B', photoRequired: false, scope: 'core' }),
-  item({ id: 'core.history.chassis_match', sectionId: 'core.history', sectionTitle: '1.2 General Condition & History', label: 'Chassis number visible and matches RC', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.history.engine_match', sectionId: 'core.history', sectionTitle: '1.2 General Condition & History', label: 'Engine number visible and matches RC', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.history.last_service', sectionId: 'core.history', sectionTitle: '1.2 General Condition & History', label: 'Last service date and odometer/hour-meter at that service', filledBy: 'S', photoRequired: true, scope: 'core', buyerHint: 'Ask for service record photo' }),
-  item({ id: 'core.history.service_records', sectionId: 'core.history', sectionTitle: '1.2 General Condition & History', label: 'Service history book / digital service records available', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.history.accident', sectionId: 'core.history', sectionTitle: '1.2 General Condition & History', label: 'Accident history disclosed (if any), with repair details', filledBy: 'S', photoRequired: 'if_applicable', scope: 'core' }),
-  item({ id: 'core.history.flood_fire', sectionId: 'core.history', sectionTitle: '1.2 General Condition & History', label: 'Flood / fire damage history disclosed (if any)', filledBy: 'S', photoRequired: false, scope: 'core' }),
-  item({ id: 'core.history.reason_sale', sectionId: 'core.history', sectionTitle: '1.2 General Condition & History', label: 'Reason for sale stated', filledBy: 'S', photoRequired: false, scope: 'core' }),
+  // History & condition — Step 3 Yes/No (seller). Skip docs/photos already in Steps 1–2.
+  item({ id: 'core.history.accident', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Has this vehicle been in any accident?', filledBy: 'S', photoRequired: false, scope: 'core', answerType: 'yes_no' }),
+  item({ id: 'core.history.flood_fire', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Any flood or fire damage history?', filledBy: 'S', photoRequired: false, scope: 'core', answerType: 'yes_no' }),
+  item({ id: 'core.history.odometer_original', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Is the odometer reading original (not tampered)?', filledBy: 'S', photoRequired: false, scope: 'core', answerType: 'yes_no' }),
+  item({ id: 'core.history.service_available', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Is complete service history available?', filledBy: 'S', photoRequired: false, scope: 'core', answerType: 'yes_no' }),
+  item({ id: 'core.history.electricals_ok', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Are all lights, horn, and indicators working?', filledBy: 'S', photoRequired: false, scope: 'core', answerType: 'yes_no' }),
+  item({ id: 'core.history.mech_ok', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Do the engine and transmission run without known issues?', filledBy: 'S', photoRequired: false, scope: 'core', answerType: 'yes_no' }),
+  item({ id: 'core.history.no_warning_lights', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Do all dashboard warning lights turn off after start?', filledBy: 'S', photoRequired: false, scope: 'core', answerType: 'yes_no' }),
+  item({ id: 'core.history.battery_ok', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Does the battery start the vehicle reliably?', filledBy: 'S', photoRequired: false, scope: 'core', answerType: 'yes_no' }),
+  item({ id: 'core.history.original_paint', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Is the body paint original (no major panel repaint)?', filledBy: 'S', photoRequired: false, scope: 'core', answerType: 'yes_no' }),
+  item({ id: 'core.history.mods', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Are there any aftermarket modifications fitted?', filledBy: 'S', photoRequired: false, scope: 'core', answerType: 'yes_no' }),
+  item({ id: 'core.history.odometer_service_match', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Odometer reading consistent with service record history', filledBy: 'B', photoRequired: false, scope: 'core', buyerHint: 'Compare odometer photo with service stamps' }),
+  item({ id: 'core.history.chassis_match', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Chassis number matches RC (photo)', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.history.engine_match', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Engine number matches RC (photo)', filledBy: 'S', photoRequired: true, scope: 'core' }),
 
-  // 1.3 Mandatory Photo Set
-  item({ id: 'core.photos.front', sectionId: 'core.photos', sectionTitle: '1.3 Mandatory Photo Set', label: 'Front view (full vehicle, straight-on)', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.rear', sectionId: 'core.photos', sectionTitle: '1.3 Mandatory Photo Set', label: 'Rear view (full vehicle, straight-on)', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.left', sectionId: 'core.photos', sectionTitle: '1.3 Mandatory Photo Set', label: 'Left side view (full vehicle)', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.right', sectionId: 'core.photos', sectionTitle: '1.3 Mandatory Photo Set', label: 'Right side view (full vehicle)', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.dashboard', sectionId: 'core.photos', sectionTitle: '1.3 Mandatory Photo Set', label: 'Dashboard / instrument cluster (engine off and on)', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.odometer_close', sectionId: 'core.photos', sectionTitle: '1.3 Mandatory Photo Set', label: 'Odometer / hour-meter close-up', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.engine_bay', sectionId: 'core.photos', sectionTitle: '1.3 Mandatory Photo Set', label: 'Engine bay, clean and unobstructed view', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.tyres', sectionId: 'core.photos', sectionTitle: '1.3 Mandatory Photo Set', label: 'All tyres (or applicable count) close-up', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.damage', sectionId: 'core.photos', sectionTitle: '1.3 Mandatory Photo Set', label: 'Any existing damage, dents, or rust (close-up)', filledBy: 'S', photoRequired: 'if_applicable', scope: 'core' }),
-  item({ id: 'core.photos.documents', sectionId: 'core.photos', sectionTitle: '1.3 Mandatory Photo Set', label: 'RC, Insurance, PUC documents (clear, legible)', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  // Listing photos
+  item({ id: 'core.photos.front', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Front view', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.photos.rear', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Rear view', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.photos.left', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Left side', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.photos.right', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Right side', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.photos.dashboard', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Dashboard / cluster', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.photos.odometer_close', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Odometer close-up', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.photos.engine_bay', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Engine bay', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.photos.tyres', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Tyres close-up', filledBy: 'S', photoRequired: true, scope: 'core' }),
+  item({ id: 'core.photos.damage', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Damage / dents / rust (if any)', filledBy: 'S', photoRequired: 'if_applicable', scope: 'core' }),
 ];
-
 function categoryItems(
   scope: VehicleCategory,
   sectionPrefix: string,
@@ -76,7 +74,7 @@ function categoryItems(
 }
 
 export const TWO_WHEELER_ITEMS: UniversalChecklistItemDef[] = [
-  ...categoryItems(VehicleCategory.TWO_WHEELER, 'tw.engine', '2.1 Engine & Drivetrain', [
+  ...categoryItems(VehicleCategory.TWO_WHEELER, 'tw.engine', 'Engine & drivetrain', [
     ['start', 'Engine starts smoothly without delay', 'B', false],
     ['noise', 'Unusual engine noise, knocking, or vibration', 'B', false],
     ['smoke', 'Smoke from exhaust (color: white/blue/black)', 'B', false],
@@ -88,7 +86,7 @@ export const TWO_WHEELER_ITEMS: UniversalChecklistItemDef[] = [
     ['coolant', 'Coolant level and condition (liquid-cooled models)', 'S/B', false],
     ['chain', 'Chain/belt tension and lubrication (chain-drive models)', 'B', false],
   ]),
-  ...categoryItems(VehicleCategory.TWO_WHEELER, 'tw.brakes', '2.2 Brakes, Suspension & Tyres', [
+  ...categoryItems(VehicleCategory.TWO_WHEELER, 'tw.brakes', 'Brakes, suspension & tyres', [
     ['front_brake', 'Front brake responsiveness and lever feel', 'B', false],
     ['rear_brake', 'Rear brake responsiveness and pedal feel', 'B', false],
     ['brake_wear', 'Brake disc/drum wear visible inspection', 'B', false],
@@ -100,7 +98,7 @@ export const TWO_WHEELER_ITEMS: UniversalChecklistItemDef[] = [
     ['battery', 'Battery condition and self-start function', 'B', false],
     ['lights', 'Horn, headlamp, tail lamp, indicators all functional', 'B', false],
   ]),
-  ...categoryItems(VehicleCategory.TWO_WHEELER, 'tw.body', '2.3 Electricals, Body & Final Checks', [
+  ...categoryItems(VehicleCategory.TWO_WHEELER, 'tw.body', 'Electricals, body & final checks', [
     ['console', 'Speedometer/console electronics functional', 'B', false],
     ['fuel_gauge', 'Fuel gauge / fuel cap lock functional', 'B', false],
     ['seat', 'Seat condition (tears, foam compression)', 'S/B', true],
@@ -109,24 +107,22 @@ export const TWO_WHEELER_ITEMS: UniversalChecklistItemDef[] = [
     ['stand', 'Side stand / center stand spring and function', 'B', false],
     ['mirrors', 'Mirrors present, unbroken, properly mounted', 'S/B', false],
     ['test_ride', 'Test ride conducted (straight line + braking + turning)', 'B', false],
-    ['duplicate_key', 'Duplicate key available', 'S', false],
+    ['duplicate_key', 'Duplicate key available?', 'S', false],
   ]),
 ];
 
 export const FOUR_WHEELER_ITEMS: UniversalChecklistItemDef[] = [
-  ...categoryItems(VehicleCategory.FOUR_WHEELER, 'fw.engine', '3.1 Engine & Transmission', [
+  ...categoryItems(VehicleCategory.FOUR_WHEELER, 'fw.engine', 'Engine & transmission', [
     ['start', 'Engine starts smoothly, no delay or cranking issue', 'B', false],
     ['noise', 'Engine noise — knocking, ticking, or rattling', 'B', false],
     ['smoke', 'Exhaust smoke color (white/blue = concern)', 'B', false],
-    ['oil', 'Engine oil level, color, and smell (no burning smell)', 'S/B', false],
-    ['coolant', 'Coolant level and condition, no oil-coolant mixing', 'S/B', false],
     ['manual_gear', 'Transmission — gear shifts smooth (manual)', 'B', false],
     ['auto_gear', 'Transmission — no jerks/delay in shifting (automatic)', 'B', false],
     ['clutch', 'Clutch biting point normal, no slipping', 'B', false],
     ['turbo', 'Turbocharger function, if equipped (lag/whine check)', 'B', false],
     ['mounts', 'Engine mounts — no excessive vibration at idle', 'B', false],
   ]),
-  ...categoryItems(VehicleCategory.FOUR_WHEELER, 'fw.brakes', '3.2 Brakes, Suspension, Steering & Tyres', [
+  ...categoryItems(VehicleCategory.FOUR_WHEELER, 'fw.brakes', 'Brakes, suspension & tyres', [
     ['pedal', 'Brake pedal feel — firm, no sponginess', 'B', false],
     ['abs', 'ABS warning light behavior at start-up', 'B', false],
     ['pad_wear', 'Brake pad/disc wear (visible inspection)', 'B', false],
@@ -134,38 +130,35 @@ export const FOUR_WHEELER_ITEMS: UniversalChecklistItemDef[] = [
     ['suspension', 'Suspension — no clunks over bumps, even ride height', 'B', false],
     ['steering', 'Steering — no excessive play, no pulling to one side', 'B', false],
     ['alignment', 'Wheel alignment — uneven tyre wear check', 'B', false],
-    ['tyres', 'Tyre tread depth across all tyres, including spare', 'S/B', true],
     ['tyre_age', 'Tyre manufacture date (DOT code) — not excessively aged', 'B', false],
     ['underbody_rust', 'Under-body rust or corrosion check', 'B', false],
   ]),
-  ...categoryItems(VehicleCategory.FOUR_WHEELER, 'fw.interior', '3.3 Interior, Electricals & Body', [
+  ...categoryItems(VehicleCategory.FOUR_WHEELER, 'fw.interior', 'Interior, electricals & body', [
     ['ac', 'AC cooling performance and odor check', 'B', false],
     ['windows', 'Power windows, central locking, all functional', 'B', false],
     ['infotainment', 'Infotainment, reverse camera, sensors functional', 'B', false],
     ['airbag', 'Airbag warning light — no fault indication', 'B', false],
     ['seatbelts', 'Seatbelt function and condition (all seats)', 'B', false],
-    ['upholstery', 'Upholstery condition, no major tears/stains', 'S/B', true],
     ['paint', 'Paint thickness / repaint check (panel-by-panel color match)', 'B', false],
     ['panel_gaps', 'Body panel gaps even (sign of accident repair if uneven)', 'B', false],
     ['windshield', 'Windshield — chips, cracks, or wiper streaking', 'S/B', true],
     ['battery', 'Battery health and terminal corrosion', 'B', false],
   ]),
-  ...categoryItems(VehicleCategory.FOUR_WHEELER, 'fw.final', '3.4 Test Drive & Final Checks', [
+  ...categoryItems(VehicleCategory.FOUR_WHEELER, 'fw.final', 'Keys, toolkit & final details', [
     ['tracking', 'Test drive — straight-line tracking, no pulling', 'B', false],
     ['braking', 'Test drive — braking performance at moderate speed', 'B', false],
     ['highway', 'Test drive — highway speed stability (if possible)', 'B', false],
     ['warnings', 'Dashboard warning lights — none persisting after start', 'B', false],
     ['obd', 'OBD scan / diagnostic check (if accessible to buyer/partner)', 'P', false],
     ['toolkit', 'Jack, spare tyre, toolkit present and usable', 'S', true],
-    ['keys', 'Duplicate key and remote available', 'S', false],
+    ['keys', 'Duplicate key and remote available?', 'S', false],
     ['service_stamps', 'Service history — authorized service center stamps verified', 'S/B', true],
-    ['mods', 'Any aftermarket modifications disclosed (engine, body, electronics)', 'S', 'if_applicable'],
-    ['rto_transfer', 'RTO transfer feasibility confirmed (interstate sale, if applicable)', 'S/B', false],
+    ['rto_transfer', 'RTO transfer feasible for interstate sale (if applicable)?', 'S/B', false],
   ]),
 ];
 
 export const THREE_WHEELER_ITEMS: UniversalChecklistItemDef[] = [
-  ...categoryItems(VehicleCategory.THREE_WHEELER, 'thw.addon', '4. Three-Wheeler Add-On', [
+  ...categoryItems(VehicleCategory.THREE_WHEELER, 'thw.addon', 'Three-wheeler extras', [
     ['permit', 'Permit validity (passenger/goods carriage permit)', 'S', true],
     ['engine_start', 'Engine starts smoothly, no excessive smoke', 'B', false],
     ['clutch_gears', 'Clutch and gear shifting smooth', 'B', false],
@@ -182,7 +175,7 @@ export const THREE_WHEELER_ITEMS: UniversalChecklistItemDef[] = [
 ];
 
 export const FARM_ITEMS: UniversalChecklistItemDef[] = [
-  ...categoryItems(VehicleCategory.FARM, 'farm.addon', '5. Farm Vehicle (Tractor) Add-On', [
+  ...categoryItems(VehicleCategory.FARM, 'farm.addon', 'Farm vehicle extras', [
     ['hour_meter', 'Hour-meter reading and consistency with service records', 'S/B', true],
     ['engine_start', 'Engine starts smoothly, no excessive smoke', 'B', false],
     ['hydraulics', 'Hydraulic system function (lift arms, draft control)', 'B', false],
@@ -199,7 +192,7 @@ export const FARM_ITEMS: UniversalChecklistItemDef[] = [
 ];
 
 export const COMMERCIAL_ITEMS: UniversalChecklistItemDef[] = [
-  ...categoryItems(VehicleCategory.COMMERCIAL, 'cv.addon', '6. Commercial Vehicle Add-On', [
+  ...categoryItems(VehicleCategory.COMMERCIAL, 'cv.addon', 'Commercial extras', [
     ['permit', 'Permit type and validity (national/state, goods/passenger)', 'S', true],
     ['fitness', 'Fitness certificate current and valid', 'S', true],
     ['odometer', 'Odometer reading and consistency with logbook/service history', 'S/B', true],
@@ -218,7 +211,7 @@ export const COMMERCIAL_ITEMS: UniversalChecklistItemDef[] = [
 ];
 
 export const CONSTRUCTION_ITEMS: UniversalChecklistItemDef[] = [
-  ...categoryItems(VehicleCategory.CONSTRUCTION, 'const.addon', '7. Construction Vehicle Add-On', [
+  ...categoryItems(VehicleCategory.CONSTRUCTION, 'const.addon', 'Construction extras', [
     ['hour_meter', 'Hour-meter reading and service log consistency', 'S/B', true],
     ['engine', 'Engine starts smoothly, smoke check under load', 'B', false],
     ['hydraulics', 'Hydraulic system — cylinder leaks, lift/boom function', 'B/P', true],
@@ -272,4 +265,57 @@ export function groupBySection(
     group.items.push(def);
   }
   return Array.from(map.values());
+}
+
+/** Seller form: 3 steps instead of many tiny numbered sections. Same item ids. */
+export type SellerFormStep = {
+  id: 'docs' | 'photos' | 'condition';
+  title: string;
+  subtitle: string;
+  items: UniversalChecklistItemDef[];
+};
+
+/** Extra photo proofs that belong with listing photos in the seller form (Step 2). */
+const PHOTOS_STEP_EXTRA_IDS = new Set([
+  'core.history.chassis_match',
+  'core.history.engine_match',
+  'fw.interior.windshield',
+  'fw.final.toolkit',
+  'fw.final.service_stamps',
+]);
+
+export function groupSellerFormSteps(category: VehicleCategory): SellerFormStep[] {
+  const defs = getSellerDefinitions(category);
+  const docs = defs.filter((d) => d.sectionId === 'core.docs');
+  const photos = defs.filter(
+    (d) => d.sectionId === 'core.photos' || PHOTOS_STEP_EXTRA_IDS.has(d.id),
+  );
+  const condition = defs.filter(
+    (d) =>
+      d.sectionId !== 'core.docs' &&
+      d.sectionId !== 'core.photos' &&
+      !PHOTOS_STEP_EXTRA_IDS.has(d.id),
+  );
+  return (
+    [
+      {
+        id: 'docs' as const,
+        title: 'Documents',
+        subtitle: 'RC, insurance, PUC — what buyers check first',
+        items: docs,
+      },
+      {
+        id: 'photos' as const,
+        title: 'Photos',
+        subtitle: 'Angles that go on your listing gallery',
+        items: photos,
+      },
+      {
+        id: 'condition' as const,
+        title: 'History & condition',
+        subtitle: 'Mileage, service, and vehicle extras',
+        items: condition,
+      },
+    ] as SellerFormStep[]
+  ).filter((s) => s.items.length > 0);
 }

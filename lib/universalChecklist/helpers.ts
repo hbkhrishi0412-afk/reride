@@ -44,7 +44,10 @@ export function isSellerItemComplete(
   if (def.photoRequired === 'if_applicable') {
     return item.status === 'na' || Boolean(item.photoUrl?.trim());
   }
-  return Boolean(item.notes?.trim()) || item.status === 'na';
+  if (def.answerType === 'yes_no') {
+    return item.status === 'pass' || item.status === 'fail';
+  }
+  return Boolean(item.notes?.trim()) || item.status === 'na' || item.status === 'pass' || item.status === 'fail';
 }
 
 export function sellerItemNeedsPhotoUpload(def: UniversalChecklistItemDef): boolean {
@@ -85,7 +88,9 @@ export function validateSellerChecklist(
       errors.push(
         def.photoRequired === true || def.photoRequired === 'if_applicable'
           ? `${def.label}: upload required photo or mark not applicable`
-          : `${def.label}: enter required details`,
+          : def.answerType === 'yes_no'
+            ? `${def.label}: select Yes or No`
+            : `${def.label}: enter required details`,
       );
       continue;
     }

@@ -8,7 +8,6 @@ import { getFirstValidImage, getValidImages, swapToPlaceholderOnError } from '..
 import { MobileImageGallery } from './MobileImageGallery';
 import { MobileShareSheet } from './MobileShareSheet';
 import { MobileEMICalculator } from './MobileEMICalculator';
-import { VehicleOfferBanner } from './VehicleOfferBanner';
 import { scrollAppToTop } from '../utils/scrollAppToTop';
 import { getFollowersCount } from '../services/buyerEngagementService';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
@@ -630,7 +629,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
 
       {/* Content - Below Images with no overlap */}
       <div className="px-4 relative z-10 space-y-4 pb-6">
-        <VehicleOfferBanner vehicle={safeVehicle} />
         {/* Vehicle Details Card */}
         <div className="bg-white rounded-2xl pt-6 pb-4 px-4 shadow-sm">
           <div className="flex items-start justify-between mb-3">

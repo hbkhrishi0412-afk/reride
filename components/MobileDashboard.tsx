@@ -1,4 +1,4 @@
-import React, { useState, memo, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, memo, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { logInfo } from '../utils/logger.js';
 import type { User, Vehicle, Conversation, Notification, ChatMessage } from '../types';
@@ -11,7 +11,7 @@ import PaymentStatusCard from './PaymentStatusCard';
 import { isEffectivelyFeatured } from '../utils/listingPromotion';
 import { PaymentErrorBoundary } from './ErrorBoundaries';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
-import { getFirstValidImage, swapToPlaceholderOnError } from '../utils/imageUtils';
+import { getFirstValidImage, getSafeImageSrc, swapToPlaceholderOnError } from '../utils/imageUtils';
 import {
   buildSellerQrCodeUrl,
   buildSellerShareUrl,
@@ -36,9 +36,14 @@ import { useSellerDashboardController } from '../hooks/useSellerDashboardControl
 import { countActionableSellerTasks } from '../utils/sellerViewedTasks';
 import { formatIndianNumberInput, parseIndianNumberDigits } from '../utils/indianNumberInput.js';
 import {
+  buildVehicleDescription,
+  VEHICLE_DESCRIPTION_MAX_LENGTH,
+} from '../utils/buildVehicleDescription';
+import {
   clearChecklistPhotoByUrl,
   extractChecklistGalleryUrls,
   getExtraGalleryImages,
+  MAX_LISTING_IMAGES,
   mergeListingImages,
   syncDocumentsFromChecklist,
 } from '../lib/universalChecklist/mediaSync';
@@ -49,6 +54,175 @@ import { isListingExpired } from '../services/listingLifecycleService';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
 import { buildVehicleMutationBody } from '../utils/vehicleIdentity';
 import InlineChat from './InlineChat';
+
+const LISTING_PHOTO_FALLBACK =
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+
+/** Unified listing gallery (checklist + extras) — matches web VehicleForm Preview. */
+const MobileListingPhotosSection: React.FC<{
+  images: string[];
+  uploading: boolean;
+  inputId: string;
+  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onRemove: (url: string) => void;
+  labels: {
+    title: string;
+    hint: string;
+    empty: string;
+    uploading: string;
+    addPhotos: string;
+    formats: string;
+    cover: string;
+    tip: string;
+  };
+}> = ({ images, uploading, inputId, onUpload, onRemove, labels }) => {
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const safeIndex = images.length === 0 ? 0 : Math.min(previewIndex, images.length - 1);
+  const coverSrc = images[safeIndex] ? getSafeImageSrc(images[safeIndex]) : null;
+
+  useEffect(() => {
+    if (images.length === 0) {
+      if (previewIndex !== 0) setPreviewIndex(0);
+      return;
+    }
+    if (previewIndex > images.length - 1) setPreviewIndex(images.length - 1);
+  }, [images.length, previewIndex]);
+
+  return (
+    <div className="space-y-4 pt-6 border-t border-gray-200">
+      <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+        <h4 className="font-bold text-gray-900 text-base">{labels.title}</h4>
+        {images.length > 0 && (
+          <span className="text-xs px-2 py-1 rounded-full font-semibold bg-stone-100 text-stone-700">
+            {images.length}/{MAX_LISTING_IMAGES}
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-gray-600">{labels.hint}</p>
+
+      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
+        <div className="relative aspect-[16/9] bg-stone-100">
+          {coverSrc ? (
+            <img
+              src={coverSrc}
+              alt=""
+              className="h-full w-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = LISTING_PHOTO_FALLBACK;
+              }}
+            />
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-stone-400">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7h4l2-3h6l2 3h4v12H3V7z" />
+                <circle cx="12" cy="13" r="3.5" />
+              </svg>
+              <span className="text-xs font-semibold">{labels.empty}</span>
+            </div>
+          )}
+          {images.length > 0 && (
+            <span className="absolute bottom-2 right-2 rounded-md bg-stone-900/80 px-2 py-1 text-[10px] font-semibold text-white">
+              {safeIndex + 1}/{images.length}
+            </span>
+          )}
+        </div>
+        {images.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto p-2.5">
+            {images.map((url, index) => {
+              const selected = index === safeIndex;
+              return (
+                <div key={`${url}-${index}`} className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewIndex(index)}
+                    className={`block h-14 w-20 overflow-hidden rounded-lg bg-stone-100 ring-2 transition ${
+                      selected ? 'ring-orange-500' : 'ring-transparent'
+                    }`}
+                    aria-label={`Show photo ${index + 1}`}
+                    aria-current={selected ? 'true' : undefined}
+                  >
+                    <img
+                      src={getSafeImageSrc(url)}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = LISTING_PHOTO_FALLBACK;
+                      }}
+                    />
+                  </button>
+                  {index === 0 && (
+                    <span className="pointer-events-none absolute left-1 top-1 rounded bg-stone-900/80 px-1 py-[1px] text-[8px] font-bold text-white">
+                      {labels.cover}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onRemove(url)}
+                    className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-red-600 shadow ring-1 ring-stone-200"
+                    aria-label={`Remove photo ${index + 1}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <label
+        htmlFor={inputId}
+        className={`flex items-center justify-center gap-3 p-4 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
+          uploading
+            ? 'border-gray-300 bg-gray-50 cursor-wait'
+            : 'border-blue-300 bg-blue-50 hover:border-blue-400 hover:bg-blue-100 active:scale-[0.98]'
+        }`}
+      >
+        {uploading ? (
+          <>
+            <svg className="animate-spin h-5 w-5 text-blue-500" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span className="text-sm font-medium text-gray-600">{labels.uploading}</span>
+          </>
+        ) : (
+          <>
+            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </div>
+            <div>
+              <span className="text-sm font-semibold text-blue-700">{labels.addPhotos}</span>
+              <p className="text-xs text-blue-600">{labels.formats}</p>
+            </div>
+          </>
+        )}
+        <input
+          id={inputId}
+          type="file"
+          className="sr-only"
+          multiple
+          accept="image/*"
+          onChange={onUpload}
+          disabled={uploading}
+        />
+      </label>
+
+      <p className="text-xs text-gray-500 flex items-center gap-1.5">
+        <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+          <path
+            fillRule="evenodd"
+            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+            clipRule="evenodd"
+          />
+        </svg>
+        {labels.tip}
+      </p>
+    </div>
+  );
+};
 
 // ---------- Premium inline SVG icon set (kept local to avoid new deps) ----------
 type IconProps = { className?: string; size?: number; stroke?: number };
@@ -574,6 +748,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const [addFormData, setAddFormData] = useState(initialAddFormData);
   const [addErrors, setAddErrors] = useState<Record<string, string>>({});
   const [isAddingVehicle, setIsAddingVehicle] = useState(false);
+  const addDescriptionManualRef = useRef(false);
+  const addLastAutoDescriptionRef = useRef('');
+  const editDescriptionManualRef = useRef(false);
+  const editLastAutoDescriptionRef = useRef('');
   
   // Profile editing state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -593,8 +771,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   // Update edit form data when editingVehicle changes
   React.useEffect(() => {
     if (editingVehicle) {
+      editDescriptionManualRef.current = Boolean(editingVehicle.description?.trim());
+      editLastAutoDescriptionRef.current = '';
       setEditFormData(editingVehicle);
     } else {
+      editDescriptionManualRef.current = false;
+      editLastAutoDescriptionRef.current = '';
       setEditFormData(null);
     }
     setEditErrors({});
@@ -618,6 +800,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   // Reset add form when switching away from addVehicle tab
   React.useEffect(() => {
     if (activeTab !== 'addVehicle') {
+      addDescriptionManualRef.current = false;
+      addLastAutoDescriptionRef.current = '';
       setAddFormData({
         ...initialAddFormData,
         sellerEmail: currentUser.email, // Ensure sellerEmail is current
@@ -631,6 +815,69 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       }));
     }
   }, [activeTab, currentUser.email]);
+
+  const addAutoDescription = useMemo(() => buildVehicleDescription(addFormData), [
+    addFormData.make,
+    addFormData.model,
+    addFormData.variant,
+    addFormData.year,
+    addFormData.registrationYear,
+    addFormData.mileage,
+    addFormData.noOfOwners,
+    addFormData.city,
+    addFormData.state,
+    addFormData.rto,
+    addFormData.price,
+    addFormData.transmission,
+    addFormData.fuelType,
+    addFormData.fuelEfficiency,
+    addFormData.color,
+    addFormData.insuranceType,
+    addFormData.insuranceValidity,
+    addFormData.features,
+  ]);
+
+  useEffect(() => {
+    if (!addAutoDescription || addDescriptionManualRef.current) return;
+    addLastAutoDescriptionRef.current = addAutoDescription;
+    setAddFormData((prev) =>
+      prev.description === addAutoDescription ? prev : { ...prev, description: addAutoDescription },
+    );
+  }, [addAutoDescription]);
+
+  const editAutoDescription = useMemo(
+    () => (editFormData ? buildVehicleDescription(editFormData) : ''),
+    [
+      editFormData?.make,
+      editFormData?.model,
+      editFormData?.variant,
+      editFormData?.year,
+      editFormData?.registrationYear,
+      editFormData?.mileage,
+      editFormData?.noOfOwners,
+      editFormData?.city,
+      editFormData?.state,
+      editFormData?.rto,
+      editFormData?.price,
+      editFormData?.transmission,
+      editFormData?.fuelType,
+      editFormData?.fuelEfficiency,
+      editFormData?.color,
+      editFormData?.insuranceType,
+      editFormData?.insuranceValidity,
+      editFormData?.features,
+    ],
+  );
+
+  useEffect(() => {
+    if (!editAutoDescription || editDescriptionManualRef.current) return;
+    editLastAutoDescriptionRef.current = editAutoDescription;
+    setEditFormData((prev) =>
+      !prev || prev.description === editAutoDescription
+        ? prev
+        : { ...prev, description: editAutoDescription },
+    );
+  }, [editAutoDescription]);
 
   const isAdmin = currentUser.role === 'admin';
 
@@ -2638,6 +2885,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   const handleAddFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    if (name === 'description') {
+      if (!value.trim()) addDescriptionManualRef.current = false;
+      else if (value !== addLastAutoDescriptionRef.current) addDescriptionManualRef.current = true;
+    }
     const numericFields = ['year', 'price', 'mileage', 'noOfOwners', 'registrationYear'];
     setAddFormData(prev => {
       const next = {
@@ -2712,15 +2963,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     });
   };
 
-  const checklistGalleryUrls = useMemo(
-    () => extractChecklistGalleryUrls(addFormData.sellerDisclosureChecklist),
-    [addFormData.sellerDisclosureChecklist],
-  );
-  const extraGalleryImages = useMemo(
-    () => getExtraGalleryImages(addFormData.sellerDisclosureChecklist, addFormData.images || []),
-    [addFormData.sellerDisclosureChecklist, addFormData.images],
-  );
-
   const handleAddImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     
@@ -2761,13 +3003,15 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       
       if (successfulUrls.length > 0) {
         const currentImages = addFormData.images || [];
-        const maxImages = 10;
-        const remainingSlots = maxImages - currentImages.length;
+        const remainingSlots = MAX_LISTING_IMAGES - currentImages.length;
         
         if (remainingSlots <= 0) {
-          notify(`Maximum ${maxImages} images allowed. Please remove some images first.`, 'info');
+          notify(`Maximum ${MAX_LISTING_IMAGES} images allowed. Please remove some images first.`, 'info');
         } else {
           const imagesToAdd = successfulUrls.slice(0, remainingSlots);
+          if (successfulUrls.length > remainingSlots) {
+            notify(`Only ${remainingSlots} image(s) added. Maximum ${MAX_LISTING_IMAGES} images allowed.`, 'info');
+          }
           setAddFormData(prev => ({
             ...prev,
             images: [...(prev.images || []), ...imagesToAdd]
@@ -2851,6 +3095,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    if (name === 'description') {
+      if (!value.trim()) editDescriptionManualRef.current = false;
+      else if (value !== editLastAutoDescriptionRef.current) editDescriptionManualRef.current = true;
+    }
     const numericFields = ['year', 'price', 'mileage', 'noOfOwners', 'registrationYear'];
     setEditFormData(prev => {
       if (!prev) return prev;
@@ -2923,15 +3171,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     });
   };
 
-  const editChecklistGalleryUrls = useMemo(
-    () => extractChecklistGalleryUrls(editFormData?.sellerDisclosureChecklist),
-    [editFormData?.sellerDisclosureChecklist],
-  );
-  const editExtraGalleryImages = useMemo(
-    () => getExtraGalleryImages(editFormData?.sellerDisclosureChecklist, editFormData?.images || []),
-    [editFormData?.sellerDisclosureChecklist, editFormData?.images],
-  );
-
   const handleEditImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0 || !editFormData) return;
 
@@ -2969,13 +3208,15 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
       if (successfulUrls.length > 0) {
         const currentImages = editFormData.images || [];
-        const maxImages = 10;
-        const remainingSlots = maxImages - currentImages.length;
+        const remainingSlots = MAX_LISTING_IMAGES - currentImages.length;
 
         if (remainingSlots <= 0) {
-          notify(`Maximum ${maxImages} images allowed. Please remove some images first.`, 'info');
+          notify(`Maximum ${MAX_LISTING_IMAGES} images allowed. Please remove some images first.`, 'info');
         } else {
           const imagesToAdd = successfulUrls.slice(0, remainingSlots);
+          if (successfulUrls.length > remainingSlots) {
+            notify(`Only ${remainingSlots} image(s) added. Maximum ${MAX_LISTING_IMAGES} images allowed.`, 'info');
+          }
           setEditFormData(prev => {
             if (!prev) return prev;
             return {
@@ -3324,156 +3565,69 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               {t('sellerListing.section.presentation', 'Listing presentation')}
             </h4>
             <p className="text-xs text-gray-600">
-              {t('sellerListing.presentation.hint', 'Add a description and any extra marketing photos.')}
+              {t(
+                'sellerListing.presentation.hint',
+                'Description is auto-filled in a fixed format from overview and specifications. Missing fields are skipped.',
+              )}
             </p>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {t('sellerListing.label.description')}
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <label className="block text-sm font-semibold text-gray-700">
+                  {t('sellerListing.label.description')}
+                </label>
+                <button
+                  type="button"
+                  disabled={!addAutoDescription}
+                  onClick={() => {
+                    if (!addAutoDescription) return;
+                    addDescriptionManualRef.current = false;
+                    addLastAutoDescriptionRef.current = addAutoDescription;
+                    setAddFormData((prev) => ({ ...prev, description: addAutoDescription }));
+                  }}
+                  className="text-xs font-semibold text-orange-600 disabled:opacity-40"
+                >
+                  Refresh from details
+                </button>
+              </div>
               <textarea
                 name="description"
                 value={addFormData.description || ''}
                 onChange={handleAddFormChange}
-                rows={4}
-                placeholder={t('sellerListing.placeholder.description')}
-                className="native-input resize-none"
+                rows={8}
+                maxLength={VEHICLE_DESCRIPTION_MAX_LENGTH}
+                placeholder={t(
+                  'sellerListing.placeholder.description',
+                  'Fill overview and specifications to generate a professional description…',
+                )}
+                className="native-input resize-none font-mono text-sm leading-relaxed"
               />
-            </div>
-          </div>
-
-          {/* Extra marketing photos */}
-          <div className="space-y-4 pt-6 border-t border-gray-200">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h4 className="font-bold text-gray-900 text-base">
-                {t('sellerListing.section.extraPhotos', 'Extra marketing photos')}
-              </h4>
-              {extraGalleryImages.length > 0 && (
-                <span className="text-xs px-2 py-1 rounded-full font-semibold bg-orange-100 text-orange-700">
-                  {extraGalleryImages.length} extra
-                </span>
-              )}
-            </div>
-
-            {checklistGalleryUrls.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-emerald-800">
-                    {t('sellerListing.photoGuide.fromChecklist', 'From checklist')} ({checklistGalleryUrls.length})
-                  </p>
-                  <p className="text-[10px] text-gray-500">
-                    {t('sellerListing.photoGuide.editInChecklist', 'Edit in checklist above')}
-                  </p>
-                </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {checklistGalleryUrls.map((url, index) => (
-                    <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 ring-1 ring-emerald-200">
-                      <img
-                        src={url}
-                        className="w-full h-full object-cover opacity-90"
-                        alt={`Checklist ${index + 1}`}
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
-                        }}
-                      />
-                      {index === 0 && (
-                        <span className="absolute top-1 left-1 bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                          {t('sellerListing.cover', 'COVER')}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Upload Button */}
-            <label
-              htmlFor="add-vehicle-images"
-              className={`flex items-center justify-center gap-3 p-4 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
-                isUploadingImages 
-                  ? 'border-gray-300 bg-gray-50 cursor-wait' 
-                  : 'border-blue-300 bg-blue-50 hover:border-blue-400 hover:bg-blue-100 active:scale-[0.98]'
-              }`}
-            >
-              {isUploadingImages ? (
-                <>
-                  <svg className="animate-spin h-5 w-5 text-blue-500" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-600">{t('sellerListing.uploading', 'Uploading...')}</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </div>
-                  <div>
-                    <span className="text-sm font-semibold text-blue-700">{t('sellerListing.tapToUpload', 'Add Extra Photos')}</span>
-                    <p className="text-xs text-blue-600">{t('sellerListing.photoFormats', 'Optional — JPG, PNG up to 25MB each (compressed on upload)')}</p>
-                  </div>
-                </>
-              )}
-              <input 
-                id="add-vehicle-images"
-                type="file" 
-                className="sr-only" 
-                multiple 
-                accept="image/*" 
-                onChange={handleAddImageUpload}
-                disabled={isUploadingImages}
-              />
-            </label>
-
-            {/* Extra photos preview */}
-            {extraGalleryImages.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-600">
-                  {t('sellerListing.uploadedImages', 'Extra photos')} ({extraGalleryImages.length})
-                </p>
-                <div className="grid grid-cols-4 gap-2">
-                  {extraGalleryImages.map((url) => (
-                    <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group">
-                      <img
-                        src={url}
-                        className="w-full h-full object-cover"
-                        alt="Extra photo"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveAddImage(url)}
-                        className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {checklistGalleryUrls.length === 0 && extraGalleryImages.length === 0 && (
-              <p className="text-xs text-gray-500 text-center">
-                {t('sellerListing.photoGuide.noPhotosYet', 'No photos yet — complete the checklist above to add required shots.')}
+              <p className="mt-1 text-[10px] text-gray-400 text-right">
+                {(addFormData.description || '').length} / {VEHICLE_DESCRIPTION_MAX_LENGTH}
               </p>
-            )}
-
-            {/* Tip */}
-            <p className="text-xs text-gray-500 flex items-center gap-1.5">
-              <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              {t('sellerListing.photoTip', 'Tip: Listings with 6+ clear photos get 3x more views!')}
-            </p>
+            </div>
           </div>
+
+          <MobileListingPhotosSection
+            images={addFormData.images || []}
+            uploading={isUploadingImages}
+            inputId="add-vehicle-images"
+            onUpload={handleAddImageUpload}
+            onRemove={handleRemoveAddImage}
+            labels={{
+              title: t('sellerListing.section.listingPhotos', 'Listing photos'),
+              hint: t(
+                'sellerListing.photoGuide.unifiedHint',
+                `All photos (checklist + extras) show here · up to ${MAX_LISTING_IMAGES}`,
+              ),
+              empty: t('sellerListing.photoGuide.noPhotosYet', 'No photos yet — complete the checklist above to add required shots.'),
+              uploading: t('sellerListing.uploading', 'Uploading...'),
+              addPhotos: t('sellerListing.tapToUpload', 'Add photos'),
+              formats: t('sellerListing.photoFormats', 'JPG, PNG up to 25MB each (compressed on upload)'),
+              cover: t('sellerListing.cover', 'COVER'),
+              tip: t('sellerListing.photoTip', 'Tip: Listings with 6+ clear photos get 3x more views!'),
+            }}
+          />
 
           {/* Actions */}
           <div className="flex gap-3 pt-6 border-t border-gray-200">
@@ -3813,249 +3967,71 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               {t('sellerListing.section.presentation', 'Listing presentation')}
             </h4>
             <p className="text-xs text-gray-600">
-              {t('sellerListing.presentation.hint', 'Add a description and any extra marketing photos.')}
+              {t(
+                'sellerListing.presentation.hint',
+                'Description is auto-filled in a fixed format from overview and specifications. Missing fields are skipped.',
+              )}
             </p>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {t('sellerListing.label.description')}
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <label className="block text-sm font-semibold text-gray-700">
+                  {t('sellerListing.label.description')}
+                </label>
+                <button
+                  type="button"
+                  disabled={!editAutoDescription}
+                  onClick={() => {
+                    if (!editAutoDescription) return;
+                    editDescriptionManualRef.current = false;
+                    editLastAutoDescriptionRef.current = editAutoDescription;
+                    setEditFormData((prev) =>
+                      prev ? { ...prev, description: editAutoDescription } : prev,
+                    );
+                  }}
+                  className="text-xs font-semibold text-orange-600 disabled:opacity-40"
+                >
+                  Refresh from details
+                </button>
+              </div>
               <textarea
                 name="description"
                 value={formData.description || ''}
                 onChange={handleEditFormChange}
-                rows={4}
-                placeholder={t('sellerListing.placeholder.description')}
-                className="native-input resize-none"
+                rows={8}
+                maxLength={VEHICLE_DESCRIPTION_MAX_LENGTH}
+                placeholder={t(
+                  'sellerListing.placeholder.description',
+                  'Fill overview and specifications to generate a professional description…',
+                )}
+                className="native-input resize-none font-mono text-sm leading-relaxed"
               />
-            </div>
-          </div>
-
-          {/* Extra marketing photos */}
-          <div className="space-y-4 pt-6 border-t border-gray-200">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h4 className="font-bold text-gray-900 text-base">
-                {t('sellerListing.section.extraPhotos', 'Extra marketing photos')}
-              </h4>
-              {editExtraGalleryImages.length > 0 && (
-                <span className="text-xs px-2 py-1 rounded-full font-semibold bg-orange-100 text-orange-700">
-                  {editExtraGalleryImages.length} extra
-                </span>
-              )}
-            </div>
-
-            {editChecklistGalleryUrls.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-emerald-800">
-                    {t('sellerListing.photoGuide.fromChecklist', 'From checklist')} ({editChecklistGalleryUrls.length})
-                  </p>
-                  <p className="text-[10px] text-gray-500">
-                    {t('sellerListing.photoGuide.editInChecklist', 'Edit in checklist above')}
-                  </p>
-                </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {editChecklistGalleryUrls.map((url, index) => (
-                    <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 ring-1 ring-emerald-200">
-                      <img
-                        src={url}
-                        className="w-full h-full object-cover opacity-90"
-                        alt={`Checklist ${index + 1}`}
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
-                        }}
-                      />
-                      {index === 0 && (
-                        <span className="absolute top-1 left-1 bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                          {t('sellerListing.cover', 'COVER')}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <label
-              htmlFor="edit-vehicle-images"
-              className={`flex items-center justify-center gap-3 p-4 rounded-xl border-2 border-dashed transition-all cursor-pointer ${
-                isUploadingEditImages
-                  ? 'border-gray-300 bg-gray-50 cursor-wait'
-                  : 'border-blue-300 bg-blue-50 hover:border-blue-400 hover:bg-blue-100 active:scale-[0.98]'
-              }`}
-            >
-              {isUploadingEditImages ? (
-                <>
-                  <svg className="animate-spin h-5 w-5 text-blue-500" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-600">{t('sellerListing.uploading', 'Uploading...')}</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </div>
-                  <div>
-                    <span className="text-sm font-semibold text-blue-700">{t('sellerListing.tapToUpload', 'Add Extra Photos')}</span>
-                    <p className="text-xs text-blue-600">{t('sellerListing.photoFormats', 'Optional — JPG, PNG up to 25MB each (compressed on upload)')}</p>
-                  </div>
-                </>
-              )}
-              <input
-                id="edit-vehicle-images"
-                type="file"
-                className="sr-only"
-                multiple
-                accept="image/*"
-                onChange={handleEditImageUpload}
-                disabled={isUploadingEditImages}
-              />
-            </label>
-
-            {editExtraGalleryImages.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-600">
-                  {t('sellerListing.uploadedImages', 'Extra photos')} ({editExtraGalleryImages.length})
-                </p>
-                <div className="grid grid-cols-4 gap-2">
-                  {editExtraGalleryImages.map((url) => (
-                    <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group">
-                      <img
-                        src={url}
-                        className="w-full h-full object-cover"
-                        alt="Extra photo"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveEditImage(url)}
-                        className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {editChecklistGalleryUrls.length === 0 && editExtraGalleryImages.length === 0 && (
-              <p className="text-xs text-gray-500 text-center">
-                {t('sellerListing.photoGuide.noPhotosYet', 'No photos yet — complete the checklist above to add required shots.')}
+              <p className="mt-1 text-[10px] text-gray-400 text-right">
+                {(formData.description || '').length} / {VEHICLE_DESCRIPTION_MAX_LENGTH}
               </p>
-            )}
-
-            <p className="text-xs text-gray-500 flex items-center gap-1.5">
-              <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              {t('sellerListing.photoTip', 'Tip: Listings with 6+ clear photos get 3x more views!')}
-            </p>
-          </div>
-
-          {/* Listing offer */}
-          <div className="space-y-4 pt-6 border-t border-gray-200">
-            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.offer')}</h4>
-            <p className="text-xs text-gray-600">{t('sellerListing.offer.hint')}</p>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={!!formData.offerEnabled}
-                onChange={(e) =>
-                  setEditFormData((prev) => (prev ? { ...prev, offerEnabled: e.target.checked } : prev))
-                }
-                className="h-5 w-5 rounded border-gray-300"
-              />
-              <span className="text-sm font-semibold text-gray-800">{t('sellerListing.offer.enable')}</span>
-            </label>
-            <div className={`space-y-3 ${formData.offerEnabled ? '' : 'opacity-50 pointer-events-none'}`}>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerTitle')}</label>
-                <input
-                  type="text"
-                  name="offerTitle"
-                  value={formData.offerTitle ?? ''}
-                  onChange={handleEditFormChange}
-                  className="native-input"
-                  placeholder={t('vehicle.detail.offer.specialOffer')}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerStartDate')}</label>
-                  <input
-                    type="date"
-                    name="offerStartDate"
-                    value={formData.offerStartDate ?? ''}
-                    onChange={handleEditFormChange}
-                    className="native-input text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerEndDate')}</label>
-                  <input
-                    type="date"
-                    name="offerEndDate"
-                    value={formData.offerEndDate ?? ''}
-                    onChange={handleEditFormChange}
-                    className="native-input text-sm"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerDateLabel')}</label>
-                <input
-                  type="text"
-                  name="offerDateLabel"
-                  value={formData.offerDateLabel ?? ''}
-                  onChange={handleEditFormChange}
-                  className="native-input"
-                  placeholder={t('sellerListing.placeholder.offerDateLabel')}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerDescription')}</label>
-                <input
-                  type="text"
-                  name="offerDescription"
-                  value={formData.offerDescription ?? ''}
-                  onChange={handleEditFormChange}
-                  className="native-input"
-                  placeholder={t('vehicle.detail.offer.loanOffersOnAllCars')}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerHighlight')}</label>
-                <input
-                  type="text"
-                  name="offerHighlight"
-                  value={formData.offerHighlight ?? ''}
-                  onChange={handleEditFormChange}
-                  className="native-input"
-                  placeholder={t('vehicle.detail.offer.roiStartingAt')}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('sellerListing.label.offerDisclaimer')}</label>
-                <input
-                  type="text"
-                  name="offerDisclaimer"
-                  value={formData.offerDisclaimer ?? ''}
-                  onChange={handleEditFormChange}
-                  className="native-input"
-                  placeholder={t('sellerListing.placeholder.offerDisclaimer')}
-                />
-              </div>
             </div>
           </div>
+
+          <MobileListingPhotosSection
+            images={formData.images || []}
+            uploading={isUploadingEditImages}
+            inputId="edit-vehicle-images"
+            onUpload={handleEditImageUpload}
+            onRemove={handleRemoveEditImage}
+            labels={{
+              title: t('sellerListing.section.listingPhotos', 'Listing photos'),
+              hint: t(
+                'sellerListing.photoGuide.unifiedHint',
+                `All photos (checklist + extras) show here · up to ${MAX_LISTING_IMAGES}`,
+              ),
+              empty: t('sellerListing.photoGuide.noPhotosYet', 'No photos yet — complete the checklist above to add required shots.'),
+              uploading: t('sellerListing.uploading', 'Uploading...'),
+              addPhotos: t('sellerListing.tapToUpload', 'Add photos'),
+              formats: t('sellerListing.photoFormats', 'JPG, PNG up to 25MB each (compressed on upload)'),
+              cover: t('sellerListing.cover', 'COVER'),
+              tip: t('sellerListing.photoTip', 'Tip: Listings with 6+ clear photos get 3x more views!'),
+            }}
+          />
 
           {/* Status */}
           <div className="space-y-4 pt-6 border-t border-gray-200">

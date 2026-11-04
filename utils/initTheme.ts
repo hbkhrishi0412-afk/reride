@@ -1,14 +1,16 @@
 /**
- * Apply Tailwind `dark` class from saved preference or system setting.
+ * ReRide ships a light UI (white cards / pages). Incomplete `dark:` variants
+ * paint light text on those surfaces when `<html class="dark">` is set, so we
+ * always force light — no theme toggle exists yet.
  */
 export function initThemeFromPreference(): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  const stored = localStorage.getItem('reride-theme');
-  const prefersDark =
-    typeof window !== 'undefined' &&
-    window.matchMedia &&
-    window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const useDark = stored === 'dark' || (stored !== 'light' && prefersDark);
-  root.classList.toggle('dark', useDark);
+  root.classList.remove('dark');
+  root.style.colorScheme = 'light';
+  try {
+    localStorage.setItem('reride-theme', 'light');
+  } catch {
+    /* private mode / quota — class removal above is enough */
+  }
 }

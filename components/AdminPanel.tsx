@@ -9,7 +9,6 @@ import ConfirmDialog from './ConfirmDialog';
 import { ModalBackdrop } from './primitives/Pressable';
 // Removed blocking import - will lazy load PLAN_DETAILS when needed
 import { planService } from '../services/planService';
-import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 import { isRerideStaffPick } from '../utils/staffPick';
 import {
     AdminContentFrame,

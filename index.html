@@ -2,6 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Keep Tailwind dark: off before module boot (OS dark mode used to flip html.dark and wash out text). -->
+    <script>document.documentElement.classList.remove('dark');document.documentElement.style.colorScheme='light';</script>
     <!-- Consolidated boot logic (redirects, fetch guards, fonts, polyfills, prefetch, viewport/zoom). -->
     <script src="/reride-boot.js"></script>
     <!-- Before any other fetch(): force /api/* and apex host → www (fixes Android WebView CORS preflight). Public file → always /reride-api-fetch-boot.js. -->
@@ -91,7 +93,7 @@
     </style>
     
   </head>
-  <body class="antialiased transition-colors duration-300" style="background-color: #FFFFFF; color: #2C2C2C;">
+  <body class="antialiased transition-colors duration-300" style="background-color: #FFFFFF; color: #2C2C2C; color-scheme: light;">
     <nav aria-label="Skip links">
       <a href="#main-content" class="skip-link" style="position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;">Skip to main content</a>
       <a href="#search-bar" class="skip-link" style="position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;">Skip to search</a>

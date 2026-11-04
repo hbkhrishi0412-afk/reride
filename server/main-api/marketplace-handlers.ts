@@ -9,6 +9,7 @@ import type { User as AuthUser } from '@supabase/supabase-js';
 import { passwordFingerprint } from '../../utils/security.js';
 import { resolveRateLimit } from '../../lib/rate-limit-resolver.js';
 import { sanitizeSellerChecklist } from '../../lib/universalChecklist/helpers.js';
+import { MAX_LISTING_IMAGES } from '../../lib/universalChecklist/mediaSync.js';
 import { VehicleCategory } from '../../vehicle-category.js';
 import { filterVerifiedMobileMatches, phoneMatchTail, syntheticPhoneEmail, toE164IndianPhone } from '../phone-login-identity.js';
 
@@ -4705,12 +4706,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           : [],
     );
     
-    if (normalizedImages.length > 10) {
-      core.logWarn('⚠️ Vehicle has too many images, limiting to 10', { 
+    if (normalizedImages.length > MAX_LISTING_IMAGES) {
+      core.logWarn(`⚠️ Vehicle has too many images, limiting to ${MAX_LISTING_IMAGES}`, { 
         provided: normalizedImages.length,
         sellerEmail: req.body.sellerEmail 
       });
-      normalizedImages.splice(10); // Keep only first 10 images
+      normalizedImages.splice(MAX_LISTING_IMAGES);
     }
     
     // Estimate total payload size for unusually large URL lists
@@ -4738,9 +4739,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       'registrationNumber', 'registrationYear', 'insuranceValidTill', 'insuranceValidity',
       'insuranceType', 'condition',
       'sellerName', 'sellerPhone', 'sellerType',
-      'qualityReport', 'offerDetails',
-      'offerEnabled', 'offerTitle', 'offerStartDate', 'offerEndDate', 'offerDateLabel',
-      'offerDescription', 'offerHighlight', 'offerDisclaimer',
+      'qualityReport',
       'tags', 'title', 'engine', 'engineCc',
       'kmDriven', 'variant', 'listingType', 'negotiable', 'status',
       'rto', 'displacement', 'groundClearance', 'bootSpace', 'documents',
@@ -4755,6 +4754,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         body.sellerDisclosureChecklist,
         (sanitizedBody.category as VehicleCategory) || VehicleCategory.FOUR_WHEELER,
       );
+    }
+    if ('vahanSnapshot' in body && body.vahanSnapshot && typeof body.vahanSnapshot === 'object') {
+      sanitizedBody.vahanSnapshot = body.vahanSnapshot;
+    }
+    if ('vahanVerifiedAt' in body && typeof body.vahanVerifiedAt === 'string') {
+      sanitizedBody.vahanVerifiedAt = body.vahanVerifiedAt;
     }
     // Client form uses noOfOwners; legacy/alternate key is numberOfOwners
     if (sanitizedBody.noOfOwners === undefined && body.numberOfOwners !== undefined) {
@@ -4886,7 +4891,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             : typeof updateData.images === 'string'
               ? [updateData.images]
               : [],
-        ).slice(0, 10);
+        ).slice(0, MAX_LISTING_IMAGES);
       }
 
       // SECURITY: Field allowlist for vehicle PUT — prevent non-admins from tampering with
@@ -4899,9 +4904,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         'registrationNumber', 'insuranceValidTill', 'insuranceValidity', 'insuranceType',
         'condition',
         'sellerName', 'sellerPhone', 'sellerType',
-        'qualityReport', 'offerDetails',
-        'offerEnabled', 'offerTitle', 'offerStartDate', 'offerEndDate', 'offerDateLabel',
-        'offerDescription', 'offerHighlight', 'offerDisclaimer',
+        'qualityReport',
         'tags', 'title', 'engine', 'engineCc', 'fuelEfficiency',
         'kmDriven', 'variant', 'listingType', 'negotiable',
         'rto', 'displacement', 'groundClearance', 'bootSpace', 'documents',
@@ -4923,6 +4926,13 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           rawUpdate.sellerDisclosureChecklist,
           ((sanitizedUpdate.category ?? existingVehicle.category) as VehicleCategory) || VehicleCategory.FOUR_WHEELER,
         );
+      }
+      // Trust verification snapshot lives in vehicles.metadata via supabase-vehicle-service.
+      if ('vahanSnapshot' in rawUpdate && rawUpdate.vahanSnapshot && typeof rawUpdate.vahanSnapshot === 'object') {
+        sanitizedUpdate.vahanSnapshot = rawUpdate.vahanSnapshot;
+      }
+      if ('vahanVerifiedAt' in rawUpdate && typeof rawUpdate.vahanVerifiedAt === 'string') {
+        sanitizedUpdate.vahanVerifiedAt = rawUpdate.vahanVerifiedAt;
       }
       if (auth.user?.role === 'admin') {
         for (const key of ADMIN_ONLY_UPDATE_FIELDS) {

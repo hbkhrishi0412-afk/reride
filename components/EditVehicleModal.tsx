@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Vehicle } from '../types';
 import { getSupabaseClient } from '../lib/supabase.js';
 import {
@@ -16,8 +16,13 @@ import {
   countAiReadyPhotos,
   extractChecklistGalleryUrls,
   getExtraGalleryImages,
+  MAX_LISTING_IMAGES,
   mergeListingImages,
 } from '../lib/universalChecklist/mediaSync';
+import {
+  buildVehicleDescription,
+  VEHICLE_DESCRIPTION_MAX_LENGTH,
+} from '../utils/buildVehicleDescription';
 import { useApp } from './AppProvider';
 import { ModalBackdrop } from './primitives/Pressable';
 
@@ -79,13 +84,15 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
     const { addToast } = useApp();
     const [formData, setFormData] = useState<Vehicle>(vehicle);
     const [featureInput, setFeatureInput] = useState('');
-    const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'media' | 'offer'>('basic');
+    const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'media'>('basic');
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [enhancementResult, setEnhancementResult] = useState<ListingEnhancementResult | null>(null);
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [showEnhancementSummary, setShowEnhancementSummary] = useState(false);
     const enhancementTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const descriptionManualRef = useRef(Boolean(vehicle.description?.trim()));
+    const lastAutoDescriptionRef = useRef('');
 
     useEffect(() => {
         return () => {
@@ -107,12 +114,53 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
 
     useEffect(() => {
         if (vehicle) {
+            descriptionManualRef.current = Boolean(vehicle.description?.trim());
+            lastAutoDescriptionRef.current = '';
             setFormData({
               ...vehicle,
               qualityReport: vehicle.qualityReport || { fixesDone: [] }
             });
         }
     }, [vehicle]);
+
+    const autoDescription = useMemo(
+        () => buildVehicleDescription(formData),
+        [
+            formData.make,
+            formData.model,
+            formData.variant,
+            formData.year,
+            formData.registrationYear,
+            formData.mileage,
+            formData.noOfOwners,
+            formData.city,
+            formData.state,
+            formData.rto,
+            formData.price,
+            formData.transmission,
+            formData.fuelType,
+            formData.fuelEfficiency,
+            formData.color,
+            formData.insuranceType,
+            formData.insuranceValidity,
+            formData.features,
+        ],
+    );
+
+    useEffect(() => {
+        if (!autoDescription || descriptionManualRef.current) return;
+        lastAutoDescriptionRef.current = autoDescription;
+        setFormData((prev) =>
+            prev.description === autoDescription ? prev : { ...prev, description: autoDescription },
+        );
+    }, [autoDescription]);
+
+    const applyAutoDescription = useCallback(() => {
+        if (!autoDescription) return;
+        descriptionManualRef.current = false;
+        lastAutoDescriptionRef.current = autoDescription;
+        setFormData((prev) => ({ ...prev, description: autoDescription }));
+    }, [autoDescription]);
 
     // Convert storage paths to public URLs for display
     const displayImages = useMemo(() => {
@@ -170,6 +218,12 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
         const target = e.target;
         const { name } = target;
         const value = target.type === 'checkbox' ? (target as HTMLInputElement).checked : target.value;
+
+        if (name === 'description') {
+            const text = String(value);
+            if (!text.trim()) descriptionManualRef.current = false;
+            else if (text !== lastAutoDescriptionRef.current) descriptionManualRef.current = true;
+        }
         
         // Clear error when user starts typing
         if (errors[name]) {
@@ -228,35 +282,28 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
             // Pass seller email from vehicle for ownership tracking
             const uploadResults = await uploadImages(files, 'vehicles', vehicle.sellerEmail);
             
-            // Check for upload errors
             const failedUploads = uploadResults.filter(r => !r.success);
             if (failedUploads.length > 0) {
-                const errorMessage = failedUploads.map(r => r.error).join(', ');
-                addToast(`Failed to upload ${failedUploads.length} file(s): ${errorMessage}`, 'error');
-                if (input) input.value = '';
-                return;
+                const errorMessage = failedUploads.map(r => r.error).filter(Boolean).join(', ');
+                addToast(`Failed to upload ${failedUploads.length} file(s)${errorMessage ? `: ${errorMessage}` : ''}`, 'error');
             }
             
-            // Get successful upload URLs (base64 data URLs)
             const successfulUrls = uploadResults
                 .filter(r => r.success && r.url)
                 .map(r => r.url!);
             
             if (successfulUrls.length > 0) {
-                // Limit total images to prevent vehicle object from becoming too large
                 const currentImages = formData.images || [];
-                const maxImages = 10;
-                const remainingSlots = maxImages - currentImages.length;
+                const remainingSlots = MAX_LISTING_IMAGES - currentImages.length;
                 
                 if (remainingSlots <= 0) {
-                    addToast(`Maximum ${maxImages} images allowed per vehicle. Please remove some images before adding more.`, 'warning');
-                    if (input) input.value = '';
+                    addToast(`Maximum ${MAX_LISTING_IMAGES} images allowed per vehicle. Please remove some images before adding more.`, 'warning');
                     return;
                 }
                 
                 const imagesToAdd = successfulUrls.slice(0, remainingSlots);
                 if (successfulUrls.length > remainingSlots) {
-                    addToast(`Only ${remainingSlots} image(s) added. Maximum ${maxImages} images allowed per vehicle.`, 'warning');
+                    addToast(`Only ${remainingSlots} image(s) added. Maximum ${MAX_LISTING_IMAGES} images allowed per vehicle.`, 'warning');
                 }
                 
                 setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...imagesToAdd] }));
@@ -382,7 +429,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
         />
     );
 
-    type TabId = 'basic' | 'specs' | 'media' | 'offer';
+    type TabId = 'basic' | 'specs' | 'media';
     const TabButton = ({ tab, label, icon }: { tab: TabId; label: string; icon: string }) => (
         <button
             type="button"
@@ -426,7 +473,6 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                         <TabButton tab="basic" label="Basic Info" icon="🚗" />
                         <TabButton tab="specs" label="Specifications" icon="⚙️" />
                         <TabButton tab="media" label="Media & Features" icon="📷" />
-                        <TabButton tab="offer" label="Listing Offer" icon="🎁" />
                     </div>
 
                     {/* Content Area */}
@@ -555,15 +601,31 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                         <span>📝</span> Description
                                     </h3>
                                     <div>
-                                        <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Vehicle Description</label>
+                                        <div className="mb-1 flex items-center justify-between gap-2">
+                                            <label className="block text-sm font-medium text-reride-text-dark dark:text-white">
+                                                Vehicle Description
+                                            </label>
+                                            <button
+                                                type="button"
+                                                disabled={!autoDescription}
+                                                onClick={applyAutoDescription}
+                                                className="text-xs font-semibold text-reride-orange disabled:opacity-40"
+                                            >
+                                                Refresh from details
+                                            </button>
+                                        </div>
                                         <textarea 
                                             name="description" 
                                             value={formData.description} 
                                             onChange={handleChange} 
-                                            rows={4} 
-                                            placeholder="Describe the vehicle's condition, history, and key selling points..."
-                                            className="block w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent resize-none"
+                                            rows={8}
+                                            maxLength={VEHICLE_DESCRIPTION_MAX_LENGTH}
+                                            placeholder="Fill details first to auto-generate a polished description…"
+                                            className="block w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent resize-none font-mono text-sm leading-relaxed"
                                         />
+                                        <p className="mt-1 text-right text-[10px] text-gray-400">
+                                            {(formData.description || '').length} / {VEHICLE_DESCRIPTION_MAX_LENGTH}
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -703,40 +765,6 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                             </div>
                         )}
 
-                        {activeTab === 'offer' && (
-                            <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg space-y-4">
-                                <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-2 flex items-center gap-2">
-                                    <span>🎁</span> Listing offer
-                                </h3>
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                    Shown on the vehicle page when enabled, dates are valid, and at least one text line is filled.
-                                </p>
-                                <div className="flex items-center gap-3">
-                                    <input
-                                        id="edit-offer-enabled"
-                                        type="checkbox"
-                                        name="offerEnabled"
-                                        checked={!!formData.offerEnabled}
-                                        onChange={handleChange}
-                                        className="h-5 w-5 rounded border-gray-300"
-                                    />
-                                    <label htmlFor="edit-offer-enabled" className="text-sm font-medium text-reride-text-dark dark:text-white cursor-pointer">
-                                        Enable offer for this listing
-                                    </label>
-                                </div>
-                                <div className={`space-y-4 pt-2 ${formData.offerEnabled ? '' : 'opacity-50 pointer-events-none'}`}>
-                                    {renderFormInput({ label: "Headline", name: "offerTitle", value: formData.offerTitle ?? '', placeholder: "e.g. Special offer" })}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        {renderFormInput({ label: "Start date", name: "offerStartDate", type: "date", value: formData.offerStartDate ?? '' })}
-                                        {renderFormInput({ label: "End date", name: "offerEndDate", type: "date", value: formData.offerEndDate ?? '' })}
-                                    </div>
-                                    {renderFormInput({ label: "Date label (optional)", name: "offerDateLabel", value: formData.offerDateLabel ?? '', placeholder: "e.g. 8 - 31 DEC" })}
-                                    {renderFormInput({ label: "Description line", name: "offerDescription", value: formData.offerDescription ?? '', placeholder: "e.g. Loan offers on all cars" })}
-                                    {renderFormInput({ label: "Highlight line", name: "offerHighlight", value: formData.offerHighlight ?? '', placeholder: "e.g. ROI starting from 10.5%*" })}
-                                    {renderFormInput({ label: "Disclaimer (small text)", name: "offerDisclaimer", value: formData.offerDisclaimer ?? '', placeholder: "Terms and conditions apply" })}
-                                </div>
-                            </div>
-                        )}
                     </div>
 
                     {/* Enhancement Summary Overlay */}

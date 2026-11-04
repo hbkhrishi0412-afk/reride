@@ -19,6 +19,8 @@ export interface UniversalChecklistItemDef {
   /** 'core' = all categories; otherwise category add-on */
   scope: ChecklistScope;
   buyerHint?: string;
+  /** Seller answers with Yes/No radios instead of free text */
+  answerType?: 'yes_no';
 }
 
 export interface ChecklistItemResponse {

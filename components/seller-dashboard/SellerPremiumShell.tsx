@@ -19,6 +19,8 @@ export type SellerPremiumPanelProps = {
   children: React.ReactNode;
   className?: string;
   bodyClassName?: string;
+  /** When true, only the card shell is rendered — children own the page header. */
+  hideHeader?: boolean;
 };
 
 /** Shared premium card shell for seller dashboard pages. */
@@ -30,25 +32,28 @@ export const SellerPremiumPanel: React.FC<SellerPremiumPanelProps> = ({
   children,
   className = '',
   bodyClassName = '',
+  hideHeader = false,
 }) => (
   <div className={`relative overflow-hidden rounded-2xl ${className}`} style={panelStyle}>
     <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-28" style={glowStyle} />
-    <div className={`relative p-5 sm:p-7 ${bodyClassName}`}>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          {eyebrow ? (
-            <p className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-stone-400">{eyebrow}</p>
-          ) : null}
-          <h2
-            className="mt-1 text-[1.65rem] font-semibold tracking-tight text-stone-900"
-            style={{ fontFamily: "'Nunito Sans', Poppins, sans-serif", letterSpacing: '-0.03em' }}
-          >
-            {title}
-          </h2>
-          {description ? <div className="mt-1.5 text-sm text-stone-500">{description}</div> : null}
+    <div className={`relative ${hideHeader ? '' : 'p-5 sm:p-7'} ${bodyClassName}`}>
+      {!hideHeader ? (
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            {eyebrow ? (
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-stone-400">{eyebrow}</p>
+            ) : null}
+            <h2
+              className="mt-1 text-[1.65rem] font-semibold tracking-tight text-stone-900"
+              style={{ fontFamily: "'Nunito Sans', Poppins, sans-serif", letterSpacing: '-0.03em' }}
+            >
+              {title}
+            </h2>
+            {description ? <div className="mt-1.5 text-sm text-stone-500">{description}</div> : null}
+          </div>
+          {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div> : null}
-      </div>
+      ) : null}
       {children}
     </div>
   </div>

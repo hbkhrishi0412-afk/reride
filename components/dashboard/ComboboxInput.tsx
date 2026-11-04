@@ -122,8 +122,8 @@ export const ComboboxInput: React.FC<{
 
   return (
     <div className="relative">
-      <label htmlFor={name} className="flex items-center text-sm font-medium text-reride-text-dark mb-1">
-        {label}{required && <span className="text-reride-orange ml-0.5">*</span>}
+      <label htmlFor={name} className="mb-1 flex items-center text-[13px] font-semibold text-stone-800">
+        {label}{required && <span className="ml-0.5 text-reride-orange">*</span>}
         {tooltip && <HelpTooltip text={tooltip} />}
       </label>
       <div className="relative">
@@ -134,23 +134,26 @@ export const ComboboxInput: React.FC<{
           name={name}
           value={inputValue || ''}
           onChange={handleInputChange}
-          onFocus={handleInputFocus}
+          onFocus={(e) => {
+            handleInputFocus();
+            if (!error) e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.14)';
+          }}
+          onBlur={(e) => { e.currentTarget.style.boxShadow = ''; }}
           onKeyDown={handleInputKeyDown}
           disabled={disabled}
           placeholder={placeholder}
           required={required}
-          className={`block w-full p-3 pr-10 border rounded-lg focus:outline-none transition bg-white text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300'}`}
-          style={!error ? { boxShadow: 'none' } : {}}
+          className={`block w-full rounded-lg border bg-white px-3 py-2.5 pr-10 text-sm text-stone-900 placeholder:text-stone-500 transition focus:outline-none disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-500 ${error ? 'border-reride-orange' : 'border-stone-300 hover:border-stone-400'}`}
         />
-        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+          <svg className="h-4 w-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </div>
         {isOpen && !disabled && Array.isArray(filteredOptions) && filteredOptions.length > 0 && (
           <div
             ref={dropdownRef}
-            className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto"
+            className="absolute z-50 mt-1.5 max-h-60 w-full overflow-auto rounded-xl border border-stone-200 bg-white py-1 shadow-lg shadow-stone-900/10"
           >
             {filteredOptions.slice(0, 10).map((option, index) => {
               if (!option || typeof option !== 'string') return null;
@@ -159,14 +162,14 @@ export const ComboboxInput: React.FC<{
                   key={option || `option-${index}`}
                   type="button"
                   onClick={() => handleSelectOption(option)}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors"
+                  className="w-full px-3.5 py-2.5 text-left text-sm text-stone-800 transition-colors hover:bg-orange-50 focus:bg-orange-50 focus:outline-none"
                 >
                   {option}
                 </button>
               );
             })}
             {filteredOptions.length > 10 && (
-              <div className="px-4 py-2 text-xs text-gray-500 text-center">
+              <div className="px-3.5 py-2 text-center text-xs text-stone-400">
                 {t('sellerDashboard.comboboxMoreOptions', {
                   count: filteredOptions.length - 10,
                 })}
@@ -175,7 +178,7 @@ export const ComboboxInput: React.FC<{
           </div>
         )}
       </div>
-      {error && <p className="mt-1 text-xs text-reride-orange">{error}</p>}
+      {error && <p className="mt-1.5 text-xs text-reride-orange">{error}</p>}
     </div>
   );
 };

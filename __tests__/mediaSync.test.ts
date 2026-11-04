@@ -3,7 +3,9 @@ import {
   clearChecklistPhotoByUrl,
   countAiReadyPhotos,
   extractChecklistGalleryUrls,
+  GALLERY_PHOTO_ITEM_IDS,
   getExtraGalleryImages,
+  MAX_LISTING_IMAGES,
   mergeListingImages,
   syncDocumentsFromChecklist,
 } from '../lib/universalChecklist/mediaSync';
@@ -47,6 +49,14 @@ describe('mediaSync', () => {
     expect(merged.length).toBe(10);
   });
 
+  it('MAX_LISTING_IMAGES leaves room for extras after a full checklist gallery', () => {
+    expect(MAX_LISTING_IMAGES).toBeGreaterThan(GALLERY_PHOTO_ITEM_IDS.length);
+    const checklist = Array.from({ length: GALLERY_PHOTO_ITEM_IDS.length }, (_, i) => `https://cdn.example/c${i}.jpg`);
+    const extras = Array.from({ length: 5 }, (_, i) => `https://cdn.example/e${i}.jpg`);
+    const merged = mergeListingImages(checklist, extras);
+    expect(merged).toEqual([...checklist, ...extras]);
+  });
+
   it('getExtraGalleryImages excludes checklist-linked urls', () => {
     const extras = getExtraGalleryImages(sampleChecklist, [frontUrl, extraUrl, rearUrl]);
     expect(extras).toEqual([extraUrl]);
@@ -72,7 +82,7 @@ describe('mediaSync', () => {
     expect(countAiReadyPhotos(full)).toBe(6);
   });
 
-  it('syncDocumentsFromChecklist maps RC/Insurance/PUC and keeps other docs', () => {
+  it('syncDocumentsFromChecklist maps RC/Insurance and keeps other docs', () => {
     const docs = syncDocumentsFromChecklist(sampleChecklist, [
       { name: 'Service Record', url: 'https://cdn.example/service.pdf', fileName: 'service.pdf' },
       { name: 'Registration Certificate (RC)', url: 'https://cdn.example/old-rc.jpg', fileName: 'old.jpg' },

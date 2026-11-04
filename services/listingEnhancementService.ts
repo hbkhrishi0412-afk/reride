@@ -4,6 +4,7 @@
  */
 
 import type { Vehicle } from '../types.js';
+import { buildVehicleDescription } from '../utils/buildVehicleDescription.js';
 import { validateVehicleListing, type ValidationResult } from '../utils/validation.js';
 
 export interface ListingEnhancementResult {
@@ -88,6 +89,14 @@ export async function enhanceVehicleListing(
 
     if (quality.missingViews.length > 0) {
       enhancements.push(`Consider adding: ${quality.missingViews.slice(0, 3).join(', ')}`);
+    }
+  }
+
+  if (!(vehicle.description || '').trim()) {
+    const generated = buildVehicleDescription(vehicle);
+    if (generated) {
+      vehicle.description = generated;
+      enhancements.push('Description generated from overview and specifications');
     }
   }
 
@@ -231,6 +240,8 @@ export function isListingReadyToPublish(vehicle: Partial<Vehicle>): {
 }
 
 export function prepareVehicleForSubmission(vehicle: Vehicle): Vehicle {
+  const description =
+    vehicle.description?.trim() || buildVehicleDescription(vehicle) || '';
   return {
     ...vehicle,
     status: vehicle.status || 'published',
@@ -239,7 +250,7 @@ export function prepareVehicleForSubmission(vehicle: Vehicle): Vehicle {
     isFeatured: vehicle.isFeatured || false,
     make: vehicle.make?.trim(),
     model: vehicle.model?.trim(),
-    description: vehicle.description?.trim(),
+    description,
     city: vehicle.city?.trim(),
     state: vehicle.state?.trim()?.toUpperCase(),
     features: vehicle.features || [],

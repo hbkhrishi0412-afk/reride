@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Conversation, SubscriptionPlan, User, Vehicle } from '../../types';
 import { PLAN_DETAILS } from '../../constants/plans';
-import { isSellerListingOfferVisible } from '../../utils/vehicleOffer';
 import { adminTableHeadClass } from './AdminPrimitives';
 
 export type ListingColumnId =
@@ -11,7 +10,6 @@ export type ListingColumnId =
     | 'sellerPlan'
     | 'price'
     | 'status'
-    | 'offer'
     | 'buyerName'
     | 'buyerNumber'
     | 'city'
@@ -40,7 +38,6 @@ export const LISTING_COLUMN_DEFS: {
     { id: 'sellerPhone', label: 'Seller phone', defaultVisible: false, group: 'seller' },
     { id: 'price', label: 'Price', defaultVisible: true, group: 'core' },
     { id: 'status', label: 'Status', defaultVisible: true, group: 'core' },
-    { id: 'offer', label: 'Offer', defaultVisible: true, group: 'core' },
     { id: 'buyerName', label: 'Buyer name', defaultVisible: false, group: 'buyer' },
     { id: 'buyerNumber', label: 'Buyer number', defaultVisible: false, group: 'buyer' },
     { id: 'category', label: 'Category', defaultVisible: false, group: 'vehicle' },
@@ -322,23 +319,6 @@ export function renderListingCell(
                     }`}
                 >
                     {vehicle.status}
-                </span>
-            );
-        case 'offer':
-            if (!vehicle.offerEnabled) return <span className="text-gray-400">—</span>;
-            if (isSellerListingOfferVisible(vehicle)) {
-                return (
-                    <span className="inline-flex rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800">
-                        Active
-                    </span>
-                );
-            }
-            return (
-                <span
-                    className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900"
-                    title="Offer is enabled but hidden from buyers (check dates or offer text)"
-                >
-                    Inactive
                 </span>
             );
         case 'buyerName':

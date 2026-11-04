@@ -1230,11 +1230,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           <SellerPremiumPanel
             eyebrow="Listing"
             title={editingVehicle ? 'Edit vehicle' : 'Add vehicle'}
-            description={
-              editingVehicle
-                ? 'Update details, photos, and listing status.'
-                : 'Create a listing, then boost it from My listings.'
-            }
+            hideHeader
           >
             <VehicleForm 
               seller={seller}
@@ -1349,10 +1345,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             ? 'cursor-not-allowed text-stone-400 opacity-55'
             : isActive
             ? 'bg-stone-900 text-white shadow-lg shadow-stone-900/20'
-            : 'text-stone-600 hover:bg-orange-50 hover:text-orange-800'
+            : 'text-stone-700 hover:bg-orange-50 hover:text-orange-800'
         }`}
       >
-        <span className="font-medium tracking-tight">{children}</span>
+        <span className="font-semibold tracking-tight">{children}</span>
         {typeof count === 'number' && count > 0 ? (
           <span
             aria-label={`${count} items`}
@@ -1435,7 +1431,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 />
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-400">Seller</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-600">Seller</p>
                     <h3
                       className="text-lg font-bold text-stone-900 truncate"
                       style={{ fontFamily: "'Nunito Sans', Poppins, sans-serif", letterSpacing: '-0.02em' }}
@@ -1443,7 +1439,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                       {t('nav.dashboard')}
                     </h3>
                     {(seller.dealershipName || seller.name) ? (
-                      <p className="text-xs text-stone-500 truncate mt-0.5">
+                      <p className="mt-0.5 truncate text-xs font-medium text-stone-700">
                         {seller.dealershipName || seller.name}
                       </p>
                     ) : null}
@@ -1451,7 +1447,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 </div>
               </div>
 
-              <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-400">Workspace</p>
+              <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-600">Workspace</p>
               <NavItem view="overview" count={hotLeadsBadgeCount > 0 ? hotLeadsBadgeCount : undefined}>
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1480,7 +1476,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 </div>
               </NavItem>
               
-              <p className="mb-2 mt-5 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-400">Communication</p>
+              <p className="mb-2 mt-5 px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-600">Communication</p>
               <NavItem view="messages" count={unreadCount}>
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1496,7 +1492,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   ? { open: true }
                   : {})}
               >
-                <summary className="cursor-pointer list-none px-3.5 py-2.5 rounded-xl text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-400 hover:bg-orange-50 hover:text-orange-800">
+                <summary className="cursor-pointer list-none rounded-xl px-3.5 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-600 hover:bg-orange-50 hover:text-orange-800">
                   {t('nav.more')}
                 </summary>
                 <div className="mt-1 space-y-1">
@@ -1549,7 +1545,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   <button
                     type="button"
                     onClick={onLogout}
-                    className="w-full px-3.5 py-2.5 rounded-xl text-left text-sm font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-left text-sm font-semibold text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900"
                   >
                     {t('nav.logout')}
                   </button>
@@ -1561,7 +1557,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           {/* Premium Main Content */}
           <main className="lg:col-span-1 min-w-0">
             <div
-              className="rounded-3xl p-4 sm:p-6 lg:p-7 min-h-[500px]"
+              className={`rounded-3xl min-h-[500px] ${
+                activeView === 'form' ? 'p-0 sm:p-0 lg:p-0' : 'p-4 sm:p-6 lg:p-7'
+              }`}
               style={{
                 background: 'rgba(255,255,255,0.55)',
                 border: '1px solid rgba(28,25,23,0.06)',

@@ -11,7 +11,6 @@ export const GALLERY_PHOTO_ITEM_IDS = [
   'core.photos.engine_bay',
   'core.photos.tyres',
   'core.photos.damage',
-  'core.photos.documents',
 ] as const;
 
 /** Minimum §1.3 angles for AI inspection readiness */
@@ -27,7 +26,6 @@ export const AI_READY_PHOTO_ITEM_IDS = [
 export const CHECKLIST_DOCUMENT_ITEMS = [
   { itemId: 'core.docs.rc_photo', docName: 'Registration Certificate (RC)' as const },
   { itemId: 'core.docs.insurance_cert', docName: 'Insurance' as const },
-  { itemId: 'core.docs.puc', docName: 'Pollution Under Control (PUC)' as const },
 ];
 
 export interface ListingDocumentLike {
@@ -70,10 +68,13 @@ export function getExtraGalleryImages(
   return allImages.filter((url) => !checklistUrls.has(url));
 }
 
+/** Checklist §1.3 alone can fill ~10 slots; extras need headroom beyond that. */
+export const MAX_LISTING_IMAGES = 20;
+
 export function mergeListingImages(
   checklistUrls: string[],
   extraImages: string[],
-  maxImages = 10,
+  maxImages = MAX_LISTING_IMAGES,
 ): string[] {
   const merged: string[] = [];
   const seen = new Set<string>();

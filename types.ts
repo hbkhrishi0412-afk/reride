@@ -311,19 +311,6 @@ export interface Vehicle {
   activeBoosts?: ActiveBoost[];
   hideExactLocation?: boolean;
 
-  /** Per-listing promotional offer (stored in Supabase `metadata` when using Postgres). */
-  offerEnabled?: boolean;
-  offerTitle?: string;
-  /** Inclusive start date for visibility (YYYY-MM-DD). */
-  offerStartDate?: string;
-  /** Inclusive end date for visibility (YYYY-MM-DD). */
-  offerEndDate?: string;
-  /** Optional display string instead of formatted dates (e.g. "8 - 31 DEC"). */
-  offerDateLabel?: string;
-  offerDescription?: string;
-  offerHighlight?: string;
-  offerDisclaimer?: string;
-  
   /** AI-powered photo inspection report */
   aiInspectionReport?: AIInspectionReport;
 

@@ -16,6 +16,8 @@ html {
   -moz-text-size-adjust: 100%;
   -ms-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Keep native controls + inherited ink on the light product surface */
+  color-scheme: light;
   /* No transform/zoom here. Either one makes position:fixed stick to the document
      instead of the screen, so the bars land in different places per WebView. */
   overflow-x: hidden;

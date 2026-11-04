@@ -843,9 +843,6 @@ const hi: Record<string, string> = {
   'vehicle.detail.media.noImagesAvailable': 'कोई इमेज उपलब्ध नहीं',
   'vehicle.detail.media.previousImage': 'पिछली इमेज',
   'vehicle.detail.media.nextImage': 'अगली इमेज',
-  'vehicle.detail.offer.specialOffer': 'विशेष ऑफर',
-  'vehicle.detail.offer.loanOffersOnAllCars': 'सभी कारों पर लोन ऑफर',
-  'vehicle.detail.offer.roiStartingAt': 'आरओआई 10.5% से शुरू*',
   'vehicle.detail.financePartners.title': 'फाइनेंस पार्टनर',
   'vehicle.detail.financePartners.description':
     'इस विक्रेता के वाहन फाइनेंस के लिए निम्न बैंक पार्टनर हैं:',

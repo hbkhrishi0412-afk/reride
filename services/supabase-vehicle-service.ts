@@ -28,6 +28,16 @@ function validateCategory(category: unknown): VehicleCategory {
 
 const SUPABASE_IMAGES_BUCKET = 'Images';
 
+/** Removed listing-offer feature — strip these stale keys from vehicles.metadata. */
+const REMOVED_LISTING_OFFER_META_KEYS = [
+  'offerEnabled', 'offerTitle', 'offerStartDate', 'offerEndDate', 'offerDateLabel',
+  'offerDescription', 'offerHighlight', 'offerDisclaimer', 'offerDetails',
+] as const;
+
+function stripRemovedListingOfferMeta(meta: Record<string, unknown>): void {
+  for (const k of REMOVED_LISTING_OFFER_META_KEYS) delete meta[k];
+}
+
 /** Lean columns for list/catalog queries — avoid select('*') payloads. */
 const VEHICLE_LIST_COLUMNS =
   'id, make, model, variant, year, price, mileage, category, seller_email, seller_name, status, is_featured, images, description, engine, fuel_type, transmission, fuel_efficiency, color, registration_year, insurance_validity, insurance_type, rto, city, state, location, no_of_owners, displacement, ground_clearance, boot_space, features, created_at, updated_at, listing_expires_at, listing_status, views, inquiries_count, certification_status, metadata';
@@ -168,7 +178,8 @@ function supabaseRowToVehicle(row: any): Vehicle {
   // CRITICAL FIX: Process images to convert storage paths to public URLs
   const processedImages = processImageUrls(row.images, vehicleId);
 
-  const rawMeta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const rawMeta = row.metadata && typeof row.metadata === 'object' ? { ...row.metadata } : {};
+  stripRemovedListingOfferMeta(rawMeta);
   // Strip the deprecated qualityReport.summary so it never overwrites Vehicle.description
   // when metadata is spread into the returned object below. We keep fixesDone intact.
   let meta: any = rawMeta;
@@ -279,8 +290,6 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, options?: { partial?: b
     'shareCount', 'keywords', 'nearbyLandmarks', 'exactLocation',
     'distanceFromUser', 'photoQuality', 'hasMinimumPhotos',
     'descriptionQuality', 'activeBoosts', 'hideExactLocation',
-    'offerEnabled', 'offerTitle', 'offerStartDate', 'offerEndDate', 'offerDateLabel',
-    'offerDescription', 'offerHighlight', 'offerDisclaimer',
     'registrationNumber', 'engineNumber', 'chassisNumber', 'vahanVerifiedAt',
     'aiInspectionReport', 'sellerDisclosureChecklist', 'vahanSnapshot',
   ];
@@ -615,6 +624,11 @@ export const supabaseVehicleService = {
       row.metadata = existingVehicle.metadata;
     }
 
+    // Drop removed listing-offer keys so merges don't keep stale promotional data forever.
+    if (row.metadata && typeof row.metadata === 'object') {
+      stripRemovedListingOfferMeta(row.metadata);
+    }
+
     if (row.metadata === null || (typeof row.metadata === 'object' && Object.keys(row.metadata).length === 0)) {
       delete row.metadata;
     }
@@ -640,7 +654,14 @@ export const supabaseVehicleService = {
       return await applyUpdate(row);
     } catch (error: unknown) {
       const message = getSupabaseErrorMessage(error);
-      if (message.includes('metadata') || message.includes('Could not find')) {
+      // Only strip metadata when PostgREST says the metadata column itself is missing.
+      // A broad "Could not find" match previously retried without metadata and silently
+      // dropped sellerDisclosureChecklist / documents while images still saved.
+      const metadataColumnMissing =
+        /Could not find the ['"]metadata['"] column/i.test(message) ||
+        /column ['"]metadata['"] of relation/i.test(message);
+      if (metadataColumnMissing && row.metadata) {
+        console.warn('⚠️ vehicles.metadata column unavailable — retrying update without metadata');
         delete row.metadata;
         try {
           return await applyUpdate(row);

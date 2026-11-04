@@ -34,11 +34,12 @@ const PricingGuidance: React.FC<PricingGuidanceProps> = ({
 
   return (
     <div className="mt-2 text-sm">
-      <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20 p-3">
-        <p className="font-semibold text-blue-900 dark:text-blue-100">{marketHint.hint.headline}</p>
-        <p className="mt-1 text-blue-800/90 dark:text-blue-200/90">{marketHint.hint.detail}</p>
+      {/* Always light card + dark ink — avoids washed-out dark:text on light bg */}
+      <div className="rounded-xl border border-sky-300 bg-sky-50 p-3 text-sky-950">
+        <p className="font-semibold text-sky-950">{marketHint.hint.headline}</p>
+        <p className="mt-1 leading-relaxed text-sky-900">{marketHint.hint.detail}</p>
         {marketHint.analysis.competitorCount >= 2 && (
-          <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+          <p className="mt-1.5 text-xs font-medium text-sky-800">
             Market range: {formatIndianPrice(marketHint.analysis.marketLow)} –{' '}
             {formatIndianPrice(marketHint.analysis.marketHigh)}
           </p>
@@ -47,7 +48,7 @@ const PricingGuidance: React.FC<PricingGuidanceProps> = ({
           <button
             type="button"
             onClick={() => onApplySuggestedPrice(marketHint.hint!.suggestedPrice!)}
-            className="mt-2 text-xs font-semibold text-reride-orange hover:underline"
+            className="mt-2 text-xs font-semibold text-orange-700 hover:underline"
           >
             Try {formatIndianPrice(marketHint.hint.suggestedPrice)}
           </button>
