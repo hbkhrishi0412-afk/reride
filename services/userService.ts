@@ -737,12 +737,24 @@ export const getUsers = async (role?: 'seller' | 'customer' | 'admin' | 'service
         return [];
       }
     } else {
-      // Development mode — use local storage
-      const users = await getUsersLocal();
-      if (role) {
-        return users.filter(u => u.role === role);
+      // Development: prefer live API (same source as seller Settings saves), fall back to local.
+      try {
+        const result = await getUsersApi(role);
+        if (!role && typeof window !== 'undefined' && typeof localStorage !== 'undefined' && Array.isArray(result)) {
+          try {
+            localStorage.setItem('reRideUsers', JSON.stringify(result));
+          } catch {
+            /* quota — best-effort */
+          }
+        }
+        return result;
+      } catch {
+        const users = await getUsersLocal();
+        if (role) {
+          return users.filter(u => u.role === role);
+        }
+        return users;
       }
-      return users;
     }
   } catch {
     return [];
@@ -806,10 +818,18 @@ export async function getDealerDirectory(): Promise<{ users: User[]; failed: boo
   return { users, failed };
 }
 export const updateUser = async (userData: Partial<User> & { email: string }): Promise<User> => {
-  if (!isDevelopment) {
+  // Prefer API in every environment so seller Settings and admin Edit User hit the same store.
+  // Local fallback remains for offline/dev when the API is unreachable.
+  try {
     return await updateUserApi(userData);
+  } catch (error) {
+    if (!isDevelopment) throw error;
+    try {
+      return await updateUserLocal(userData);
+    } catch {
+      throw error;
+    }
   }
-  return await updateUserLocal(userData);
 };
 export const deleteUser = isDevelopment ? deleteUserLocal : deleteUserApi;
 

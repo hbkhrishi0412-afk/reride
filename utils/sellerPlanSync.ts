@@ -25,7 +25,7 @@ export function mergeSellerPlanFields(prev: User, next: Partial<User>): User {
   const merged: User = { ...prev };
   for (const key of SELLER_PLAN_SYNC_KEYS) {
     if (next[key] !== undefined) {
-      (merged as Record<string, unknown>)[key] = next[key];
+      (merged as unknown as Record<string, unknown>)[key] = next[key];
     }
   }
   return merged;

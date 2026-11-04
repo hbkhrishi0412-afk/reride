@@ -431,7 +431,7 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
   // Inline gallery (when no onClose provided - for embedded use)
   return (
     <div className="relative w-full max-w-full overflow-hidden">
-      <div className="relative flex w-full items-center justify-center overflow-hidden bg-gray-100 aspect-[16/10] max-h-[min(42vh,300px)]">
+      <div className="relative flex w-full items-center justify-center overflow-hidden bg-gray-100 aspect-[4/3] max-h-[min(42vh,300px)]">
         <img
           src={images[currentIndex]}
           alt={`${alt} ${currentIndex + 1}`}

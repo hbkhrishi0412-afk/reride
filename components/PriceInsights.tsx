@@ -15,6 +15,9 @@ import {
 } from '../utils/vehiclePricing';
 import { fetchLiveMarketPricing } from '../services/vehicleMarketPricingService';
 
+/** Flip to `true` when you want Price Analysis / deal badges back on the site. */
+export const PRICE_ANALYSIS_ENABLED = false;
+
 const IBB_PUBLIC_VALUATION_URL = 'https://www.indianbluebook.com/';
 
 interface PriceInsightsProps {
@@ -171,6 +174,7 @@ export const PriceFairnessBadge: React.FC<{
   priceDifferencePercent?: number;
   buyerFacing?: boolean;
 }> = ({ fairnessLabel, priceDifferencePercent = 0, buyerFacing = true }) => {
+  if (!PRICE_ANALYSIS_ENABLED) return null;
   if (buyerFacing && (fairnessLabel === 'Above Market' || fairnessLabel === 'Overpriced')) {
     return null;
   }
@@ -207,10 +211,12 @@ export const PriceInsights: React.FC<PriceInsightsProps> = ({
   const [showDetails, setShowDetails] = useState(!compact);
   const [liveMarket, setLiveMarket] = useState<ExternalMarketInput | null>(null);
   const [liveComparables, setLiveComparables] = useState(similarVehicles);
-  const [marketLoading, setMarketLoading] = useState(true);
+  const [marketLoading, setMarketLoading] = useState(PRICE_ANALYSIS_ENABLED);
   const [marketSummary, setMarketSummary] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!PRICE_ANALYSIS_ENABLED) return;
+
     let cancelled = false;
     setMarketLoading(true);
 
@@ -269,6 +275,8 @@ export const PriceInsights: React.FC<PriceInsightsProps> = ({
             : analysis.dataSource === 'estimate'
               ? 'IBB-style estimates'
               : 'market data';
+
+  if (!PRICE_ANALYSIS_ENABLED) return null;
 
   if (compact) {
     return (

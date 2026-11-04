@@ -400,7 +400,7 @@ interface MobileDashboardProps {
   onViewVehicle?: (vehicle: Vehicle) => void;
   // Profile editing
   onUpdateProfile?: (profileData: Partial<User>) => Promise<void>;
-  onUpdateSellerProfile?: (details: { dealershipName: string; bio: string; logoUrl: string; partnerBanks?: string[] }) => void;
+  onUpdateSellerProfile?: (details: Partial<User>) => void | Promise<void>;
   // Notifications
   notifications?: Notification[];
   onNotificationClick?: (notification: Notification) => void;

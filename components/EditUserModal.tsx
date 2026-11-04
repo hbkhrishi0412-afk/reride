@@ -19,6 +19,9 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
         role: 'customer' as User['role'],
         location: '',
         address: '',
+        dealershipName: '',
+        bio: '',
+        pincode: '',
         rerideRecommended: false,
     });
     const [showPasswordReset, setShowPasswordReset] = useState(false);
@@ -35,6 +38,9 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                 role: user.role,
                 location: user.location || '',
                 address: user.address || '',
+                dealershipName: user.dealershipName || '',
+                bio: user.bio || '',
+                pincode: user.pincode || '',
                 rerideRecommended: isRerideStaffPick(user.rerideRecommended),
             });
         }
@@ -212,6 +218,53 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400 transition shadow-sm resize-none"
                                 />
                             </div>
+                            {(user.role === 'seller' || formData.role === 'seller') && (
+                                <>
+                                    <div className="space-y-2 md:col-span-2">
+                                        <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                                            Dealership name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="dealershipName"
+                                            value={formData.dealershipName}
+                                            onChange={handleChange}
+                                            maxLength={50}
+                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400 transition shadow-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-2 md:col-span-2">
+                                        <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                                            About dealership
+                                        </label>
+                                        <textarea
+                                            name="bio"
+                                            value={formData.bio}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value.slice(0, 500) }))}
+                                            rows={3}
+                                            maxLength={500}
+                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400 transition shadow-sm resize-none"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                                            PIN code
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="pincode"
+                                            inputMode="numeric"
+                                            maxLength={6}
+                                            value={formData.pincode}
+                                            onChange={(e) => setFormData(prev => ({
+                                                ...prev,
+                                                pincode: e.target.value.replace(/\D/g, '').slice(0, 6),
+                                            }))}
+                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400 transition shadow-sm"
+                                        />
+                                    </div>
+                                </>
+                            )}
                             <div className="space-y-2">
                                 <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
                                     Email (Read Only)
@@ -281,6 +334,40 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                     className="mt-1 block w-full p-2 border rounded-md resize-none"
                                 />
                             </div>
+                            {(user.role === 'seller' || formData.role === 'seller') && (
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Dealership name</label>
+                                        <input type="text" name="dealershipName" value={formData.dealershipName} onChange={handleChange} maxLength={50} className="mt-1 block w-full p-2 border rounded-md" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">About dealership</label>
+                                        <textarea
+                                            name="bio"
+                                            value={formData.bio}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value.slice(0, 500) }))}
+                                            rows={3}
+                                            maxLength={500}
+                                            className="mt-1 block w-full p-2 border rounded-md resize-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">PIN code</label>
+                                        <input
+                                            type="text"
+                                            name="pincode"
+                                            inputMode="numeric"
+                                            maxLength={6}
+                                            value={formData.pincode}
+                                            onChange={(e) => setFormData(prev => ({
+                                                ...prev,
+                                                pincode: e.target.value.replace(/\D/g, '').slice(0, 6),
+                                            }))}
+                                            className="mt-1 block w-full p-2 border rounded-md"
+                                        />
+                                    </div>
+                                </>
+                            )}
                         </div>
                         
                         {/* Password Reset Section */}

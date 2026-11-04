@@ -18,7 +18,7 @@ import { ListingTrustChips } from './ListingTrustChips.js';
 import { ListingTrustStatusBar } from './ListingTrustStatusBar.js';
 import { isListingAvailable } from '../utils/listingStock.js';
 import StarRating from './StarRating';
-import { PriceInsights } from './PriceInsights';
+import { PriceInsights, PRICE_ANALYSIS_ENABLED } from './PriceInsights';
 import { findSimilarVehicles } from '../utils/vehiclePricing';
 import SellerDisclosureDisplay from './SellerDisclosureDisplay';
 import { fetchRatingEligibility, submitPeerRating } from '../services/vehicleTrustService';
@@ -763,18 +763,27 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 sellerProfileEmail ? 'active:bg-gray-50' : ''
               }`}
             >
-              <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                {seller?.name?.charAt(0).toUpperCase() || 
-                 seller?.dealershipName?.charAt(0).toUpperCase() || 
-                 safeVehicle.sellerName?.charAt(0).toUpperCase() || 
-                 safeVehicle.sellerEmail?.charAt(0).toUpperCase() || 
-                 'S'}
+              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-orange-500 shadow-sm ring-1 ring-slate-200">
+                <div className="absolute inset-0 flex items-center justify-center text-lg font-bold text-white" aria-hidden>
+                  {seller?.name?.charAt(0).toUpperCase() ||
+                   seller?.dealershipName?.charAt(0).toUpperCase() ||
+                   safeVehicle.sellerName?.charAt(0).toUpperCase() ||
+                   safeVehicle.sellerEmail?.charAt(0).toUpperCase() ||
+                   'S'}
+                </div>
+                {(seller?.logoUrl || seller?.avatarUrl) ? (
+                  <img
+                    src={seller.logoUrl || seller.avatarUrl}
+                    alt=""
+                    className="relative h-full w-full object-cover"
+                  />
+                ) : null}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-gray-900">
-                  {seller?.name || 
-                   seller?.dealershipName || 
-                   safeVehicle.sellerName || 
+                <h3 className="font-semibold text-gray-900 truncate">
+                  {seller?.dealershipName ||
+                   seller?.name ||
+                   safeVehicle.sellerName ||
                    t('vehicle.card.sellerFallback')}
                 </h3>
                 <p className="text-sm text-gray-600">
@@ -858,6 +867,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
             <div className="flex min-w-max gap-1">
               {(['overview', 'disclosure', 'report', 'features', 'vahan', 'price'] as const)
                 .filter((tab) => {
+                  if (tab === 'price') return PRICE_ANALYSIS_ENABLED;
                   if (tab === 'disclosure') return hasSellerDisclosureReport(safeVehicle);
                   if (tab === 'report') return Boolean(safeVehicle.certifiedInspection);
                   return true;

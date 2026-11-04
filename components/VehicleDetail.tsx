@@ -9,7 +9,6 @@ import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
 import VerificationBadge from './VerificationBadge';
 import VehicleHistory from './VehicleHistory';
-import { getFollowersCount } from '../services/buyerEngagementService';
 import { useApp } from './AppProvider';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import { scrollAppToTop } from '../utils/scrollAppToTop';
@@ -22,7 +21,7 @@ import { ListingTrustStatusBar } from './ListingTrustStatusBar.js';
 import VehicleDetailTrustStrip from './VehicleDetailTrustStrip.js';
 import { isListingAvailable } from '../utils/listingStock.js';
 import { isRerideStaffPick } from '../utils/staffPick.js';
-import { PriceInsights } from './PriceInsights';
+import { PriceInsights, PRICE_ANALYSIS_ENABLED } from './PriceInsights';
 import { findSimilarVehicles } from '../utils/vehiclePricing';
 import { enrichVehicleWithSellerInfo, resolveVehicleSellerEmail } from '../utils/vehicleEnrichment';
 import SellerDisclosureDisplay from './SellerDisclosureDisplay';
@@ -60,7 +59,10 @@ interface VehicleDetailProps {
   updateVehicle?: (id: number, updates: Partial<Vehicle>, options?: { successMessage?: string; skipToast?: boolean }) => Promise<void>;
 }
 
-const SocialShareButtons: React.FC<{ vehicle: Vehicle }> = ({ vehicle }) => {
+const SocialShareButtons: React.FC<{ vehicle: Vehicle; variant?: 'default' | 'pill' }> = ({
+  vehicle,
+  variant = 'default',
+}) => {
     const { t } = useTranslation();
     const [copyState, setCopyState] = useState<'default' | 'copied' | 'failed'>('default');
 
@@ -93,7 +95,24 @@ const SocialShareButtons: React.FC<{ vehicle: Vehicle }> = ({ vehicle }) => {
             ? t('vehicle.share.copied')
             : copyState === 'failed'
               ? t('vehicle.share.failed')
-              : t('vehicle.share.copyLink');
+              : variant === 'pill'
+                ? t('vehicle.detail.share', 'Share')
+                : t('vehicle.share.copyLink');
+
+    if (variant === 'pill') {
+      return (
+        <button
+          type="button"
+          onClick={handleCopyLink}
+          className="flex-1 inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+          </svg>
+          <span>{copyLabel}</span>
+        </button>
+      );
+    }
 
     return (
         <>
@@ -581,13 +600,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     : seller?.avatarUrl
       ? getSafeImageSrc(seller.avatarUrl, '')
       : '';
-  const sellerLocation =
-    seller?.location || [safeVehicle.city, safeVehicle.state].filter(Boolean).join(', ') || '';
-  const sellerRating = seller?.averageRating ?? safeVehicle.averageRating ?? 0;
-  const sellerRatingCount = seller?.ratingCount ?? safeVehicle.ratingCount ?? 0;
-  const followersForSeller = safeVehicle.sellerEmail
-    ? getFollowersCount(seller?.email || safeVehicle.sellerEmail)
-    : 0;
   const hasSellerInfo = Boolean(
     seller ||
       safeVehicle.sellerEmail?.trim() ||
@@ -610,14 +622,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     });
     return byName?.email?.toLowerCase().trim() || '';
   }, [safeVehicle.sellerEmail, safeVehicle.sellerName, seller, users]);
-
-  const sellerListingsCount = useMemo(() => {
-    const email = sellerProfileEmail || safeVehicle.sellerEmail?.toLowerCase().trim();
-    if (!email) return 0;
-    return (contextVehicles || []).filter(
-      (v) => v?.sellerEmail?.toLowerCase().trim() === email && v.status === 'published',
-    ).length;
-  }, [contextVehicles, safeVehicle.sellerEmail, sellerProfileEmail]);
 
   const canViewSellerProfile = Boolean(sellerProfileEmail);
 
@@ -723,6 +727,18 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     detailTabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const openChecklistTab = () => {
+    setActiveTab(hasSellerDisclosureReport(safeVehicle) ? 'disclosure' : 'overview');
+    detailTabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const listingLocation =
+    safeVehicle.location ||
+    [translatedFields.city, translatedFields.state].filter(Boolean).join(', ') ||
+    t('vehicle.detail.locationNotSpecified');
+
+  const vehicleTitle = [safeVehicle.make, safeVehicle.model].filter(Boolean).join(' ');
+
   // Format currency helper
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -746,8 +762,8 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   return (
     <>
       <VehicleJsonLd vehicle={safeVehicle} />
-      <div className="bg-white dark:bg-white animate-fade-in vehicle-detail-page">
-          <div className="max-w-7xl mx-auto py-4 sm:py-5 px-4 sm:px-6 lg:px-8">
+      <div className="bg-[#F7F8FA] dark:bg-[#F7F8FA] animate-fade-in vehicle-detail-page">
+          <div className="max-w-7xl mx-auto py-3 sm:py-4 lg:py-5 px-4 sm:px-6 lg:px-8">
               <button type="button" onClick={onBackToHome} className="mb-3 text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -755,57 +771,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                 {t('vehicle.detail.backToListings')}
               </button>
 
-              {/* Listing header — primary identity (title, key specs, location), full-width above the gallery */}
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">
-                    {safeVehicle.year} {safeVehicle.make} {safeVehicle.model} {safeVehicle.variant || ''}
-                  </h1>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-600">
-                    <span className="font-semibold text-gray-800">
-                      {typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'} km
-                    </span>
-                    <span className="text-gray-300">•</span>
-                    <span data-no-translate>{translatedFields.fuelType}</span>
-                    <span className="text-gray-300">•</span>
-                    <span data-no-translate>{translatedFields.transmission}</span>
-                    {safeVehicle.noOfOwners ? (
-                      <>
-                        <span className="text-gray-300">•</span>
-                        <span>
-                          {safeVehicle.noOfOwners}
-                          {safeVehicle.noOfOwners === 1 ? 'st' : safeVehicle.noOfOwners === 2 ? 'nd' : safeVehicle.noOfOwners === 3 ? 'rd' : 'th'} Owner
-                        </span>
-                      </>
-                    ) : null}
-                    <span className="text-gray-300">•</span>
-                    <span className="inline-flex items-center gap-1">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      {safeVehicle.location ||
-                        `${translatedFields.city || ''}, ${translatedFields.state || ''}`.trim() ||
-                        t('vehicle.detail.locationNotSpecified')}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => onToggleWishlist(safeVehicle.id)}
-                  className={`flex-shrink-0 p-2 rounded-full border border-gray-200 transition-colors ${
-                    isInWishlist
-                      ? 'text-red-500 hover:text-red-600'
-                      : 'text-gray-400 hover:text-red-500'
-                  }`}
-                  aria-label={isInWishlist ? t('vehicle.card.wishlistRemove') : t('vehicle.card.wishlistAdd')}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill={isInWishlist ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
-                    <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px] gap-5 lg:gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px] gap-3 lg:gap-4">
                   {/* Left Column: Media and Details */}
                   <div className="min-w-0 space-y-3">
                     {safeVehicle.videoUrl && (
@@ -814,7 +780,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           onClick={() => setActiveMediaTab('images')}
                           className={`py-2 px-4 font-semibold transition-colors ${
                             activeMediaTab === 'images'
-                              ? 'border-b-2 border-purple-600 text-purple-600'
+                              ? 'border-b-2 border-[#FF6B35] text-[#FF6B35]'
                               : 'text-gray-600'
                           }`}
                         >
@@ -824,7 +790,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           onClick={() => setActiveMediaTab('video')}
                           className={`py-2 px-4 font-semibold transition-colors ${
                             activeMediaTab === 'video'
-                              ? 'border-b-2 border-purple-600 text-purple-600'
+                              ? 'border-b-2 border-[#FF6B35] text-[#FF6B35]'
                               : 'text-gray-600'
                           }`}
                         >
@@ -834,81 +800,90 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                     )}
                     {activeMediaTab === 'images' ? (
                       <>
-                        {/* ✅ FIX: Better error handling for images */}
                         {validImages.length > 0 ? (
-                          <>
-                            <div className="relative group bg-gray-100 rounded-xl overflow-hidden">
-                                <img 
-                                  key={currentIndex} 
-                                  className="w-full h-[280px] sm:h-[360px] lg:h-[400px] object-contain rounded-xl shadow-md animate-fade-in bg-white" 
-                                  src={getSafeImageSrc(
-                                    validImages[currentIndex] || getFirstValidImage(safeVehicle.images, safeVehicle.id),
-                                    VEHICLE_IMAGE_PLACEHOLDER_DATA_URI
-                                  )} 
-                                  alt={`${safeVehicle.make} ${safeVehicle.model} - Image ${currentIndex + 1}`}
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    // Only set placeholder if not already a placeholder to avoid infinite loops
-                                    const textCarParam = (() => {
-                                      try {
-                                        return new URL(target.src, 'https://invalid.invalid/').searchParams.get('text') === 'Car';
-                                      } catch {
-                                        return false;
-                                      }
-                                    })();
-                                    if (!isInlineImagePlaceholder(target.src) && !isPlaceholderService(target.src) && !textCarParam) {
-                                      target.src = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
-                                    }
-                                  }}
-                                  loading="lazy"
-                                />
-                                {validImages.length > 1 && (
-                                    <>
-                        <button
-                          onClick={handlePrevImage}
-                          className="absolute top-1/2 left-4 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all focus:opacity-100"
-                          aria-label={t('vehicle.detail.media.previousImage')}
-                        >
-                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                          </svg>
-                                        </button>
-                        <button
-                          onClick={handleNextImage}
-                          className="absolute top-1/2 right-4 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all focus:opacity-100"
-                          aria-label={t('vehicle.detail.media.nextImage')}
-                        >
-                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                          </svg>
-                                        </button>
-                                    </>
+                          <div className="flex gap-2 sm:gap-2.5 items-stretch">
+                            <div className="relative group flex-1 min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm aspect-[16/10]">
+                              <img
+                                key={currentIndex}
+                                className="absolute inset-0 h-full w-full object-cover animate-fade-in bg-gray-100"
+                                src={getSafeImageSrc(
+                                  validImages[currentIndex] || getFirstValidImage(safeVehicle.images, safeVehicle.id),
+                                  VEHICLE_IMAGE_PLACEHOLDER_DATA_URI
                                 )}
+                                alt={`${safeVehicle.make} ${safeVehicle.model} - Image ${currentIndex + 1}`}
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  const textCarParam = (() => {
+                                    try {
+                                      return new URL(target.src, 'https://invalid.invalid/').searchParams.get('text') === 'Car';
+                                    } catch {
+                                      return false;
+                                    }
+                                  })();
+                                  if (!isInlineImagePlaceholder(target.src) && !isPlaceholderService(target.src) && !textCarParam) {
+                                    target.src = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
+                                  }
+                                }}
+                                loading="lazy"
+                              />
+                              {validImages.length > 1 && (
+                                <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handlePrevImage}
+                                    className="bg-black/55 hover:bg-black/75 text-white p-2.5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                    aria-label={t('vehicle.detail.media.previousImage')}
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleNextImage}
+                                    className="bg-black/55 hover:bg-black/75 text-white p-2.5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                    aria-label={t('vehicle.detail.media.nextImage')}
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                             {validImages.length > 1 && (
-                                <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
-                                    {validImages.slice(0, 8).map((img, index) => (
-                                        <img 
-                                          key={index} 
-                                          src={getSafeImageSrc(img)} 
-                                          alt={`Thumbnail ${index + 1}`} 
-                                          className={`cursor-pointer rounded-lg border-2 h-14 w-20 sm:h-16 sm:w-24 object-cover flex-shrink-0 transition-all ${
-                                            currentIndex === index 
-                                              ? 'border-purple-600 shadow-md scale-105' 
-                                              : 'border-transparent hover:border-purple-300'
-                                          }`}
-                                          onClick={() => setCurrentIndex(index)}
-                                          onError={(e) => {
-                                            const target = e.target as HTMLImageElement;
-                                            target.src = VEHICLE_THUMB_PLACEHOLDER_DATA_URI;
-                                          }}
-                                        />
-                                    ))}
-                                </div>
+                              <div className="hidden sm:flex w-[72px] lg:w-[88px] flex-shrink-0 flex-col gap-2.5 overflow-y-auto scrollbar-hide pr-0.5">
+                                {validImages.map((img, index) => (
+                                  <button
+                                    key={index}
+                                    type="button"
+                                    onClick={() => setCurrentIndex(index)}
+                                    onMouseEnter={() => setCurrentIndex(index)}
+                                    onFocus={() => setCurrentIndex(index)}
+                                    className={`relative overflow-hidden rounded-lg flex-shrink-0 aspect-square border-2 transition-colors focus:outline-none ${
+                                      currentIndex === index
+                                        ? 'border-[#1E88E5]'
+                                        : 'border-transparent hover:border-[#1E88E5]/50'
+                                    }`}
+                                    aria-label={`Thumbnail ${index + 1}`}
+                                    aria-current={currentIndex === index ? 'true' : undefined}
+                                  >
+                                    <img
+                                      src={getSafeImageSrc(img)}
+                                      alt=""
+                                      className="h-full w-full object-cover"
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.src = VEHICLE_THUMB_PLACEHOLDER_DATA_URI;
+                                      }}
+                                    />
+                                  </button>
+                                ))}
+                              </div>
                             )}
-                          </>
+                          </div>
                         ) : (
-                          <div className="w-full h-[280px] sm:h-[360px] lg:h-[400px] bg-gray-100 rounded-xl flex items-center justify-center">
+                          <div className="w-full aspect-[16/10] bg-gray-100 rounded-2xl flex items-center justify-center">
                             <div className="text-center text-gray-500">
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -919,9 +894,35 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             </div>
                           </div>
                         )}
+                        {validImages.length > 1 && (
+                          <div className="flex sm:hidden space-x-2 overflow-x-auto pb-1 scrollbar-hide">
+                            {validImages.map((img, index) => (
+                              <button
+                                key={index}
+                                type="button"
+                                onClick={() => setCurrentIndex(index)}
+                                onMouseEnter={() => setCurrentIndex(index)}
+                                onFocus={() => setCurrentIndex(index)}
+                                className={`flex-shrink-0 overflow-hidden rounded-lg h-14 w-20 border-2 ${
+                                  currentIndex === index ? 'border-[#1E88E5]' : 'border-transparent'
+                                }`}
+                              >
+                                <img
+                                  src={getSafeImageSrc(img)}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.src = VEHICLE_THUMB_PLACEHOLDER_DATA_URI;
+                                  }}
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </>
                     ) : (
-                      <div className="w-full aspect-video bg-black rounded-xl shadow-lg overflow-hidden animate-fade-in">
+                      <div className="w-full aspect-video bg-black rounded-2xl shadow-lg overflow-hidden animate-fade-in">
                         <video src={safeVehicle.videoUrl} controls className="w-full h-full object-cover">
                           Your browser does not support the video tag.
                         </video>
@@ -929,20 +930,20 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                     )}
                     
                     {/* Tab Navigation - Reride Style */}
-                    <div className="mt-6 lg:mt-8" ref={detailTabsRef}>
-                      <div className="bg-white rounded-t-xl border-b-2 border-gray-200 overflow-x-auto">
+                    <div className="mt-4 lg:mt-5 border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm" ref={detailTabsRef}>
+                      <div className="bg-white border-b border-gray-200 overflow-x-auto">
                         <div className="flex space-x-0.5 min-w-max sm:min-w-0">
                           <button
                             onClick={() => setActiveTab('overview')}
                             className={`px-3 sm:px-4 py-2.5 font-bold text-xs sm:text-sm uppercase transition-colors relative ${
                               activeTab === 'overview'
-                                ? 'text-purple-600'
+                                ? 'text-[#FF6B35]'
                                 : 'text-gray-600 hover:text-gray-900'
                             }`}
                           >
                             {t('vehicle.detail.tabs.overview')}
                             {activeTab === 'overview' && (
-                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
+                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF6B35]"></span>
                             )}
                           </button>
                           {hasSellerDisclosureReport(safeVehicle) && (
@@ -950,13 +951,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               onClick={() => setActiveTab('disclosure')}
                               className={`px-3 sm:px-4 py-2.5 font-bold text-xs sm:text-sm uppercase transition-colors relative ${
                                 activeTab === 'disclosure'
-                                  ? 'text-purple-600'
+                                  ? 'text-[#FF6B35]'
                                   : 'text-gray-600 hover:text-gray-900'
                               }`}
                             >
                               {t('vehicle.detail.tabs.disclosure')}
                               {activeTab === 'disclosure' && (
-                                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
+                                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF6B35]"></span>
                               )}
                             </button>
                           )}
@@ -965,13 +966,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               onClick={() => setActiveTab('report')}
                               className={`px-3 sm:px-4 py-2.5 font-bold text-xs sm:text-sm uppercase transition-colors relative ${
                                 activeTab === 'report'
-                                  ? 'text-purple-600'
+                                  ? 'text-[#FF6B35]'
                                   : 'text-gray-600 hover:text-gray-900'
                               }`}
                             >
                               {t('vehicle.detail.tabs.report')}
                               {activeTab === 'report' && (
-                                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
+                                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF6B35]"></span>
                               )}
                             </button>
                           )}
@@ -979,46 +980,48 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             onClick={() => setActiveTab('features')}
                             className={`px-3 sm:px-4 py-2.5 font-bold text-xs sm:text-sm uppercase transition-colors relative ${
                               activeTab === 'features'
-                                ? 'text-purple-600'
+                                ? 'text-[#FF6B35]'
                                 : 'text-gray-600 hover:text-gray-900'
                             }`}
                           >
                             {t('vehicle.detail.tabs.featureSpecs')}
                             {activeTab === 'features' && (
-                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
+                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF6B35]"></span>
                             )}
                           </button>
                           <button
                             onClick={() => setActiveTab('vahan')}
                             className={`px-3 sm:px-4 py-2.5 font-bold text-xs sm:text-sm uppercase transition-colors relative ${
                               activeTab === 'vahan'
-                                ? 'text-purple-600'
+                                ? 'text-[#FF6B35]'
                                 : 'text-gray-600 hover:text-gray-900'
                             }`}
                           >
                             {t('vehicle.detail.tabs.vahan')}
                             {activeTab === 'vahan' && (
-                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
+                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF6B35]"></span>
                             )}
                           </button>
+                          {PRICE_ANALYSIS_ENABLED && (
                           <button
                             onClick={() => setActiveTab('price')}
                             className={`px-3 sm:px-4 py-2.5 font-bold text-xs sm:text-sm uppercase transition-colors relative ${
                               activeTab === 'price'
-                                ? 'text-purple-600'
+                                ? 'text-[#FF6B35]'
                                 : 'text-gray-600 hover:text-gray-900'
                             }`}
                           >
                             {t('vehicle.detail.tabs.price', 'Price')}
                             {activeTab === 'price' && (
-                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
+                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF6B35]"></span>
                             )}
                           </button>
+                          )}
                         </div>
                       </div>
 
                       {/* Tab Content */}
-                      <div className="bg-white rounded-b-xl">
+                      <div className="bg-white">
                         {activeTab === 'overview' && (
                           <div className="p-4 sm:p-5">
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
@@ -1504,224 +1507,65 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                   </div>
                   </div>
                   
-                  {/* Right Column: Seller + pricing card — sticky on scroll */}
+                  {/* Right Column: pricing + contact — sticky on scroll */}
                   <div className="lg:sticky lg:top-20 lg:h-fit lg:self-start lg:z-10">
-                      <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden flex flex-col">
-                        {/* Seller profile hero — first thing buyers see */}
-                        {hasSellerInfo ? (
-                          <div className="relative bg-gradient-to-br from-[#5f48ff] via-purple-700 to-indigo-900 px-3.5 pt-3.5 pb-3 text-white">
-                            <div
-                              className="pointer-events-none absolute inset-0 opacity-[0.12]"
-                              style={{
-                                background:
-                                  'radial-gradient(circle at 100% 0%, white 0%, transparent 55%), radial-gradient(circle at 0% 100%, #FF6B35 0%, transparent 50%)',
-                              }}
-                              aria-hidden
-                            />
-                            <div className="relative flex items-start gap-3">
-                              <div className="relative w-12 h-12 flex-shrink-0">
-                                <div className="absolute inset-0 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center text-lg font-bold">
+                      <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(15,23,42,0.08)] border border-gray-100 overflow-hidden flex flex-col">
+                        <div className="p-4 sm:p-5 flex flex-col gap-4">
+                          <div>
+                            <h1 className="text-[1.35rem] sm:text-[1.5rem] font-bold text-gray-900 leading-tight tracking-tight">
+                              {vehicleTitle}
+                            </h1>
+                            <p className="mt-2 text-[1.65rem] sm:text-[1.85rem] font-bold text-gray-900 leading-none">
+                              {formatCurrency(safeVehicle.price)}
+                            </p>
+                            <p className="mt-1.5 text-sm text-gray-500">{listingLocation}</p>
+                          </div>
+
+                          {hasSellerInfo ? (
+                            <button
+                              type="button"
+                              onClick={handleViewSellerProfile}
+                              disabled={!canViewSellerProfile}
+                              className={`flex items-center gap-3 text-left w-full ${
+                                canViewSellerProfile ? 'hover:opacity-90' : 'cursor-default'
+                              }`}
+                            >
+                              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-[#1E88E5] shadow-sm ring-1 ring-slate-200">
+                                <div className="absolute inset-0 flex items-center justify-center text-base font-bold text-white" aria-hidden>
                                   {sellerInitial}
                                 </div>
                                 {sellerAvatarSrc ? (
                                   <img
                                     src={sellerAvatarSrc}
                                     alt=""
-                                    className="relative w-12 h-12 rounded-xl object-cover border border-white/25 bg-white/10"
+                                    className="relative h-full w-full object-cover"
                                   />
                                 ) : null}
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex flex-wrap items-center gap-1 mb-1">
-                                  <span className="inline-flex rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-purple-50">
-                                    {isDealerSeller
-                                      ? t('vehicle.detail.dealerSeller', { defaultValue: 'Verified dealer' })
-                                      : t('vehicle.detail.individualSeller', { defaultValue: 'Individual seller' })}
+                              <div className="min-w-0 flex-1">
+                                {isDealerSeller && seller?.isVerified ? (
+                                  <span className="mb-0.5 inline-flex rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                                    {t('vehicle.detail.verifiedDealer', { defaultValue: 'Verified Dealer' })}
                                   </span>
-                                  {showStaffPick ? (
-                                    <span className="inline-flex rounded-full bg-amber-400/90 px-2 py-0.5 text-[10px] font-bold text-amber-950">
-                                      ★ {t('vehicle.detail.staffPick', { defaultValue: 'ReRide pick' })}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <p className="font-bold text-[15px] leading-snug truncate text-white">
-                                  {sellerDisplayName}
-                                </p>
-                                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-purple-100">
-                                  {sellerRatingCount > 0 ? (
-                                    <span className="inline-flex items-center gap-0.5 [&_svg]:text-amber-300">
-                                      <StarRating rating={sellerRating} size="sm" readOnly />
-                                      <span className="font-semibold text-white">{sellerRating.toFixed(1)}</span>
-                                    </span>
-                                  ) : (
-                                    <span>{t('vehicle.detail.newSeller', { defaultValue: 'New seller' })}</span>
-                                  )}
-                                  {sellerLocation ? (
-                                    <>
-                                      <span className="text-white/35">•</span>
-                                      <span className="truncate">{sellerLocation}</span>
-                                    </>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="relative mt-3 grid grid-cols-2 gap-2">
-                              <div className="rounded-lg bg-white/10 px-2.5 py-2 text-center">
-                                <p className="text-sm font-bold text-white">{followersForSeller}</p>
-                                <p className="text-[10px] uppercase tracking-wide text-purple-200">
-                                  {t('vehicle.detail.followers')}
+                                ) : null}
+                                <p className="font-semibold text-gray-900 truncate">{sellerDisplayName}</p>
+                                <p className="text-sm text-gray-500 truncate">
+                                  {isDealerSeller
+                                    ? t('vehicle.detail.dealership', 'Dealership')
+                                    : t('vehicle.detail.individualSeller', { defaultValue: 'Individual seller' })}
+                                  {showStaffPick ? ` · ${t('vehicle.detail.staffPick', { defaultValue: 'ReRide pick' })}` : ''}
                                 </p>
                               </div>
-                              <div className="rounded-lg bg-white/10 px-2.5 py-2 text-center">
-                                <p className="text-sm font-bold text-white">
-                                  {sellerListingsCount || seller?.activeListings || 1}
-                                </p>
-                                <p className="text-[10px] uppercase tracking-wide text-purple-200">
-                                  {t('vehicle.detail.activeListings', { defaultValue: 'Listings' })}
-                                </p>
-                              </div>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={handleViewSellerProfile}
-                              disabled={!canViewSellerProfile}
-                              className={`relative mt-3 w-full rounded-lg px-3 py-2.5 text-sm font-bold shadow-sm transition-colors flex items-center justify-center gap-1.5 ${
-                                canViewSellerProfile
-                                  ? 'bg-white text-purple-700 hover:bg-purple-50'
-                                  : 'bg-white/20 text-white/60 cursor-not-allowed'
-                              }`}
-                            >
-                              {t('vehicle.detail.viewSellerPage', { defaultValue: 'View seller page' })}
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
                             </button>
+                          ) : null}
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <ListingStockBadge vehicle={safeVehicle} size="md" />
+                            <VerificationBadge vehicle={safeVehicle} />
                           </div>
-                        ) : (
-                          <div className="bg-gradient-to-r from-purple-600 to-indigo-700 px-4 py-3 text-white">
-                            <p className="text-sm font-semibold">{t('vehicle.detail.listedOnReride', { defaultValue: 'Listed on ReRide' })}</p>
-                            <p className="text-xs text-purple-100 mt-0.5">
-                              {t('vehicle.detail.chatToConnect', { defaultValue: 'Chat with the seller to learn more' })}
-                            </p>
-                          </div>
-                        )}
 
-                        <div className="p-3.5 sm:p-4 flex flex-col">
-                        <div className="space-y-2.5">
-                        {/* Listing trust signals */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <ListingStockBadge vehicle={safeVehicle} size="md" />
-                          <VerificationBadge vehicle={safeVehicle} />
-                        </div>
-                        <ListingTrustStatusBar vehicle={safeVehicle} className="mt-1" />
-
-                        {canRate && seller ? (
-                          <div className="rounded-lg border border-purple-100 bg-purple-50/60 px-3 py-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs text-gray-700">{t('vehicle.detail.rateExperience', { defaultValue: 'Rate your experience' })}</p>
-                              <StarRating rating={0} onRate={handleRateSeller} />
-                            </div>
-                            {showSellerRatingSuccess ? (
-                              <p className="text-center text-green-600 text-xs mt-1">
-                                {t('vehicle.detail.ratingThanks', { defaultValue: 'Thanks for your feedback!' })}
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        {/* Quality Assurance Badge */}
-                        {safeVehicle.certifiedInspection ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44-1.22a.75 .75 0 00-1.06 0L8.172 6.172a.75 .75 0 00-1.06 1.06L8.94 9.332a.75 .75 0 001.191.04l3.22-4.294a.75 .75 0 00-.04-1.19z" clipRule="evenodd" />
-                              </svg>
-                              ReRide Assured
-                            </span>
-                            <span className="text-xs text-gray-600">High quality, less driven</span>
-                          </div>
-                        ) : null}
-
-                        {/* Divider */}
-                        <div className="border-t border-gray-200 pt-2"></div>
-
-                        {/* Pricing */}
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <span className="text-sm text-gray-600">{t('vehicle.detail.price.fixedOnRoadPrice')}</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          </div>
-                          <p className="text-2xl font-bold text-gray-900">₹{safeVehicle.price.toLocaleString('en-IN')}</p>
-                        </div>
-
-                        <div className="mt-4">
-                          <PriceInsights
-                            vehicle={safeVehicle}
-                            similarVehicles={similarVehiclesForPricing}
-                            buyerFacing
-                            compact
-                            compactHidePrice
-                            onViewFullAnalysis={openPriceTab}
-                          />
-                        </div>
-
-                        {/* EMI Details */}
-                        <div className="border-t border-gray-200 pt-2.5 space-y-2">
-                          <div>
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-xl font-bold text-gray-900">{formatCurrency(baseEMI)}/m</span>
-                              <button 
-                                type="button"
-                                onClick={() => {
-                                  if (showEMICalculator) {
-                                    setShowEMICalculator(false);
-                                    return;
-                                  }
-                                  scrollToEmiOnShowRef.current = true;
-                                  setShowEMICalculator(true);
-                                }}
-                                className="text-base text-purple-600 font-semibold hover:underline"
-                              >
-                                {showEMICalculator ? t('vehicle.detail.hideEmiCalculator') : t('vehicle.detail.price.calculateEmi')}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Compare and Share */}
-                        <div className="flex gap-2 pt-2.5 border-t border-gray-200">
-                          <button
-                            onClick={() => onToggleCompare(safeVehicle.id)}
-                            disabled={isCompareDisabled}
-                            className={`flex-1 font-semibold py-2.5 px-3 rounded-lg text-sm transition-all flex items-center justify-center gap-1.5 ${
-                              isComparing 
-                                ? 'bg-purple-100 text-purple-700' 
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            } ${isCompareDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          >
-                            {isComparing ? (
-                              <>
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                                {t('vehicle.detail.comparing')}
-                              </>
-                            ) : (
-                              t('vehicle.detail.compare')
-                            )}
-                          </button>
-                          <SocialShareButtons vehicle={safeVehicle} />
-                        </div>
-                        </div>
-
-                        {/* Action Buttons — one clear primary, contact options secondary */}
-                        <div className="pt-3 mt-3 border-t border-gray-200 space-y-2">
                           {vehicleDealLead ? (
-                            <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2">
+                            <div className="rounded-xl bg-blue-50 border border-blue-100 px-3 py-2">
                               <DealStageChip lead={vehicleDealLead} className="mb-1" />
                               <button
                                 type="button"
@@ -1732,22 +1576,133 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               </button>
                             </div>
                           ) : null}
-                          {/* Primary CTA */}
+
+                          <div className="space-y-2.5" aria-label={t('vehicle.detail.contactActions')}>
+                            {listingAvailable && callHref ? (
+                              <button
+                                type="button"
+                                onClick={handleCallSeller}
+                                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#1E88E5] hover:bg-[#1976D2] text-white font-semibold py-3 px-4 text-sm transition-colors shadow-sm"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                                  <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                                </svg>
+                                {t('vehicle.detail.call')}
+                              </button>
+                            ) : null}
+                            {listingAvailable && sellerWhatsAppUrl ? (
+                              <button
+                                type="button"
+                                onClick={handleWhatsAppSeller}
+                                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#E8F8EE] hover:bg-[#DCF5E5] text-[#1FA855] font-semibold py-3 px-4 text-sm transition-colors"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                                </svg>
+                                {t('vehicle.detail.whatsapp', { defaultValue: 'WhatsApp' })}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => void handleChatWithSeller()}
+                              data-testid="start-tracked-deal"
+                              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#E8F1FB] hover:bg-[#DCEAF8] text-[#1E88E5] font-semibold py-3 px-4 text-sm transition-colors"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                              {vehicleDealLead
+                                ? t('vehicle.detail.openDealRoom', { defaultValue: 'Open deal room' })
+                                : t('vehicle.detail.chat')}
+                            </button>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => onToggleWishlist(safeVehicle.id)}
+                              className={`flex-1 inline-flex items-center justify-center gap-2 rounded-full border px-3 py-2.5 text-sm font-semibold transition-colors ${
+                                isInWishlist
+                                  ? 'border-red-200 bg-red-50 text-red-600'
+                                  : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'
+                              }`}
+                              aria-label={isInWishlist ? t('vehicle.card.wishlistRemove') : t('vehicle.card.wishlistAdd')}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill={isInWishlist ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={isInWishlist ? 0 : 1.5} aria-hidden>
+                                <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                              </svg>
+                              {t('vehicle.detail.wishlist', 'Wishlist')}
+                            </button>
+                            <SocialShareButtons vehicle={safeVehicle} variant="pill" />
+                          </div>
+
                           <button
                             type="button"
-                            onClick={() => void handleChatWithSeller()}
-                            data-testid="start-tracked-deal"
-                            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-all flex items-center justify-center gap-2 shadow-sm"
+                            onClick={openChecklistTab}
+                            className="w-full inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2.5 text-sm font-semibold text-gray-800 hover:bg-gray-50 transition-colors"
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                            </svg>
-                            {vehicleDealLead
-                              ? t('vehicle.detail.openDealRoom', { defaultValue: 'Open deal room' })
-                              : t('vehicle.detail.chatWithSeller')}
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-[#E53935] text-[11px] font-bold text-white" aria-hidden>
+                              A
+                            </span>
+                            {t('vehicle.detail.checklist', 'Checklist')}
                           </button>
+
+                          <div className="pt-1 border-t border-gray-100 space-y-3">
+                            <PriceInsights
+                              vehicle={safeVehicle}
+                              similarVehicles={similarVehiclesForPricing}
+                              buyerFacing
+                              compact
+                              compactHidePrice
+                              onViewFullAnalysis={openPriceTab}
+                            />
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="text-lg font-bold text-gray-900">{formatCurrency(baseEMI)}/m</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (showEMICalculator) {
+                                    setShowEMICalculator(false);
+                                    return;
+                                  }
+                                  scrollToEmiOnShowRef.current = true;
+                                  setShowEMICalculator(true);
+                                }}
+                                className="text-sm text-[#1E88E5] font-semibold hover:underline"
+                              >
+                                {showEMICalculator ? t('vehicle.detail.hideEmiCalculator') : t('vehicle.detail.price.calculateEmi')}
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => onToggleCompare(safeVehicle.id)}
+                              disabled={isCompareDisabled}
+                              className={`w-full font-semibold py-2.5 px-3 rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 border ${
+                                isComparing
+                                  ? 'bg-blue-50 text-[#1E88E5] border-blue-100'
+                                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                              } ${isCompareDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              {isComparing ? t('vehicle.detail.comparing') : t('vehicle.detail.compare')}
+                            </button>
+                          </div>
+
+                          {canRate && seller ? (
+                            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs text-gray-700">{t('vehicle.detail.rateExperience', { defaultValue: 'Rate your experience' })}</p>
+                                <StarRating rating={0} onRate={handleRateSeller} />
+                              </div>
+                              {showSellerRatingSuccess ? (
+                                <p className="text-center text-green-600 text-xs mt-1">
+                                  {t('vehicle.detail.ratingThanks', { defaultValue: 'Thanks for your feedback!' })}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
+
                           {onRequestTestDrive && listingAvailable && testDriveBookingState(vehicleDealLead) === 'available' ? (
-                            <div className="rounded-lg border border-orange-100 bg-orange-50/60 p-3">
+                            <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-3">
                               {showTestDriveForm ? (
                                 <form className="space-y-2" onSubmit={handleRequestTestDriveSubmit}>
                                   <div className="grid grid-cols-2 gap-2">
@@ -1810,37 +1765,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               )}
                             </div>
                           ) : onRequestTestDrive && listingAvailable && testDriveBookingState(vehicleDealLead) === 'locked' ? (
-                            <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                            <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                               {t('vehicle.detail.testDriveLocked')}
                             </p>
                           ) : null}
-                          {/* Secondary contact options */}
-                          {listingAvailable && (callHref || sellerWhatsAppUrl) ? (
-                            <div className="grid grid-cols-2 gap-2">
-                              {callHref ? (
-                                <button
-                                  type="button"
-                                  onClick={handleCallSeller}
-                                  className="flex items-center justify-center gap-1.5 rounded-lg border-2 border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                                >
-                                  {t('vehicle.detail.call')}
-                                </button>
-                              ) : null}
-                              {sellerWhatsAppUrl ? (
-                                <button
-                                  type="button"
-                                  onClick={handleWhatsAppSeller}
-                                  className="flex items-center justify-center gap-1.5 rounded-lg border-2 border-[#25D366] py-2.5 text-sm font-semibold text-[#1FA855] hover:bg-[#25D366]/10 transition-colors"
-                                >
-                                  {t('vehicle.detail.whatsapp', { defaultValue: 'WhatsApp' })}
-                                </button>
-                              ) : null}
-                            </div>
-                          ) : null}
-                          {/* Tertiary action */}
-                        </div>
 
-                      </div>
+                          <ListingTrustStatusBar vehicle={safeVehicle} />
+                        </div>
                       </div>
                   </div>
               </div>

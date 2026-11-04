@@ -180,7 +180,16 @@ export function useAdminPlatformActions(args: UseAdminPlatformActionsArgs) {
           apiUpdateData.govtIdVerified = details.govtIdVerified;
         }
         
-        await updateUserService(apiUpdateData);
+        const savedUser = await updateUserService(apiUpdateData);
+
+        // Keep seller Settings in sync when admin edits the logged-in seller.
+        const normalizedEmail = String(email || '').toLowerCase().trim();
+        if (
+          currentUser &&
+          String(currentUser.email || '').toLowerCase().trim() === normalizedEmail
+        ) {
+          setCurrentUser({ ...currentUser, ...updateFields, ...(savedUser || {}) });
+        }
         
         // Local state already updated above — refresh from API in the background so toasts/modals aren't blocked.
         void (async () => {

@@ -118,7 +118,7 @@ function getScrollableAncestor(el: Element | null): Element | null {
 // Amazon/Flipkart-style skeleton loader with shimmer effect
 const VehicleCardSkeleton: React.FC = () => (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden relative border border-gray-100">
-      <div className="w-full aspect-[16/10] skeleton relative overflow-hidden"></div>
+      <div className="w-full aspect-[4/3] skeleton relative overflow-hidden"></div>
       <div className="p-3">
         <div className="flex justify-between items-start mb-1.5">
           <div className="h-4 skeleton rounded w-3/5"></div>
@@ -1170,13 +1170,12 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   useEffect(() => {
     const body = document.body;
     if (!body) return;
-    if (isFilterModalOpen) {
-        body.style.overflow = 'hidden';
-    } else {
-        body.style.overflow = 'auto';
-    }
+    // Lock page scroll while the mobile filter sheet is open. Clear the inline
+    // style on close — never set 'auto'. Inline overflow:auto makes <body> its
+    // own scrollport and stacks a second scrollbar next to the document's.
+    body.style.overflow = isFilterModalOpen ? 'hidden' : '';
     return () => {
-      if (document.body) document.body.style.overflow = 'auto';
+      body.style.overflow = '';
     };
   }, [isFilterModalOpen]);
 
@@ -2235,16 +2234,19 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         }
     };
     
-    return (
+    const formatCategoryLabel = (cat: string) =>
+      cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase());
+
+    // Mobile web bottom sheet keeps compact selects; desktop uses radio sections.
+    if (isMobile) {
+      return (
         <div className="space-y-4">
             <div>
                 <label htmlFor="category-select" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Category</label>
                 <select id="category-select" name="categoryFilter" value={state.categoryFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="ALL">All Categories</option>
                     {uniqueCategories.map(cat => (
-                        <option key={cat} value={cat}>
-                            {cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-                        </option>
+                        <option key={cat} value={cat}>{formatCategoryLabel(cat)}</option>
                     ))}
                 </select>
             </div>
@@ -2252,14 +2254,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 <label htmlFor="make-filter" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Make</label>
                 <select id="make-filter" name="makeFilter" value={state.makeFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="">Any Make</option>
-                    {(isMobile ? tempUniqueMakes : uniqueMakes).map(make => <option key={make} value={make}>{make}</option>)}
+                    {tempUniqueMakes.map(make => <option key={make} value={make}>{make}</option>)}
                 </select>
             </div>
             <div>
                 <label htmlFor="model-filter" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Model</label>
-                <select id="model-filter" name="modelFilter" value={state.modelFilter} onChange={handleSelectChange} disabled={!state.makeFilter || (isMobile ? tempAvailableModels.length === 0 : availableModels.length === 0)} className={formElementClass}>
+                <select id="model-filter" name="modelFilter" value={state.modelFilter} onChange={handleSelectChange} disabled={!state.makeFilter || tempAvailableModels.length === 0} className={formElementClass}>
                     <option value="">Any Model</option>
-                    {(isMobile ? tempAvailableModels : availableModels).map(model => <option key={model} value={model}>{model}</option>)}
+                    {tempAvailableModels.map(model => <option key={model} value={model}>{model}</option>)}
                 </select>
             </div>
             <div>
@@ -2294,21 +2296,21 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 <label htmlFor="fuel-type-filter" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Fuel Type</label>
                 <select id="fuel-type-filter" name="fuelTypeFilter" value={state.fuelTypeFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="">Any Fuel Type</option>
-                    {(isMobile ? tempUniqueFuelTypes : uniqueFuelTypes).map(fuel => <option key={fuel} value={fuel}>{fuel}</option>)}
+                    {tempUniqueFuelTypes.map(fuel => <option key={fuel} value={fuel}>{fuel}</option>)}
                 </select>
             </div>
             <div>
                 <label htmlFor="year-filter" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Year</label>
                 <select id="year-filter" name="yearFilter" value={state.yearFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="0">Any Year</option>
-                    {(isMobile ? tempUniqueYears : uniqueYears).map(year => <option key={year} value={year}>{year}</option>)}
+                    {tempUniqueYears.map(year => <option key={year} value={year}>{year}</option>)}
                 </select>
             </div>
             <div>
                 <label htmlFor="transmission-filter-web" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">{t('listings.mobileFilter.catTransmission')}</label>
                 <select id="transmission-filter-web" name="transmissionFilter" value={state.transmissionFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="">{t('listings.mobileFilter.anyTransmission')}</option>
-                    {(isMobile ? tempUniqueTransmissions : uniqueTransmissions).map((tr) => (
+                    {tempUniqueTransmissions.map((tr) => (
                       <option key={tr} value={tr}>{tr}</option>
                     ))}
                 </select>
@@ -2329,23 +2331,274 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     {uniqueStates.map(st => <option key={st.code} value={st.code}>{st.name}</option>)}
                 </select>
             </div>
-            {!isMobile && (
-              <div className="space-y-2 mt-2">
-                <button onClick={handleResetFilters} className="w-full bg-reride-light-gray dark:bg-brand-gray-700 text-reride-text-dark dark:text-brand-gray-200 font-bold py-3 px-4 rounded-lg hover:bg-brand-gray-300 dark:hover:bg-brand-gray-600 transition-colors">
-                  {t('listings.resetFilters')}
-                </button>
-                <button 
-                  onClick={handleSaveSearch} 
-                  className="w-full bg-reride-orange text-white font-bold py-3 px-4 rounded-lg hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                  </svg>
-                  {t('listings.saveSearchButton')}
-                </button>
-              </div>
-            )}
         </div>
+      );
+    }
+
+    const activePriceBucket =
+      selectedPriceBuckets.length === 1
+        ? selectedPriceBuckets[0]
+        : selectedPriceBuckets.length === 0 &&
+            priceRange.min === MIN_PRICE &&
+            priceRange.max === MAX_PRICE
+          ? 'any'
+          : '';
+
+    const applyDesktopPriceBucket = (id: string) => {
+      if (id === 'any') {
+        setSelectedPriceBuckets([]);
+        setPriceRange({ min: MIN_PRICE, max: MAX_PRICE });
+        return;
+      }
+      const bucket = MOBILE_PRICE_BUCKETS.find((b) => b.id === id);
+      if (!bucket) return;
+      setSelectedPriceBuckets([id]);
+      setPriceRange({ min: bucket.min, max: Math.min(bucket.max, MAX_PRICE) });
+    };
+
+    const applyDesktopCategory = (value: VehicleCategory | 'ALL') => {
+      setCategoryFilter(value);
+      setMakeFilter('');
+      setModelFilter('');
+      setFuelTypeFilter('');
+      setTransmissionFilter('');
+      setOwnershipFilter('');
+      setYearFilter('0');
+      setYearBounds({ min: null, max: null });
+      void onCategoryChange?.(value);
+    };
+
+    const applyDesktopMake = (value: string) => {
+      setMakeFilter(value);
+      setModelFilter('');
+      setFuelTypeFilter('');
+      setTransmissionFilter('');
+      setOwnershipFilter('');
+      setYearFilter('0');
+      setYearBounds({ min: null, max: null });
+    };
+
+    const radioRow = (
+      name: string,
+      value: string,
+      checked: boolean,
+      label: string,
+      onPick: () => void,
+    ) => (
+      <label
+        key={`${name}-${value || 'any'}`}
+        className="flex items-center gap-3 py-1.5 cursor-pointer select-none"
+      >
+        <span
+          className={`relative w-[18px] h-[18px] shrink-0 rounded-full border-2 flex items-center justify-center ${
+            checked ? 'border-[#1B2A4A]' : 'border-gray-300'
+          }`}
+          aria-hidden
+        >
+          {checked ? <span className="w-2.5 h-2.5 rounded-full bg-[#1B2A4A]" /> : null}
+        </span>
+        <input
+          type="radio"
+          className="sr-only"
+          name={name}
+          value={value}
+          checked={checked}
+          onChange={onPick}
+        />
+        <span className={`text-[14px] leading-snug ${checked ? 'font-semibold text-[#1B2A4A]' : 'font-normal text-gray-600'}`}>
+          {label}
+        </span>
+      </label>
+    );
+
+    const filterSection = (title: string, children: React.ReactNode) => (
+      <section className="pt-4 mt-4 border-t border-gray-200 first:pt-0 first:mt-0 first:border-0">
+        <h3 className="text-[11px] font-bold tracking-[0.08em] uppercase text-[#1B2A4A] mb-1.5">
+          {title}
+        </h3>
+        <div className="flex flex-col">{children}</div>
+      </section>
+    );
+
+    return (
+      <div className="desktop-filter-panel">
+        {filterSection(
+          t('listings.filterSection.vehicleType', { defaultValue: 'Vehicle Type' }),
+          <>
+            {radioRow('desktop-category', 'ALL', state.categoryFilter === 'ALL', t('listings.mobileFilter.allBodyTypes'), () => applyDesktopCategory('ALL'))}
+            {uniqueCategories.map((cat) =>
+              radioRow(
+                'desktop-category',
+                cat,
+                state.categoryFilter === cat,
+                formatCategoryLabel(cat),
+                () => applyDesktopCategory(cat as VehicleCategory),
+              ),
+            )}
+          </>,
+        )}
+
+        {filterSection(
+          t('listings.mobileFilter.catPrice'),
+          <>
+            {radioRow('desktop-price', 'any', activePriceBucket === 'any', t('listings.filterSection.anyPrice', { defaultValue: 'Any Price' }), () => applyDesktopPriceBucket('any'))}
+            {MOBILE_PRICE_BUCKETS.map((b) =>
+              radioRow(
+                'desktop-price',
+                b.id,
+                activePriceBucket === b.id,
+                t(b.labelKey),
+                () => applyDesktopPriceBucket(b.id),
+              ),
+            )}
+          </>,
+        )}
+
+        {filterSection(
+          t('listings.filterSection.brand', { defaultValue: 'Brand' }),
+          <>
+            {radioRow('desktop-make', '', !state.makeFilter, t('listings.mobileFilter.anyMake'), () => applyDesktopMake(''))}
+            {uniqueMakes.map((make) =>
+              radioRow('desktop-make', make, state.makeFilter === make, make, () => applyDesktopMake(make)),
+            )}
+            {state.makeFilter ? (
+              <div className="mt-2 pl-1">
+                <label htmlFor="model-filter-desktop" className="block text-xs font-medium text-gray-500 mb-1">
+                  {t('listings.mobileFilter.model')}
+                </label>
+                <select
+                  id="model-filter-desktop"
+                  name="modelFilter"
+                  value={state.modelFilter}
+                  onChange={handleSelectChange}
+                  disabled={availableModels.length === 0}
+                  className={`${formElementClass} text-sm py-2`}
+                >
+                  <option value="">{t('listings.mobileFilter.anyModel')}</option>
+                  {availableModels.map((model) => (
+                    <option key={model} value={model}>{model}</option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+          </>,
+        )}
+
+        {filterSection(
+          t('listings.mobileFilter.catFuel'),
+          <>
+            {radioRow('desktop-fuel', '', !state.fuelTypeFilter, t('listings.mobileFilter.anyFuel'), () => setFuelTypeFilter(''))}
+            {uniqueFuelTypes.map((fuel) =>
+              radioRow('desktop-fuel', fuel, state.fuelTypeFilter === fuel, fuel, () => setFuelTypeFilter(fuel)),
+            )}
+          </>,
+        )}
+
+        {filterSection(
+          t('listings.mobileFilter.catTransmission'),
+          <>
+            {radioRow('desktop-transmission', '', !state.transmissionFilter, t('listings.mobileFilter.anyTransmission'), () => setTransmissionFilter(''))}
+            {uniqueTransmissions.map((tr) =>
+              radioRow('desktop-transmission', tr, state.transmissionFilter === tr, tr, () => setTransmissionFilter(tr)),
+            )}
+          </>,
+        )}
+
+        {filterSection(
+          t('listings.mobileFilter.catOwnership'),
+          <>
+            {radioRow('desktop-ownership', '', !state.ownershipFilter, t('listings.mobileFilter.anyOwnership'), () => setOwnershipFilter(''))}
+            {radioRow('desktop-ownership', '1', state.ownershipFilter === '1', t('listings.mobileFilter.owner1'), () => setOwnershipFilter('1'))}
+            {radioRow('desktop-ownership', '2', state.ownershipFilter === '2', t('listings.mobileFilter.owner2'), () => setOwnershipFilter('2'))}
+            {radioRow('desktop-ownership', '3plus', state.ownershipFilter === '3plus', t('listings.mobileFilter.owner3plus'), () => setOwnershipFilter('3plus'))}
+          </>,
+        )}
+
+        {filterSection(
+          t('listings.mobileFilter.catYear'),
+          <>
+            {radioRow('desktop-year', '0', state.yearFilter === '0' || !state.yearFilter, t('listings.mobileFilter.anyYear'), () => {
+              setYearFilter('0');
+              setYearBounds({ min: null, max: null });
+            })}
+            {uniqueYears.slice(0, 12).map((year) =>
+              radioRow('desktop-year', String(year), state.yearFilter === String(year), String(year), () => {
+                setYearFilter(String(year));
+                setYearBounds({ min: null, max: null });
+              }),
+            )}
+          </>,
+        )}
+
+        {filterSection(
+          t('listings.mobileFilter.catKms'),
+          <div className="pt-1">
+            <div className="flex justify-between items-center text-xs text-gray-500 mb-1">
+              <span>{state.mileageRange.min.toLocaleString('en-IN')} km</span>
+              <span>{state.mileageRange.max.toLocaleString('en-IN')} km</span>
+            </div>
+            <div className="relative h-8 flex items-center">
+              <div className="relative w-full h-1.5 bg-gray-200 rounded-full">
+                <div
+                  className="absolute h-1.5 rounded-full bg-[#1B2A4A]"
+                  style={{
+                    left: `${((state.mileageRange.min - MIN_MILEAGE) / (MAX_MILEAGE - MIN_MILEAGE)) * 100}%`,
+                    right: `${100 - ((state.mileageRange.max - MIN_MILEAGE) / (MAX_MILEAGE - MIN_MILEAGE)) * 100}%`,
+                  }}
+                />
+              </div>
+              <input
+                id="mileage-range-min-desktop"
+                name="min"
+                type="range"
+                min={MIN_MILEAGE}
+                max={MAX_MILEAGE}
+                step="1000"
+                value={state.mileageRange.min}
+                onChange={(e) => handleRangeChange(e, 'mileage')}
+                className="absolute w-full h-1.5 bg-transparent appearance-none z-20 slider-thumb"
+              />
+              <input
+                name="max"
+                type="range"
+                min={MIN_MILEAGE}
+                max={MAX_MILEAGE}
+                step="1000"
+                value={state.mileageRange.max}
+                onChange={(e) => handleRangeChange(e, 'mileage')}
+                className="absolute w-full h-1.5 bg-transparent appearance-none z-30 slider-thumb"
+              />
+            </div>
+          </div>,
+        )}
+
+        {filterSection(
+          t('listings.mobileFilter.catState'),
+          <>
+            {radioRow('desktop-state', '', !state.stateFilter, t('listings.mobileFilter.anyState'), () => {
+              setStateFilter('');
+              setIsStateFilterUserSet(false);
+            })}
+            {uniqueStates.map((st) =>
+              radioRow('desktop-state', st.code, state.stateFilter === st.code, st.name, () => {
+                setStateFilter(st.code);
+                setIsStateFilterUserSet(true);
+              }),
+            )}
+          </>,
+        )}
+
+        <button
+          type="button"
+          onClick={handleSaveSearch}
+          className="mt-5 w-full text-sm font-semibold py-2.5 px-3 rounded-md border border-gray-200 text-[#1B2A4A] hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+          </svg>
+          {t('listings.saveSearchButton')}
+        </button>
+      </div>
     );
   };
 
@@ -2675,39 +2928,33 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const showCompareBanner = comparisonList.length > 0 && Boolean(onOpenCompare);
   return (
     <>
-      <div className="min-h-screen bg-white lg:bg-gradient-to-br lg:from-slate-50 lg:via-white lg:to-orange-50/60 relative overflow-hidden">
-        {/* Background Elements - Hidden on mobile */}
-        <div className="hidden lg:block absolute inset-0 overflow-hidden">
-          <div className="absolute top-20 right-20 w-80 h-80 bg-gradient-to-br from-orange-200/25 to-amber-200/20 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-20 left-20 w-96 h-96 bg-gradient-to-tr from-orange-200/15 to-rose-200/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
-        </div>
-        
-        <div className="relative z-10 used-cars-page grid grid-cols-1 md:grid-cols-[auto_1fr] gap-4 md:gap-6 lg:gap-8 container mx-auto py-4 md:py-6 lg:py-8">
-          <aside id="filters" className={`filters hidden md:block md:sticky top-24 self-start space-y-6 transition-all duration-300 ${isDesktopFilterVisible ? 'w-[260px] lg:w-[300px] opacity-100' : 'w-0 opacity-0 -translate-x-full'}`}>
-              <div className={`bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-6 ${isDesktopFilterVisible ? 'block' : 'hidden'}`}>
-                <div className="flex items-center gap-3 mb-6">
-                  <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center shadow-md"
-                    style={{
-                      background: 'linear-gradient(135deg, #FF6B35 0%, #F97316 50%, #FB923C 100%)',
-                      boxShadow: '0 6px 14px -4px rgba(255, 107, 53, 0.5), inset 0 1px 0 rgba(255,255,255,0.25)',
-                    }}
+      <div className="min-h-screen bg-[#F7F8FA] relative">
+        <div className="relative z-10 used-cars-page grid grid-cols-1 md:grid-cols-[auto_1fr] gap-3 md:gap-4 lg:gap-5 max-w-[1536px] w-full mx-auto px-2 sm:px-3 lg:px-4 xl:px-5 py-3 md:py-4 lg:py-5">
+          {/* overflow-hidden: sticky aside otherwise leaks the tall filter content into
+              document scrollHeight (empty space below the footer + a second scrollbar). */}
+          <aside id="filters" className={`filters hidden md:block md:sticky top-24 self-start overflow-hidden transition-all duration-300 ${isDesktopFilterVisible ? 'w-[232px] lg:w-[252px] opacity-100' : 'w-0 opacity-0 -translate-x-full'}`}>
+              <div className={`bg-white border border-gray-200 rounded-lg shadow-sm max-h-[calc(100vh-7rem)] overflow-y-auto ${isDesktopFilterVisible ? 'block' : 'hidden'}`}>
+                <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3.5 bg-white border-b border-gray-100">
+                  <h2 className="text-lg font-bold text-[#1B2A4A]">{t('listings.filtersTitle')}</h2>
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className="text-sm font-medium text-[#3B6EA5] underline underline-offset-2 hover:text-[#1B2A4A] transition-colors"
                   >
-                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <h2 className="text-xl font-bold bg-gradient-to-r from-gray-900 via-orange-700 to-amber-600 bg-clip-text text-transparent">{t('listings.filtersTitle')}</h2>
+                    {t('listings.clearAll', { defaultValue: 'Clear All' })}
+                  </button>
                 </div>
-                {renderFilterControls(false)}
+                <div className="px-4 pb-5 pt-3">
+                  {renderFilterControls(false)}
+                </div>
               </div>
           </aside>
 
-          <main className="space-y-2 lg:space-y-4">
-            <div className="hidden lg:block px-1">
+          <main className="space-y-2 lg:space-y-3 min-w-0">
+            <div className="hidden lg:block px-0.5">
               <p className="text-sm text-gray-600">{t('listings.subtitle')}</p>
             </div>
-            <ListingTrustFilterBar value={trustFilter} onChange={setTrustFilter} className="px-1 lg:px-0" />
+            <ListingTrustFilterBar value={trustFilter} onChange={setTrustFilter} className="px-0.5 lg:px-0" />
 
           {/* Mobile-optimized filters and sort bar - sticky on mobile */}
           <div 
@@ -2775,7 +3022,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
           <div 
             key={`vehicle-results-${sortOrder}`}
-            className={isMobileApp ? "flex flex-col gap-3" : viewMode === 'grid' ? "grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4" : "flex flex-col gap-3 lg:gap-4"}
+            className={isMobileApp ? "flex flex-col gap-3" : viewMode === 'grid' ? "grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4" : "flex flex-col gap-3 lg:gap-4"}
             data-testid="vehicle-results"
             data-sort={sortOrder}
             style={isMobileApp ? { paddingTop: '0.5rem' } : {}}

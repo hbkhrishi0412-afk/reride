@@ -2,7 +2,7 @@ import * as React from 'react';
 
 const VehicleCardSkeleton: React.FC = () => (
   <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
-    <div className="relative aspect-[16/10] bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200 animate-pulse" />
+    <div className="relative aspect-[4/3] bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200 animate-pulse" />
     <div className="p-4 space-y-3">
       <div className="flex items-start justify-between">
         <div className="space-y-2 flex-1">

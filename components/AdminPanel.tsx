@@ -4019,7 +4019,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
         const handleCreatePlan = async (newPlanData: Omit<PlanDetails, 'id'>) => {
             try {
-                const id = await planService.createPlan(newPlanData);
+                const id = (await planService.createPlan(newPlanData)) as SubscriptionPlan;
                 setPlans((prev) => [...(prev || []), { ...newPlanData, id }].slice(0, 4));
                 setShowAddPlanModal(false);
                 notifyPlanConfigUpdated();

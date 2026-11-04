@@ -26,8 +26,8 @@ const base = {
   sellerEmail: 'a@b.com',
 };
 
-assert.equal(hasSellerDisclosureReport(base as Vehicle), false);
-assert.equal(hasVehicleDetailReport(base as Vehicle), false);
+assert.equal(hasSellerDisclosureReport(base as unknown as Vehicle), false);
+assert.equal(hasVehicleDetailReport(base as unknown as Vehicle), false);
 
 const withAnswers = {
   ...base,
@@ -40,7 +40,7 @@ const withAnswers = {
     ],
   },
 };
-assert.equal(hasSellerDisclosureReport(withAnswers as Vehicle), true);
-assert.equal(hasVehicleDetailReport(withAnswers as Vehicle), true);
+assert.equal(hasSellerDisclosureReport(withAnswers as unknown as Vehicle), true);
+assert.equal(hasVehicleDetailReport(withAnswers as unknown as Vehicle), true);
 
 console.log('listingTrust.disclosure.check: ok');

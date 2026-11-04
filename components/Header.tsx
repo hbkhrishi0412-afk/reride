@@ -203,7 +203,7 @@ const Header: React.FC<HeaderProps> = memo(({
             <header className="bg-white/80 backdrop-blur-xl border-b border-white/20 sticky top-0 z-chrome shadow-lg">
                 {showHomeLocationActions ? (
                     <div className="lg:hidden border-b border-gray-100 bg-white" data-testid="header-mobile-home-location">
-                        <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-end gap-2">
+                        <div className="max-w-[1536px] mx-auto px-2 sm:px-3 lg:px-4 xl:px-5 py-2 flex items-center justify-end gap-2">
                             <button onClick={onOpenCommandPalette} className="p-2 rounded-full" aria-label={t('common.search')}>
                                 <svg className="h-6 w-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -239,7 +239,7 @@ const Header: React.FC<HeaderProps> = memo(({
 
                 {/* Premium Main Navigation */}
                 <div className="bg-white/90 backdrop-blur-sm">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="max-w-[1536px] mx-auto px-2 sm:px-3 lg:px-4 xl:px-5">
                         <div className="flex items-center h-16 gap-2 lg:gap-3">
                             {/* Logo + location */}
                             <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">

@@ -19,7 +19,7 @@ const store: Record<string, string> = { 'reride-theme': 'dark' };
 
 (globalThis as typeof globalThis & { document: unknown; localStorage: Storage }).document = {
   documentElement: { classList, style },
-};
+} as unknown as Document;
 (globalThis as typeof globalThis & { localStorage: Storage }).localStorage = {
   getItem: (k: string) => store[k] ?? null,
   setItem: (k: string, v: string) => {

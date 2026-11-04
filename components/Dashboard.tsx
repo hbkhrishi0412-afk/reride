@@ -21,6 +21,7 @@ import { isListingExpired } from '../services/listingLifecycleService';
 import { isEffectivelyFeatured } from '../utils/listingPromotion';
 import { InquiriesView } from './seller-dashboard/InquiriesView';
 import { SettingsView } from './seller-dashboard/SettingsView';
+import { FinancePartnersView } from './seller-dashboard/FinancePartnersView';
 import { ReportsView } from './seller-dashboard/ReportsView';
 import { SellerAnalyticsView } from './seller-dashboard/SellerAnalyticsView';
 import { SellerListingsView } from './seller-dashboard/SellerListingsView';
@@ -70,7 +71,7 @@ interface DashboardProps {
   onClearChat?: (conversationId: string) => void | Promise<void>;
   onDeleteConversation?: (conversationId: string) => void | Promise<void>;
   onArchiveConversation?: (conversationId: string, archived?: boolean) => void | Promise<void>;
-  onUpdateSellerProfile: (details: { dealershipName: string; bio: string; logoUrl: string; partnerBanks?: string[] }) => void;
+  onUpdateSellerProfile: (details: Partial<User>) => void | Promise<void>;
   vehicleData: VehicleData;
   onFeatureListing: (vehicleId: number) => Promise<void>;
   onBoostListing?: (vehicleId: number, packageId: string) => Promise<void>;
@@ -90,7 +91,7 @@ interface DashboardProps {
   onLogout?: () => void;
 }
 
-type DashboardView = 'overview' | 'listings' | 'form' | 'messages' | 'analytics' | 'salesHistory' | 'reports' | 'settings' | 'notifications';
+type DashboardView = 'overview' | 'listings' | 'form' | 'messages' | 'analytics' | 'salesHistory' | 'reports' | 'settings' | 'notifications' | 'financePartners';
 
 // Main Dashboard Component
 const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onDeleteConversation, onArchiveConversation, onUpdateSellerProfile, vehicleData, onFeatureListing, onBoostListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat, onNotify, notifications = [], onNotificationClick, onMarkNotificationsAsRead, onLogout }) => {
@@ -1276,7 +1277,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           <SellerPremiumPanel
             eyebrow="Account"
             title={t('sellerDashboard.nav.settings')}
-            description="Plan, profile, and dealership preferences."
+            description="Plan and dealership profile."
           >
             <SettingsView
               seller={seller}
@@ -1285,6 +1286,27 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               activeListingsCount={publishedListings.length}
               featuredListingsCount={safeSellerVehicles.filter(v => v && isEffectivelyFeatured(v)).length}
               onNavigate={onNavigate}
+            />
+          </SellerPremiumPanel>
+        );
+      case 'financePartners':
+        if (!seller) {
+          return (
+            <SellerPremiumPanel eyebrow="Finance" title={t('sellerDashboard.nav.financePartners')} description="Loading…">
+              <p className="text-sm text-stone-500">{t('sellerDashboard.loadingSellerInfo')}</p>
+            </SellerPremiumPanel>
+          );
+        }
+        return (
+          <SellerPremiumPanel
+            eyebrow="Finance"
+            title={t('sellerDashboard.nav.financePartners')}
+            description={t('sellerDashboard.financePartnerHint')}
+          >
+            <FinancePartnersView
+              seller={seller}
+              onUpdateSeller={onUpdateSellerProfile}
+              onNotify={onNotify}
             />
           </SellerPremiumPanel>
         );
@@ -1486,16 +1508,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 </div>
               </NavItem>
 
-              <details
-                className="pt-3"
-                {...( ['analytics', 'reports', 'salesHistory', 'notifications', 'settings'].includes(activeView)
-                  ? { open: true }
-                  : {})}
-              >
-                <summary className="cursor-pointer list-none rounded-xl px-3.5 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-600 hover:bg-orange-50 hover:text-orange-800">
-                  {t('nav.more')}
-                </summary>
-                <div className="mt-1 space-y-1">
               <NavItem view="analytics">
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1528,6 +1540,14 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   <span>Notifications</span>
                 </div>
               </NavItem>
+              <NavItem view="financePartners">
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <span>{t('sellerDashboard.nav.financePartners')}</span>
+                </div>
+              </NavItem>
               <NavItem view="settings">
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -1537,8 +1557,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   <span>{t('sellerDashboard.nav.settings')}</span>
                 </div>
               </NavItem>
-                </div>
-              </details>
 
               {onLogout ? (
                 <div className="mt-4 pt-3 border-t border-stone-200/80">

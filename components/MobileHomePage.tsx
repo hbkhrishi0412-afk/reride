@@ -736,7 +736,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 key={i}
                 className="flex-shrink-0 w-[85%] max-w-sm rounded-2xl border border-gray-100 overflow-hidden bg-gray-50"
               >
-                <div className="aspect-[16/10] bg-gray-200 animate-pulse" />
+                <div className="aspect-[4/3] bg-gray-200 animate-pulse" />
                 <div className="p-4 space-y-2">
                   <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse" />
                   <div className="h-4 w-1/2 bg-gray-200 rounded animate-pulse" />
