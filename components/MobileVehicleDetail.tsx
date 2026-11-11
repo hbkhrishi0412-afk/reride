@@ -10,10 +10,7 @@ import { MobileShareSheet } from './MobileShareSheet';
 import { MobileEMICalculator } from './MobileEMICalculator';
 import { scrollAppToTop } from '../utils/scrollAppToTop';
 import { getFollowersCount } from '../services/buyerEngagementService';
-import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 import { MobileVehicleTrustStrip } from './MobileVehicleTrustStrip';
-import { buildSellerWhatsAppUrl, openExternalUrl } from '../utils/sellerContact.js';
-import { trackPhoneView } from '../services/listingService.js';
 import { ListingTrustChips } from './ListingTrustChips.js';
 import { ListingTrustStatusBar } from './ListingTrustStatusBar.js';
 import { isListingAvailable } from '../utils/listingStock.js';
@@ -21,6 +18,10 @@ import StarRating from './StarRating';
 import { PriceInsights, PRICE_ANALYSIS_ENABLED } from './PriceInsights';
 import { findSimilarVehicles } from '../utils/vehiclePricing';
 import SellerDisclosureDisplay from './SellerDisclosureDisplay';
+import VehicleDescriptionDisplay from './VehicleDescriptionDisplay';
+import VehicleFeatureSpecsPanel from './VehicleFeatureSpecsPanel';
+import VerificationBadge from './VerificationBadge';
+import { ListingStockBadge } from './ListingStockBadge.js';
 import { fetchRatingEligibility, submitPeerRating } from '../services/vehicleTrustService';
 import { useApp } from './AppProvider';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
@@ -32,6 +33,11 @@ import { hasSellerDisclosureReport } from '../utils/listingTrust.js';
 import { getPublishedVehicleDetail } from '../services/dataService.js';
 import { findVehicleByIdentity, getCanonicalPrimaryKey, vehicleIdsEqual } from '../utils/vehicleIdentity.js';
 import { stringifyVehicleForSession } from '../utils/vehicleSessionCache.js';
+import { isRerideStaffPick } from '../utils/staffPick.js';
+import {
+  formatInsuranceValidity,
+  INSURANCE_INVALID_DATE_TOKEN,
+} from '../utils/formatInsuranceValidity.js';
 
 interface MobileVehicleDetailProps {
   vehicle: Vehicle;
@@ -47,7 +53,7 @@ interface MobileVehicleDetailProps {
   onViewSellerProfile: (sellerEmail: string) => void;
   onStartChat: (vehicle: Vehicle) => void;
   onRequestTestDrive?: (vehicle: Vehicle, details: { date: string; time: string }) => void | Promise<void>;
-  /** Shown when user taps Call but must sign in first (hides `tel:` until logged in). */
+  /** Sign-in for gated tabs (e.g. Vahan) / chat without starting the deal. */
   onRequestLogin: () => void;
   recommendations: Vehicle[];
   onSelectVehicle: (vehicle: Vehicle) => void;
@@ -101,8 +107,8 @@ const MobileCertifiedInspectionReport: React.FC<{ report: CertifiedInspection }>
  * Mobile-Optimized Vehicle Detail Page
  * Features:
  * - Full-screen swipeable image gallery
- * - Sticky action buttons (Call, Chat, Share)
- * - Collapsible sections
+ * - Sticky deal-room CTA + share / wishlist
+ * - Overview (glance + specs + features + seller notes)
  * - Mobile-friendly specs layout
  */
 export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
@@ -142,10 +148,10 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   const [testDriveDate, setTestDriveDate] = useState('');
   const [testDriveTime, setTestDriveTime] = useState('');
   const [isRequestingTestDrive, setIsRequestingTestDrive] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'disclosure' | 'report' | 'features' | 'vahan' | 'price'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'disclosure' | 'report' | 'vahan' | 'price'>('overview');
   const detailTabsRef = useRef<HTMLDivElement>(null);
   const detailTabButtonRefs = useRef<
-    Partial<Record<'overview' | 'disclosure' | 'report' | 'features' | 'vahan' | 'price', HTMLButtonElement | null>>
+    Partial<Record<'overview' | 'disclosure' | 'report' | 'vahan' | 'price', HTMLButtonElement | null>>
   >({});
   const [vehicleDealLead, setVehicleDealLead] = useState<DealLead | null>(null);
   const [ratingEligibility, setRatingEligibility] = useState<RatingEligibility | null>(null);
@@ -289,6 +295,17 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   );
   const isInWishlist = wishlist.includes(safeVehicle.id);
   const canRate = Boolean(ratingEligibility?.canRateSeller);
+  const isDealerSeller = Boolean(seller?.dealershipName);
+  const showStaffPick = seller ? isRerideStaffPick(seller.rerideRecommended) : false;
+  const insuranceGlance = (() => {
+    const formatted = formatInsuranceValidity(
+      safeVehicle.insuranceValidity,
+      safeVehicle.year || safeVehicle.registrationYear,
+    );
+    if (!formatted) return t('vehicle.detail.insurance.notSpecified');
+    if (formatted === INSURANCE_INVALID_DATE_TOKEN) return t('vehicle.detail.insurance.invalidDate');
+    return formatted;
+  })();
 
   useEffect(() => {
     if (!currentUser?.email) {
@@ -423,6 +440,12 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     detailTabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const openChecklistTab = () => {
+    if (!hasSellerDisclosureReport(safeVehicle)) return;
+    setActiveTab('disclosure');
+    detailTabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   useEffect(() => {
     setActiveTab('overview');
     setShowGallery(false);
@@ -454,23 +477,8 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     return Math.round((loanAmount * monthlyRate * Math.pow(1 + monthlyRate, tenure)) / (Math.pow(1 + monthlyRate, tenure) - 1));
   }, [safeVehicle.price]);
 
-  const rawCallPhone = (seller?.mobile || safeVehicle.sellerPhone || '').trim();
-  const callHref = useMemo(() => telHrefFromRawPhone(rawCallPhone), [rawCallPhone]);
-  const callPhoneLabel = phoneDisplayCompact(rawCallPhone);
-  const sellerWhatsAppUrl = useMemo(
-    () => buildSellerWhatsAppUrl(safeVehicle, seller),
-    [safeVehicle, seller],
-  );
   const listingAvailable = isListingAvailable(safeVehicle);
 
-  const handleWhatsAppSeller = () => {
-    if (!currentUser) {
-      onRequestLogin();
-      return;
-    }
-    trackPhoneView(safeVehicle.id);
-    if (sellerWhatsAppUrl) void openExternalUrl(sellerWhatsAppUrl);
-  };
   const followersForSeller = safeVehicle.sellerEmail
     ? getFollowersCount(seller?.email || safeVehicle.sellerEmail)
     : 0;
@@ -567,63 +575,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
             role="toolbar"
             aria-label={t('vehicle.detail.contactActions')}
           >
-            {callHref ? (
-              currentUser ? (
-                <a
-                  href={callHref}
-                  className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-gray-200 bg-white px-2 py-3 text-base font-semibold text-gray-700 transition-colors hover:bg-gray-50 active:scale-[0.99]"
-                  style={{ minHeight: '52px' }}
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                    {t('vehicle.detail.call')}
-                  </span>
-                  {callPhoneLabel ? (
-                    <span className="text-xs font-medium text-gray-500 tabular-nums">{callPhoneLabel}</span>
-                  ) : null}
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onRequestLogin}
-                  className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-gray-200 bg-white px-2 py-3 text-base font-semibold text-gray-700 transition-colors hover:bg-gray-50 active:scale-[0.99]"
-                  style={{ minHeight: '52px' }}
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                    {t('vehicle.detail.call')}
-                  </span>
-                  <span className="text-[10px] font-medium leading-tight text-gray-500">{t('vehicle.detail.loginToCallSeller')}</span>
-                </button>
-              )
-            ) : (
-              <button
-                type="button"
-                disabled
-                title={t('vehicle.detail.callUnavailable')}
-                className="flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-200 py-3.5 text-base font-semibold text-gray-500"
-                style={{ minHeight: '52px' }}
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                </svg>
-                {t('vehicle.detail.call')}
-              </button>
-            )}
-            {sellerWhatsAppUrl && listingAvailable ? (
-              <button
-                type="button"
-                onClick={handleWhatsAppSeller}
-                className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-[#25D366] bg-white px-2 py-3 text-sm font-semibold text-[#1FA855] hover:bg-[#25D366]/10 active:scale-[0.99]"
-                style={{ minHeight: '52px' }}
-              >
-                {t('vehicle.detail.whatsapp', { defaultValue: 'WhatsApp' })}
-              </button>
-            ) : null}
             <button
               type="button"
               data-testid="start-tracked-deal"
@@ -632,7 +583,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 e.stopPropagation();
                 handleChat();
               }}
-              className="flex flex-[1.4] flex-col items-center justify-center gap-0.5 rounded-xl bg-[#FF6B35] py-2.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-[#E85A28] active:scale-[0.99]"
+              className="flex w-full flex-col items-center justify-center gap-0.5 rounded-xl bg-[#FF6B35] py-2.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-[#E85A28] active:scale-[0.99]"
               style={{ minHeight: '52px' }}
             >
               <span className="flex items-center gap-2">
@@ -699,6 +650,8 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               <div className="flex flex-wrap gap-2 mb-2">
                 <ListingTrustStatusBar vehicle={safeVehicle} metOnly />
                 <ListingTrustChips vehicle={safeVehicle} seller={seller} />
+                <ListingStockBadge vehicle={safeVehicle} size="md" />
+                <VerificationBadge vehicle={safeVehicle} />
               </div>
               {safeVehicle.variant && (
                 <p className="text-sm text-gray-600 mb-2">{safeVehicle.variant}</p>
@@ -724,11 +677,28 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               )}
             </div>
             {/* Action Icons */}
-            <div className="flex gap-2 ml-2">
+            <div className="flex gap-1 ml-2">
               <button
+                type="button"
+                onClick={() => onToggleCompare(safeVehicle.id)}
+                disabled={isCompareDisabled}
+                className={`p-2 rounded-full ${
+                  isComparing ? 'bg-blue-50 text-[#1E88E5]' : 'text-gray-400'
+                } ${isCompareDisabled ? 'opacity-50' : ''}`}
+                style={{ minWidth: '44px', minHeight: '44px' }}
+                aria-label={isComparing ? t('vehicle.detail.comparing') : t('vehicle.detail.compare')}
+                aria-pressed={isComparing}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+              </button>
+              <button
+                type="button"
                 onClick={() => onToggleWishlist(safeVehicle.id)}
                 className="p-2"
                 style={{ minWidth: '44px', minHeight: '44px' }}
+                aria-label={isInWishlist ? t('vehicle.card.wishlistRemove') : t('vehicle.card.wishlistAdd')}
               >
                 <svg
                   className={`w-6 h-6 ${isInWishlist ? 'fill-red-500 text-red-500' : 'text-gray-400'}`}
@@ -740,9 +710,11 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 </svg>
               </button>
               <button
+                type="button"
                 onClick={handleShare}
                 className="p-2"
                 style={{ minWidth: '44px', minHeight: '44px' }}
+                aria-label={t('vehicle.detail.share', { defaultValue: 'Share' })}
               >
                 <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -780,6 +752,11 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 ) : null}
               </div>
               <div className="flex-1 min-w-0">
+                {isDealerSeller && seller?.isVerified ? (
+                  <span className="mb-0.5 inline-flex rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                    {t('vehicle.detail.verifiedDealer', { defaultValue: 'Verified Dealer' })}
+                  </span>
+                ) : null}
                 <h3 className="font-semibold text-gray-900 truncate">
                   {seller?.dealershipName ||
                    seller?.name ||
@@ -787,7 +764,11 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                    t('vehicle.card.sellerFallback')}
                 </h3>
                 <p className="text-sm text-gray-600">
-                  {followersForSeller} {t('vehicle.detail.followers')}
+                  {isDealerSeller
+                    ? t('vehicle.detail.dealership', { defaultValue: 'Dealership' })
+                    : t('vehicle.detail.individualSeller', { defaultValue: 'Individual seller' })}
+                  {showStaffPick ? ` · ${t('vehicle.detail.staffPick', { defaultValue: 'ReRide pick' })}` : ''}
+                  {` · ${followersForSeller} ${t('vehicle.detail.followers')}`}
                 </p>
               </div>
               {sellerProfileEmail ? (
@@ -859,13 +840,24 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           </div>
         </div>
 
-        <MobileVehicleTrustStrip />
+        {hasSellerDisclosureReport(safeVehicle) ? (
+          <button
+            type="button"
+            onClick={openChecklistTab}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-800 shadow-sm"
+          >
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-[#E53935] text-[11px] font-bold text-white" aria-hidden>
+              A
+            </span>
+            {t('vehicle.detail.checklist', { defaultValue: 'Checklist' })}
+          </button>
+        ) : null}
 
         {/* Additional Details Section */}
         <div className="bg-white rounded-2xl p-4 shadow-sm" ref={detailTabsRef}>
           <div className="-mx-4 px-4 mb-4 border-b border-gray-200 overflow-x-auto scrollbar-hide">
             <div className="flex min-w-max gap-1">
-              {(['overview', 'disclosure', 'report', 'features', 'vahan', 'price'] as const)
+              {(['overview', 'disclosure', 'report', 'vahan', 'price'] as const)
                 .filter((tab) => {
                   if (tab === 'price') return PRICE_ANALYSIS_ENABLED;
                   if (tab === 'disclosure') return hasSellerDisclosureReport(safeVehicle);
@@ -880,11 +872,9 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                       ? t('vehicle.detail.tabs.disclosure')
                       : tab === 'report'
                         ? t('vehicle.detail.tabs.report')
-                        : tab === 'features'
-                          ? t('vehicle.detail.tabs.featureSpecs')
-                          : tab === 'vahan'
-                            ? t('vehicle.detail.tabs.vahan')
-                            : t('vehicle.detail.tabs.price', 'Price');
+                        : tab === 'vahan'
+                          ? t('vehicle.detail.tabs.vahan')
+                          : t('vehicle.detail.tabs.price', 'Price');
                 return (
                   <button
                     key={tab}
@@ -909,15 +899,86 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
 
           <div>
             {activeTab === 'overview' && (
-              <div className="space-y-4">
-                {safeVehicle.description && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {t('vehicle.detail.descriptionLabel')}
-                    </h3>
-                    <p className="text-gray-700 leading-relaxed" data-no-translate>{translatedDescription}</p>
+              <div className="space-y-5">
+                <MobileVehicleTrustStrip />
+                <div>
+                  <h3 className="mb-3 text-base font-semibold text-slate-900">
+                    {t('vehicle.detail.atAGlance', { defaultValue: 'At a glance' })}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <SpecCard label={t('vehicle.year')} value={safeVehicle.year?.toString()} />
+                    <SpecCard
+                      label={t('vehicle.spec.registrationYear')}
+                      value={safeVehicle.registrationYear?.toString() || safeVehicle.year?.toString()}
+                    />
+                    <SpecCard label={t('vehicle.fuel')} value={translatedFields.fuelType} />
+                    <SpecCard
+                      label={t('vehicle.mileage')}
+                      value={`${(safeVehicle.mileage ?? 0).toLocaleString('en-IN')} km`}
+                    />
+                    <SpecCard label={t('vehicle.transmission')} value={translatedFields.transmission} />
+                    <SpecCard
+                      label={t('vehicle.spec.ownersShort')}
+                      value={safeVehicle.noOfOwners?.toString() || '1'}
+                    />
+                    <SpecCard
+                      label={t('vehicle.detail.specs.insurance')}
+                      value={insuranceGlance}
+                    />
+                    <SpecCard
+                      label={t('vehicle.detail.specs.rto')}
+                      value={safeVehicle.rto || t('common.notAvailable')}
+                    />
                   </div>
-                )}
+                </div>
+                <VehicleFeatureSpecsPanel
+                  density="compact"
+                  omitGlanceDuplicates
+                  specs={{
+                    engine: translatedFields.engine,
+                    displacement: translatedFields.displacement,
+                    transmission: translatedFields.transmission,
+                    fuelType: translatedFields.fuelType,
+                    fuelEfficiency: safeVehicle.fuelEfficiency,
+                    groundClearance: safeVehicle.groundClearance,
+                    bootSpace: safeVehicle.bootSpace,
+                    color: translatedFields.color,
+                  }}
+                  features={translatedFeatures}
+                />
+                {safeVehicle.description ? (
+                  <VehicleDescriptionDisplay
+                    text={translatedDescription}
+                    density="compact"
+                    heading={t('vehicle.detail.sellerNotes', { defaultValue: 'Seller notes' })}
+                  />
+                ) : null}
+                {seller ? (
+                  <div className="rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-4">
+                    <h3 className="mb-2 text-base font-bold text-gray-900">
+                      {t('vehicle.detail.financePartners.title')}
+                    </h3>
+                    {seller.partnerBanks && seller.partnerBanks.length > 0 ? (
+                      <>
+                        <p className="mb-3 text-xs text-gray-600">
+                          {t('vehicle.detail.financePartners.description')}
+                        </p>
+                        <ul className="grid grid-cols-2 gap-2">
+                          {seller.partnerBanks.map((bank) => (
+                            <li
+                              key={bank}
+                              className="rounded-lg border border-purple-200 bg-white px-2.5 py-2 text-center text-xs font-semibold text-purple-700"
+                            >
+                              {bank}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-500">{t('vehicle.detail.financePartners.none')}</p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -937,84 +998,73 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               </div>
             )}
 
-            {activeTab === 'features' && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <SpecCard label={t('vehicle.year')} value={safeVehicle.year?.toString()} />
-                  <SpecCard
-                    label={t('vehicle.spec.registrationYear')}
-                    value={safeVehicle.registrationYear?.toString() || safeVehicle.year?.toString()}
-                  />
-                  <SpecCard label={t('vehicle.fuel')} value={translatedFields.fuelType} />
-                  <SpecCard
-                    label={t('vehicle.mileage')}
-                    value={`${safeVehicle.mileage.toLocaleString()} km`}
-                  />
-                  <SpecCard label={t('vehicle.transmission')} value={translatedFields.transmission} />
-                  <SpecCard
-                    label={t('vehicle.spec.ownersShort')}
-                    value={safeVehicle.noOfOwners?.toString() || '1'}
-                  />
-                  <SpecCard
-                    label={t('vehicle.detail.specs.insurance')}
-                    value={safeVehicle.insuranceValidity || t('common.notAvailable')}
-                  />
-                  <SpecCard
-                    label={t('vehicle.detail.specs.rto')}
-                    value={safeVehicle.rto || t('common.notAvailable')}
-                  />
-                </div>
-
-                <div>
-                  <h3 className="text-base font-semibold text-gray-900 mb-3">
-                    {t('vehicle.detail.includedFeatures')}
-                  </h3>
-                  {translatedFeatures.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      {translatedFeatures.map((feature, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-sm text-gray-700" data-no-translate>
-                          <svg className="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                          <span>{feature}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500 text-center py-4">
-                      {t('vehicle.detail.noFeaturesListed')}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
             {activeTab === 'vahan' && (
               <div className="space-y-6">
                 {/* Show login prompt for non-logged-in users */}
                 {!currentUser ? (
-                  <div className="flex flex-col items-center justify-center py-10 px-4">
-                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#FF6B35]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
+                  <div className="space-y-5">
+                    <div className="rounded-xl border border-purple-200 bg-purple-50 p-4">
+                      <p className="font-semibold text-gray-900">{t('vehicle.detail.vahan.loginRequired')}</p>
+                      <p className="mt-1 text-sm text-gray-600">{t('vehicle.detail.vahan.loginDescription')}</p>
+                      <button
+                        type="button"
+                        onClick={onRequestLogin}
+                        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#FF6B35] px-5 py-2.5 text-sm font-bold text-white"
+                      >
+                        {t('vehicle.detail.vahan.loginButton')}
+                      </button>
                     </div>
-                    <h3 className="text-lg font-bold text-gray-900 mb-2 text-center">
-                      {t('vehicle.detail.vahan.loginRequired')}
-                    </h3>
-                    <p className="text-sm text-gray-600 text-center mb-5">
-                      {t('vehicle.detail.vahan.loginDescription')}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={onRequestLogin}
-                      className="bg-[#FF6B35] hover:bg-[#E85A28] text-white font-bold py-2.5 px-6 rounded-lg transition-colors flex items-center gap-2 text-sm"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                      </svg>
-                      {t('vehicle.detail.vahan.loginButton')}
-                    </button>
+                    <div>
+                      <h4 className="mb-3 text-base font-semibold text-gray-900">
+                        {t('vehicle.detail.vahan.ownershipStatus')}
+                      </h4>
+                      <dl className="grid grid-cols-1 gap-3 rounded-lg bg-gray-50 p-3">
+                        <div>
+                          <dt className="text-xs text-gray-500">{t('vehicle.detail.vahan.registeredState')}</dt>
+                          <dd className="text-sm font-medium text-gray-900">{safeVehicle.state || '—'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-gray-500">{t('vehicle.detail.vahan.rtoOffice')}</dt>
+                          <dd className="text-sm font-medium text-gray-900">{safeVehicle.rto || '—'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-gray-500">{t('vehicle.detail.vahan.registrationDate')}</dt>
+                          <dd className="text-sm font-medium text-gray-900">
+                            {safeVehicle.registrationYear ? String(safeVehicle.registrationYear) : '—'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-gray-500">{t('vehicle.detail.vahan.numberOfOwners')}</dt>
+                          <dd className="text-sm font-medium text-gray-900">
+                            {safeVehicle.noOfOwners ? String(safeVehicle.noOfOwners) : '—'}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                    <div>
+                      <h4 className="mb-3 text-base font-semibold text-gray-900">
+                        {t('vehicle.detail.vahan.registrationDetails')}
+                      </h4>
+                      <dl className="grid grid-cols-1 gap-3 rounded-lg bg-gray-50 p-3">
+                        {[
+                          t('vehicle.detail.vahan.registrationNumber'),
+                          t('vehicle.detail.vahan.engineNumber'),
+                          t('vehicle.detail.vahan.chassisNumber'),
+                        ].map((label) => (
+                          <div key={label}>
+                            <dt className="text-xs text-gray-500">{label}</dt>
+                            <dd className="mt-0.5 flex items-center gap-1.5">
+                              <span className="select-none blur-sm text-sm font-medium text-gray-700" aria-hidden>
+                                XX00XX0000
+                              </span>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                              </svg>
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
                   </div>
                 ) : (
                 <>

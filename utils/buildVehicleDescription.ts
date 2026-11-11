@@ -146,3 +146,83 @@ export function buildVehicleDescription(
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength - 1).trimEnd() + '…';
 }
+
+/** Known section titles emitted by {@link buildVehicleDescription}. */
+export const VEHICLE_DESCRIPTION_SECTION_HEADINGS = [
+  'OVERVIEW',
+  'SPECIFICATIONS',
+  'KEY FEATURES',
+] as const;
+
+export type VehicleDescriptionSection = {
+  heading: string;
+  bullets: string[];
+};
+
+export type ParsedVehicleDescription = {
+  title: string;
+  sections: VehicleDescriptionSection[];
+  paragraphs: string[];
+};
+
+/**
+ * Re-insert line breaks when an auto description was flattened to one line
+ * (e.g. older storage / CSS collapse copies). Safe no-op for already-structured text.
+ */
+export function normalizeVehicleDescription(text: string): string {
+  const raw = (text || '').replace(/\r\n/g, '\n').trim();
+  if (!raw) return '';
+  if (raw.includes('\n')) return raw;
+
+  const headingAlt = VEHICLE_DESCRIPTION_SECTION_HEADINGS.join('|');
+  return raw
+    .replace(new RegExp(`\\s+(${headingAlt})\\s+`, 'g'), '\n\n$1\n')
+    .replace(/\s+•\s+/g, '\n• ')
+    .replace(/\s+(Professionally listed)/, '\n\n$1')
+    .trim();
+}
+
+/**
+ * Parse auto (or seller) description into title + sections + free paragraphs
+ * for organized display on desktop and mobile.
+ */
+export function parseVehicleDescription(text: string): ParsedVehicleDescription {
+  const normalized = normalizeVehicleDescription(text);
+  if (!normalized) return { title: '', sections: [], paragraphs: [] };
+
+  const headingSet = new Set<string>(VEHICLE_DESCRIPTION_SECTION_HEADINGS);
+  const blocks = normalized.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
+
+  let title = '';
+  const sections: VehicleDescriptionSection[] = [];
+  const paragraphs: string[] = [];
+
+  for (const block of blocks) {
+    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) continue;
+
+    const first = lines[0];
+    const firstUpper = first.toUpperCase();
+    if (headingSet.has(firstUpper) || headingSet.has(first)) {
+      const heading = headingSet.has(firstUpper) ? firstUpper : first;
+      const bullets = lines.slice(1).map((l) => l.replace(/^•\s*/, '').trim()).filter(Boolean);
+      sections.push({ heading, bullets });
+      continue;
+    }
+
+    // Title line alone (year make model…) before first section
+    if (!title && sections.length === 0 && paragraphs.length === 0 && lines.length === 1) {
+      title = first;
+      continue;
+    }
+
+    paragraphs.push(lines.join('\n'));
+  }
+
+  // Flattened single-block freeform with no recoverable sections
+  if (!title && sections.length === 0 && paragraphs.length === 0) {
+    paragraphs.push(normalized);
+  }
+
+  return { title, sections, paragraphs };
+}

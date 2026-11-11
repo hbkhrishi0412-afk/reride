@@ -8,6 +8,8 @@ import {
   validateImageUrl,
   formatValidationErrors,
   formatValidationWarnings,
+  validateAadharNumber,
+  validatePanNumber,
 } from '../utils/validation.js';
 
 const baseVehicle: Partial<Vehicle> = {
@@ -105,5 +107,19 @@ describe('formatValidationWarnings', () => {
     });
     expect(text).toContain('make');
     expect(text).toContain('Check spelling');
+  });
+});
+
+describe('KYC document number validators', () => {
+  it('accepts empty optional Aadhar/PAN and valid formats', () => {
+    expect(validateAadharNumber('')).toBeUndefined();
+    expect(validateAadharNumber('1234 5678 9012')).toBeUndefined();
+    expect(validatePanNumber('')).toBeUndefined();
+    expect(validatePanNumber('ABCDE1234F')).toBeUndefined();
+  });
+
+  it('rejects invalid Aadhar/PAN', () => {
+    expect(validateAadharNumber('12345')).toMatch(/12 digits/i);
+    expect(validatePanNumber('ABC123')).toMatch(/ABCDE1234F/);
   });
 });

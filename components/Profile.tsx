@@ -9,6 +9,7 @@ import {
   sellerQrDownloadFileName,
 } from '../utils/sellerQrCode';
 import { userNeedsPasswordSetup } from '../utils/profilePassword';
+import { validateAadharNumber, validatePanNumber } from '../utils/validation.js';
 import { useApp } from './AppProvider';
 import WebsitePageShell from './WebsitePageShell';
 
@@ -262,24 +263,6 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
     return undefined;
   };
 
-  const validateAadhar = (aadhar: string): string | undefined => {
-    if (!aadhar.trim()) return undefined; // Optional field
-    const aadharRegex = /^\d{12}$/;
-    if (!aadharRegex.test(aadhar.replace(/\s/g, ''))) {
-      return 'Aadhar number must be 12 digits';
-    }
-    return undefined;
-  };
-
-  const validatePAN = (pan: string): string | undefined => {
-    if (!pan.trim()) return undefined; // Optional field
-    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-    if (!panRegex.test(pan.toUpperCase())) {
-      return 'PAN must be in format: ABCDE1234F';
-    }
-    return undefined;
-  };
-
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
     
@@ -311,12 +294,12 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
 
     // Validate Aadhar and PAN if provided
     if (formData.aadharNumber) {
-      const aadharError = validateAadhar(formData.aadharNumber);
+      const aadharError = validateAadharNumber(formData.aadharNumber);
       if (aadharError) errors.aadharNumber = aadharError;
     }
 
     if (formData.panNumber) {
-      const panError = validatePAN(formData.panNumber);
+      const panError = validatePanNumber(formData.panNumber);
       if (panError) errors.panNumber = panError;
     }
 

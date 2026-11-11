@@ -1,19 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle, User } from '../types.js';
 import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService.js';
-import {
-  canRevealSellerPhone,
-  getPhoneRevealVehicleKey,
-  maskPhoneNumber,
-  recordPhoneReveal,
-} from '../utils/phoneRevealGate.js';
 
 interface SellerContactCardProps {
   vehicle: Vehicle;
   seller: User;
-  currentUser: User | null;
-  onPhoneView: (vehicleId: number) => void;
+  currentUser?: User | null;
+  onPhoneView?: (vehicleId: number) => void;
   onStartChat: () => void;
   onLoginRequired?: () => void;
 }
@@ -21,62 +15,9 @@ interface SellerContactCardProps {
 const SellerContactCard: React.FC<SellerContactCardProps> = ({
   vehicle,
   seller,
-  currentUser,
-  onPhoneView,
   onStartChat,
-  onLoginRequired,
 }) => {
   const { t } = useTranslation();
-  const [showPhone, setShowPhone] = useState(false);
-  const [revealBlocked, setRevealBlocked] = useState<string | null>(null);
-
-  const vehicleKey = getPhoneRevealVehicleKey(vehicle);
-  const phone = (vehicle.sellerPhone || '').trim();
-
-  const handleShowPhone = () => {
-    const gate = canRevealSellerPhone({
-      isLoggedIn: Boolean(currentUser),
-      vehicleKey,
-    });
-
-    if (!gate.allowed) {
-      if (gate.reason === 'login_required') {
-        setRevealBlocked('Log in to view the seller phone number.');
-        onLoginRequired?.();
-        return;
-      }
-      if (gate.reason === 'daily_limit') {
-        setRevealBlocked('Daily contact limit reached. Try chat or come back tomorrow.');
-        return;
-      }
-      if (gate.reason === 'vehicle_limit') {
-        setRevealBlocked('You have already viewed this number. Use chat to continue.');
-        return;
-      }
-    }
-
-    recordPhoneReveal(vehicleKey);
-    setRevealBlocked(null);
-    setShowPhone(true);
-    onPhoneView(vehicle.id);
-  };
-
-  const handleCallClick = () => {
-    if (phone) {
-      window.location.href = `tel:${phone}`;
-    }
-  };
-
-  const handleWhatsAppClick = () => {
-    const whatsappNumber = vehicle.sellerWhatsApp || phone;
-    if (whatsappNumber) {
-      const message = encodeURIComponent(
-        `Hi, I'm interested in your ${vehicle.year} ${vehicle.make} ${vehicle.model} listed on ReRide for ₹${vehicle.price.toLocaleString('en-IN')}`,
-      );
-      const cleanNumber = whatsappNumber.replace(/[^0-9]/g, '');
-      window.open(`https://wa.me/91${cleanNumber}?text=${message}`, '_blank');
-    }
-  };
 
   const responseTime = seller.responseTime
     ? seller.responseTime < 60
@@ -200,51 +141,6 @@ const SellerContactCard: React.FC<SellerContactCardProps> = ({
           {t('vehicle.detail.chatWithSeller')}
         </button>
 
-        {vehicle.showPhoneNumber && phone && (
-          <div>
-            {!showPhone ? (
-              <button
-                onClick={handleShowPhone}
-                className="w-full bg-white border-2 border-reride-orange text-reride-orange font-bold py-3 px-6 rounded-lg text-lg hover:bg-reride-orange hover:text-white transition-all flex items-center justify-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                  />
-                </svg>
-                {currentUser ? 'Show Phone Number' : 'Log in to Call Seller'}
-              </button>
-            ) : (
-              <a
-                href={`tel:${phone}`}
-                onClick={handleCallClick}
-                className="w-full bg-green-600 text-white font-bold py-3 px-6 rounded-lg text-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2"
-              >
-                📞 {phone}
-              </a>
-            )}
-            {!showPhone && currentUser && (
-              <p className="mt-1 text-xs text-gray-500 text-center">
-                Number ends with {maskPhoneNumber(phone).slice(-4)}
-              </p>
-            )}
-            {revealBlocked && (
-              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300 text-center">{revealBlocked}</p>
-            )}
-          </div>
-        )}
-
-        {(vehicle.sellerWhatsApp || phone) && (
-          <button
-            onClick={handleWhatsAppClick}
-            className="w-full bg-[#25D366] text-white font-bold py-3 px-6 rounded-lg text-lg hover:bg-[#20BA5A] transition-all flex items-center justify-center gap-2"
-          >
-            Contact on WhatsApp
-          </button>
-        )}
       </div>
 
       <div className="mt-6 pt-6 border-t border-gray-200">

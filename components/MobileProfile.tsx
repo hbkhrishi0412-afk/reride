@@ -13,6 +13,8 @@ import {
 } from '../utils/sellerQrCode';
 import { downloadProfileExport, requestAccountDeletion } from '../services/accountPrivacyService';
 import { userNeedsPasswordSetup } from '../utils/profilePassword';
+import { compressImage } from '../utils/mobileFeatures';
+import { validateAadharNumber, validatePanNumber } from '../utils/validation';
 import { useVisualViewportBottomInset } from '../hooks/useVisualViewportBottomInset';
 import { useApp } from './AppProvider';
 
@@ -31,6 +33,34 @@ interface FormErrors {
   mobile?: string;
   dealershipName?: string;
   bio?: string;
+  location?: string;
+  address?: string;
+  pincode?: string;
+  aadharNumber?: string;
+  aadharCard?: string;
+  panNumber?: string;
+  panCard?: string;
+}
+
+const PROFILE_DOC_ACCEPT = 'image/jpeg,image/jpg,image/png,image/webp,application/pdf';
+const isPdfDocumentUrl = (url: string) => /^data:application\/pdf|\.pdf(\?|$)/i.test(url);
+
+function emptyProfileForm(user: User) {
+  return {
+    name: user.name || '',
+    email: user.email || '',
+    mobile: user.mobile || '',
+    dealershipName: user.dealershipName || '',
+    bio: user.bio || '',
+    location: user.location || '',
+    address: user.address || '',
+    pincode: user.pincode || '',
+    avatarUrl: user.avatarUrl || '',
+    aadharNumber: user.aadharCard?.number || '',
+    aadharDocumentUrl: user.aadharCard?.documentUrl || '',
+    panNumber: user.panCard?.number || '',
+    panDocumentUrl: user.panCard?.documentUrl || '',
+  };
 }
 
 /**
@@ -52,14 +82,8 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   const needsPasswordSetup = userNeedsPasswordSetup(currentUser);
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
-  const [formData, setFormData] = useState({
-    name: currentUser.name || '',
-    email: currentUser.email || '',
-    mobile: currentUser.mobile || '',
-    dealershipName: currentUser.dealershipName || '',
-    bio: currentUser.bio || '',
-    avatarUrl: currentUser.avatarUrl || ''
-  });
+  const [docsOpen, setDocsOpen] = useState(true);
+  const [formData, setFormData] = useState(() => emptyProfileForm(currentUser));
   const [passwordData, setPasswordData] = useState({
     current: '',
     new: '',
@@ -76,7 +100,10 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   const [deletePassword, setDeletePassword] = useState('');
   const [showDeletePasswordModal, setShowDeletePasswordModal] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ aadhar: false, pan: false });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const aadharInputRef = useRef<HTMLInputElement>(null);
+  const panInputRef = useRef<HTMLInputElement>(null);
   const keyboardInset = useVisualViewportBottomInset();
 
   const handleInputChange = (field: keyof typeof formData, value: string) => {
@@ -147,8 +174,80 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
       newErrors.mobile = 'Invalid mobile number';
     }
 
+    if (currentUser.role === 'seller') {
+      if (formData.bio && formData.bio.length > 500) {
+        newErrors.bio = 'Bio must be less than 500 characters';
+      }
+      const pc = formData.pincode.replace(/\D/g, '');
+      if (formData.pincode.trim() && pc.length !== 6) {
+        newErrors.pincode = 'PIN code must be exactly 6 digits';
+      }
+    }
+
+    const aadharError = validateAadharNumber(formData.aadharNumber);
+    if (aadharError) newErrors.aadharNumber = aadharError;
+    const panError = validatePanNumber(formData.panNumber);
+    if (panError) newErrors.panNumber = panError;
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleDocumentUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: 'aadhar' | 'pan',
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowed.includes(file.type)) {
+      setErrors((prev) => ({
+        ...prev,
+        [type === 'aadhar' ? 'aadharCard' : 'panCard']: 'Please upload JPEG, PNG, WebP, or PDF',
+      }));
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors((prev) => ({
+        ...prev,
+        [type === 'aadhar' ? 'aadharCard' : 'panCard']: 'File size must be less than 5MB',
+      }));
+      return;
+    }
+
+    setUploadProgress((prev) => ({ ...prev, [type]: true }));
+    setErrors((prev) => ({
+      ...prev,
+      [type === 'aadhar' ? 'aadharCard' : 'panCard']: undefined,
+    }));
+
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
+      const finalUrl =
+        file.type === 'application/pdf'
+          ? dataUrl
+          : await compressImage(dataUrl, 1200, 1200, 0.82);
+      setFormData((prev) =>
+        type === 'aadhar'
+          ? { ...prev, aadharDocumentUrl: finalUrl }
+          : { ...prev, panDocumentUrl: finalUrl },
+      );
+    } catch {
+      setErrors((prev) => ({
+        ...prev,
+        [type === 'aadhar' ? 'aadharCard' : 'panCard']:
+          'Failed to process file. Please try a different one.',
+      }));
+    } finally {
+      setUploadProgress((prev) => ({ ...prev, [type]: false }));
+    }
   };
 
   const validatePassword = (): boolean => {
@@ -177,7 +276,48 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
 
     setIsSaving(true);
     try {
-      await onUpdateProfile(formData);
+      const profileData: Partial<User> = {
+        name: formData.name,
+        email: formData.email,
+        mobile: formData.mobile,
+        avatarUrl: formData.avatarUrl,
+        dealershipName: formData.dealershipName,
+        bio: formData.bio,
+      };
+      if (currentUser.role === 'seller') {
+        profileData.location = formData.location.trim();
+        profileData.address = formData.address.trim() || undefined;
+        const pc = formData.pincode.replace(/\D/g, '').slice(0, 6);
+        profileData.pincode = pc || '';
+      }
+
+      const existingAadhar = currentUser.aadharCard;
+      profileData.aadharCard = {
+        number: formData.aadharNumber.replace(/[\s-]/g, ''),
+        documentUrl: formData.aadharDocumentUrl || '',
+        isVerified: existingAadhar?.isVerified ?? false,
+        verifiedAt: existingAadhar?.verifiedAt,
+        verifiedBy: existingAadhar?.verifiedBy,
+        uploadedAt:
+          formData.aadharDocumentUrl && !existingAadhar?.uploadedAt
+            ? new Date().toISOString()
+            : existingAadhar?.uploadedAt,
+      };
+
+      const existingPAN = currentUser.panCard;
+      profileData.panCard = {
+        number: (formData.panNumber || '').toUpperCase(),
+        documentUrl: formData.panDocumentUrl || '',
+        isVerified: existingPAN?.isVerified ?? false,
+        verifiedAt: existingPAN?.verifiedAt,
+        verifiedBy: existingPAN?.verifiedBy,
+        uploadedAt:
+          formData.panDocumentUrl && !existingPAN?.uploadedAt
+            ? new Date().toISOString()
+            : existingPAN?.uploadedAt,
+      };
+
+      await onUpdateProfile(profileData);
       setSaveSuccess(true);
       setIsEditing(false);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -447,14 +587,20 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
             )}
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Bio</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                {currentUser.role === 'seller' ? 'About Your Dealership' : 'Bio'}
+              </label>
               <textarea
                 value={formData.bio}
                 onChange={(e) => handleInputChange('bio', e.target.value)}
                 disabled={!isEditing}
                 rows={4}
                 maxLength={500}
-                placeholder="Tell us about yourself..."
+                placeholder={
+                  currentUser.role === 'seller'
+                    ? 'Tell customers about your dealership...'
+                    : 'Tell us about yourself...'
+                }
                 className={`w-full px-4 py-3 rounded-xl border ${
                   errors.bio ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
                 } ${!isEditing ? 'bg-gray-50' : ''} focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none`}
@@ -462,6 +608,257 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
               <p className="text-xs text-gray-500 mt-1 text-right">
                 {formData.bio.length}/500
               </p>
+              {errors.bio && <p className="text-xs text-red-600 mt-1">{errors.bio}</p>}
+            </div>
+
+            {currentUser.role === 'seller' && (
+              <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800">Business location</h3>
+                  <p className="mt-1 text-xs text-gray-500">
+                    City is shown on listings. PIN code groups you on the dealers map. Street + PIN improves map accuracy.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">City or region</label>
+                  <input
+                    type="text"
+                    value={formData.location}
+                    onChange={(e) => handleInputChange('location', e.target.value)}
+                    disabled={!isEditing}
+                    placeholder="e.g. Bengaluru, Karnataka"
+                    className={`w-full px-4 py-3 rounded-xl border ${
+                      errors.location ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                    } ${!isEditing ? 'bg-gray-50' : ''} focus:outline-none focus:ring-2 focus:ring-orange-500`}
+                  />
+                  {errors.location && <p className="text-xs text-red-600 mt-1">{errors.location}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Street address</label>
+                  <textarea
+                    value={formData.address}
+                    onChange={(e) => handleInputChange('address', e.target.value)}
+                    disabled={!isEditing}
+                    rows={2}
+                    placeholder="Building, street, locality"
+                    className={`w-full px-4 py-3 rounded-xl border ${
+                      errors.address ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                    } ${!isEditing ? 'bg-gray-50' : ''} focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none`}
+                  />
+                  {errors.address && <p className="text-xs text-red-600 mt-1">{errors.address}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">PIN code</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={formData.pincode}
+                    onChange={(e) => handleInputChange('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    disabled={!isEditing}
+                    placeholder="6-digit PIN"
+                    className={`w-full px-4 py-3 rounded-xl border ${
+                      errors.pincode ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                    } ${!isEditing ? 'bg-gray-50' : ''} focus:outline-none focus:ring-2 focus:ring-orange-500`}
+                  />
+                  {errors.pincode && <p className="text-xs text-red-600 mt-1">{errors.pincode}</p>}
+                </div>
+              </div>
+            )}
+
+            {/* Document Verification — parity with desktop Profile */}
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setDocsOpen((o) => !o)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-gray-50"
+                style={{ minHeight: '56px' }}
+              >
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Document Verification</h3>
+                  <p className="text-xs text-gray-500">Upload Aadhar Card and PAN Card</p>
+                </div>
+                <svg
+                  className={`h-5 w-5 shrink-0 text-gray-400 transition-transform ${docsOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {docsOpen && (
+                <div className="space-y-4 border-t border-gray-100 px-4 py-4">
+                  <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-gray-700">Aadhar Card</span>
+                      {currentUser.aadharCard?.isVerified ? (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                          Verified
+                        </span>
+                      ) : null}
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">Aadhar Number</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={14}
+                        value={formData.aadharNumber}
+                        onChange={(e) => handleInputChange('aadharNumber', e.target.value)}
+                        disabled={!isEditing}
+                        placeholder="1234 5678 9012"
+                        className={`w-full rounded-xl border px-4 py-3 ${
+                          errors.aadharNumber ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                        } ${!isEditing ? 'bg-gray-50' : ''} focus:outline-none focus:ring-2 focus:ring-orange-500`}
+                      />
+                      {errors.aadharNumber && (
+                        <p className="mt-1 text-xs text-red-600">{errors.aadharNumber}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
+                        Aadhar Card Document
+                      </label>
+                      {formData.aadharDocumentUrl ? (
+                        <div className="mb-3 relative inline-block">
+                          {isPdfDocumentUrl(formData.aadharDocumentUrl) ? (
+                            <div className="flex h-28 w-28 items-center justify-center rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600">
+                              PDF uploaded
+                            </div>
+                          ) : (
+                            <img
+                              src={formData.aadharDocumentUrl}
+                              alt="Aadhar Card"
+                              className="h-28 w-20 rounded-lg border border-gray-200 object-cover"
+                            />
+                          )}
+                          {uploadProgress.aadhar ? (
+                            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-blue-500/20">
+                              <span className="text-xs font-semibold text-blue-700">Uploading…</span>
+                            </div>
+                          ) : null}
+                          <a
+                            href={formData.aadharDocumentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1 block text-xs font-medium text-blue-600 underline"
+                          >
+                            View document
+                          </a>
+                        </div>
+                      ) : null}
+                      {isEditing ? (
+                        <div>
+                          <label
+                            htmlFor="mobile-aadhar-upload"
+                            className="inline-flex min-h-[44px] items-center rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 active:bg-blue-100"
+                          >
+                            {formData.aadharDocumentUrl ? 'Change document' : 'Upload document'}
+                          </label>
+                          <input
+                            id="mobile-aadhar-upload"
+                            ref={aadharInputRef}
+                            type="file"
+                            className="sr-only"
+                            accept={PROFILE_DOC_ACCEPT}
+                            onChange={(e) => void handleDocumentUpload(e, 'aadhar')}
+                          />
+                          <p className="mt-2 text-xs text-gray-500">JPEG, PNG, PDF (Max 5MB)</p>
+                        </div>
+                      ) : null}
+                      {errors.aadharCard && (
+                        <p className="mt-1 text-xs text-red-600">{errors.aadharCard}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-gray-700">PAN Card</span>
+                      {currentUser.panCard?.isVerified ? (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                          Verified
+                        </span>
+                      ) : null}
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">PAN Number</label>
+                      <input
+                        type="text"
+                        maxLength={10}
+                        value={(formData.panNumber || '').toUpperCase()}
+                        onChange={(e) => handleInputChange('panNumber', e.target.value.toUpperCase())}
+                        disabled={!isEditing}
+                        placeholder="ABCDE1234F"
+                        className={`w-full rounded-xl border px-4 py-3 ${
+                          errors.panNumber ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                        } ${!isEditing ? 'bg-gray-50' : ''} focus:outline-none focus:ring-2 focus:ring-orange-500`}
+                      />
+                      {errors.panNumber && (
+                        <p className="mt-1 text-xs text-red-600">{errors.panNumber}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">
+                        PAN Card Document
+                      </label>
+                      {formData.panDocumentUrl ? (
+                        <div className="mb-3 relative inline-block">
+                          {isPdfDocumentUrl(formData.panDocumentUrl) ? (
+                            <div className="flex h-28 w-28 items-center justify-center rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600">
+                              PDF uploaded
+                            </div>
+                          ) : (
+                            <img
+                              src={formData.panDocumentUrl}
+                              alt="PAN Card"
+                              className="h-28 w-20 rounded-lg border border-gray-200 object-cover"
+                            />
+                          )}
+                          {uploadProgress.pan ? (
+                            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-blue-500/20">
+                              <span className="text-xs font-semibold text-blue-700">Uploading…</span>
+                            </div>
+                          ) : null}
+                          <a
+                            href={formData.panDocumentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1 block text-xs font-medium text-blue-600 underline"
+                          >
+                            View document
+                          </a>
+                        </div>
+                      ) : null}
+                      {isEditing ? (
+                        <div>
+                          <label
+                            htmlFor="mobile-pan-upload"
+                            className="inline-flex min-h-[44px] items-center rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 active:bg-blue-100"
+                          >
+                            {formData.panDocumentUrl ? 'Change document' : 'Upload document'}
+                          </label>
+                          <input
+                            id="mobile-pan-upload"
+                            ref={panInputRef}
+                            type="file"
+                            className="sr-only"
+                            accept={PROFILE_DOC_ACCEPT}
+                            onChange={(e) => void handleDocumentUpload(e, 'pan')}
+                          />
+                          <p className="mt-2 text-xs text-gray-500">JPEG, PNG, PDF (Max 5MB)</p>
+                        </div>
+                      ) : null}
+                      {errors.panCard && (
+                        <p className="mt-1 text-xs text-red-600">{errors.panCard}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Seller QR Code Section */}
@@ -540,14 +937,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
                 <button
                   onClick={() => {
                     setIsEditing(false);
-                    setFormData({
-                      name: currentUser.name || '',
-                      email: currentUser.email || '',
-                      mobile: currentUser.mobile || '',
-                      dealershipName: currentUser.dealershipName || '',
-                      bio: currentUser.bio || '',
-                      avatarUrl: currentUser.avatarUrl || ''
-                    });
+                    setFormData(emptyProfileForm(currentUser));
                     setErrors({});
                   }}
                   className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold"

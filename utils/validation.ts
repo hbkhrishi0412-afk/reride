@@ -38,11 +38,23 @@ const INTERNATIONAL_PHONE_PATTERN = /^\+\d{1,3}[\s-]?\d{6,14}$/;
 // Valid pincode pattern
 const PINCODE_PATTERN = /^\d{6}$/;
 
-// Aadhar pattern (XXXX XXXX XXXX)
-const AADHAR_PATTERN = /^\d{4}[\s-]?\d{4}[\s-]?\d{4}$/;
-
 // PAN pattern (ABCDE1234F)
 const PAN_PATTERN = /^[A-Z]{5}\d{4}[A-Z]$/i;
+
+/** Optional Aadhar field — empty is ok; otherwise 12 digits (spaces/dashes allowed). */
+export function validateAadharNumber(aadhar: string): string | undefined {
+  if (!aadhar.trim()) return undefined;
+  const digits = aadhar.replace(/[\s-]/g, '');
+  if (!/^\d{12}$/.test(digits)) return 'Aadhar number must be 12 digits';
+  return undefined;
+}
+
+/** Optional PAN field — empty is ok; otherwise ABCDE1234F. */
+export function validatePanNumber(pan: string): string | undefined {
+  if (!pan.trim()) return undefined;
+  if (!PAN_PATTERN.test(pan.trim())) return 'PAN must be in format: ABCDE1234F';
+  return undefined;
+}
 
 // Email pattern
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -306,17 +318,21 @@ export function validateUserData(data: Partial<User>): ValidationResult {
   }
 
   // Aadhar validation
-  if (data.aadharCard?.number && !AADHAR_PATTERN.test(data.aadharCard.number)) {
-    errors.push({ 
-      field: 'aadharCard', 
-      message: 'Invalid Aadhar number format',
-      code: 'INVALID_AADHAR'
+  const aadharError = data.aadharCard?.number
+    ? validateAadharNumber(data.aadharCard.number)
+    : undefined;
+  if (aadharError) {
+    errors.push({
+      field: 'aadharCard',
+      message: aadharError,
+      code: 'INVALID_AADHAR',
     });
   }
 
   // PAN validation
-  if (data.panCard?.number && !PAN_PATTERN.test(data.panCard.number)) {
-    errors.push({ field: 'panCard', message: 'Invalid PAN number format', code: 'INVALID_PAN' });
+  const panError = data.panCard?.number ? validatePanNumber(data.panCard.number) : undefined;
+  if (panError) {
+    errors.push({ field: 'panCard', message: panError, code: 'INVALID_PAN' });
   }
 
   // Role validation

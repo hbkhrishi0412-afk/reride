@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { FAQItem } from '../types';
 import { View as ViewEnum } from '../types';
+import { DEFAULT_PLATFORM_FAQS } from '../constants/defaultFaqs.js';
 
 interface MobileFAQPageProps {
   faqItems: FAQItem[];
@@ -18,7 +19,8 @@ export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems, onNaviga
   const [openItem, setOpenItem] = useState<number | string | null>(null);
 
   const filteredAndGroupedFAQs = useMemo(() => {
-    const filtered = faqItems.filter(
+    const source = faqItems.length > 0 ? faqItems : DEFAULT_PLATFORM_FAQS;
+    const filtered = source.filter(
       (item) =>
         item.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.answer.toLowerCase().includes(searchTerm.toLowerCase())
@@ -42,12 +44,12 @@ export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems, onNaviga
     <div className="min-h-full bg-gray-50">
       <div className="bg-white border-b border-gray-200 px-4 py-4">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          {t('faq.page.title', { defaultValue: 'Frequently Asked Questions' })}
+          {t('help.title', { defaultValue: 'Help Center' })}
         </h1>
         <p className="text-gray-600 text-sm">
-          {t('faq.page.subtitle', {
+          {t('help.subtitle', {
             defaultValue:
-              'Answers about deals, RC transfer, buying, selling, and safety — aligned with how ReRide actually works.',
+              'Guides for buying, selling, deal rooms, RC transfer, and account settings on ReRide.',
           })}
         </p>
       </div>

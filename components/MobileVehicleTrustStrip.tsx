@@ -15,7 +15,7 @@ export const MobileVehicleTrustStrip: React.FC = () => {
 
   return (
     <section
-      className="mx-4 mt-4 rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-3"
+      className="mt-1 rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-3"
       aria-label={t('trust.strip.aria', { defaultValue: 'Buying safely' })}
     >
       <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-800 mb-2">

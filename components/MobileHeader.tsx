@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
-import { HELP_NAV_ITEMS } from '../constants/helpLegalNav.js';
+import { FOOTER_HELP_AND_LEGAL_ITEMS } from '../constants/helpLegalNav.js';
 import { homeViewForActor, isServiceProviderActor } from '../utils/serviceProviderAccess.js';
 import { mobileSellDestination } from '../utils/mobileSellNav';
 
@@ -120,7 +120,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
       {
         icon: <DealFlowIcon />,
         label: t('nav.howDealsWork'),
-        view: ViewEnum.ABOUT_US,
+        view: ViewEnum.SAFETY_CENTER,
         tint: '#475569',
         hidden: isProviderActor,
       },
@@ -194,8 +194,11 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
 
   const helpNavItems: MenuItemConfig[] = useMemo(
     () =>
-      HELP_NAV_ITEMS.map((item) => ({
-        icon: <QuestionIcon />,
+      FOOTER_HELP_AND_LEGAL_ITEMS.map((item) => ({
+        icon:
+          item.view === ViewEnum.PRIVACY_POLICY || item.view === ViewEnum.TERMS_OF_SERVICE
+            ? <LegalIcon />
+            : <QuestionIcon />,
         label: t(item.labelKey, { defaultValue: item.defaultLabel }),
         view: item.view,
         tint: '#64748B',
@@ -508,7 +511,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                 </MenuSection>
               ) : null}
 
-              <MenuSection title={t('footer.support', { defaultValue: 'Support' })}>
+              <MenuSection title={t('footer.helpAndLegal', { defaultValue: 'Help & legal' })}>
                 {helpNavItems.map((item) => (
                   <MenuItem
                     key={item.view}
@@ -696,6 +699,12 @@ const AboutIcon = () => (
 const QuestionIcon = () => (
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const LegalIcon = () => (
+  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
   </svg>
 );
 

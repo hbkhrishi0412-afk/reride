@@ -42,11 +42,13 @@ describe('groupSellerFormSteps', () => {
         .items.every(
           (i) =>
             i.sectionId !== 'core.docs' &&
-            i.sectionId !== 'core.photos' &&
             i.id !== 'core.history.chassis_match' &&
             i.id !== 'core.history.engine_match',
         ),
     ).toBe(true);
+    expect(getSellerDefinitions(VehicleCategory.FOUR_WHEELER).some((d) => d.id.startsWith('core.photos.'))).toBe(
+      false,
+    );
   });
 
   it('puts 10 Yes/No condition questions only in Step 3', () => {

@@ -41,17 +41,6 @@ export const CORE_CHECKLIST_ITEMS: UniversalChecklistItemDef[] = [
   item({ id: 'core.history.odometer_service_match', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Odometer reading consistent with service record history', filledBy: 'B', photoRequired: false, scope: 'core', buyerHint: 'Compare odometer photo with service stamps' }),
   item({ id: 'core.history.chassis_match', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Chassis number matches RC (photo)', filledBy: 'S', photoRequired: true, scope: 'core' }),
   item({ id: 'core.history.engine_match', sectionId: 'core.history', sectionTitle: 'History & condition', label: 'Engine number matches RC (photo)', filledBy: 'S', photoRequired: true, scope: 'core' }),
-
-  // Listing photos
-  item({ id: 'core.photos.front', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Front view', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.rear', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Rear view', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.left', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Left side', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.right', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Right side', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.dashboard', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Dashboard / cluster', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.odometer_close', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Odometer close-up', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.engine_bay', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Engine bay', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.tyres', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Tyres close-up', filledBy: 'S', photoRequired: true, scope: 'core' }),
-  item({ id: 'core.photos.damage', sectionId: 'core.photos', sectionTitle: 'Listing photos', label: 'Damage / dents / rust (if any)', filledBy: 'S', photoRequired: 'if_applicable', scope: 'core' }),
 ];
 function categoryItems(
   scope: VehicleCategory,
@@ -275,8 +264,8 @@ export type SellerFormStep = {
   items: UniversalChecklistItemDef[];
 };
 
-/** Extra photo proofs that belong with listing photos in the seller form (Step 2). */
-const PHOTOS_STEP_EXTRA_IDS = new Set([
+/** Photo proofs in the seller form (Step 2) — chassis/engine match and category extras. */
+const PHOTOS_STEP_IDS = new Set([
   'core.history.chassis_match',
   'core.history.engine_match',
   'fw.interior.windshield',
@@ -287,14 +276,9 @@ const PHOTOS_STEP_EXTRA_IDS = new Set([
 export function groupSellerFormSteps(category: VehicleCategory): SellerFormStep[] {
   const defs = getSellerDefinitions(category);
   const docs = defs.filter((d) => d.sectionId === 'core.docs');
-  const photos = defs.filter(
-    (d) => d.sectionId === 'core.photos' || PHOTOS_STEP_EXTRA_IDS.has(d.id),
-  );
+  const photos = defs.filter((d) => PHOTOS_STEP_IDS.has(d.id));
   const condition = defs.filter(
-    (d) =>
-      d.sectionId !== 'core.docs' &&
-      d.sectionId !== 'core.photos' &&
-      !PHOTOS_STEP_EXTRA_IDS.has(d.id),
+    (d) => d.sectionId !== 'core.docs' && !PHOTOS_STEP_IDS.has(d.id),
   );
   return (
     [
@@ -307,7 +291,7 @@ export function groupSellerFormSteps(category: VehicleCategory): SellerFormStep[
       {
         id: 'photos' as const,
         title: 'Photos',
-        subtitle: 'Angles that go on your listing gallery',
+        subtitle: 'Proof photos buyers expect with disclosure',
         items: photos,
       },
       {

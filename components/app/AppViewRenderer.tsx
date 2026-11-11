@@ -695,6 +695,15 @@ switch (currentView) {
         updateVehicle={updateVehicle}
         onViewSellerProfile={openSellerProfileByEmail}
         onStartChat={handleStartVehicleChat}
+        onRequestLogin={() => {
+          try {
+            sessionStorage.setItem('reride.postLoginView', ViewEnum.DETAIL);
+          } catch {
+            /* ignore */
+          }
+          addToast('Please login to verify this vehicle', 'info');
+          navigate(ViewEnum.CUSTOMER_LOGIN);
+        }}
         onRequestTestDrive={handleRequestTestDrive}
         recommendations={recommendations}
         onSelectVehicle={selectVehicle}

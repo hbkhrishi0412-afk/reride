@@ -1028,6 +1028,8 @@ const en = {
   'vehicle.detail.vahan.notVerifiedDescription': 'This vehicle has not been verified with the official Vahan database. The information shown below is provided by the seller and should be independently verified before purchase.',
   'vehicle.detail.ai.generateProsCons': 'Generate Pros & Cons',
   'vehicle.detail.descriptionLabel': 'Description',
+  'vehicle.detail.sellerNotes': 'Seller notes',
+  'vehicle.detail.atAGlance': 'At a glance',
   'vehicle.detail.ai.generateProsConsMobile': 'Generate AI Pros & Cons',
   'vehicle.detail.ai.generatingInsights': 'Generating insights...',
   'vehicle.detail.ai.pros': 'Pros',

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, memo, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { testDriveBookingState, type Vehicle, type User, type CertifiedInspection, type VehicleDocument, type DealLead } from '../types';
+import { testDriveBookingState, type Vehicle, type User, type CertifiedInspection, type DealLead } from '../types';
 import { useTranslatedText, useTranslatedArray, useTranslatedFields } from '../hooks/useTranslatedText';
 import { getFirstValidImage, getValidImages, getSafeImageSrc, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, VEHICLE_THUMB_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder, isPlaceholderService } from '../utils/imageUtils';
 import StarRating from './StarRating';
@@ -8,14 +8,10 @@ import { useTrackVehicleView } from '../hooks/useTrackVehicleView';
 import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
 import VerificationBadge from './VerificationBadge';
-import VehicleHistory from './VehicleHistory';
 import { useApp } from './AppProvider';
 import { isCompareDisabledForVehicle } from '../utils/compareList.js';
 import { scrollAppToTop } from '../utils/scrollAppToTop';
 import { getVehicleListingUrl } from '../utils/whatsappShare.js';
-import { buildSellerWhatsAppUrl, getSellerCallPhone, openExternalUrl } from '../utils/sellerContact.js';
-import { trackPhoneView } from '../services/listingService.js';
-import { telHrefFromRawPhone } from '../utils/numberUtils.js';
 import { ListingStockBadge } from './ListingStockBadge.js';
 import { ListingTrustStatusBar } from './ListingTrustStatusBar.js';
 import VehicleDetailTrustStrip from './VehicleDetailTrustStrip.js';
@@ -25,6 +21,8 @@ import { PriceInsights, PRICE_ANALYSIS_ENABLED } from './PriceInsights';
 import { findSimilarVehicles } from '../utils/vehiclePricing';
 import { enrichVehicleWithSellerInfo, resolveVehicleSellerEmail } from '../utils/vehicleEnrichment';
 import SellerDisclosureDisplay from './SellerDisclosureDisplay';
+import VehicleDescriptionDisplay from './VehicleDescriptionDisplay';
+import VehicleFeatureSpecsPanel from './VehicleFeatureSpecsPanel';
 import {
   fetchRatingEligibility,
   submitPeerRating,
@@ -39,6 +37,10 @@ import { hasSellerDisclosureReport } from '../utils/listingTrust.js';
 import { getPublishedVehicleDetail } from '../services/dataService.js';
 import { findVehicleByIdentity, getCanonicalPrimaryKey, vehicleIdsEqual } from '../utils/vehicleIdentity.js';
 import { stringifyVehicleForSession } from '../utils/vehicleSessionCache.js';
+import {
+  formatInsuranceValidity,
+  INSURANCE_INVALID_DATE_TOKEN,
+} from '../utils/formatInsuranceValidity.js';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -53,6 +55,8 @@ interface VehicleDetailProps {
   users: User[];
   onViewSellerProfile: (sellerEmail: string) => void;
   onStartChat: (vehicle: Vehicle) => void;
+  /** Sign-in for gated tabs (e.g. Vahan) without starting chat. */
+  onRequestLogin?: () => void;
   onRequestTestDrive?: (vehicle: Vehicle, details: { date: string; time: string }) => void | Promise<void>;
   recommendations: Vehicle[];
   onSelectVehicle: (vehicle: Vehicle) => void;
@@ -129,33 +133,6 @@ const SocialShareButtons: React.FC<{ vehicle: Vehicle; variant?: 'default' | 'pi
         </>
     );
 };
-
-const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode; defaultOpen?: boolean }> = ({ title, children, defaultOpen = false }) => {
-    const [isOpen, setIsOpen] = useState(defaultOpen);
-
-    return (
-        <div className="bg-white rounded-xl shadow-soft overflow-hidden">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex justify-between items-center text-left p-6"
-                aria-expanded={isOpen}
-            >
-                <h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">{title}</h3>
-                <svg className={`w-6 h-6 text-reride-text transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-            </button>
-            <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                <div className="overflow-hidden">
-                    <div className="p-6 pt-0 border-t border-gray-200 dark:border-gray-200">
-                        {children}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 
 const KeySpec: React.FC<{ label: string; value: string | number; icon?: React.ReactNode }> = memo(({ label, value, icon }) => (
     <div className="flex flex-col gap-0.5 p-2.5 sm:p-3 bg-reride-off-white dark:bg-white rounded-lg text-center">
@@ -260,18 +237,6 @@ const SpecDetail: React.FC<{ label: string; value: React.ReactNode }> = ({ label
 );
 
 
-const DocumentChip: React.FC<{ doc: VehicleDocument }> = ({ doc }) => {
-    return (
-        <a href={doc.url} target="_blank" rel="noopener noreferrer" title={`View ${doc.fileName}`}
-           className="flex items-center gap-2 bg-white dark:bg-white text-reride-text-dark dark:text-reride-text-dark px-3 py-1.5 rounded-full text-sm font-medium hover:bg-gray-100 dark:hover:bg-white transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2-2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
-            </svg>
-            <span>{doc.name}</span>
-        </a>
-    )
-}
-
 const CertifiedInspectionReport: React.FC<{ report: CertifiedInspection }> = ({ report }) => {
     const scoreColor = (score: number) => {
         if (score >= 90) return 'bg-green-500';
@@ -309,7 +274,7 @@ const CertifiedInspectionReport: React.FC<{ report: CertifiedInspection }> = ({ 
 };
 
 
-export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: onBackToHome, comparisonList, onToggleCompare, onAddSellerRating, wishlist, onToggleWishlist, currentUser, onFlagContent, users, onViewSellerProfile, onStartChat, onRequestTestDrive, recommendations, onSelectVehicle, updateVehicle: updateVehicleProp }) => {
+export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: onBackToHome, comparisonList, onToggleCompare, onAddSellerRating, wishlist, onToggleWishlist, currentUser, onFlagContent, users, onViewSellerProfile, onStartChat, onRequestLogin, onRequestTestDrive, recommendations, onSelectVehicle, updateVehicle: updateVehicleProp }) => {
   const { t } = useTranslation();
 
   // Get updateVehicle from context (hook must be called unconditionally)
@@ -441,7 +406,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<'images' | 'video'>('images');
-  const [activeTab, setActiveTab] = useState<'overview' | 'disclosure' | 'report' | 'features' | 'vahan' | 'price'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'disclosure' | 'report' | 'vahan' | 'price'>('overview');
   const detailTabsRef = useRef<HTMLDivElement>(null);
   const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
   const [showEMICalculator, setShowEMICalculator] = useState<boolean>(false);
@@ -630,33 +595,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     onViewSellerProfile(sellerProfileEmail);
   };
 
-  const callHref = useMemo(
-    () => telHrefFromRawPhone(getSellerCallPhone(safeVehicle, seller)),
-    [safeVehicle, seller],
-  );
-  const sellerWhatsAppUrl = useMemo(
-    () => buildSellerWhatsAppUrl(safeVehicle, seller),
-    [safeVehicle, seller],
-  );
   const listingAvailable = isListingAvailable(safeVehicle);
-
-  const handleCallSeller = () => {
-    if (!currentUser) {
-      void onStartChat(safeVehicle);
-      return;
-    }
-    trackPhoneView(safeVehicle.id);
-    if (callHref) window.location.href = callHref;
-  };
-
-  const handleWhatsAppSeller = () => {
-    if (!currentUser) {
-      void onStartChat(safeVehicle);
-      return;
-    }
-    trackPhoneView(safeVehicle.id);
-    if (sellerWhatsAppUrl) void openExternalUrl(sellerWhatsAppUrl);
-  };
 
   const handleChatWithSeller = async () => {
     await Promise.resolve(onStartChat(safeVehicle));
@@ -763,7 +702,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     <>
       <VehicleJsonLd vehicle={safeVehicle} />
       <div className="bg-[#F7F8FA] dark:bg-[#F7F8FA] animate-fade-in vehicle-detail-page">
-          <div className="max-w-7xl mx-auto py-3 sm:py-4 lg:py-5 px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-[1600px] py-3 sm:py-4 lg:py-5 px-3 sm:px-5 lg:px-6 xl:px-8">
               <button type="button" onClick={onBackToHome} className="mb-3 text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -771,7 +710,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                 {t('vehicle.detail.backToListings')}
               </button>
 
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px] gap-3 lg:gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px] gap-4 lg:gap-5 xl:gap-6">
                   {/* Left Column: Media and Details */}
                   <div className="min-w-0 space-y-3">
                     {safeVehicle.videoUrl && (
@@ -801,11 +740,11 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                     {activeMediaTab === 'images' ? (
                       <>
                         {validImages.length > 0 ? (
-                          <div className="flex gap-2 sm:gap-2.5 items-stretch">
-                            <div className="relative group flex-1 min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm aspect-[16/10]">
+                          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_5.75rem] lg:grid-cols-[minmax(0,1fr)_6rem] gap-2.5 sm:gap-3 items-start">
+                            <div className="relative group min-w-0 w-full overflow-hidden rounded-2xl bg-slate-100 shadow-sm aspect-[16/9]">
                               <img
                                 key={currentIndex}
-                                className="absolute inset-0 h-full w-full object-cover animate-fade-in bg-gray-100"
+                                className="absolute inset-0 h-full w-full object-cover animate-fade-in"
                                 src={getSafeImageSrc(
                                   validImages[currentIndex] || getFirstValidImage(safeVehicle.images, safeVehicle.id),
                                   VEHICLE_IMAGE_PLACEHOLDER_DATA_URI
@@ -852,7 +791,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               )}
                             </div>
                             {validImages.length > 1 && (
-                              <div className="hidden sm:flex w-[72px] lg:w-[88px] flex-shrink-0 flex-col gap-2.5 overflow-y-auto scrollbar-hide pr-0.5">
+                              <div className="hidden sm:flex max-h-[min(28rem,calc((100vw-24rem)*9/16))] lg:max-h-[min(32rem,calc((100vw-28rem)*9/16))] w-full flex-col gap-2 overflow-y-auto scrollbar-hide">
                                 {validImages.map((img, index) => (
                                   <button
                                     key={index}
@@ -883,7 +822,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             )}
                           </div>
                         ) : (
-                          <div className="w-full aspect-[16/10] bg-gray-100 rounded-2xl flex items-center justify-center">
+                          <div className="w-full aspect-[16/9] bg-gray-100 rounded-2xl flex items-center justify-center">
                             <div className="text-center text-gray-500">
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -977,19 +916,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             </button>
                           )}
                           <button
-                            onClick={() => setActiveTab('features')}
-                            className={`px-3 sm:px-4 py-2.5 font-bold text-xs sm:text-sm uppercase transition-colors relative ${
-                              activeTab === 'features'
-                                ? 'text-[#FF6B35]'
-                                : 'text-gray-600 hover:text-gray-900'
-                            }`}
-                          >
-                            {t('vehicle.detail.tabs.featureSpecs')}
-                            {activeTab === 'features' && (
-                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF6B35]"></span>
-                            )}
-                          </button>
-                          <button
                             onClick={() => setActiveTab('vahan')}
                             className={`px-3 sm:px-4 py-2.5 font-bold text-xs sm:text-sm uppercase transition-colors relative ${
                               activeTab === 'vahan'
@@ -1026,47 +952,59 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           <div className="p-4 sm:p-5">
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
                               {/* Left Column - Overview Content */}
-                              <div className="lg:col-span-2 space-y-4">
+                              <div className="lg:col-span-2 space-y-5">
                                 <VehicleDetailTrustStrip />
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-                                  <KeySpec label={t('vehicle.year')} value={safeVehicle.year} />
-                                  <KeySpec
-                                    label={t('vehicle.spec.registrationYear')}
-                                    value={safeVehicle.registrationYear}
-                                  />
-                                  <KeySpec label={t('vehicle.fuel')} value={translatedFields.fuelType} />
-                                  <KeySpec
-                                    label={t('vehicle.mileage')}
-                                    value={typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'}
-                                  />
-                                  <KeySpec label={t('vehicle.transmission')} value={translatedFields.transmission} />
-                                  <KeySpec label={t('vehicle.spec.ownersShort')} value={safeVehicle.noOfOwners} />
-                                  <KeySpec label={t('vehicle.detail.specs.insurance')} value={(() => {
-                                    const insurance = safeVehicle.insuranceValidity;
-                                    if (!insurance || insurance.trim() === '') return t('vehicle.detail.insurance.notSpecified');
-                                    // Validate insurance date - if it's a date format, check if it makes sense
-                                    if (insurance.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                                      const insuranceDate = new Date(insurance);
-                                      const vehicleYear = safeVehicle.year || safeVehicle.registrationYear;
-                                      // If insurance date is before vehicle year, it's invalid
-                                      if (vehicleYear && insuranceDate.getFullYear() < vehicleYear) {
+                                <div>
+                                  <h3 className="mb-3 text-base font-semibold text-slate-900">
+                                    {t('vehicle.detail.atAGlance', { defaultValue: 'At a glance' })}
+                                  </h3>
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+                                    <KeySpec label={t('vehicle.year')} value={safeVehicle.year} />
+                                    <KeySpec
+                                      label={t('vehicle.spec.registrationYear')}
+                                      value={safeVehicle.registrationYear}
+                                    />
+                                    <KeySpec label={t('vehicle.fuel')} value={translatedFields.fuelType} />
+                                    <KeySpec
+                                      label={t('vehicle.mileage')}
+                                      value={typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'}
+                                    />
+                                    <KeySpec label={t('vehicle.transmission')} value={translatedFields.transmission} />
+                                    <KeySpec label={t('vehicle.spec.ownersShort')} value={safeVehicle.noOfOwners} />
+                                    <KeySpec label={t('vehicle.detail.specs.insurance')} value={(() => {
+                                      const formatted = formatInsuranceValidity(
+                                        safeVehicle.insuranceValidity,
+                                        safeVehicle.year || safeVehicle.registrationYear,
+                                      );
+                                      if (!formatted) return t('vehicle.detail.insurance.notSpecified');
+                                      if (formatted === INSURANCE_INVALID_DATE_TOKEN) {
                                         return t('vehicle.detail.insurance.invalidDate');
                                       }
-                                      // Format date nicely
-                                      return insuranceDate.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
-                                    }
-                                    return insurance;
-                                  })()} />
-                                  <KeySpec label={t('vehicle.detail.specs.rto')} value={safeVehicle.rto} />
-                                </div>
-                                {safeVehicle.description && (
-                                  <div>
-                                    <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-2">
-                                      {t('vehicle.detail.descriptionLabel')}
-                                    </h4>
-                                    <p className="text-reride-text-dark dark:text-reride-text-dark whitespace-pre-line" data-no-translate>{translatedDescription}</p>
+                                      return formatted;
+                                    })()} />
+                                    <KeySpec label={t('vehicle.detail.specs.rto')} value={safeVehicle.rto} />
                                   </div>
-                                )}
+                                </div>
+                                <VehicleFeatureSpecsPanel
+                                  omitGlanceDuplicates
+                                  specs={{
+                                    engine: translatedFields.engine,
+                                    displacement: translatedFields.displacement,
+                                    transmission: translatedFields.transmission,
+                                    fuelType: translatedFields.fuelType,
+                                    fuelEfficiency: safeVehicle.fuelEfficiency,
+                                    groundClearance: safeVehicle.groundClearance,
+                                    bootSpace: safeVehicle.bootSpace,
+                                    color: translatedFields.color,
+                                  }}
+                                  features={translatedFeatures}
+                                />
+                                {safeVehicle.description ? (
+                                  <VehicleDescriptionDisplay
+                                    text={translatedDescription}
+                                    heading={t('vehicle.detail.sellerNotes', { defaultValue: 'Seller notes' })}
+                                  />
+                                ) : null}
                               </div>
 
                               {/* Right Column - Finance Partners Card (Desktop) */}
@@ -1174,46 +1112,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           </div>
                         )}
 
-                        {activeTab === 'features' && (
-                          <div className="p-4 sm:p-5 space-y-6">
-                            {/* Detailed Specifications */}
-                            <div>
-                              <h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
-                                {t('vehicle.detail.detailedSpecifications')}
-                              </h3>
-                              <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                                <SpecDetail label={t('compare.field.engine')} value={translatedFields.engine} />
-                                <SpecDetail label={t('compare.field.displacement')} value={translatedFields.displacement} />
-                                <SpecDetail label={t('vehicle.transmission')} value={translatedFields.transmission} />
-                                <SpecDetail label={t('vehicle.fuel')} value={translatedFields.fuelType} />
-                                <SpecDetail label={t('vehicle.detail.mileageLabel')} value={safeVehicle.fuelEfficiency} />
-                                <SpecDetail label={t('vehicle.detail.specs.groundClearance')} value={safeVehicle.groundClearance} />
-                                <SpecDetail label={t('vehicle.detail.specs.bootSpace')} value={safeVehicle.bootSpace} />
-                                <SpecDetail label={t('compare.field.color')} value={translatedFields.color} />
-                              </dl>
-                            </div>
-
-                            {/* Features, Pros & Cons */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                              <div>
-                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
-                                  {t('vehicle.detail.includedFeatures')}
-                                </h4>
-                                {translatedFeatures.length > 0 ? (
-                                  <div className="flex flex-wrap gap-3">
-                                    {translatedFeatures.map((feature, idx) => (
-                                      <div key={safeVehicle.features[idx] || idx} className="flex items-center gap-2 text-reride-text-dark dark:text-reride-text-dark bg-reride-off-white dark:bg-brand-gray-700 px-3 py-1 rounded-full text-sm" data-no-translate>
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-reride-orange" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-                                        {feature}
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : <p className="text-reride-text">{t('vehicle.detail.noFeaturesListed')}</p>}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
                         {activeTab === 'vahan' && (
                           <div className="p-4 sm:p-5 space-y-6">
                             {/* Show login prompt for non-logged-in users */}
@@ -1234,7 +1132,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                   </div>
                                   <button
                                     type="button"
-                                    onClick={() => onStartChat(safeVehicle)}
+                                    onClick={() => {
+                                      if (onRequestLogin) {
+                                        onRequestLogin();
+                                        return;
+                                      }
+                                      void onStartChat(safeVehicle);
+                                    }}
                                     className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-6 rounded-lg transition-colors flex-shrink-0"
                                   >
                                     {t('vehicle.detail.vahan.loginButton')}
@@ -1477,24 +1381,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
 
                     {/* Additional Sections Below Tabs */}
                     <div className="mt-6 space-y-6">
-                    {/* ✅ FIX: Removed duplicate section - Vehicle History & Documents */}
-                    {(safeVehicle.serviceRecords || safeVehicle.accidentHistory || safeVehicle.documents) && (
-                        <CollapsibleSection title={t('vehicle.detail.historyAndDocs')}>
-                            {(safeVehicle.serviceRecords || safeVehicle.accidentHistory) && (
-                                <VehicleHistory serviceRecords={safeVehicle.serviceRecords || []} accidentHistory={safeVehicle.accidentHistory || []} />
-                            )}
-                            {safeVehicle.documents && safeVehicle.documents.length > 0 && <div className="mt-6">
-                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
-                                  {t('vehicle.detail.availableDocuments')}
-                                </h4>
-                                <div className="flex flex-wrap gap-4">
-                                    {safeVehicle.documents.map(doc => <DocumentChip key={doc.name} doc={doc} />)}
-                                </div>
-                            </div>}
-                        </CollapsibleSection>
-                    )}
-
-                    {/* EMI Calculator - Shown at bottom when clicked */}
                     {showEMICalculator && (
                         <div id="emi-calculator" ref={emiCalculatorRef} className="mt-8 scroll-mt-24">
                             <EMICalculator
@@ -1578,35 +1464,11 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           ) : null}
 
                           <div className="space-y-2.5" aria-label={t('vehicle.detail.contactActions')}>
-                            {listingAvailable && callHref ? (
-                              <button
-                                type="button"
-                                onClick={handleCallSeller}
-                                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#1E88E5] hover:bg-[#1976D2] text-white font-semibold py-3 px-4 text-sm transition-colors shadow-sm"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-                                  <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
-                                </svg>
-                                {t('vehicle.detail.call')}
-                              </button>
-                            ) : null}
-                            {listingAvailable && sellerWhatsAppUrl ? (
-                              <button
-                                type="button"
-                                onClick={handleWhatsAppSeller}
-                                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#E8F8EE] hover:bg-[#DCF5E5] text-[#1FA855] font-semibold py-3 px-4 text-sm transition-colors"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-                                </svg>
-                                {t('vehicle.detail.whatsapp', { defaultValue: 'WhatsApp' })}
-                              </button>
-                            ) : null}
                             <button
                               type="button"
                               onClick={() => void handleChatWithSeller()}
                               data-testid="start-tracked-deal"
-                              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#E8F1FB] hover:bg-[#DCEAF8] text-[#1E88E5] font-semibold py-3 px-4 text-sm transition-colors"
+                              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#FF6B35] hover:bg-[#E85A28] text-white font-semibold py-3 px-4 text-sm transition-colors shadow-sm"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />

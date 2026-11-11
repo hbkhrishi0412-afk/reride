@@ -2983,7 +2983,7 @@ h5, h6 {
   color: #111827 !important;
 }
 
-/* Vehicle detail — compact layout aligned with site header (max-w-7xl / 1280px) */
+/* Vehicle detail — wider canvas so gallery uses more of the viewport */
 .vehicle-detail-page {
   overflow-x: clip;
 }
