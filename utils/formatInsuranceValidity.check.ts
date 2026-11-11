@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {
   formatInsuranceValidity,
   INSURANCE_INVALID_DATE_TOKEN,
-} from './formatInsuranceValidity.ts';
+} from './formatInsuranceValidity.js';
 
 assert.equal(formatInsuranceValidity(''), null);
 assert.equal(formatInsuranceValidity(undefined), null);
